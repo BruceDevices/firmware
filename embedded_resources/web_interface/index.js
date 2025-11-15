@@ -457,7 +457,7 @@ async function saveEditorFile(runFile = false) {
   if (runFile) {
     let serial = getSerialCommand(filename);
     if (serial !== undefined) {
-      await runCommand(serial + " " + filename);
+      await runCommand(serial + " \"" + filename + "\"");
     }
   }
   Dialog.loading.hide();
