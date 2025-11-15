@@ -731,7 +731,7 @@ void BruceConfig::setBadUSBBLEKeyDelay(int value) {
 }
 
 void BruceConfig::validateBadUSBBLEKeyDelay() {
-    if (badUSBBLEKeyDelay < 20) badUSBBLEKeyDelay = 20;
+    if (badUSBBLEKeyDelay < 0) badUSBBLEKeyDelay = 0;
     if (badUSBBLEKeyDelay > 500) badUSBBLEKeyDelay = 500;
 }
 
