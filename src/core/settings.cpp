@@ -1259,6 +1259,7 @@ void setBadUSBBLEMenu() {
     options = {
         {"Keyboard Layout", setBadUSBBLEKeyboardLayoutMenu},
         {"Key Delay",       setBadUSBBLEKeyDelayMenu      },
+        {"Show Output",     setBadUSBBLEShowOutputMenu    },
     };
     addOptionToMainMenu();
 
@@ -1309,6 +1310,21 @@ void setBadUSBBLEKeyDelayMenu() {
     } else if (delayVal != 0) {
         displayError("Invalid key delay value (25 to 500)", true);
     }
+}
+
+/*********************************************************************
+**  Function: setBadUSBBLEShowOutputMenu
+**  Main Menu for setting Bad USB/BLE Show Output
+**********************************************************************/
+void setBadUSBBLEShowOutputMenu() {
+    options.clear();
+    options = {
+        {"Enable",  [&]() { bruceConfig.setBadUSBBLEShowOutput(true); } },
+        {"Disable", [&]() { bruceConfig.setBadUSBBLEShowOutput(false); }},
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, bruceConfig.badUSBBLEShowOutput ? 0 : 1);
 }
 
 /*********************************************************************
