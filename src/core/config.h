@@ -42,6 +42,9 @@ public:
     // Settings
     int rotation = ROTATION > 1 ? 3 : 1;
     int dimmerSet = 10;
+    int screenOffTimeout = 15;
+    int autoSleepTimeout = 0;
+    int autoDeepSleepTimeout = 0;
     int bright = 100;
     int tmz = 0;
     int soundEnabled = 1;
@@ -133,6 +136,12 @@ public:
     void validateRotationValue();
     void setDimmer(int value);
     void validateDimmerValue();
+    void setScreenOffTimeout(int value);
+    void validateScreenOffTimeoutValue();
+    void setAutoSleepTimeout(int value);
+    void validateAutoSleepTimeoutValue();
+    void setAutoDeepSleepTimeout(int value);
+    void validateAutoDeepSleepTimeoutValue();
     void setBright(uint8_t value);
     void validateBrightValue();
     void setTmz(int value);

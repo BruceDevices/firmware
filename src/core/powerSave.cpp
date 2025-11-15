@@ -1,10 +1,8 @@
 #include "powerSave.h"
 #include "core/led_control.h"
 #include "display.h"
+#include "mykeyboard.h"
 #include "settings.h"
-
-/* Check if it's time to put the device to sleep */
-#define SCREEN_OFF_DELAY 5000
 
 void fadeOutScreen(int startValue) {
     for (int brightValue = startValue; brightValue >= 0; brightValue -= 1) {
@@ -15,18 +13,55 @@ void fadeOutScreen(int startValue) {
 }
 
 void checkPowerSaveTime() {
-    if (bruceConfig.dimmerSet == 0) return;
+    const bool dimmerEnabled = bruceConfig.dimmerSet > 0;
+    const bool screenOffEnabled = bruceConfig.screenOffTimeout > 0;
+    const bool autoSleepEnabled = bruceConfig.autoSleepTimeout > 0;
+    const bool autoDeepSleepEnabled = bruceConfig.autoDeepSleepTimeout > 0;
+
+    if (!dimmerEnabled && !screenOffEnabled && !autoSleepEnabled && !autoDeepSleepEnabled) return;
 
     unsigned long elapsed = millis() - previousMillis;
     int startDimmerBright = bruceConfig.bright / 3;
-    int dimmerSetMs = bruceConfig.dimmerSet * 1000;
+    const unsigned long dimmerSetMs = dimmerEnabled ? bruceConfig.dimmerSet * 1000UL : 0;
+    const unsigned long screenOffMs = screenOffEnabled ? bruceConfig.screenOffTimeout * 1000UL : 0;
+    const unsigned long autoSleepMs = autoSleepEnabled ? bruceConfig.autoSleepTimeout * 1000UL : 0;
+    const unsigned long autoDeepSleepMs =
+        autoDeepSleepEnabled ? bruceConfig.autoDeepSleepTimeout * 1000UL : 0;
 
-    if (elapsed >= dimmerSetMs && !dimmer && !isSleeping) {
+    if (autoDeepSleepEnabled && elapsed >= autoDeepSleepMs) {
+        goToDeepSleep();
+        return;
+    }
+
+    if (isSleeping) {
+        if (AnyKeyPress) {
+            sleepModeOff();
+            previousMillis = millis();
+        }
+        return;
+    }
+
+    if ((isScreenOff || dimmer) && AnyKeyPress) {
+        if (wakeUpScreen()) {
+            previousMillis = millis();
+            return;
+        }
+    }
+
+    if (dimmerEnabled && !dimmer && elapsed >= dimmerSetMs) {
         dimmer = true;
         setBrightness(startDimmerBright, false);
-    } else if (elapsed >= (dimmerSetMs + SCREEN_OFF_DELAY) && !isScreenOff && !isSleeping) {
+    }
+
+    if (screenOffEnabled && !isScreenOff && elapsed >= screenOffMs) {
         isScreenOff = true;
+        dimmer = true;
         fadeOutScreen(startDimmerBright);
+        return;
+    }
+
+    if (autoSleepEnabled && elapsed >= autoSleepMs) {
+        sleepModeOn();
     }
 }
 

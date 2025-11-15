@@ -55,6 +55,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
         {"others",      &theme.others,      theme.paths.others     },
         {"connect",     &theme.connect,     theme.paths.connect    },
         {"config",      &theme.config,      theme.paths.config     },
+        {"power",       &theme.power,       theme.paths.power      },
         {"boot_img",    &theme.boot_img,    theme.paths.boot_img   },
         {"boot_sound",  &theme.boot_sound,  theme.paths.boot_sound }
     };

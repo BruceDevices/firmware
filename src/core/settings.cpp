@@ -184,6 +184,147 @@ void setDimmerTimeMenu() {
     loopOptions(options, idx);
 }
 
+void setScreenOffTimeoutMenu() {
+    struct TimeoutOption {
+        const char *label;
+        int value;
+    };
+    static const TimeoutOption entries[] = {
+        {"5 s",       5  },
+        {"15 s",      15 },
+        {"30 s",      30 },
+        {"1 min",     60 },
+        {"2 min",     120},
+        {"5 min",     300},
+        {"Disabled",  0  },
+    };
+
+    options.clear();
+    constexpr size_t entryCount = sizeof(entries) / sizeof(entries[0]);
+    int selectedIndex = static_cast<int>(entryCount);
+
+    for (size_t i = 0; i < entryCount; ++i) {
+        if (bruceConfig.screenOffTimeout == entries[i].value) selectedIndex = i;
+        options.push_back(
+            {entries[i].label,
+             [=]() { bruceConfig.setScreenOffTimeout(entries[i].value); },
+             bruceConfig.screenOffTimeout == entries[i].value}
+        );
+    }
+
+    options.push_back(
+        {"Custom",
+         [=]() {
+             String initialValue =
+                 bruceConfig.screenOffTimeout > 0 ? String(bruceConfig.screenOffTimeout) : "15";
+             String result = num_keyboard(initialValue, 4, "Seconds (1-3600)");
+             if (result == "\x1B" || result.length() == 0) return;
+             int seconds = result.toInt();
+             seconds = max(0, min(3600, seconds));
+             bruceConfig.setScreenOffTimeout(seconds);
+         },
+         selectedIndex == static_cast<int>(entryCount)}
+    );
+
+    loopOptions(options, selectedIndex);
+}
+
+static void autoTimeoutCustomPrompt(
+    const char *prompt, int currentSeconds, std::function<void(int)> setter
+) {
+    String initialValue = currentSeconds > 0 ? String(max(1, currentSeconds / 60)) : "0";
+    String result = num_keyboard(initialValue, 4, prompt);
+    if (result == "\x1B" || result.length() == 0) return;
+    int minutes = result.toInt();
+    minutes = max(0, min(1440, minutes));
+    setter(minutes * 60);
+}
+
+void setAutoSleepTimeoutMenu() {
+    struct TimeoutOption {
+        const char *label;
+        int value;
+    };
+    static const TimeoutOption entries[] = {
+        {"Disabled", 0    },
+        {"1 min",    60   },
+        {"3 min",    180  },
+        {"5 min",    300  },
+        {"10 min",   600  },
+        {"15 min",   900  },
+        {"30 min",   1800 },
+        {"60 min",   3600 },
+    };
+
+    options.clear();
+    constexpr size_t entryCount = sizeof(entries) / sizeof(entries[0]);
+    int selectedIndex = static_cast<int>(entryCount);
+
+    for (size_t i = 0; i < entryCount; ++i) {
+        if (bruceConfig.autoSleepTimeout == entries[i].value) selectedIndex = i;
+        options.push_back(
+            {entries[i].label,
+             [=]() { bruceConfig.setAutoSleepTimeout(entries[i].value); },
+             bruceConfig.autoSleepTimeout == entries[i].value}
+        );
+    }
+
+    options.push_back(
+        {"Custom",
+         [=]() {
+             autoTimeoutCustomPrompt("Minutes (1-1440)", bruceConfig.autoSleepTimeout, [](int seconds) {
+                 bruceConfig.setAutoSleepTimeout(seconds);
+             });
+         },
+         selectedIndex == static_cast<int>(entryCount)}
+    );
+
+    loopOptions(options, selectedIndex);
+}
+
+void setAutoDeepSleepTimeoutMenu() {
+    struct TimeoutOption {
+        const char *label;
+        int value;
+    };
+    static const TimeoutOption entries[] = {
+        {"Disabled", 0    },
+        {"5 min",    300  },
+        {"10 min",   600  },
+        {"15 min",   900  },
+        {"30 min",   1800 },
+        {"60 min",   3600 },
+        {"120 min",  7200 },
+    };
+
+    options.clear();
+    constexpr size_t entryCount = sizeof(entries) / sizeof(entries[0]);
+    int selectedIndex = static_cast<int>(entryCount);
+
+    for (size_t i = 0; i < entryCount; ++i) {
+        if (bruceConfig.autoDeepSleepTimeout == entries[i].value) selectedIndex = i;
+        options.push_back(
+            {entries[i].label,
+             [=]() { bruceConfig.setAutoDeepSleepTimeout(entries[i].value); },
+             bruceConfig.autoDeepSleepTimeout == entries[i].value}
+        );
+    }
+
+    options.push_back(
+        {"Custom",
+         [=]() {
+             autoTimeoutCustomPrompt(
+                 "Minutes (1-1440)", bruceConfig.autoDeepSleepTimeout, [](int seconds) {
+                     bruceConfig.setAutoDeepSleepTimeout(seconds);
+                 }
+             );
+         },
+         selectedIndex == static_cast<int>(entryCount)}
+    );
+
+    loopOptions(options, selectedIndex);
+}
+
 /*********************************************************************
 **  Function: setUIColor
 **  Set and store main UI color

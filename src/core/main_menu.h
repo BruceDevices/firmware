@@ -13,6 +13,7 @@
 #include "menu_items/GpsMenu.h"
 #include "menu_items/IRMenu.h"
 #include "menu_items/NRF24.h"
+#include "menu_items/PowerMenu.h"
 #include "menu_items/OthersMenu.h"
 #include "menu_items/RFIDMenu.h"
 #include "menu_items/RFMenu.h"
@@ -26,6 +27,7 @@ public:
     ClockMenu clockMenu;
     ConnectMenu connectMenu;
     ConfigMenu configMenu;
+    PowerMenu powerMenu;
     FMMenu fmMenu;
     GpsMenu gpsMenu;
     IRMenu irMenu;

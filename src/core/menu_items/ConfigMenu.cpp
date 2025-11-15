@@ -11,11 +11,11 @@
 
 void ConfigMenu::optionsMenu() {
     options = {
-        {"Brightness", setBrightnessMenu},
-        {"Dim Time", setDimmerTimeMenu},
-        {"Orientation", lambdaHelper(gsetRotation, true)},
+        {"Brightness",            setBrightnessMenu                  },
+        {"Orientation",           lambdaHelper(gsetRotation, true)   },
         {"UI Color", setUIColor},
         {"UI Theme", setTheme},
+        {"Управление питанием", []() { mainMenu.powerMenu.optionsMenu(); }},
         {String("InstaBoot: " + String(bruceConfig.instantBoot ? "ON" : "OFF")),
          [=]() {
              bruceConfig.instantBoot = !bruceConfig.instantBoot;
@@ -48,13 +48,9 @@ void ConfigMenu::optionsMenu() {
         {"Hide/Show Apps", []() { mainMenu.hideAppsMenu(); }},
         {"Network Creds", setNetworkCredsMenu},
         {"Clock", setClock},
-        {"Sleep", setSleepMode},
         {"Factory Reset", [=]() { bruceConfig.factoryReset(); }},
         {"Restart", [=]() { ESP.restart(); }},
     };
-
-    options.push_back({"Turn-off", powerOff});
-    options.push_back({"Deep Sleep", goToDeepSleep});
 
     if (bruceConfig.devMode) options.push_back({"Device Pin setting", [=]() { devMenu(); }});
 
@@ -79,6 +75,7 @@ void ConfigMenu::devMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Dev Mode");
 }
+
 void ConfigMenu::drawIconImg() {
     drawImg(
         *bruceConfig.themeFS(),

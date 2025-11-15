@@ -13,6 +13,9 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["rot"] = rotation;
     setting["dimmerSet"] = dimmerSet;
+    setting["screenOffTimeout"] = screenOffTimeout;
+    setting["autoSleepTimeout"] = autoSleepTimeout;
+    setting["autoDeepSleepTimeout"] = autoDeepSleepTimeout;
     setting["bright"] = bright;
     setting["tmz"] = tmz;
     setting["soundEnabled"] = soundEnabled;
@@ -157,6 +160,24 @@ void BruceConfig::fromFile(bool checkFS) {
     }
     if (!setting["dimmerSet"].isNull()) {
         dimmerSet = setting["dimmerSet"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["screenOffTimeout"].isNull()) {
+        screenOffTimeout = setting["screenOffTimeout"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["autoSleepTimeout"].isNull()) {
+        autoSleepTimeout = setting["autoSleepTimeout"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["autoDeepSleepTimeout"].isNull()) {
+        autoDeepSleepTimeout = setting["autoDeepSleepTimeout"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -462,6 +483,9 @@ void BruceConfig::factoryReset() {
 void BruceConfig::validateConfig() {
     validateRotationValue();
     validateDimmerValue();
+    validateScreenOffTimeoutValue();
+    validateAutoSleepTimeoutValue();
+    validateAutoDeepSleepTimeoutValue();
     validateBrightValue();
     validateTmzValue();
     validateSoundEnabledValue();
@@ -506,6 +530,39 @@ void BruceConfig::setDimmer(int value) {
 void BruceConfig::validateDimmerValue() {
     if (dimmerSet < 0) dimmerSet = 10;
     if (dimmerSet > 60) dimmerSet = 0;
+}
+
+void BruceConfig::setScreenOffTimeout(int value) {
+    screenOffTimeout = value;
+    validateScreenOffTimeoutValue();
+    saveFile();
+}
+
+void BruceConfig::validateScreenOffTimeoutValue() {
+    if (screenOffTimeout < 0) screenOffTimeout = 0;
+    if (screenOffTimeout > 3600) screenOffTimeout = 3600;
+}
+
+void BruceConfig::setAutoSleepTimeout(int value) {
+    autoSleepTimeout = value;
+    validateAutoSleepTimeoutValue();
+    saveFile();
+}
+
+void BruceConfig::validateAutoSleepTimeoutValue() {
+    if (autoSleepTimeout < 0) autoSleepTimeout = 0;
+    if (autoSleepTimeout > 86400) autoSleepTimeout = 86400;
+}
+
+void BruceConfig::setAutoDeepSleepTimeout(int value) {
+    autoDeepSleepTimeout = value;
+    validateAutoDeepSleepTimeoutValue();
+    saveFile();
+}
+
+void BruceConfig::validateAutoDeepSleepTimeoutValue() {
+    if (autoDeepSleepTimeout < 0) autoDeepSleepTimeout = 0;
+    if (autoDeepSleepTimeout > 86400) autoDeepSleepTimeout = 86400;
 }
 
 void BruceConfig::setBright(uint8_t value) {
