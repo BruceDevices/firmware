@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "core/batteryLogger.h"
 #include "core/wifi/wifi_common.h"
 #include "display.h"
 #include "modules/others/qrcode_menu.h"
@@ -323,6 +324,75 @@ void setAutoDeepSleepTimeoutMenu() {
     );
 
     loopOptions(options, selectedIndex);
+}
+
+void setBatteryLogIntervalMenu() {
+    struct IntervalOption {
+        const char *label;
+        int value;
+    };
+    static const IntervalOption entries[] = {
+        {"Disabled",  0  },
+        {"Every 1 s", 1  },
+        {"Every 5 s", 5  },
+        {"Every 15 s", 15 },
+        {"Every 1 min", 60 },
+        {"Every 5 min", 300},
+        {"Every 15 min", 900},
+    };
+
+    options.clear();
+    constexpr size_t entryCount = sizeof(entries) / sizeof(entries[0]);
+    int selectedIndex = 0;
+    bool matchedPreset = false;
+
+    for (size_t i = 0; i < entryCount; ++i) {
+        if (bruceConfig.batteryLogInterval == entries[i].value) {
+            selectedIndex = i;
+            matchedPreset = true;
+        }
+
+        options.push_back(
+            {entries[i].label,
+             [=]() {
+                 bruceConfig.setBatteryLogInterval(entries[i].value);
+                 BatteryLogger::updateIntervalFromConfig(entries[i].value > 0);
+             },
+             bruceConfig.batteryLogInterval == entries[i].value}
+        );
+    }
+
+    size_t customIndex = entryCount;
+    options.push_back(
+        {"Custom",
+         [=]() {
+             String initialValue =
+                 bruceConfig.batteryLogInterval > 0 ? String(bruceConfig.batteryLogInterval) : "60";
+             String result = num_keyboard(initialValue, 4, "Seconds (1-3600)");
+             if (result.isEmpty()) return;
+             int seconds = constrain(result.toInt(), 1, 3600);
+             bruceConfig.setBatteryLogInterval(seconds);
+             BatteryLogger::updateIntervalFromConfig(true);
+         },
+         !matchedPreset && bruceConfig.batteryLogInterval > 0}
+    );
+
+    if (!matchedPreset && bruceConfig.batteryLogInterval > 0) selectedIndex = static_cast<int>(customIndex);
+    loopOptions(options, selectedIndex);
+}
+
+void showBatteryLogText() { BatteryLogger::showLogAsText(); }
+
+void showBatteryLogGraph() { BatteryLogger::showLogAsGraph(); }
+
+void deleteBatteryLogFileMenu() {
+    if (!BatteryLogger::logFileExists()) {
+        displayWarning("Log file not found", true);
+        return;
+    }
+
+    bool removed = BatteryLogger::deleteLogFile();
+    displayWarning(removed ? "Log file deleted" : "Unable to delete log", true);
 }
 
 /*********************************************************************

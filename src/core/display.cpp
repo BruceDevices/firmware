@@ -890,6 +890,8 @@ int getBattery() {
     return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
 
+float getBatteryVoltage() { return 0.0f; }
+
 /***************************************************************************************
 ** Function name: drawBatteryStatus()
 ** Description:   Delivers the battery value from 1-100

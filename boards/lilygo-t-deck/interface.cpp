@@ -110,29 +110,38 @@ void _setup_gpio() {
 ** location: display.cpp
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
+namespace {
+    constexpr adc1_channel_t BAT_ADC_CHANNEL = ADC1_GPIO4_CHANNEL;
+    constexpr adc_unit_t BAT_ADC_UNIT = ADC_UNIT_1;
+    constexpr int BASE_VOLTAGE = 3600;
+    constexpr float MAX_BAT_MV = 4150.0f;
+    constexpr float MIN_BAT_MV = 3350.0f;
+    esp_adc_cal_characteristics_t adcChars;
+    bool adcReady = false;
+
+    void ensureAdcSetup() {
+        if (adcReady) return;
+        adc1_config_width(ADC_WIDTH_BIT_12);
+        adc1_config_channel_atten(BAT_ADC_CHANNEL, ADC_ATTEN_DB_12);
+        esp_adc_cal_characterize(BAT_ADC_UNIT, ADC_ATTEN_DB_12, ADC_WIDTH_BIT_12, BASE_VOLTAGE, &adcChars);
+        adcReady = true;
+    }
+
+    float readBatteryMillivolts() {
+        ensureAdcSetup();
+        int raw = adc1_get_raw(BAT_ADC_CHANNEL);
+        uint32_t volt = esp_adc_cal_raw_to_voltage(raw, &adcChars);
+        return volt * 2.0f;
+    }
+} // namespace
+
 int getBattery() {
-    int percent = 0;
-    uint8_t _batAdcCh = ADC1_GPIO4_CHANNEL;
-    uint8_t _batAdcUnit = 1;
-    static uint32_t lastVolt = 5000;
-    static unsigned long lastTime = 0;
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten((adc1_channel_t)_batAdcCh, ADC_ATTEN_DB_12);
-    static esp_adc_cal_characteristics_t *adc_chars = nullptr;
-    static constexpr int BASE_VOLATAGE = 3600;
-    adc_chars = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_characterize(
-        (adc_unit_t)_batAdcUnit, ADC_ATTEN_DB_12, ADC_WIDTH_BIT_12, BASE_VOLATAGE, adc_chars
-    );
-    int raw;
-    raw = adc1_get_raw((adc1_channel_t)_batAdcCh);
-    uint32_t volt = esp_adc_cal_raw_to_voltage(raw, adc_chars);
-
-    float mv = volt * 2;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
+    float mv = readBatteryMillivolts();
+    int percent = (mv - MIN_BAT_MV) * 100 / (MAX_BAT_MV - MIN_BAT_MV);
     return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
+
+float getBatteryVoltage() { return readBatteryMillivolts() / 1000.0f; }
 bool isCharging() { return false; }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()

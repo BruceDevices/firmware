@@ -22,6 +22,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
+    setting["batteryLogInterval"] = batteryLogInterval;
 
     setting["ledBright"] = ledBright;
     setting["ledColor"] = String(ledColor, HEX);
@@ -214,6 +215,13 @@ void BruceConfig::fromFile(bool checkFS) {
     }
     if (!setting["instantBoot"].isNull()) {
         instantBoot = setting["instantBoot"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
+    if (!setting["batteryLogInterval"].isNull()) {
+        batteryLogInterval = setting["batteryLogInterval"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -491,6 +499,7 @@ void BruceConfig::validateConfig() {
     validateSoundEnabledValue();
     validateSoundVolumeValue();
     validateWifiAtStartupValue();
+    validateBatteryLogIntervalValue();
     validateLedBrightValue();
     validateLedColorValue();
     validateLedBlinkEnabledValue();
@@ -613,6 +622,17 @@ void BruceConfig::setWifiAtStartup(int value) {
 
 void BruceConfig::validateWifiAtStartupValue() {
     if (wifiAtStartup > 1) wifiAtStartup = 1;
+}
+
+void BruceConfig::setBatteryLogInterval(int value) {
+    batteryLogInterval = value;
+    validateBatteryLogIntervalValue();
+    saveFile();
+}
+
+void BruceConfig::validateBatteryLogIntervalValue() {
+    if (batteryLogInterval < 0) batteryLogInterval = 0;
+    else if (batteryLogInterval > 3600) batteryLogInterval = 3600;
 }
 
 void BruceConfig::setLedBright(int value) {

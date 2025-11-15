@@ -49,6 +49,7 @@ void setDimmerTimeMenu();
 void setScreenOffTimeoutMenu();
 void setAutoSleepTimeoutMenu();
 void setAutoDeepSleepTimeoutMenu();
+void setBatteryLogIntervalMenu();
 
 void setClock();
 
@@ -89,5 +90,9 @@ void setI2CPinsMenu(BruceConfigPins::I2CPins &value);
 void setTheme();
 
 void setMacAddressMenu();
+
+void showBatteryLogText();
+void showBatteryLogGraph();
+void deleteBatteryLogFileMenu();
 
 #endif

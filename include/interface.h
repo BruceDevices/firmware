@@ -23,6 +23,13 @@ void _post_setup_gpio();
 ***************************************************************************************/
 int getBattery();
 
+/***************************************************************************************
+** Function name: getBatteryVoltage()
+** location: display.cpp
+** Description:   Returns the current battery voltage (in Volts) if supported
+***************************************************************************************/
+float getBatteryVoltage();
+
 
 /*********************************************************************
 ** Function: setBrightness

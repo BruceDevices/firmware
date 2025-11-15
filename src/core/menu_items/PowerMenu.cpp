@@ -12,6 +12,10 @@ void PowerMenu::optionsMenu() {
         {"Screen Off Timeout",     setScreenOffTimeoutMenu    },
         {"Auto Sleep Timeout",     setAutoSleepTimeoutMenu    },
         {"Auto Deep Sleep Timeout", setAutoDeepSleepTimeoutMenu},
+        {"Battery Log Interval",   setBatteryLogIntervalMenu  },
+        {"View Battery Log (Text)", showBatteryLogText        },
+        {"View Battery Log (Graph)", showBatteryLogGraph      },
+        {"Delete Battery Log",     deleteBatteryLogFileMenu   },
     };
 
     addOptionToMainMenu();
