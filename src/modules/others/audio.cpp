@@ -14,10 +14,19 @@
 #endif
 
 static bool configureI2SPinout(AudioOutputI2S *output) {
+#if defined(BCLK) && defined(WCLK) && defined(DOUT)
 #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
+#ifdef MCLK
     return output->SetPinout(BCLK, WCLK, DOUT, MCLK);
 #else
     return output->SetPinout(BCLK, WCLK, DOUT);
+#endif
+#else
+    return output->SetPinout(BCLK, WCLK, DOUT);
+#endif
+#else
+    log_w("Skipping audio output configuration: I2S pins not defined");
+    return false;
 #endif
 }
 
@@ -29,10 +38,13 @@ bool playAudioFile(FS *fs, String filepath) {
     AudioFileSource *source = new AudioFileSourceFS(*fs, filepath.c_str());
     if (!source) return false;
 
-    AudioOutputI2S *audioout = new AudioOutputI2S(
-    ); // https://github.com/earlephilhower/ESP8266Audio/blob/master/src/AudioOutputI2S.cpp#L32
-    configureI2SPinout(audioout);
-    
+    AudioOutputI2S *audioout = new AudioOutputI2S();
+    if (!audioout || !configureI2SPinout(audioout)) {
+        delete audioout;
+        delete source;
+        return false;
+    }
+
     // set volume, derived from https://github.com/earlephilhower/ESP8266Audio/blob/master/examples/WebRadio/WebRadio.ino
     audioout->SetGain(((float)bruceConfig.soundVolume) / 100.0);
 
@@ -92,7 +104,10 @@ bool playAudioRTTTLString(String song) {
     if (song == "") return false;
 
     AudioOutputI2S *audioout = new AudioOutputI2S();
-    configureI2SPinout(audioout);
+    if (!audioout || !configureI2SPinout(audioout)) {
+        delete audioout;
+        return false;
+    }
 
     AudioGenerator *generator = new AudioGeneratorRTTTL();
 
@@ -125,7 +140,10 @@ bool tts(String text) {
     if (text == "") return false;
 
     AudioOutputI2S *audioout = new AudioOutputI2S();
-    configureI2SPinout(audioout);
+    if (!audioout || !configureI2SPinout(audioout)) {
+        delete audioout;
+        return false;
+    }
 
     // https://github.com/earlephilhower/ESP8266SAM/blob/master/examples/Speak/Speak.ino
     audioout->begin();
@@ -154,7 +172,10 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     AudioGeneratorWAV *wav;
     AudioFileSourceFunction *file;
     AudioOutputI2S *out = new AudioOutputI2S();
-    configureI2SPinout(out);
+    if (!out || !configureI2SPinout(out)) {
+        delete out;
+        return;
+    }
 
     file = new AudioFileSourceFunction(duration / 1000.0); // , 1, 44100
     //

@@ -28,8 +28,29 @@ struct LogEntry {
 };
 
 String makeTimestamp() {
+    char buffer[32] = {0};
+
+#if defined(HAS_RTC)
+    if (clock_set) {
+        RTC_TimeTypeDef nowTime;
+        RTC_DateTypeDef nowDate;
+        _rtc.GetTime(&nowTime);
+        _rtc.GetDate(&nowDate);
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "%04u-%02u-%02u %02u:%02u:%02u",
+            static_cast<unsigned>(nowDate.Year),
+            static_cast<unsigned>(nowDate.Month),
+            static_cast<unsigned>(nowDate.Date),
+            static_cast<unsigned>(nowTime.Hours),
+            static_cast<unsigned>(nowTime.Minutes),
+            static_cast<unsigned>(nowTime.Seconds)
+        );
+        return String(buffer);
+    }
+#else
     struct tm timeinfo = rtc.getTimeStruct();
-    char buffer[24];
     if (clock_set && timeinfo.tm_year >= 70) {
         snprintf(
             buffer,
@@ -44,6 +65,7 @@ String makeTimestamp() {
         );
         return String(buffer);
     }
+#endif
 
     snprintf(buffer, sizeof(buffer), "T+%lu", millis() / 1000UL);
     return String(buffer);
