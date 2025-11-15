@@ -1305,10 +1305,10 @@ void setBadUSBBLEKeyboardLayoutMenu() {
 void setBadUSBBLEKeyDelayMenu() {
     String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 4, "Key Delay (ms):");
     uint8_t delayVal = static_cast<uint8_t>(delayStr.toInt());
-    if (delayVal >= 25 && delayVal <= 500) {
+    if (delayVal >= 0 && delayVal <= 500) {
         bruceConfig.setBadUSBBLEKeyDelay(delayVal);
     } else if (delayVal != 0) {
-        displayError("Invalid key delay value (25 to 500)", true);
+        displayError("Invalid key delay value (0 to 500)", true);
     }
 }
 
