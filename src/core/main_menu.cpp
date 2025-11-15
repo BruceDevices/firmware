@@ -31,6 +31,7 @@ MainMenu::MainMenu() {
         &othersMenu,
         &clockMenu,
         &connectMenu,
+        &powerMenu,
         &configMenu,
     };
 

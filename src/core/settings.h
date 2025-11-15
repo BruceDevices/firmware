@@ -46,6 +46,9 @@ void addMifareKeyMenu();
 void setSleepMode();
 
 void setDimmerTimeMenu();
+void setScreenOffTimeoutMenu();
+void setAutoSleepTimeoutMenu();
+void setAutoDeepSleepTimeoutMenu();
 
 void setClock();
 
