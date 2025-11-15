@@ -9,7 +9,7 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    M5.begin();          // Need to test if SDCard inits with the new setup
+    M5.begin(); // Need to test if SDCard inits with the new setup
     pinMode(GPIO_NUM_0, OUTPUT);
 }
 
@@ -78,7 +78,7 @@ void goToDeepSleep() { M5.Power.deepSleep(); }
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}
 

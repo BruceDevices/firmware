@@ -147,7 +147,7 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = millis();  // debauce for buttons
+    static unsigned long tm = millis();  // debounce for buttons
     static unsigned long tm2 = millis(); // delay between Select and encoder (avoid missclick)
     static int posDifference = 0;
     static int lastPos = 0;
