@@ -1,4 +1,5 @@
 #include "display.h"
+#include "core/led_control.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -101,18 +102,23 @@ void setTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg) {
     tft.setTextColor(fc, bg);
 }
 
-void turnOffDisplay() { setBrightness(0, false); }
+void turnOffDisplay() {
+    setBrightness(0, false);
+    ledSleepMode(true);
+}
 
 bool wakeUpScreen() {
     previousMillis = millis();
     if (isScreenOff) {
         isScreenOff = false;
         dimmer = false;
+        ledSleepMode(false);
         getBrightness();
         vTaskDelay(pdMS_TO_TICKS(200));
         return true;
     } else if (dimmer) {
         dimmer = false;
+        ledSleepMode(false);
         getBrightness();
         vTaskDelay(pdMS_TO_TICKS(200));
         return true;

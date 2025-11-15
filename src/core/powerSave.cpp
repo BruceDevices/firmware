@@ -1,4 +1,5 @@
 #include "powerSave.h"
+#include "core/led_control.h"
 #include "display.h"
 #include "settings.h"
 
@@ -55,6 +56,7 @@ void sleepModeOff() {
     panelSleep(false); // wake the screen back up
 
 
+    ledSleepMode(false);
     getBrightness();
     enableCore0WDT();
     enableCore1WDT();

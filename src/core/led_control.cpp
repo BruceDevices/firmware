@@ -4,9 +4,15 @@
 #include "core/utils.h"
 #include <globals.h>
 
+#ifndef FASTLED_RMT_BUILTIN_DRIVER
 #define FASTLED_RMT_BUILTIN_DRIVER 1  // Use the ESP32 RMT built-in driver
-#define FASTLED_RMT_MAX_CHANNELS 1    // Maximum number of RMT channels
+#endif
+#ifndef FASTLED_RMT_MAX_CHANNELS
+#define FASTLED_RMT_MAX_CHANNELS 1  // Restrict FastLED to a single RMT channel
+#endif
+#ifndef FASTLED_ESP32_RMT_CHANNEL_0
 #define FASTLED_ESP32_RMT_CHANNEL_0 0 // Use RMT channel 0 for FastLED
+#endif
 #include "driver/rmt.h"
 #include <FastLED.h>
 #include <freertos/FreeRTOS.h>
@@ -19,6 +25,7 @@ CRGB previewLedColor;
 int previewLedEffect;
 int previewLedEffectSpeed;
 int previewLedEffectDirection;
+bool ledSleepModeActive = false;
 
 CRGB hsvToRgb(uint16_t h, uint8_t s, uint8_t v) {
     uint8_t f = (h % 60) * 255 / 60;
@@ -85,12 +92,30 @@ void ledEffectTask(void *pvParameters) {
     short offset = 0;
     int currentLED = 0;
     int frame = 0;
+    int lastEffect = -1;
+#ifdef HAS_ENCODER_LED
+    int encoderRunnerLastLed = -1;
+    uint32_t encoderRunnerLastColor = 0;
+    float encoderRainbowHue = 0.0f;
+#endif
     uint64_t start_time = esp_timer_get_time() / 1000;
     while (1) {
         CRGB baseColor = isPreviewLed ? previewLedColor : bruceConfig.ledColor;
         int ledEffect = isPreviewLed ? previewLedEffect : bruceConfig.ledEffect;
         int ledEffectSpeed = isPreviewLed ? previewLedEffectSpeed : bruceConfig.ledEffectSpeed;
         int ledEffectDirection = isPreviewLed ? previewLedEffectDirection : bruceConfig.ledEffectDirection;
+
+        if (ledEffect != lastEffect) {
+            offset = 0;
+            frame = 0;
+            currentLED = 0;
+#ifdef HAS_ENCODER_LED
+            encoderRunnerLastLed = -1;
+            encoderRunnerLastColor = 0;
+            encoderRainbowHue = 0.0f;
+#endif
+            lastEffect = ledEffect;
+        }
 
         if (ledEffect == LED_EFFECT_COLOR_CYCLE || ledEffect == LED_EFFECT_COLOR_WHEEL) {
             short delayMs = 50;
@@ -182,7 +207,51 @@ void ledEffectTask(void *pvParameters) {
                     }
                 }
             }
-            frame++;
+#ifdef HAS_ENCODER_LED
+        } else if (ledEffect == LED_EFFECT_ENCODER_RUNNER) {
+            bool shouldRedraw = false;
+            if (EncoderLedChange != 0) {
+                currentLED = (currentLED + EncoderLedChange + LED_COUNT) % LED_COUNT;
+                EncoderLedChange = 0;
+                shouldRedraw = true;
+            }
+
+            uint32_t colorValue = ((uint32_t)baseColor.r << 16) | ((uint32_t)baseColor.g << 8) | baseColor.b;
+            if (encoderRunnerLastLed == -1 || colorValue != encoderRunnerLastColor) { shouldRedraw = true; }
+
+            if (shouldRedraw) {
+                fill_solid(leds, LED_COUNT, CRGB::Black);
+                leds[currentLED] = baseColor;
+                encoderRunnerLastLed = currentLED;
+                encoderRunnerLastColor = colorValue;
+            }
+        } else if (ledEffect == LED_EFFECT_ENCODER_RAINBOW) {
+            bool shouldRedraw = false;
+            if (EncoderLedChange != 0) {
+                currentLED = (currentLED + EncoderLedChange + LED_COUNT) % LED_COUNT;
+                EncoderLedChange = 0;
+                shouldRedraw = true;
+            }
+
+            int runnerSpeed = ledEffectSpeed;
+            if (runnerSpeed <= 0) runnerSpeed = 1;
+            if (runnerSpeed > 10) runnerSpeed = 10;
+            float hueIncrement = runnerSpeed * 2.0f;
+            encoderRainbowHue = fmodf(encoderRainbowHue + hueIncrement, 360.0f);
+
+            CRGB rainbowColor = hsvToRgb(static_cast<uint16_t>(encoderRainbowHue), 255, 255);
+            uint32_t colorValue =
+                ((uint32_t)rainbowColor.r << 16) | ((uint32_t)rainbowColor.g << 8) | rainbowColor.b;
+            if (encoderRunnerLastLed == -1 || colorValue != encoderRunnerLastColor) { shouldRedraw = true; }
+
+            if (shouldRedraw) {
+                fill_solid(leds, LED_COUNT, CRGB::Black);
+                leds[currentLED] = rainbowColor;
+                encoderRunnerLastLed = currentLED;
+                encoderRunnerLastColor = colorValue;
+            }
+#endif
+        frame++;
 #endif
         }
 
@@ -279,6 +348,18 @@ void setLedBrightness(int value) {
     int bright = 255 * value / 100;
     FastLED.setBrightness(bright);
     FastLED.show();
+}
+
+void ledSleepMode(bool enable) {
+    if (enable) {
+        if (!ledSleepModeActive) {
+            ledSleepModeActive = true;
+            setLedBrightness(0);
+        }
+    } else if (ledSleepModeActive) {
+        ledSleepModeActive = false;
+        setLedBrightness(bruceConfig.ledBright);
+    }
 }
 
 const CRGB BrucePurple = 0x960064; // Custom purple color for Bruce
@@ -491,6 +572,22 @@ void setLedEffectConfig() {
                  setLedEffect(LED_EFFECT_CHASE_TAIL);
                  return false;
              }                                                                    },
+#ifdef HAS_ENCODER_LED
+            {"Encoder Runner",
+             [=]() { bruceConfig.setLedEffect(LED_EFFECT_ENCODER_RUNNER); },
+             bruceConfig.ledEffect == LED_EFFECT_ENCODER_RUNNER,
+             [](void *pointer,                                                                     bool shouldRender) {
+                 setLedEffect(LED_EFFECT_ENCODER_RUNNER);
+                 return false;
+             }                                                                    },
+            {"Rainbow Runner",
+             [=]() { bruceConfig.setLedEffect(LED_EFFECT_ENCODER_RAINBOW); },
+             bruceConfig.ledEffect == LED_EFFECT_ENCODER_RAINBOW,
+             [](void *pointer,                                                                     bool shouldRender) {
+                 setLedEffect(LED_EFFECT_ENCODER_RAINBOW);
+                 return false;
+             }                                                                    },
+#endif
 #endif
             {"Config - Speed",
              setLedEffectSpeedConfig,                                     false,

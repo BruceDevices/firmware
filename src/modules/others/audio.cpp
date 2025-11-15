@@ -9,6 +9,18 @@
 #include <ESP8266Audio.h>
 #include <ESP8266SAM.h>
 
+#ifdef ESP32
+#include <esp_idf_version.h>
+#endif
+
+static bool configureI2SPinout(AudioOutputI2S *output) {
+#if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
+    return output->SetPinout(BCLK, WCLK, DOUT, MCLK);
+#else
+    return output->SetPinout(BCLK, WCLK, DOUT);
+#endif
+}
+
 #if defined(HAS_NS4168_SPKR)
 
 bool playAudioFile(FS *fs, String filepath) {
@@ -19,7 +31,7 @@ bool playAudioFile(FS *fs, String filepath) {
 
     AudioOutputI2S *audioout = new AudioOutputI2S(
     ); // https://github.com/earlephilhower/ESP8266Audio/blob/master/src/AudioOutputI2S.cpp#L32
-    audioout->SetPinout(BCLK, WCLK, DOUT, MCLK);
+    configureI2SPinout(audioout);
     
     // set volume, derived from https://github.com/earlephilhower/ESP8266Audio/blob/master/examples/WebRadio/WebRadio.ino
     audioout->SetGain(((float)bruceConfig.soundVolume) / 100.0);
@@ -80,7 +92,7 @@ bool playAudioRTTTLString(String song) {
     if (song == "") return false;
 
     AudioOutputI2S *audioout = new AudioOutputI2S();
-    audioout->SetPinout(BCLK, WCLK, DOUT, MCLK);
+    configureI2SPinout(audioout);
 
     AudioGenerator *generator = new AudioGeneratorRTTTL();
 
@@ -113,7 +125,7 @@ bool tts(String text) {
     if (text == "") return false;
 
     AudioOutputI2S *audioout = new AudioOutputI2S();
-    audioout->SetPinout(BCLK, WCLK, DOUT, MCLK);
+    configureI2SPinout(audioout);
 
     // https://github.com/earlephilhower/ESP8266SAM/blob/master/examples/Speak/Speak.ino
     audioout->begin();
@@ -142,7 +154,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     AudioGeneratorWAV *wav;
     AudioFileSourceFunction *file;
     AudioOutputI2S *out = new AudioOutputI2S();
-    out->SetPinout(BCLK, WCLK, DOUT, MCLK);
+    configureI2SPinout(out);
 
     file = new AudioFileSourceFunction(duration / 1000.0); // , 1, 44100
     //

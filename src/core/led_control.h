@@ -12,6 +12,8 @@
 #define LED_EFFECT_COLOR_WHEEL 3
 #define LED_EFFECT_CHASE 4
 #define LED_EFFECT_CHASE_TAIL 5
+#define LED_EFFECT_ENCODER_RUNNER 6
+#define LED_EFFECT_ENCODER_RAINBOW 7
 
 CRGB hsvToRgb(uint16_t h, uint8_t s, uint8_t v);
 uint32_t alterOneColorChannel(uint32_t color, uint16_t newR, uint16_t newG, uint16_t newB);
@@ -34,9 +36,11 @@ void ledEffects(bool enable);
 void ledPreviewMode(bool enable);
 void setLedBrightness(int value);
 void setLedBrightnessConfig();
+void ledSleepMode(bool enable);
 
 #else
 inline void blinkLed(int blinkTime = 50) {};
+inline void ledSleepMode(bool enable) {};
 #endif
 
 #endif

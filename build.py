@@ -37,7 +37,7 @@ out_bin  = proj_dir / f"Bruce-{pioenv}.bin"
 
 # Esptool from PlatformIO + Python executable
 esptool_pkg = senv.PioPlatform().get_package_dir("tool-esptoolpy")
-esptool_py  = str(Path(esptool_pkg) / "esptool")
+esptool_py  = Path(esptool_pkg) / "esptool.py"
 python_exe  = senv.get("PYTHONEXE", "python")
 
 chip_arg = mcu if mcu else "esp32"
@@ -98,15 +98,17 @@ def _merge_bins_callback(target, source, env):
             print("[merge_bin] Error: firmware.bin exceeds OTA partition size")
             env.Exit(1)
 
-    cmd = " ".join([
-        "pio pkg exec -p \"tool-esptoolpy\" -- esptool.py",
+    cmd_parts = [
+        q(python_exe),
+        q(esptool_py),
         "--chip", chip_arg,
         "merge_bin",
         "--output", q(out_bin),
         hex(boot_offset), q(boot_bin),
         hex(PART_TABLE_OFFSET), q(part_bin),
         hex(APP_OFFSET), q(app_bin),
-    ])
+    ]
+    cmd = " ".join(cmd_parts)
 
     print("[merge_bin] Merging binaries:")
     print(" ", cmd)
