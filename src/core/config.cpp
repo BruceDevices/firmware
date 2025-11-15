@@ -23,6 +23,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
     setting["batteryLogInterval"] = batteryLogInterval;
+    setting["powerMode"] = powerMode;
 
     setting["ledBright"] = ledBright;
     setting["ledColor"] = String(ledColor, HEX);
@@ -222,6 +223,12 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["batteryLogInterval"].isNull()) {
         batteryLogInterval = setting["batteryLogInterval"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["powerMode"].isNull()) {
+        powerMode = setting["powerMode"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -500,6 +507,7 @@ void BruceConfig::validateConfig() {
     validateSoundVolumeValue();
     validateWifiAtStartupValue();
     validateBatteryLogIntervalValue();
+    validatePowerModeValue();
     validateLedBrightValue();
     validateLedColorValue();
     validateLedBlinkEnabledValue();
@@ -633,6 +641,17 @@ void BruceConfig::setBatteryLogInterval(int value) {
 void BruceConfig::validateBatteryLogIntervalValue() {
     if (batteryLogInterval < 0) batteryLogInterval = 0;
     else if (batteryLogInterval > 3600) batteryLogInterval = 3600;
+}
+
+void BruceConfig::setPowerMode(int value) {
+    powerMode = value;
+    validatePowerModeValue();
+    saveFile();
+}
+
+void BruceConfig::validatePowerModeValue() {
+    if (powerMode < POWER_MODE_AGGRESSIVE || powerMode > POWER_MODE_PERFORMANCE)
+        powerMode = POWER_MODE_BALANCED;
 }
 
 void BruceConfig::setLedBright(int value) {

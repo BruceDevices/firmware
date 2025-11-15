@@ -1,5 +1,6 @@
 #include "display.h"
 #include "core/led_control.h"
+#include "core/systemStatus.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -817,6 +818,12 @@ void drawStatusBar() {
         setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
         tft.print("BRUCE " + String(BRUCE_VERSION));
     }
+
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    String cpuInfo =
+        String(SystemStatus::cpuFrequencyMhz()) + "MHz " + String(SystemStatus::cpuLoadPercent()) + "%";
+    tft.drawCentreString(cpuInfo, tftWidth / 2, 12, 1);
 }
 
 void drawMainBorder(bool clear) {

@@ -50,6 +50,8 @@ void setScreenOffTimeoutMenu();
 void setAutoSleepTimeoutMenu();
 void setAutoDeepSleepTimeoutMenu();
 void setBatteryLogIntervalMenu();
+void setPowerProfileMenu();
+const char *powerModeName(int mode);
 
 void setClock();
 

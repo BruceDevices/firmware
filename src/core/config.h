@@ -22,6 +22,12 @@ enum RFModules {
     CC1101_SPI_MODULE = 1,
 };
 
+enum PowerMode {
+    POWER_MODE_AGGRESSIVE = 0,
+    POWER_MODE_BALANCED = 1,
+    POWER_MODE_PERFORMANCE = 2,
+};
+
 class BruceConfig : public BruceTheme {
 public:
     struct WiFiCredential {
@@ -52,6 +58,7 @@ public:
     int wifiAtStartup = 0;
     int instantBoot = 0;
     int batteryLogInterval = 0; // seconds, 0 disables logging
+    int powerMode = POWER_MODE_PERFORMANCE;
 
     // Led
     int ledBright = 75;
@@ -155,6 +162,8 @@ public:
     void validateWifiAtStartupValue();
     void setBatteryLogInterval(int value);
     void validateBatteryLogIntervalValue();
+    void setPowerMode(int value);
+    void validatePowerModeValue();
 
     // Led
     void setLedBright(int value);

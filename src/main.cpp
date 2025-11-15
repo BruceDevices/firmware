@@ -3,6 +3,7 @@
 
 #include "core/batteryLogger.h"
 #include "core/powerSave.h"
+#include "core/systemStatus.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
 #include "esp32-hal-psram.h"
@@ -54,6 +55,7 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
     while (true) {
         checkPowerSaveTime();
         BatteryLogger::update();
+        SystemStatus::update();
         // Sometimes this task run 2 or more times before looptask,
         // and navigation gets stuck, the idea here is run the input detection
         // if AnyKeyPress is false, or rerun if it was not renewed within 75ms (arbitrary)
@@ -407,6 +409,7 @@ void setup() {
 #endif
     begin_storage();
     BatteryLogger::begin();
+    SystemStatus::begin();
     begin_tft();
     init_clock();
     init_led();

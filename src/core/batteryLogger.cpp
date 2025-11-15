@@ -25,6 +25,7 @@ struct LogEntry {
     int percent = 0;
     float voltage = 0.0f;
     bool voltageValid = false;
+    bool charging = false;
 };
 
 String makeTimestamp() {
@@ -108,14 +109,32 @@ void appendSample() {
         return;
     }
 
-    if (file.size() == 0) file.println("timestamp,percent,voltage");
+    if (file.size() == 0) file.println("timestamp,percent,voltage,charging");
 
     String timestamp = makeTimestamp();
     float voltage = getBatteryVoltage();
-    String voltageToken = voltage > 0.0f ? String(voltage, 3) : String("NA");
-
-    file.printf("%s,%d,%s\n", timestamp.c_str(), percent, voltageToken.c_str());
+    bool voltageValid = voltage > 0.0f;
+    String voltageToken = voltageValid ? String(voltage, 3) : String("NA");
+    bool charging = isCharging();
+    file.printf("%s,%d,%s,%d\n", timestamp.c_str(), percent, voltageToken.c_str(), charging ? 1 : 0);
     file.close();
+
+    if (voltageValid) {
+        log_i(
+            "BatteryLogger: %s, %d%%, %.3fV, charging=%s",
+            timestamp.c_str(),
+            percent,
+            voltage,
+            charging ? "true" : "false"
+        );
+    } else {
+        log_i(
+            "BatteryLogger: %s, %d%%, voltage=N/A, charging=%s",
+            timestamp.c_str(),
+            percent,
+            charging ? "true" : "false"
+        );
+    }
 }
 
 bool parseLine(const String &line, LogEntry &entry) {
@@ -124,13 +143,29 @@ bool parseLine(const String &line, LogEntry &entry) {
     int secondComma = line.indexOf(',', firstComma + 1);
     if (secondComma < 0) return false;
 
+    int thirdComma = line.indexOf(',', secondComma + 1);
+
     entry.timestamp = line.substring(0, firstComma);
     entry.percent = line.substring(firstComma + 1, secondComma).toInt();
 
-    String voltageToken = line.substring(secondComma + 1);
+    String voltageToken;
+    String chargingToken;
+    if (thirdComma < 0) {
+        voltageToken = line.substring(secondComma + 1);
+    } else {
+        voltageToken = line.substring(secondComma + 1, thirdComma);
+        chargingToken = line.substring(thirdComma + 1);
+    }
+
     voltageToken.trim();
     entry.voltageValid = !voltageToken.equalsIgnoreCase("NA") && !voltageToken.isEmpty();
     entry.voltage = entry.voltageValid ? voltageToken.toFloat() : 0.0f;
+    chargingToken.trim();
+    if (!chargingToken.isEmpty()) {
+        if (chargingToken.equalsIgnoreCase("true")) entry.charging = true;
+        else if (chargingToken.equalsIgnoreCase("false")) entry.charging = false;
+        else entry.charging = chargingToken.toInt() != 0;
+    } else entry.charging = false;
     return true;
 }
 
@@ -192,11 +227,21 @@ void renderGraph(const std::vector<LogEntry> &entries) {
     bool hasVoltage = false;
     float minVolt = std::numeric_limits<float>::max();
     float maxVolt = std::numeric_limits<float>::lowest();
+    bool hasChargingSamples = false;
     for (const auto &entry : entries) {
         if (!entry.voltageValid) continue;
         hasVoltage = true;
         minVolt = std::min(minVolt, entry.voltage);
         maxVolt = std::max(maxVolt, entry.voltage);
+        if (entry.charging) hasChargingSamples = true;
+    }
+    if (!hasChargingSamples) {
+        for (const auto &entry : entries) {
+            if (entry.charging) {
+                hasChargingSamples = true;
+                break;
+            }
+        }
     }
     if (hasVoltage && fabsf(maxVolt - minVolt) < 0.01f) maxVolt = minVolt + 0.05f;
 
@@ -237,6 +282,16 @@ void renderGraph(const std::vector<LogEntry> &entries) {
         );
     }
 
+    if (hasChargingSamples) {
+        int16_t markerHeight = min<int16_t>(6, graphHeight / 6);
+        int16_t markerTop = top + graphHeight - markerHeight - 1;
+        for (size_t i = 0; i < entries.size(); ++i) {
+            if (!entries[i].charging) continue;
+            int16_t x = xForIndex(i);
+            tft.drawFastVLine(x, markerTop, markerHeight, TFT_ORANGE);
+        }
+    }
+
     if (hasVoltage) {
         bool havePrev = false;
         int16_t lastX = 0;
@@ -268,13 +323,19 @@ void renderGraph(const std::vector<LogEntry> &entries) {
 
     int16_t legendY = BORDER_PAD_Y + 10;
     int16_t legendX = margin;
-    tft.drawLine(legendX, legendY + 6, legendX + 24, legendY + 6, TFT_GREEN);
-    tft.drawString("Charge %", legendX + 30, legendY, 1);
-    legendX += 140;
-    if (legendX + 80 > margin + graphWidth) legendX = margin + graphWidth - 120;
-    if (legendX < margin) legendX = margin;
-    tft.drawLine(legendX, legendY + 6, legendX + 24, legendY + 6, TFT_CYAN);
-    tft.drawString("Voltage", legendX + 30, legendY, 1);
+    auto drawLegendItem = [&](uint16_t color, const char *label) {
+        tft.drawLine(legendX, legendY + 6, legendX + 24, legendY + 6, color);
+        tft.drawString(label, legendX + 30, legendY, 1);
+        legendX += 140;
+        if (legendX + 80 > margin + graphWidth) {
+            legendX = margin;
+            legendY += LH;
+        }
+    };
+
+    drawLegendItem(TFT_GREEN, "Charge %");
+    if (hasVoltage) drawLegendItem(TFT_CYAN, "Voltage");
+    if (hasChargingSamples) drawLegendItem(TFT_ORANGE, "Charging");
 
     if (!entries.empty()) {
         tft.drawCentreString(
@@ -348,7 +409,7 @@ void showLogAsText() {
     }
 
     ScrollableTextArea area("BATTERY LOG");
-    area.addLine("TIME | LEVEL | VOLTAGE");
+    area.addLine("TIME | LEVEL | VOLTAGE | CHG");
     bool hasData = false;
 
     while (file.available()) {
@@ -361,6 +422,8 @@ void showLogAsText() {
         hasData = true;
         String row = entry.timestamp + " | " + String(entry.percent) + "% | ";
         row += entry.voltageValid ? String(entry.voltage, 3) + "V" : "N/A";
+        row += " | ";
+        row += entry.charging ? "Y" : "N";
         area.addLine(row);
     }
 

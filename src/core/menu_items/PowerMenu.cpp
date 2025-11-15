@@ -4,18 +4,20 @@
 #include "core/utils.h"
 
 void PowerMenu::optionsMenu() {
+    String profileLabel = String("Power Profile (") + powerModeName(bruceConfig.powerMode) + ")";
     options = {
-        {"Sleep",                  setSleepMode               },
-        {"Deep Sleep",             goToDeepSleep              },
-        {"Power Off",              powerOff                   },
-        {"Dim Timeout",            setDimmerTimeMenu          },
-        {"Screen Off Timeout",     setScreenOffTimeoutMenu    },
-        {"Auto Sleep Timeout",     setAutoSleepTimeoutMenu    },
-        {"Auto Deep Sleep Timeout", setAutoDeepSleepTimeoutMenu},
-        {"Battery Log Interval",   setBatteryLogIntervalMenu  },
-        {"View Battery Log (Text)", showBatteryLogText        },
-        {"View Battery Log (Graph)", showBatteryLogGraph      },
-        {"Delete Battery Log",     deleteBatteryLogFileMenu   },
+        {"Sleep",                   setSleepMode                },
+        {"Deep Sleep",              goToDeepSleep               },
+        {"Power Off",               powerOff                    },
+        {profileLabel,              setPowerProfileMenu         },
+        {"Dim Timeout",             setDimmerTimeMenu           },
+        {"Screen Off Timeout",      setScreenOffTimeoutMenu     },
+        {"Auto Sleep Timeout",      setAutoSleepTimeoutMenu     },
+        {"Auto Deep Sleep Timeout", setAutoDeepSleepTimeoutMenu },
+        {"Battery Log Interval",    setBatteryLogIntervalMenu   },
+        {"View Battery Log (Text)", showBatteryLogText          },
+        {"View Battery Log (Graph)", showBatteryLogGraph        },
+        {"Delete Battery Log",      deleteBatteryLogFileMenu    },
     };
 
     addOptionToMainMenu();

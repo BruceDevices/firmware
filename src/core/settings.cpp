@@ -185,6 +185,15 @@ void setDimmerTimeMenu() {
     loopOptions(options, idx);
 }
 
+const char *powerModeName(int mode) {
+    switch (mode) {
+    case POWER_MODE_AGGRESSIVE: return "Aggressive";
+    case POWER_MODE_PERFORMANCE: return "Performance";
+    case POWER_MODE_BALANCED:
+    default: return "Balanced";
+    }
+}
+
 void setScreenOffTimeoutMenu() {
     struct TimeoutOption {
         const char *label;
@@ -322,6 +331,39 @@ void setAutoDeepSleepTimeoutMenu() {
          },
          selectedIndex == static_cast<int>(entryCount)}
     );
+
+    loopOptions(options, selectedIndex);
+}
+
+void setPowerProfileMenu() {
+    struct ProfileEntry {
+        const char *label;
+        const char *description;
+        int mode;
+    };
+    static const ProfileEntry entries[] = {
+        {"Aggressive",  "Fast dim/off, 80MHz CPU",  POWER_MODE_AGGRESSIVE  },
+        {"Balanced",    "Moderate dim/off, 160MHz", POWER_MODE_BALANCED    },
+        {"Performance", "Slow dim/off, 240MHz",     POWER_MODE_PERFORMANCE},
+    };
+
+    options.clear();
+    constexpr size_t entryCount = sizeof(entries) / sizeof(entries[0]);
+    int selectedIndex = 0;
+
+    for (size_t i = 0; i < entryCount; ++i) {
+        if (bruceConfig.powerMode == entries[i].mode) selectedIndex = static_cast<int>(i);
+        String label = String(entries[i].label);
+        if (entries[i].description && entries[i].description[0] != '\0') {
+            label += " - ";
+            label += entries[i].description;
+        }
+        options.push_back(
+            {label,
+             [=]() { bruceConfig.setPowerMode(entries[i].mode); },
+             bruceConfig.powerMode == entries[i].mode}
+        );
+    }
 
     loopOptions(options, selectedIndex);
 }
