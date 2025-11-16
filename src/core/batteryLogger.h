@@ -4,11 +4,20 @@
 #include <Arduino.h>
 
 namespace BatteryLogger {
+struct BatteryStatus {
+    int percent = 0;
+    float voltage = 0.0f;
+    bool voltageValid = false;
+    bool charging = false;
+};
+
 void begin();
 
 void update();
 
 void updateIntervalFromConfig(bool immediateSample = false);
+
+BatteryStatus currentStatus();
 
 bool deleteLogFile();
 

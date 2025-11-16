@@ -443,5 +443,14 @@ void showLogAsGraph() {
     renderGraph(entries);
 }
 
+BatteryStatus currentStatus() {
+    BatteryStatus status;
+    status.percent = getBattery();
+    status.voltage = getBatteryVoltage();
+    status.voltageValid = status.voltage > 0.0f;
+    status.charging = isCharging();
+    return status;
+}
+
 const char *logFilePath() { return kLogFilePath; }
 } // namespace BatteryLogger
