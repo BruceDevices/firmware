@@ -88,6 +88,7 @@ unsigned long previousMillis = millis();
 int prog_handler; // 0 - Flash, 1 - LittleFS, 3 - Download
 String cachedPassword = "";
 bool interpreter_start = false;
+bool littleFsMounted = false;
 bool sdcardMounted = false;
 bool gpsConnected = false;
 
@@ -152,11 +153,43 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
  **  Function: begin_storage
  **  Config LittleFS and SD storage
  *********************************************************************/
-void begin_storage() {
-    if (!LittleFS.begin(true)) { LittleFS.format(), LittleFS.begin(); }
-    bool checkFS = setupSdCard();
-    bruceConfig.fromFile(checkFS);
-    bruceConfigPins.fromFile(checkFS);
+enum StorageInitResult : uint8_t {
+    STORAGE_INIT_OK = 0,
+    STORAGE_INIT_LFS_MOUNT_FAILED = 1 << 0,
+    STORAGE_INIT_LFS_FORMAT_BLOCKED = 1 << 1,
+    STORAGE_INIT_LFS_FORMAT_FAILED = 1 << 2,
+    STORAGE_INIT_SD_FAILED = 1 << 3,
+};
+
+StorageInitResult begin_storage(bool allowLittleFsFormat = false) {
+    StorageInitResult status = STORAGE_INIT_OK;
+    littleFsMounted = LittleFS.begin(false);
+    if (!littleFsMounted) {
+        log_e("LittleFS mount failed");
+        bool formatAttempted = false;
+        if (allowLittleFsFormat) {
+            formatAttempted = true;
+            log_w("Attempting LittleFS.format() after mount failure");
+            if (LittleFS.format()) littleFsMounted = LittleFS.begin(false);
+            else status = static_cast<StorageInitResult>(status | STORAGE_INIT_LFS_FORMAT_FAILED);
+        } else {
+            status = static_cast<StorageInitResult>(status | STORAGE_INIT_LFS_FORMAT_BLOCKED);
+        }
+        if (!littleFsMounted) {
+            status = static_cast<StorageInitResult>(status | STORAGE_INIT_LFS_MOUNT_FAILED);
+            if (formatAttempted) status = static_cast<StorageInitResult>(status | STORAGE_INIT_LFS_FORMAT_FAILED);
+        }
+    } else log_i("LittleFS mounted successfully");
+
+    const bool sdMounted = setupSdCard();
+    if (!sdMounted) status = static_cast<StorageInitResult>(status | STORAGE_INIT_SD_FAILED);
+
+    if (littleFsMounted) {
+        bruceConfig.fromFile(sdMounted);
+        bruceConfigPins.fromFile(sdMounted);
+    }
+
+    return status;
 }
 
 /*********************************************************************
@@ -247,8 +280,8 @@ void boot_screen_anim() {
         if (SD.exists("/boot.jpg")) boot_img = 1;
         else if (SD.exists("/boot.gif")) boot_img = 3;
     }
-    if (boot_img == 0 && LittleFS.exists("/boot.jpg")) boot_img = 2;
-    else if (boot_img == 0 && LittleFS.exists("/boot.gif")) boot_img = 4;
+    if (boot_img == 0 && littleFsMounted && LittleFS.exists("/boot.jpg")) boot_img = 2;
+    else if (boot_img == 0 && littleFsMounted && LittleFS.exists("/boot.gif")) boot_img = 4;
     if (bruceConfig.theme.boot_img) boot_img = 5; // override others
 
     tft.drawPixel(0, 0, 0);       // Forces back communication with TFT, to avoid ghosting
@@ -271,13 +304,13 @@ void boot_screen_anim() {
                 } else if (boot_img == 1) {
                     drawImg(SD, "/boot.jpg", 0, 0, true);
                     Serial.println("Image from SD");
-                } else if (boot_img == 2) {
+                } else if (boot_img == 2 && littleFsMounted) {
                     drawImg(LittleFS, "/boot.jpg", 0, 0, true);
                     Serial.println("Image from LittleFS");
                 } else if (boot_img == 3) {
                     drawImg(SD, "/boot.gif", 0, 0, true, 3600);
                     Serial.println("Image from SD");
-                } else if (boot_img == 4) {
+                } else if (boot_img == 4 && littleFsMounted) {
                     drawImg(LittleFS, "/boot.gif", 0, 0, true, 3600);
                     Serial.println("Image from LittleFS");
                 }
@@ -366,7 +399,7 @@ void startup_sound() {
         playAudioFile(bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_sound));
     } else if (SD.exists("/boot.wav")) {
         playAudioFile(&SD, "/boot.wav");
-    } else if (LittleFS.exists("/boot.wav")) {
+    } else if (littleFsMounted && LittleFS.exists("/boot.wav")) {
         playAudioFile(&LittleFS, "/boot.wav");
     }
 #endif
@@ -393,6 +426,7 @@ void setup() {
 
     // declare variables
     prog_handler = 0;
+    littleFsMounted = false;
     sdcardMounted = false;
     wifiConnected = false;
     BLEConnected = false;
@@ -409,8 +443,27 @@ void setup() {
 #else
     tft.begin();
 #endif
-    begin_storage();
-    BatteryLogger::begin();
+    StorageInitResult storageStatus = begin_storage();
+    const bool hasLittleFs =
+        (storageStatus & STORAGE_INIT_LFS_MOUNT_FAILED) == 0 && littleFsMounted;
+    const bool hasSdCard = (storageStatus & STORAGE_INIT_SD_FAILED) == 0;
+    const bool storageAvailable = hasLittleFs || hasSdCard;
+
+    if (!hasLittleFs) {
+        Serial.println("LittleFS unavailable; storage features limited");
+        if (storageStatus & STORAGE_INIT_LFS_FORMAT_BLOCKED)
+            Serial.println("LittleFS format skipped (manual action required)");
+        if (storageStatus & STORAGE_INIT_LFS_FORMAT_FAILED)
+            Serial.println("LittleFS format attempt failed");
+#if defined(HAS_SCREEN)
+        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.drawCentreString("LittleFS mount failed", tft.width() / 2, tft.height() / 2, 1);
+#endif
+    }
+    if (!hasSdCard) Serial.println("SD card mount failed; SD features disabled");
+
+    if (storageAvailable) BatteryLogger::begin();
+    else log_w("Skipping BatteryLogger init due to missing storage");
     SystemStatus::begin();
     begin_tft();
     init_clock();
@@ -431,7 +484,9 @@ void setup() {
         &xHandle          // Task handle (not used)
     );
     // #endif
-    bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath);
+    if (storageAvailable)
+        bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath);
+    else log_w("Theme loading skipped due to missing storage");
     if (!bruceConfig.instantBoot) {
         boot_screen_anim();
         startup_sound();
