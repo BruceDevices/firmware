@@ -13,6 +13,7 @@ struct themeFiles {
     String rf = "";
     String rfid = "";
     String fm = "";
+    String radio = "";
     String ir = "";
     String files = "";
     String gps = "";
@@ -39,6 +40,7 @@ struct themeInfo {
     bool rf = false;
     bool rfid = false;
     bool fm = false;
+    bool radio = false;
     bool ir = false;
     bool files = false;
     bool gps = false;

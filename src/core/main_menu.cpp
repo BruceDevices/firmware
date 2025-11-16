@@ -20,6 +20,9 @@ MainMenu::MainMenu() {
 #if defined(FM_SI4713)
         &fmMenu,
 #endif
+#if defined(HAS_NS4168_SPKR)
+        &radioMenu,
+#endif
         &fileMenu,
         &gpsMenu,
 #if !defined(REMOVE_NRF_MENU)

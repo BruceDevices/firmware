@@ -1,0 +1,20 @@
+[
+  {
+    "name": "BBC World Service",
+    "url": "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service",
+    "mime": "audio/aac",
+    "description": "Global news and analysis"
+  },
+  {
+    "name": "NPR Live",
+    "url": "https://npr-ice.streamguys1.com/live.mp3",
+    "mime": "audio/mpeg",
+    "description": "US public radio news"
+  },
+  {
+    "name": "Radio Paradise (FLAC)",
+    "url": "https://stream.radioparadise.com/flac",
+    "mime": "audio/flac",
+    "description": "Hi-fi eclectic playlist"
+  }
+]
