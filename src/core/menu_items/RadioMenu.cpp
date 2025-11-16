@@ -5,8 +5,8 @@
 
 void RadioMenu::optionsMenu() {
     options = {
-        {"Online Radio", radioMainMenu},
-        {"Air Radio (WIP)", radioAirMock},
+        {"Online Radio",       radioMainMenu},
+        {"Aerial Radio (WIP)", radioAirMock },
     };
     addOptionToMainMenu();
 
@@ -15,7 +15,11 @@ void RadioMenu::optionsMenu() {
 
 void RadioMenu::drawIconImg() {
     drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.radio), 0, imgCenterY, true
+        *bruceConfig.themeFS(),
+        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.radio),
+        0,
+        imgCenterY,
+        true
     );
 }
 
@@ -48,15 +52,37 @@ void RadioMenu::drawIcon(float scale) {
         tft.drawLine(antennaX, y, antennaX, antennaTopY, bruceConfig.priColor);
         if (antennaHeight > bodyH / 4) {
             // Draw antenna tip only if there's enough space
-            tft.drawLine(antennaX, antennaTopY, antennaX - bodyW / 6, antennaTopY - bodyH / 4, bruceConfig.priColor);
-            tft.drawLine(antennaX, antennaTopY, antennaX + bodyW / 6, antennaTopY - bodyH / 4, bruceConfig.priColor);
+            tft.drawLine(
+                antennaX, antennaTopY, antennaX - bodyW / 6, antennaTopY - bodyH / 4, bruceConfig.priColor
+            );
+            tft.drawLine(
+                antennaX, antennaTopY, antennaX + bodyW / 6, antennaTopY - bodyH / 4, bruceConfig.priColor
+            );
         }
     }
 
     // Waves - only draw if there's space above antenna
     if (antennaTopY - bodyH / 4 > iconAreaY) {
         int waveY = antennaTopY - bodyH / 4;
-        tft.drawArc(antennaX, waveY, bodyW / 3, bodyW / 3 + scale * 4, 220, 320, bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawArc(antennaX, waveY, bodyW / 4, bodyW / 4 + scale * 3, 220, 320, bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawArc(
+            antennaX,
+            waveY,
+            bodyW / 3,
+            bodyW / 3 + scale * 4,
+            220,
+            320,
+            bruceConfig.priColor,
+            bruceConfig.bgColor
+        );
+        tft.drawArc(
+            antennaX,
+            waveY,
+            bodyW / 4,
+            bodyW / 4 + scale * 3,
+            220,
+            320,
+            bruceConfig.priColor,
+            bruceConfig.bgColor
+        );
     }
 }

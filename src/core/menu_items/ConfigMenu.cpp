@@ -2,6 +2,7 @@
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/main_menu.h"
+#include "core/mykeyboard.h"
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
@@ -15,7 +16,10 @@ void ConfigMenu::optionsMenu() {
         {"Orientation",           lambdaHelper(gsetRotation, true)   },
         {"UI Color", setUIColor},
         {"UI Theme", setTheme},
-        {"Управление питанием", []() { mainMenu.powerMenu.optionsMenu(); }},
+        {"Power Settings", []() { mainMenu.powerMenu.optionsMenu(); }},
+        {"Sleep", setSleepMode},
+        {"Deep Sleep", goToDeepSleep},
+        {"Power Off", powerOff},
         {String("InstaBoot: " + String(bruceConfig.instantBoot ? "ON" : "OFF")),
          [=]() {
              bruceConfig.instantBoot = !bruceConfig.instantBoot;

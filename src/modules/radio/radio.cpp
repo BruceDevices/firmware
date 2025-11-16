@@ -17,7 +17,9 @@ namespace {
     const char *kStationsPath = "/radio/radio_stations.json";
     constexpr size_t kMaxLogLines = 12;
     constexpr unsigned long kRedrawIntervalMs = 500;
+    constexpr unsigned long kInputIgnoreWindowMs = 500; // Ignore inputs for 500ms after exit
     RadioPlayer playerInstance;
+    static unsigned long s_lastExitTime = 0; // Track when we last exited playback
 
 #define RADIO_LOGI(fmt, ...) log_i("[radio] " fmt, ##__VA_ARGS__)
 #define RADIO_LOGW(fmt, ...) log_w("[radio] " fmt, ##__VA_ARGS__)
@@ -43,6 +45,40 @@ namespace {
         DownPress = false;
         AnyKeyPress = false;
         SerialCmdPress = false;
+    }
+
+    void clearInputsAndWait() {
+        // Aggressive input clearing with multiple cycles
+        // InputHandler task runs every 10ms, so we need multiple cycles
+        const int cycles = 8;
+        for (int i = 0; i < cycles; i++) {
+            forceClearAllInputs();
+            delay(30); // Allow InputHandler task to process
+        }
+        // Final clear
+        forceClearAllInputs();
+    }
+
+    void markRadioExit() {
+        // Mark the time when we exit radio functions
+        s_lastExitTime = millis();
+        clearInputsAndWait();
+    }
+
+    bool shouldIgnoreInputs() {
+        // Check if we should ignore inputs (within ignore window after exit)
+        if (s_lastExitTime == 0) return false;
+        unsigned long elapsed = millis() - s_lastExitTime;
+        if (elapsed < kInputIgnoreWindowMs) {
+            // Still in ignore window, clear any inputs that might have been set
+            forceClearAllInputs();
+            return true;
+        }
+        // Outside ignore window, reset tracking
+        if (elapsed > kInputIgnoreWindowMs * 2) {
+            s_lastExitTime = 0;
+        }
+        return false;
     }
 
     void addDefaultStations(std::vector<RadioStation> &stations) {
@@ -584,10 +620,8 @@ void showPlayback(const RadioStation &station) {
     }
     RADIO_LOGI("Entered playback loop");
     
-    // Clear any pending input - use force clear to prevent phantom presses
-    forceClearAllInputs();
-    delay(150); // Allow InputHandler to process button states
-    forceClearAllInputs();
+    // Clear any pending input - use aggressive clearing to prevent phantom presses
+    clearInputsAndWait();
     delay(100); // Additional delay to ensure input is cleared
     
     unsigned long lastDraw = 0;
@@ -646,16 +680,10 @@ void showPlayback(const RadioStation &station) {
     RADIO_LOGI("Playback loop exit: status=%d", (int)playerInstance.status());
     playerInstance.stop();
     
-    // Force clear all input flags to prevent phantom presses
-    // Multiple clears with delays to ensure InputHandler task has time to process
-    // The InputHandler task runs every 10ms, so we need multiple cycles
-    for (int i = 0; i < 5; i++) {
-        forceClearAllInputs();
-        delay(50); // Allow InputHandler task multiple cycles to process button states
-    }
+    // Mark exit time and aggressively clear all inputs
+    markRadioExit();
     
-    // Final clear and delay before returning to menu
-    forceClearAllInputs();
+    // Additional delay to ensure InputHandler has processed everything
     delay(100);
 }
 
@@ -673,28 +701,45 @@ void radioStopPlayback() {
 void radioStationsMenu();
 
 void radioMainMenu() {
+    // Check if we should ignore inputs (recently exited from playback)
+    if (shouldIgnoreInputs()) {
+        delay(100); // Wait a bit more if in ignore window
+    }
+    
     options.clear();
     options.push_back({"Stations", radioStationsMenu});
 
     if (playerInstance.current() && playerInstance.status() != RadioPlayerStatus::Idle) {
         options.push_back({"Now playing", [=]() { 
             showPlayback(*playerInstance.current());
-            // Clear inputs after returning from playback to prevent auto-selection
-            // Additional delay to ensure flags are cleared before returning to loopOptions
-            for (int i = 0; i < 3; i++) {
-                forceClearAllInputs();
-                delay(50);
-            }
+            // Mark exit and clear inputs after returning from playback
+            markRadioExit();
+            delay(50);
         }});
         options.push_back({"Stop playback", radioStopPlayback});
     }
 
     options.push_back({"Back", backToMenu});
     addOptionToMainMenu();
+    
+    // Additional protection: clear inputs one more time before entering loopOptions
+    // and wait to ensure InputHandler has processed everything
+    if (shouldIgnoreInputs()) {
+        delay(200); // Extended wait if in ignore window
+    } else {
+        clearInputsAndWait();
+        delay(100);
+    }
+    
     loopOptions(options, MENU_TYPE_SUBMENU, "Online Radio");
 }
 
 void radioStationsMenu() {
+    // Check if we should ignore inputs (recently exited from playback)
+    if (shouldIgnoreInputs()) {
+        delay(100); // Wait a bit more if in ignore window
+    }
+    
     std::vector<RadioStation> stations;
     String err;
     if (!loadRadioStations(stations, err)) {
@@ -714,16 +759,23 @@ void radioStationsMenu() {
         RadioStation stationCopy = station;
         options.push_back({station.name, [stationCopy]() { 
             showPlayback(stationCopy);
-            // Clear inputs after returning from playback to prevent auto-selection
-            // Additional delay to ensure flags are cleared before returning to loopOptions
-            for (int i = 0; i < 3; i++) {
-                forceClearAllInputs();
-                delay(50);
-            }
+            // Mark exit and clear inputs after returning from playback
+            markRadioExit();
+            delay(50);
         }});
     }
     options.push_back({"Back", radioMainMenu});
     addOptionToMainMenu();
+    
+    // Additional protection: clear inputs one more time before entering loopOptions
+    // and wait to ensure InputHandler has processed everything
+    if (shouldIgnoreInputs()) {
+        delay(200); // Extended wait if in ignore window
+    } else {
+        clearInputsAndWait();
+        delay(100);
+    }
+    
     loopOptions(options, MENU_TYPE_SUBMENU, "Stations");
 }
 
@@ -740,9 +792,7 @@ void radioAirMock() {
 
     while (!check(AnyKeyPress) && !check(EscPress) && !check(SelPress)) { delay(50); }
     
-    // Force clear all input flags to prevent phantom presses
-    forceClearAllInputs();
-    delay(150);
-    forceClearAllInputs();
+    // Mark exit and clear inputs
+    markRadioExit();
     delay(50);
 }
