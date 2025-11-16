@@ -29,6 +29,7 @@ bool setupSdCard() {
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0) {
         sdcardMounted = false;
+        log_w("setupSdCard: bus pins not configured, skipping mount");
         return false;
     }
 #endif
@@ -41,13 +42,17 @@ bool setupSdCard() {
 #endif
 #ifdef USE_SD_MMC
     if (!SD.begin("/sdcard", true)) {
+        log_e("setupSdCard: SD_MMC mount failed");
         sdcardMounted = false;
         result = false;
     }
 #else
     // Not using InputHandler (SdCard on default &SPI bus)
     if (task) {
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) {
+            log_e("setupSdCard: SD.begin failed on default SPI bus");
+            result = false;
+        }
         // Serial.println("Task not activated");
     }
     // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
@@ -58,6 +63,7 @@ bool setupSdCard() {
         if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
             result = false;
             Serial.println("SDCard in the same Bus as TFT, but failed to mount");
+            log_e("setupSdCard: SD.begin failed with TFT SPI instance");
         }
 #else
         goto NEXT; // destination for Headless and 8bit displays (no SPI bus)
@@ -74,17 +80,22 @@ bool setupSdCard() {
             (int8_t)bruceConfigPins.SDCARD_bus.cs
         ); // start SPI communications
         delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+            log_e("setupSdCard: SD.begin failed on dedicated SPI bus");
+            result = false;
+        }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
 #endif
 
     if (result == false) {
         Serial.println("SDCARD NOT mounted, check wiring and format");
+        log_e("setupSdCard: mount failed");
         sdcardMounted = false;
         return false;
     } else {
         Serial.println("SDCARD mounted successfully");
+        log_i("setupSdCard: mount succeeded");
         sdcardMounted = true;
         return true;
     }
@@ -876,6 +887,10 @@ void viewFile(FS fs, String filepath) {
 **  Check if there are more then 4096 bytes available for storage
 **********************************************************************/
 bool checkLittleFsSize() {
+    if (!littleFsMounted) {
+        log_w("checkLittleFsSize: LittleFS not mounted");
+        return false;
+    }
     if ((LittleFS.totalBytes() - LittleFS.usedBytes()) < 4096) {
         displayError("LittleFS is Full", true);
         return false;
@@ -886,7 +901,10 @@ bool checkLittleFsSize() {
 **  Function: checkLittleFsSize
 **  Check if there are more then 4096 bytes available for storage
 **********************************************************************/
-bool checkLittleFsSizeNM() { return (LittleFS.totalBytes() - LittleFS.usedBytes()) >= 4096; }
+bool checkLittleFsSizeNM() {
+    if (!littleFsMounted) return false;
+    return (LittleFS.totalBytes() - LittleFS.usedBytes()) >= 4096;
+}
 
 /*********************************************************************
 **  Function: getFsStorage

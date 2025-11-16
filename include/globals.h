@@ -79,6 +79,7 @@ extern Timezone myTZ;
 
 extern int prog_handler; // 0 - Flash, 1 - LittleFS, 2 - Download
 
+extern bool littleFsMounted; // inform if LittleFS is active or not
 extern bool sdcardMounted; // inform if SD Cardis active or not
 
 extern bool wifiConnected; // inform if wifi is active or not
