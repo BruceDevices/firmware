@@ -571,7 +571,13 @@ int loopOptions(
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
         */
-        if (check(SelPress) || forceMenuOption >= 0) {
+        static unsigned long lastSelectMs = 0;
+        bool selPressed = check(SelPress);
+        if (selPressed || forceMenuOption >= 0) {
+            if (selPressed && (millis() - lastSelectMs) < 1200) {
+                // swallow rapid re-triggers (e.g. stale presses coming back from nested loops)
+                continue;
+            }
             uint16_t chosen = index;
             if (forceMenuOption >= 0) {
                 chosen = forceMenuOption;
@@ -579,6 +585,7 @@ int loopOptions(
                 Serial.print("Forcely ");
             }
             Serial.println("Selected: " + String(options[index].label));
+            if (selPressed) lastSelectMs = millis();
             options[chosen].operation();
             break;
         }

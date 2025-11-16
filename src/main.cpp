@@ -5,6 +5,7 @@
 #include "core/powerSave.h"
 #include "core/systemStatus.h"
 #include "core/serial_commands/cli.h"
+#include "core/emergencyReboot.h"
 #include "core/utils.h"
 #include "esp32-hal-psram.h"
 #include "esp_task_wdt.h"
@@ -52,6 +53,7 @@ keyStroke KeyStroke;
 TaskHandle_t xHandle;
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
+    bool backPressLatched = false;
     while (true) {
         checkPowerSaveTime();
         BatteryLogger::update();
@@ -73,11 +75,11 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
-#ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
-#endif
+            backPressLatched = EscPress || KeyStroke.exit_key || KeyStroke.del;
             timer = millis();
         }
+        EmergencyReboot::update(backPressLatched);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

@@ -46,6 +46,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
         {"rf",          &theme.rf,          theme.paths.rf         },
         {"rfid",        &theme.rfid,        theme.paths.rfid       },
         {"fm",          &theme.fm,          theme.paths.fm         },
+        {"radio",       &theme.radio,       theme.paths.radio      },
         {"ir",          &theme.ir,          theme.paths.ir         },
         {"files",       &theme.files,       theme.paths.files      },
         {"gps",         &theme.gps,         theme.paths.gps        },
