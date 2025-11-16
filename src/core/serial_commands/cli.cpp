@@ -11,6 +11,7 @@
 #include "settings_commands.h"
 #include "sound_commands.h"
 #include "storage_commands.h"
+#include "status_commands.h"
 #include "util_commands.h"
 #include "wifi_commands.h"
 
@@ -39,6 +40,7 @@ void SerialCli::setup() {
     createRfCommands(&_cli);
     createSettingsCommands(&_cli);
     createStorageCommands(&_cli);
+    createStatusCommands(&_cli);
     createUtilCommands(&_cli);
     createWifiCommands(&_cli);
 

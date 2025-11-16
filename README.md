@@ -31,6 +31,18 @@ Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT)!
 For more information on each function supported by Bruce, [read our wiki here](https://github.com/pr3y/Bruce/wiki).
 Also, [read our FAQ](https://github.com/pr3y/Bruce/wiki/FAQ)
 
+## :satellite: Serial CLI
+
+Connect to the device's USB serial port (115200 baud) to access a built-in CLI powered by SimpleCLI. Commands can be entered directly
+after the prompt; for example, to view runtime information and connectivity state:
+
+```text
+status
+```
+
+This prints CPU frequency/load, WiFi/BLE/SD card connectivity, and current battery level (including voltage and charging state) so
+you can verify the board's health without opening the UI.
+
 ## :computer: List of Features
 
 <details>
