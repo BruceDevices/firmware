@@ -16,7 +16,7 @@
 namespace {
     const char *kStationsPath = "/radio/radio_stations.json";
     constexpr size_t kMaxLogLines = 12;
-    constexpr unsigned long kRedrawIntervalMs = 600;
+    constexpr unsigned long kRedrawIntervalMs = 500;
     RadioPlayer playerInstance;
 
 #define RADIO_LOGI(fmt, ...) log_i("[radio] " fmt, ##__VA_ARGS__)
@@ -32,14 +32,17 @@ namespace {
         return "audio/mpeg";
     }
 
-    void clearNavInputs() {
-        check(AnyKeyPress);
-        check(EscPress);
-        check(SelPress);
-        check(PrevPress);
-        check(NextPress);
-        check(UpPress);
-        check(DownPress);
+    void forceClearAllInputs() {
+        // Force clear all input flags without triggering handlers
+        // This prevents phantom presses after exiting functions
+        EscPress = false;
+        SelPress = false;
+        PrevPress = false;
+        NextPress = false;
+        UpPress = false;
+        DownPress = false;
+        AnyKeyPress = false;
+        SerialCmdPress = false;
     }
 
     void addDefaultStations(std::vector<RadioStation> &stations) {
@@ -429,6 +432,17 @@ void RadioPlayer::stop() {
     _mime = "";
 }
 
+void RadioPlayer::setVolume(int volume) {
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
+    
+    bruceConfig.setSoundVolume(volume);
+    
+    if (_output) {
+        _output->SetGain(((float)volume) / 100.0f);
+    }
+}
+
 float RadioPlayer::bufferFillPct() const {
     if (!_buffer) return 0.0f;
     return (static_cast<float>(_buffer->getFillLevel()) / static_cast<float>(_bufferBytes)) * 100.0f;
@@ -500,64 +514,160 @@ bool loadRadioStations(std::vector<RadioStation> &stations, String &error) {
     return true;
 }
 
-void drawPlaybackScreen(const RadioStation &station, const RadioPlayer &player) {
-    resetTftDisplay(0, 0, bruceConfig.priColor, FM, bruceConfig.bgColor, bruceConfig.bgColor);
-    drawMainBorderWithTitle("ONLINE RADIO");
-
-    setPadCursor(1, 1);
-    padprintln("Station: " + station.name, 1);
-    if (station.description.length()) padprintln("About: " + station.description, 1);
-    padprintln("Status: " + player.statusText(), 1);
-    padprintln("Codec: " + player.codec() + "  MIME: " + player.mime(), 1);
-
-    padprintf("Buffer: %d%% (%u KB)\n", (int)player.bufferFillPct(), (unsigned)(player.bufferBytesTarget() / 1024));
-    padprintln("Now: " + (player.metadata().length() ? player.metadata() : String("waiting...")), 1);
-
-    padprintln("Debug:", 1);
-    int shown = 0;
-    for (auto it = player.log().rbegin(); it != player.log().rend() && shown < 5; ++it, ++shown) {
-        padprintln("- " + *it, 2);
+void drawPlaybackScreen(const RadioStation &station, const RadioPlayer &player, int volume = -1) {
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    
+    // Title
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawCentreString("ONLINE RADIO", tftWidth / 2, 5, 1);
+    
+    // Station name
+    tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+    tft.drawCentreString(station.name.c_str(), tftWidth / 2, 25, 1);
+    
+    // Status
+    String statusText = player.statusText();
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawString("Status:", 5, 45, 1);
+    tft.drawString(statusText.c_str(), 60, 45, 1);
+    
+    // Codec info
+    String codecInfo = player.codec() + " / " + player.mime();
+    tft.drawString("Codec:", 5, 60, 1);
+    tft.drawString(codecInfo.c_str(), 60, 60, 1);
+    
+    // Buffer
+    int bufferPct = (int)player.bufferFillPct();
+    unsigned bufferKB = (unsigned)(player.bufferBytesTarget() / 1024);
+    char bufferStr[32];
+    snprintf(bufferStr, sizeof(bufferStr), "Buffer: %d%% (%u KB)", bufferPct, bufferKB);
+    tft.drawString(bufferStr, 5, 75, 1);
+    
+    // Volume (show if volume was recently changed)
+    if (volume >= 0) {
+        char volumeStr[32];
+        snprintf(volumeStr, sizeof(volumeStr), "Volume: %d%%", volume);
+        tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+        tft.drawString(volumeStr, 5, 90, 1);
+        
+        // Metadata/Now playing (moved down)
+        String nowPlaying = player.metadata().length() ? player.metadata() : "waiting...";
+        tft.drawString("Now:", 5, 105, 1);
+        if (nowPlaying.length() > 30) {
+            nowPlaying = nowPlaying.substring(0, 27) + "...";
+        }
+        tft.drawString(nowPlaying.c_str(), 5, 120, 1);
+    } else {
+        // Metadata/Now playing
+        String nowPlaying = player.metadata().length() ? player.metadata() : "waiting...";
+        tft.drawString("Now:", 5, 90, 1);
+        if (nowPlaying.length() > 30) {
+            nowPlaying = nowPlaying.substring(0, 27) + "...";
+        }
+        tft.drawString(nowPlaying.c_str(), 5, 105, 1);
     }
-
-    padprintln("Press ESC or SEL to stop", 1);
+    
+    // Instructions
+    tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
+    tft.drawCentreString("ESC: stop | Up/Down: volume", tftWidth / 2, tftHeight - 15, 1);
 }
 
 void showPlayback(const RadioStation &station) {
     if (!playerInstance.play(station)) {
         String msg = playerInstance.statusText().length() ? playerInstance.statusText() : String("Radio start failed");
         displayError(msg, true);
+        // Clear inputs after error to prevent phantom presses
+        forceClearAllInputs();
+        delay(100);
         return;
     }
     RADIO_LOGI("Entered playback loop");
-    clearNavInputs();
-
+    
+    // Clear any pending input - use force clear to prevent phantom presses
+    forceClearAllInputs();
+    delay(150); // Allow InputHandler to process button states
+    forceClearAllInputs();
+    delay(100); // Additional delay to ensure input is cleared
+    
     unsigned long lastDraw = 0;
-    while (true) {
+    unsigned long volumeDisplayTimeout = 0;
+    int lastVolume = bruceConfig.soundVolume;
+    bool volumeChanged = false;
+    
+    // Main playback loop - using nrf_spectrum pattern: while (!check(EscPress))
+    while (!check(EscPress)) {
         const unsigned long now = millis();
-        if (now - lastDraw > kRedrawIntervalMs) {
-            drawPlaybackScreen(station, playerInstance);
-            lastDraw = now;
+        
+        // Handle volume control
+        bool volumeUp = check(UpPress) || check(PrevPress);   // Up button or encoder left/up
+        bool volumeDown = check(DownPress) || check(NextPress); // Down button or encoder right/down
+        
+        if (volumeUp || volumeDown) {
+            int newVolume = bruceConfig.soundVolume;
+            if (volumeUp) {
+                newVolume += 5;
+                if (newVolume > 100) newVolume = 100;
+            } else {
+                newVolume -= 5;
+                if (newVolume < 0) newVolume = 0;
+            }
+            
+            if (newVolume != bruceConfig.soundVolume) {
+                playerInstance.setVolume(newVolume);
+                lastVolume = newVolume;
+                volumeChanged = true;
+                volumeDisplayTimeout = now + 2000; // Show volume for 2 seconds
+                RADIO_LOGI("Volume changed to %d%%", newVolume);
+            }
         }
-        if (!playerInstance.loop()) break;
-        if (check(EscPress) || check(SelPress)) {
-            RADIO_LOGI("Playback stop requested by input");
+        
+        // Update display periodically or when volume changes
+        bool shouldRedraw = (now - lastDraw >= kRedrawIntervalMs) || volumeChanged;
+        if (shouldRedraw) {
+            int displayVolume = -1;
+            if (now < volumeDisplayTimeout) {
+                displayVolume = lastVolume;
+            }
+            drawPlaybackScreen(station, playerInstance, displayVolume);
+            lastDraw = now;
+            volumeChanged = false;
+        }
+        
+        // Process audio loop
+        if (!playerInstance.loop()) {
+            RADIO_LOGI("Playback loop ended: status=%d", (int)playerInstance.status());
             break;
         }
-        delay(10);
+        
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
     RADIO_LOGI("Playback loop exit: status=%d", (int)playerInstance.status());
     playerInstance.stop();
-    clearNavInputs();
+    
+    // Force clear all input flags to prevent phantom presses
+    // Multiple clears with delays to ensure InputHandler task has time to process
+    // The InputHandler task runs every 10ms, so we need multiple cycles
+    for (int i = 0; i < 5; i++) {
+        forceClearAllInputs();
+        delay(50); // Allow InputHandler task multiple cycles to process button states
+    }
+    
+    // Final clear and delay before returning to menu
+    forceClearAllInputs();
+    delay(100);
 }
 
 void radioStopPlayback() {
     if (playerInstance.status() == RadioPlayerStatus::Idle) {
         displayWarning("Radio not playing", true);
+        delay(1000);
         return;
     }
     playerInstance.stop();
     displayWarning("Playback stopped", true);
+    delay(1000);
 }
 
 void radioStationsMenu();
@@ -566,14 +676,22 @@ void radioMainMenu() {
     options.clear();
     options.push_back({"Stations", radioStationsMenu});
 
-    if (playerInstance.current()) {
-        options.push_back({"Now playing", [=]() { showPlayback(*playerInstance.current()); }});
+    if (playerInstance.current() && playerInstance.status() != RadioPlayerStatus::Idle) {
+        options.push_back({"Now playing", [=]() { 
+            showPlayback(*playerInstance.current());
+            // Clear inputs after returning from playback to prevent auto-selection
+            // Additional delay to ensure flags are cleared before returning to loopOptions
+            for (int i = 0; i < 3; i++) {
+                forceClearAllInputs();
+                delay(50);
+            }
+        }});
         options.push_back({"Stop playback", radioStopPlayback});
     }
 
     options.push_back({"Back", backToMenu});
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Radio");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Online Radio");
 }
 
 void radioStationsMenu() {
@@ -581,16 +699,28 @@ void radioStationsMenu() {
     String err;
     if (!loadRadioStations(stations, err)) {
         displayError(err, true);
+        delay(1000);
         return;
     }
     if (stations.empty()) {
         displayWarning("Station list empty", true);
+        delay(1000);
         return;
     }
 
     options.clear();
-    for (auto station : stations) {
-        options.push_back({station.name, [station]() { showPlayback(station); }});
+    for (const auto &station : stations) {
+        // Capture station by value in lambda to avoid reference issues
+        RadioStation stationCopy = station;
+        options.push_back({station.name, [stationCopy]() { 
+            showPlayback(stationCopy);
+            // Clear inputs after returning from playback to prevent auto-selection
+            // Additional delay to ensure flags are cleared before returning to loopOptions
+            for (int i = 0; i < 3; i++) {
+                forceClearAllInputs();
+                delay(50);
+            }
+        }});
     }
     options.push_back({"Back", radioMainMenu});
     addOptionToMainMenu();
@@ -609,4 +739,10 @@ void radioAirMock() {
     padprintln("Press any key to return", 1);
 
     while (!check(AnyKeyPress) && !check(EscPress) && !check(SelPress)) { delay(50); }
+    
+    // Force clear all input flags to prevent phantom presses
+    forceClearAllInputs();
+    delay(150);
+    forceClearAllInputs();
+    delay(50);
 }

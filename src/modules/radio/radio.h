@@ -28,6 +28,7 @@ public:
     bool play(const RadioStation &station);
     bool loop();
     void stop();
+    void setVolume(int volume); // Set volume (0-100) and update output gain
 
     RadioPlayerStatus status() const { return _status; }
     String statusText() const { return _statusText; }
