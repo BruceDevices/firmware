@@ -22,6 +22,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+          git config checkout.defaultRemote origin
 
       - name: Add upstream remote
         run: |
@@ -39,10 +40,10 @@ jobs:
 
       - name: Sync dev branch with Ninja-Jr preservation
         run: |
-          git checkout dev
+          git checkout origin/dev
           git merge upstream/dev || echo "Merge may have conflicts"
           git checkout --ours platformio.ini
           git checkout --ours .github/workflows/
           git add .
           git commit -m "Sync upstream dev, preserve Ninja-Jr changes" || echo "No changes or already committed"
-          git push origin dev
+          git push origin HEAD:dev
