@@ -1,4 +1,4 @@
-name: Manual Sync
+name: Manual Update
 on:
   workflow_dispatch:
 permissions:
@@ -21,38 +21,55 @@ jobs:
         run: |
           git remote add upstream https://github.com/PR3Y/Bruce.git || true
           git fetch upstream
-      - name: Normal git merge
+      - name: Merge with conflict handling
         run: |
           git checkout origin/dev
-          if git merge upstream/dev -m "Merge upstream updates"; then
-            echo "Clean merge - no conflicts!"
+          git merge upstream/dev -m "Merge upstream updates" || true
+          
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "No conflicts, merge successful"
             git push origin HEAD:dev
             exit 0
           fi
-          echo "Merge has conflicts, resolving with Ninja-Jr priority..."
-      - name: Resolve conflicts
-        run: |
-          CONFLICTED=$(git diff --name-only --diff-filter=U)
+          
+          echo "Checking for conflicts..."
+          CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null || echo "")
+          
+          if [ -z "$CONFLICTED" ]; then
+            echo "No unmerged conflicts found"
+            git push origin HEAD:dev
+            exit 0
+          fi
+          
+          echo "Conflicts found in: $CONFLICTED"
+          
           for file in $CONFLICTED; do
-            echo "Resolving conflicts in: $file"
+            echo "Resolving: $file"
             if [[ "$file" == *"jammer"* ]] || [[ "$file" == *"timeout"* ]]; then
-              echo "Ninja-Jr feature file, keeping our changes"
               git checkout --ours "$file"
             elif [[ "$file" == "platformio.ini" ]]; then
-              echo "Ninja-Jr version file, keeping our version"
               git checkout --ours "$file"
             elif [[ "$file" == *".github/workflows/"* ]]; then
-              echo "Workflow file, keeping our version"
               git checkout --ours "$file"
             else
-              echo "Other file, attempting automatic conflict resolution..."
               git checkout --merge "$file" 2>/dev/null || true
             fi
             git add "$file" 2>/dev/null || true
           done
-          git commit -m "Merge upstream with Ninja-Jr feature preservation"
-          echo "Merge committed with conflicts resolved"
-      - name: Push merged branch
+          
+          git commit -m "Merge upstream with Ninja-Jr feature preservation" || echo "Commit may have failed"
+          
+      - name: Push if changes
         run: |
-          git push origin HEAD:dev
-          echo "Merge pushed to dev branch"
+          if git status --porcelain | grep -q .; then
+            echo "Uncommitted changes exist"
+            git add .
+            git commit -m "Merge upstream updates" || echo "Nothing to commit"
+          fi
+          
+          if git diff HEAD origin/dev --quiet 2>/dev/null; then
+            echo "No changes to push"
+          else
+            git push origin HEAD:dev
+            echo "Merge pushed to dev"
+          fi
