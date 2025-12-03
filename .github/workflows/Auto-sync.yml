@@ -1,13 +1,10 @@
 name: Auto Sync Bruce Branches
-
 on:
   schedule:
     - cron: '0 3 * * 1,3,5'
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
@@ -17,33 +14,29 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git config checkout.defaultRemote origin
-
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/PR3Y/Bruce.git 2>/dev/null || true
           git fetch upstream
-
-      - name: Sync main branch with workflow preservation
+      - name: Sync main branch
         run: |
           git checkout main
           git merge upstream/main || echo "Merge may have conflicts"
           git checkout --ours .github/workflows/
           git add .
-          git commit -m "Sync upstream main, preserve workflows" || echo "No changes or already committed"
+          git commit -m "Sync upstream main, preserve workflows" || echo "No changes"
           git push origin main
-
-      - name: Sync dev branch with Ninja-Jr preservation
+      - name: Sync dev branch
         run: |
           git checkout origin/dev
           git merge upstream/dev || echo "Merge may have conflicts"
           git checkout --ours platformio.ini
           git checkout --ours .github/workflows/
           git add .
-          git commit -m "Sync upstream dev, preserve Ninja-Jr changes" || echo "No changes or already committed"
+          git commit -m "Sync upstream dev, preserve Ninja-Jr changes" || echo "No changes"
           git push origin HEAD:dev
