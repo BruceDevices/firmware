@@ -1,11 +1,8 @@
 name: Manual Sync
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -15,43 +12,25 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
       - name: Add upstream & fetch
         run: |
           git remote add upstream https://github.com/PR3Y/Bruce.git || true
           git fetch upstream
-
-      - name: Sync main branch (exclude .github/workflows)
+      - name: Sync main branch
         run: |
-          git checkout main || git checkout -b main
-          git merge upstream/main --no-edit || true
-          git checkout HEAD -- . ':!.github/workflows/'
-          git add -A
-          git commit -m "Manual sync: main ← upstream/main (workflows preserved)" || echo "No changes on main"
-          git push origin main --force-with-lease || true
-
-      - name: Sync dev (exclude .github/workflows)
+          git checkout main
+          git merge upstream/main
+          git push origin main
+      - name: Sync dev branch
         run: |
-          git checkout dev || git checkout -b dev
-          git merge upstream/dev --no-edit || true
-          git checkout HEAD -- . ':!.github/workflows/'
-          git add -A
-          git commit -m "Manual sync: dev ← upstream/dev (workflows preserved)" || echo "No changes on dev"
-          git push origin dev --force-with-lease || true
-
-      - name: Sync all other branches to upstream/dev (exclude .github/workflows)
-        run: |
-          for branch in $(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v '^main$' | grep -v '^dev$'); do
-            echo "Manual sync: $branch ← upstream/dev"
-            git checkout "$branch" || git checkout -b "$branch"
-            git merge upstream/dev --no-edit || true
-            git checkout HEAD -- . ':!.github/workflows/'
-            git add -A
-            git commit -m "Manual sync: $branch ← upstream/dev (workflows preserved)" || echo "No changes on $branch"
-            git push origin "$branch" --force-with-lease || true
-          done
+          git checkout dev
+          git merge upstream/dev || echo "Merge may have conflicts"
+          git checkout --ours platformio.ini
+          git checkout --ours .github/workflows/
+          git add .
+          git commit -m "Sync upstream with Ninja-Jr preservation" || echo "No changes or already committed"
+          git push origin dev
