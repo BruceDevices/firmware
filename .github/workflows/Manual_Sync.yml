@@ -1,8 +1,11 @@
-name: Manual Sync
+name: Manual Sync with Ninja-Jr Preservation
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -12,25 +15,30 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+          git config checkout.defaultRemote origin
+
       - name: Add upstream & fetch
         run: |
           git remote add upstream https://github.com/PR3Y/Bruce.git || true
           git fetch upstream
+
       - name: Sync main branch
         run: |
           git checkout main
           git merge upstream/main
           git push origin main
+
       - name: Sync dev branch
         run: |
-          git checkout dev
+          git checkout origin/dev
           git merge upstream/dev || echo "Merge may have conflicts"
           git checkout --ours platformio.ini
           git checkout --ours .github/workflows/
           git add .
-          git commit -m "Sync upstream with Ninja-Jr preservation" || echo "No changes or already committed"
-          git push origin dev
+          git commit -m "Sync upstream dev, preserve Ninja-Jr changes" || echo "No changes or already committed"
+          git push origin HEAD:dev
