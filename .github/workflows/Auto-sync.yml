@@ -26,17 +26,61 @@ jobs:
       - name: Sync main branch
         run: |
           git checkout main
-          git merge upstream/main || echo "Merge may have conflicts"
+          git merge upstream/main || true
           git checkout --ours .github/workflows/
           git add .
-          git commit -m "Sync upstream main, preserve workflows" || echo "No changes"
+          git commit -m "Auto-sync upstream main, preserve workflows" || echo "No changes"
           git push origin main
       - name: Sync dev branch
         run: |
           git checkout origin/dev
-          git merge upstream/dev || echo "Merge may have conflicts"
-          git checkout --ours platformio.ini
-          git checkout --ours .github/workflows/
-          git add .
-          git commit -m "Sync upstream dev, preserve Ninja-Jr changes" || echo "No changes"
-          git push origin HEAD:dev
+          git merge upstream/dev -m "Auto-sync upstream updates" || true
+          
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "No conflicts, auto-sync successful"
+            git push origin HEAD:dev
+            exit 0
+          fi
+          
+          echo "Checking for conflicts..."
+          CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null || echo "")
+          
+          if [ -z "$CONFLICTED" ]; then
+            echo "No unmerged conflicts found"
+            git push origin HEAD:dev
+            exit 0
+          fi
+          
+          echo "Conflicts found in: $CONFLICTED"
+          
+          for file in $CONFLICTED; do
+            echo "Resolving: $file"
+            if [[ "$file" == *"jammer"* ]] || [[ "$file" == *"timeout"* ]]; then
+              git checkout --ours "$file"
+            elif [[ "$file" == "platformio.ini" ]]; then
+              git checkout --ours "$file"
+            elif [[ "$file" == *".github/workflows/"* ]]; then
+              git checkout --ours "$file"
+            else
+              git checkout --merge "$file" 2>/dev/null || true
+            fi
+            git add "$file" 2>/dev/null || true
+          done
+          
+          git commit -m "Auto-sync upstream with Ninja-Jr preservation" || echo "Commit may have failed"
+          
+      - name: Push dev if changes
+        run: |
+          git checkout origin/dev 2>/dev/null || true
+          if git status --porcelain | grep -q .; then
+            echo "Uncommitted changes exist"
+            git add .
+            git commit -m "Auto-sync upstream updates" || echo "Nothing to commit"
+          fi
+          
+          if git diff HEAD origin/dev --quiet 2>/dev/null; then
+            echo "No changes to push"
+          else
+            git push origin HEAD:dev
+            echo "Dev auto-sync pushed"
+          fi
