@@ -30,58 +30,38 @@ jobs:
 
       - name: Sync dev branch
         run: |
-          set +e
           git checkout dev 2>/dev/null || git checkout -b dev
           git fetch origin dev
           
-          git merge upstream/dev --no-ff --no-edit
+          git merge --no-commit --no-ff upstream/dev 2>/dev/null || true
           
-          if [ $? -ne 0 ]; then
-            CONFLICTS=$(git diff --name-only --diff-filter=U)
-            if echo "$CONFLICTS" | grep -q '^.github/workflows/'; then
-              echo "$CONFLICTS" | grep '^.github/workflows/' | while read file; do
-                git checkout --ours "$file"
-                git add "$file"
-              done
-              
-              git commit --no-verify -m "Sync dev from upstream - preserved workflow files"
-              
-              git config core.whitespace -trailing-space
-              git commit --amend --no-edit --no-verify 2>/dev/null || true
-              
-            else
-              git merge --abort
-              exit 1
-            fi
+          if git diff --name-only --diff-filter=U | grep -q '^.github/workflows/'; then
+            git reset -- .github/workflows/ 2>/dev/null || true
+            git checkout -- .github/workflows/ 2>/dev/null || true
           fi
           
-          git push origin dev --force-with-lease
+          if git diff --cached --quiet; then
+            echo "No changes to merge"
+          else
+            git commit -m "Sync dev from upstream $(date +%Y-%m-%d)"
+            git push origin dev
+          fi
 
       - name: Sync main branch
         run: |
-          set +e
           git checkout main 2>/dev/null || git checkout -b main
           git fetch origin main
           
-          git merge upstream/main --no-ff --no-edit
+          git merge --no-commit --no-ff upstream/main 2>/dev/null || true
           
-          if [ $? -ne 0 ]; then
-            CONFLICTS=$(git diff --name-only --diff-filter=U)
-            if echo "$CONFLICTS" | grep -q '^.github/workflows/'; then
-              echo "$CONFLICTS" | grep '^.github/workflows/' | while read file; do
-                git checkout --ours "$file"
-                git add "$file"
-              done
-              
-              git commit --no-verify -m "Sync main from upstream - preserved workflow files"
-              
-              git config core.whitespace -trailing-space
-              git commit --amend --no-edit --no-verify 2>/dev/null || true
-              
-            else
-              git merge --abort
-              exit 1
-            fi
+          if git diff --name-only --diff-filter=U | grep -q '^.github/workflows/'; then
+            git reset -- .github/workflows/ 2>/dev/null || true
+            git checkout -- .github/workflows/ 2>/dev/null || true
           fi
           
-          git push origin main --force-with-lease
+          if git diff --cached --quiet; then
+            echo "No changes to merge"
+          else
+            git commit -m "Sync main from upstream $(date +%Y-%m-%d)"
+            git push origin main
+          fi
