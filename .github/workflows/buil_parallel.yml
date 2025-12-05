@@ -20,7 +20,7 @@ jobs:
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
-          - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
+          # - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
           - { env: "m5stack-core2",                   family: "ESP32",}
           - { env: "m5stack-core16mb",                family: "ESP32",}
           - { env: "m5stack-core4mb",                 family: "ESP32",}
