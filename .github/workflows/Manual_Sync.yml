@@ -19,7 +19,7 @@ jobs:
           git config checkout.defaultRemote origin
       - name: Add upstream & fetch
         run: |
-          git remote add upstream https://github.com/PR3Y/Bruce.git || true
+          git remote add upstream https://github.com/BruceDevices/firmware.git || true
           git fetch upstream
       - name: Merge main branch
         run: |
