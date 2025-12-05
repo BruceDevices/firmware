@@ -1,10 +1,13 @@
 name: Manual Sync
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  merge:
+  sync:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -12,73 +15,43 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git config checkout.defaultRemote origin
+
       - name: Add upstream & fetch
         run: |
-          git remote add upstream https://github.com/BruceDevices/firmware.git || true
+          git remote add upstream https://github.com/PR3Y/Bruce.git || true
           git fetch upstream
-      - name: Merge main branch
+
+      - name: Sync main branch (exclude .github/workflows)
         run: |
-          git checkout main
-          git merge upstream/main || true
-          git checkout --ours .github/workflows/
-          git add .
-          git commit -m "Merge upstream main, preserve workflows" || echo "No changes"
-          git push origin main
-      - name: Merge dev branch
+          git checkout main || git checkout -b main
+          git merge upstream/main --no-edit || true
+          git checkout HEAD -- . ':!.github/workflows/'
+          git add -A
+          git commit -m "Manual sync: main ← upstream/main (workflows preserved)" || echo "No changes on main"
+          git push origin main --force-with-lease || true
+
+      - name: Sync dev (exclude .github/workflows)
         run: |
-          git checkout origin/dev
-          git merge upstream/dev -m "Merge upstream updates" || true
-          
-          if git diff --cached --quiet && git diff --quiet; then
-            echo "No conflicts, merge successful"
-            git push origin HEAD:dev
-            exit 0
-          fi
-          
-          echo "Checking for conflicts..."
-          CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null || echo "")
-          
-          if [ -z "$CONFLICTED" ]; then
-            echo "No unmerged conflicts found"
-            git push origin HEAD:dev
-            exit 0
-          fi
-          
-          echo "Conflicts found in: $CONFLICTED"
-          
-          for file in $CONFLICTED; do
-            echo "Resolving: $file"
-            if [[ "$file" == *"jammer"* ]] || [[ "$file" == *"timeout"* ]]; then
-              git checkout --ours "$file"
-            elif [[ "$file" == "platformio.ini" ]]; then
-              git checkout --ours "$file"
-            elif [[ "$file" == *".github/workflows/"* ]]; then
-              git checkout --ours "$file"
-            else
-              git checkout --merge "$file" 2>/dev/null || true
-            fi
-            git add "$file" 2>/dev/null || true
+          git checkout dev || git checkout -b dev
+          git merge upstream/dev --no-edit || true
+          git checkout HEAD -- . ':!.github/workflows/'
+          git add -A
+          git commit -m "Manual sync: dev ← upstream/dev (workflows preserved)" || echo "No changes on dev"
+          git push origin dev --force-with-lease || true
+
+      - name: Sync all other branches to upstream/dev (exclude .github/workflows)
+        run: |
+          for branch in $(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v '^main$' | grep -v '^dev$'); do
+            echo "Manual sync: $branch ← upstream/dev"
+            git checkout "$branch" || git checkout -b "$branch"
+            git merge upstream/dev --no-edit || true
+            git checkout HEAD -- . ':!.github/workflows/'
+            git add -A
+            git commit -m "Manual sync: $branch ← upstream/dev (workflows preserved)" || echo "No changes on $branch"
+            git push origin "$branch" --force-with-lease || true
           done
-          
-          git commit -m "Merge upstream with Ninja-Jr feature preservation" || echo "Commit may have failed"
-          
-      - name: Push dev if changes
-        run: |
-          git checkout origin/dev 2>/dev/null || true
-          if git status --porcelain | grep -q .; then
-            echo "Uncommitted changes exist"
-            git add .
-            git commit -m "Merge upstream updates" || echo "Nothing to commit"
-          fi
-          
-          if git diff HEAD origin/dev --quiet 2>/dev/null; then
-            echo "No changes to push"
-          else
-            git push origin HEAD:dev
-            echo "Dev merge pushed"
-          fi
