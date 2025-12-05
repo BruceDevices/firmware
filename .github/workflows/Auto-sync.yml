@@ -33,12 +33,15 @@ jobs:
           git push origin main
       - name: Sync dev branch
         run: |
-          git checkout origin/dev
+          git checkout dev 2>/dev/null || git checkout -b dev origin/dev
           git merge upstream/dev -m "Auto-sync upstream updates" || true
+          
+          git checkout --ours .github/workflows/ 2>/dev/null || true
+          git add .github/workflows/ 2>/dev/null || true
           
           if git diff --cached --quiet && git diff --quiet; then
             echo "No conflicts, auto-sync successful"
-            git push origin HEAD:dev
+            git push origin dev
             exit 0
           fi
           
@@ -47,7 +50,7 @@ jobs:
           
           if [ -z "$CONFLICTED" ]; then
             echo "No unmerged conflicts found"
-            git push origin HEAD:dev
+            git push origin dev
             exit 0
           fi
           
@@ -71,7 +74,7 @@ jobs:
           
       - name: Push dev if changes
         run: |
-          git checkout origin/dev 2>/dev/null || true
+          git checkout dev 2>/dev/null || true
           if git status --porcelain | grep -q .; then
             echo "Uncommitted changes exist"
             git add .
@@ -81,6 +84,6 @@ jobs:
           if git diff HEAD origin/dev --quiet 2>/dev/null; then
             echo "No changes to push"
           else
-            git push origin HEAD:dev
+            git push origin dev
             echo "Dev auto-sync pushed"
           fi
