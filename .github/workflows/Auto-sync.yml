@@ -21,7 +21,7 @@ jobs:
           git config checkout.defaultRemote origin
       - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/PR3Y/Bruce.git 2>/dev/null || true
+          git remote add upstream https://github.com/BruceDevices/firmware.git 2>/dev/null || true
           git fetch upstream
       - name: Sync main branch
         run: |
