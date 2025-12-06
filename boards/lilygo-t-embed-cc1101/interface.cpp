@@ -147,8 +147,10 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = millis();  // debauce for buttons
+    static unsigned long tm = millis();  // debounce for buttons
     static unsigned long tm2 = millis(); // delay between Select and encoder (avoid missclick)
+    static unsigned long lastSelPressTime = 0; // Track last SelPress time for double-press
+    static bool waitingForDoublePress = false; // Flag for double-press detection
     static int posDifference = 0;
     static int lastPos = 0;
     bool sel = !BTN_ACT;
@@ -187,16 +189,42 @@ void InputHandler(void) {
         tm2 = millis();
     }
 
+    // Handle encoder middle button with double-press detection
     if (sel == BTN_ACT && millis() - tm2 > 200) {
+        unsigned long currentTime = millis();
+        
+        if (waitingForDoublePress && (currentTime - lastSelPressTime < 500)) {
+            // Double press detected within 500ms
+            EscPress = true;
+            waitingForDoublePress = false;
+            lastSelPressTime = 0;
+        } else {
+            // First press - start waiting for potential double press
+            waitingForDoublePress = true;
+            lastSelPressTime = currentTime;
+        }
+        
         posDifference = 0;
-        SelPress = true;
         tm = millis();
     }
+    
+    // Check if single press timeout has expired
+    if (waitingForDoublePress && millis() - lastSelPressTime >= 600) {
+        // Timeout reached - it's a single press
+        SelPress = true;
+        waitingForDoublePress = false;
+        lastSelPressTime = 0;
+    }
+
+    // Handle dedicated back button
     if (esc == BTN_ACT) {
         AnyKeyPress = true;
         EscPress = true;
-        Serial.println("EscPressed");
         tm = millis();
+        
+        // Reset encoder double-press tracking
+        waitingForDoublePress = false;
+        lastSelPressTime = 0;
     }
 }
 
