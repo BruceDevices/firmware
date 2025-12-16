@@ -152,6 +152,22 @@ const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
     /*107 -108 */ 0x00,
     0x00
 };
+// --- helper: convert channel -> frequency in MHz ---
+static inline int channel_to_mhz(uint8_t ch) {
+    // 2.4 GHz band
+    if (ch >= 1 && ch <= 13) {
+        return 2412 + 5 * (ch - 1); // ch1=2412, ch6=2437, ch11=2462
+    }
+    if (ch == 14) {
+        return 2484; // special-case channel 14 (Japan)
+    }
+    // common 5 GHz mapping (works for typical U-NII channels)
+    if (ch >= 36) {
+        return 5000 + (int)ch * 5; // ch36 -> 5180, ch149 -> 5745, etc.
+    }
+    // unknown / invalid channel
+    return 0;
+}
 
 static inline void prepareBeaconPacket(
     uint8_t outPacket[BEACON_PKT_LEN], const uint8_t macAddr[6], const char *ssid, uint8_t ssidLen,
@@ -236,10 +252,21 @@ void wifi_atk_info(String tssid, String mac, uint8_t channel) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
     tft.drawCentreString("-=Information=-", tft.width() / 2, 28, SMOOTH_FONT);
+
+    // compute frequency string
+    int freqMHz = channel_to_mhz(channel);
+    String freqText;
+    if (freqMHz > 0) {
+        freqText = " (" + String(freqMHz) + " MHz)";
+    } else {
+        freqText = " (unknown freq)";
+    }
+
     tft.drawString("AP: " + tssid, 10, 48);
-    tft.drawString("Channel: " + String(channel), 10, 66);
+    tft.drawString("Channel: " + String(channel) + freqText, 10, 66);
     tft.drawString(mac, 10, 84);
     tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, tftHeight - 20);
+
     vTaskDelay(200 / portTICK_PERIOD_MS);
     SelPress = false;
 
