@@ -1542,7 +1542,7 @@ void setTheme() {
     loopOptions(options);
     if (fs == nullptr) return;
 
-    String filepath = loopSD(*fs, true, "JSON");
+    String filepath = loopSD(*fs, true, "JSON", "/Themes");
     if (bruceConfig.openThemeFile(fs, filepath, true)) {
         bruceConfig.themePath = filepath;
         if (fs == &LittleFS) bruceConfig.theme.fs = 1;

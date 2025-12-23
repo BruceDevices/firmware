@@ -290,7 +290,7 @@ void EvilPortal::printDeauthStatus() {
 void EvilPortal::loadCustomHtml() {
     getFsStorage(fsHtmlFile);
 
-    htmlFileName = loopSD(*fsHtmlFile, true, "HTML");
+    htmlFileName = loopSD(*fsHtmlFile, true, "HTML", "/BruceHTMLs");    // Default folder for custom HTML files
     String fileBaseName =
         htmlFileName.substring(htmlFileName.lastIndexOf("/") + 1, htmlFileName.length() - 5);
     fileBaseName.toLowerCase();
