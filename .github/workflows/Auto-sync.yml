@@ -32,7 +32,8 @@ jobs:
         run: |
           sync_branch() {
             local BRANCH_NAME="$1"
-            git checkout "$BRANCH_NAME" 2>/dev/null || git checkout -b "$BRANCH_NAME" origin/"$BRANCH_NAME"
+            git fetch origin "$BRANCH_NAME"
+            git checkout "$BRANCH_NAME" 2>/dev/null || git checkout -b "$BRANCH_NAME" --track origin/"$BRANCH_NAME"
             git fetch upstream "$BRANCH_NAME"
             if git diff --quiet "$BRANCH_NAME" upstream/"$BRANCH_NAME" -- . ':!.github/workflows/'; then
               echo "No changes."
@@ -50,43 +51,4 @@ jobs:
             fi
           }
           sync_branch "dev"
-          sync_branch "main" 2>/dev/null || git remote set-url upstream https://github.com/PR3Y/Bruce.git
-          git fetch upstream --tags --prune
-
-      - name: Sync dev branch
-        run: |
-          # Explicitly checkout origin/dev to avoid ambiguity
-          git checkout origin/dev -b dev
-          git fetch origin dev
-          
-          # Merge with "ours" strategy for conflicts
-          git merge -X ours upstream/dev --no-ff --no-edit 2>/dev/null || true
-          
-          # Ensure workflow files stay exactly as they are
-          git checkout origin/dev -- .github/workflows/ 2>/dev/null || true
-          
-          # Check if we actually have non-workflow changes
-          if ! git diff --quiet HEAD upstream/dev -- . ':!.github/workflows/'; then
-            git add -A
-            git commit -m "Sync dev from upstream $(date +%Y-%m-%d) [skip ci]" || echo "No changes to commit"
-            git push origin dev --force-with-lease
-          else
-            echo "No changes to sync"
-          fi
-
-      - name: Sync main branch
-        run: |
-          git checkout origin/main -b main
-          git fetch origin main
-          
-          git merge -X ours upstream/main --no-ff --no-edit 2>/dev/null || true
-          
-          git checkout origin/main -- .github/workflows/ 2>/dev/null || true
-          
-          if ! git diff --quiet HEAD upstream/main -- . ':!.github/workflows/'; then
-            git add -A
-            git commit -m "Sync main from upstream $(date +%Y-%m-%d) [skip ci]" || echo "No changes to commit"
-            git push origin main --force-with-lease
-          else
-            echo "No changes to sync"
-          fi
+          sync_branch "main"
