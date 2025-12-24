@@ -38,9 +38,13 @@ jobs:
               echo "No changes."
               return 0
             fi
+            if [ "$BRANCH_NAME" = "dev" ] && [ -f "src/modules/rf/rf_jammer.cpp" ]; then
+              cp "src/modules/rf/rf_jammer.cpp" "/tmp/rf_jammer_backup.cpp"
+            fi
             git merge --no-edit --no-ff upstream/"$UPSTREAM_SOURCE" -m "chore: manual sync with upstream/$UPSTREAM_SOURCE $(date +'%Y-%m-%d') [skip ci]" || true
-            if [ "$BRANCH_NAME" = "dev" ]; then
-              git checkout "$BRANCH_NAME" -- "src/modules/rf/rf_jammer.cpp" 2>/dev/null || true
+            if [ "$BRANCH_NAME" = "dev" ] && [ -f "/tmp/rf_jammer_backup.cpp" ]; then
+              cp "/tmp/rf_jammer_backup.cpp" "src/modules/rf/rf_jammer.cpp"
+              git add "src/modules/rf/rf_jammer.cpp" 2>/dev/null || true
             fi
             git checkout "$BRANCH_NAME" -- .github/workflows/ 2>/dev/null || true
             if ! git diff --quiet origin/"$BRANCH_NAME" "$BRANCH_NAME"; then
