@@ -13,45 +13,44 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.SYNC_PAT }}
           fetch-depth: 0
 
       - name: Configure Git
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream & fetch
+      - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/PR3Y/Bruce.git || true
-          git fetch upstream
+          git remote add upstream https://github.com/PR3Y/Bruce.git 2>/dev/null || git remote set-url upstream https://github.com/PR3Y/Bruce.git
+          git fetch upstream --tags --prune
 
-      - name: Sync main branch (exclude .github/workflows)
+      - name: Sync branches
         run: |
-          git checkout main || git checkout -b main
-          git merge upstream/main --no-edit || true
-          git checkout HEAD -- . ':!.github/workflows/'
-          git add -A
-          git commit -m "Manual sync: main ← upstream/main (workflows preserved)" || echo "No changes on main"
-          git push origin main --force-with-lease || true
-
-      - name: Sync dev (exclude .github/workflows)
-        run: |
-          git checkout dev || git checkout -b dev
-          git merge upstream/dev --no-edit || true
-          git checkout HEAD -- . ':!.github/workflows/'
-          git add -A
-          git commit -m "Manual sync: dev ← upstream/dev (workflows preserved)" || echo "No changes on dev"
-          git push origin dev --force-with-lease || true
-
-      - name: Sync all other branches to upstream/dev (exclude .github/workflows)
-        run: |
+          sync_branch() {
+            local BRANCH_NAME="$1"
+            local UPSTREAM_SOURCE="$2"
+            git fetch origin "$BRANCH_NAME"
+            git checkout "$BRANCH_NAME" 2>/dev/null || git checkout -b "$BRANCH_NAME" --track origin/"$BRANCH_NAME"
+            git fetch upstream "$UPSTREAM_SOURCE"
+            if git diff --quiet "$BRANCH_NAME" upstream/"$UPSTREAM_SOURCE" -- . ':!.github/workflows/'; then
+              echo "No changes."
+              return 0
+            fi
+            git merge --no-edit --no-ff upstream/"$UPSTREAM_SOURCE" -m "chore: manual sync with upstream/$UPSTREAM_SOURCE $(date +'%Y-%m-%d') [skip ci]" || true
+            if [ "$BRANCH_NAME" = "dev" ]; then
+              git checkout "$BRANCH_NAME" -- "src/modules/rf/rf_jammer.cpp" 2>/dev/null || true
+            fi
+            git checkout "$BRANCH_NAME" -- .github/workflows/ 2>/dev/null || true
+            if ! git diff --quiet origin/"$BRANCH_NAME" "$BRANCH_NAME"; then
+              git push origin "$BRANCH_NAME" --force-with-lease
+            else
+              echo "No new changes."
+            fi
+          }
+          sync_branch "main" "main"
+          sync_branch "dev" "dev"
           for branch in $(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v '^main$' | grep -v '^dev$'); do
-            echo "Manual sync: $branch ← upstream/dev"
-            git checkout "$branch" || git checkout -b "$branch"
-            git merge upstream/dev --no-edit || true
-            git checkout HEAD -- . ':!.github/workflows/'
-            git add -A
-            git commit -m "Manual sync: $branch ← upstream/dev (workflows preserved)" || echo "No changes on $branch"
-            git push origin "$branch" --force-with-lease || true
+            sync_branch "$branch" "dev"
           done
