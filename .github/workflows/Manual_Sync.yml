@@ -38,7 +38,13 @@ jobs:
               echo "No changes."
               return 0
             fi
-            git merge --no-edit --no-ff upstream/"$UPSTREAM_SOURCE" -m "chore: manual sync with upstream/$UPSTREAM_SOURCE $(date +'%Y-%m-%d') [skip ci]" || true
+            git merge --no-edit --no-ff upstream/"$UPSTREAM_SOURCE" -m "chore: manual sync with upstream/$UPSTREAM_SOURCE $(date +'%Y-%m-%d') [skip ci]" 2>/dev/null
+            MERGE_EXIT=$?
+            if [ $MERGE_EXIT -ne 0 ]; then
+              echo "Merge had conflicts. Aborting to preserve branch state."
+              git merge --abort 2>/dev/null || true
+              return 0
+            fi
             if [ "$BRANCH_NAME" = "dev" ]; then
               git checkout "$BRANCH_NAME" -- "src/modules/rf/rf_jammer.cpp" 2>/dev/null || true
             fi
@@ -46,7 +52,7 @@ jobs:
             if ! git diff --quiet origin/"$BRANCH_NAME" "$BRANCH_NAME"; then
               git push origin "$BRANCH_NAME" --force-with-lease
             else
-              echo "No new changes."
+              echo "No new changes to push."
             fi
           }
           sync_branch "main" "main"
