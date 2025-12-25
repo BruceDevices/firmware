@@ -44,4 +44,6 @@
 #include "../ESP32-C5-tft/pins_arduino.h"
 #elif ESP32C5_DEVKITC_1
 #include "../ESP32-C5/pins_arduino.h"
+#elif LILKA_V2
+#include "../lilka_v2/pins_arduino.h"
 #endif
