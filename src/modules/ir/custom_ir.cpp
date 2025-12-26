@@ -706,3 +706,87 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
     );
     digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
+
+bool chooseCmdIrFile(FS *fs, String filepath) {
+    checkIrTxPin();
+    resetCodesArray();
+    int total_codes = 0;
+    File databaseFile;
+
+    returnToMenu = true;
+
+    databaseFile = fs->open(filepath, FILE_READ);
+    drawMainBorder();
+
+    if (!databaseFile) {
+        Serial.println("Failed to open IR file.");
+        return false;
+    }
+    Serial.println("Opened IR file.");
+
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
+
+    // Mode to choose and send command by command (limitted to 100 commands)
+    String line;
+    String txt;
+    codes.push_back(new IRCode());
+
+    while (databaseFile.available() && total_codes < 100) {
+        line = databaseFile.readStringUntil('\n');
+        txt = line.substring(line.indexOf(":") + 1);
+        txt.trim();
+
+        if (line.startsWith("name:")) {
+            if (codes[total_codes]->name != "") {
+                total_codes++;
+                codes.push_back(new IRCode());
+            }
+            // save signal name
+            codes[total_codes]->name = txt;
+            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
+        }
+
+        if (line.startsWith("type:")) codes[total_codes]->type = txt;
+        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
+        if (line.startsWith("address:")) codes[total_codes]->address = txt;
+        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
+        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
+        if (line.startsWith("command:")) codes[total_codes]->command = txt;
+        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
+            codes[total_codes]->data = txt;
+        }
+
+        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
+            total_codes++;
+            codes.push_back(new IRCode());
+        }
+    }
+
+    options = {};
+    for (auto code : codes) {
+        if (code->name != "") {
+            options.push_back({code->name.c_str(), [code]() {
+                               sendIRCommand(code);
+                               addToRecentCodes(code);
+                           }});
+        }
+    }
+
+    bool exit = false;
+    options.push_back({"Main Menu", [&]() { exit = true; }});
+    databaseFile.close();
+
+#ifdef USE_BOOST /// DISABLE 5V OUTPUT
+    PPM.disableOTG();
+#endif
+
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+    int idx = 0;
+    while (1) {
+        idx = loopOptions(options, idx);
+        if (check(EscPress) || exit) break;
+    }
+    options.clear();
+    resetCodesArray();
+    return true;
+}
