@@ -343,14 +343,14 @@ void executeAndroidFriendlySpam(EBLEPayloadType type) {
     BLEAdvertisementData scanResponseData = BLEAdvertisementData();
 
     if (type == Samsung) {
-        pAdvertising->setMinInterval(0x30);
-        pAdvertising->setMaxInterval(0x50);
+        pAdvertising->setMinInterval(0x60);
+        pAdvertising->setMaxInterval(0xA0);
     } else if (type == Google) {
-        pAdvertising->setMinInterval(0x40);
-        pAdvertising->setMaxInterval(0x60);
+        pAdvertising->setMinInterval(0x80);
+        pAdvertising->setMaxInterval(0xC0);
     } else {
-        pAdvertising->setMinInterval(0x30);
-        pAdvertising->setMaxInterval(0x60);
+        pAdvertising->setMinInterval(0x40);
+        pAdvertising->setMaxInterval(0x80);
     }
 
     advertisementData.setFlags(0x06);
@@ -362,11 +362,11 @@ void executeAndroidFriendlySpam(EBLEPayloadType type) {
     pAdvertising->start();
     
     if (type == Samsung) {
-        vTaskDelay(50 + random(0, 30) / portTICK_PERIOD_MS);
+        vTaskDelay(200 + random(0, 150) / portTICK_PERIOD_MS);
     } else if (type == Google) {
-        vTaskDelay(80 + random(0, 40) / portTICK_PERIOD_MS);
+        vTaskDelay(300 + random(0, 200) / portTICK_PERIOD_MS);
     } else {
-        vTaskDelay(150 / portTICK_PERIOD_MS);
+        vTaskDelay(180 / portTICK_PERIOD_MS);
     }
 
     pAdvertising->stop();
@@ -588,7 +588,7 @@ void aj_adv(int ble_choice) {
         }
         count++;
 
-        vTaskDelay(250 / portTICK_PERIOD_MS);
+        vTaskDelay(300 / portTICK_PERIOD_MS);
 
         if (check(EscPress)) {
             returnToMenu = true;
