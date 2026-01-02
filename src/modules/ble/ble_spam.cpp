@@ -203,8 +203,6 @@ void executeIOSFriendlySpam(EBLEPayloadType type) {
         case AirPods_Pro_2: deviceName = "AirPods Pro"; break;
     }
 
-    Serial.printf("[BLE iOS] %s\n", deviceName);
-
     BLEDevice::init(deviceName);
     vTaskDelay(20 / portTICK_PERIOD_MS);
 
@@ -216,9 +214,6 @@ void executeIOSFriendlySpam(EBLEPayloadType type) {
 
     advertisementData.setFlags(0x1A);
     scanResponseData.setName(deviceName);
-    
-    uint8_t txPower = 0xC5;
-    scanResponseData.setTXPower(txPower);
 
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->setScanResponseData(scanResponseData);
@@ -251,8 +246,6 @@ void executeAndroidFriendlySpam(EBLEPayloadType type) {
         case Google: deviceName = "PixelBuds"; break;
         default: deviceName = "Device"; break;
     }
-
-    Serial.printf("[BLE Android] %s\n", deviceName);
 
     BLEDevice::init(deviceName);
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -297,7 +290,6 @@ void executeSpam(EBLEPayloadType type) {
         esp_base_mac_addr_set(macAddr);
 
         const char* deviceName = "Device";
-        Serial.printf("[BLE] %s\n", deviceName);
 
         BLEDevice::init(deviceName);
         vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -344,8 +336,6 @@ void executeCustomSpam(String spamName) {
     if (!deviceName.endsWith(" Pro") && !deviceName.endsWith(" Max")) {
         deviceName += " Pro";
     }
-
-    Serial.printf("[BLE] Custom: %s\n", deviceName.c_str());
 
     BLEDevice::init(deviceName.c_str());
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -421,8 +411,6 @@ void aj_adv(int ble_choice) {
     int count = 0;
     String spamName = "";
 
-    Serial.println("\n=== BLE SPAM ===");
-
     if (ble_choice == 6) {
         spamName = keyboard("", 10, "Name to spam");
     }
@@ -433,61 +421,50 @@ void aj_adv(int ble_choice) {
     }
 
     while (1) {
-        Serial.printf("Try #%d: ", count);
-
         switch (ble_choice) {
             case 0:
                 displayTextLine("Applejuice (" + String(count) + ")");
-                Serial.println("AirPods");
                 executeSpam(AppleJuice);
                 break;
             case 1:
                 displayTextLine("SourApple (" + String(count) + ")");
-                Serial.println("AppleTV");
                 executeSpam(SourApple);
                 break;
             case 2:
                 displayTextLine("SwiftPair (" + String(count) + ")");
-                Serial.println("Surface");
                 executeSpam(Microsoft);
                 break;
             case 3:
                 displayTextLine("Samsung (" + String(count) + ")");
-                Serial.println("GalaxyBuds");
                 executeSpam(Samsung);
                 break;
             case 4:
                 displayTextLine("Android (" + String(count) + ")");
-                Serial.println("PixelBuds");
                 executeSpam(Google);
                 break;
             case 5:
                 displayTextLine("Spam All (" + String(count) + ")");
                 switch(mael % 7) {
-                    case 0: Serial.print("PixelBuds "); executeSpam(Google); break;
-                    case 1: Serial.print("GalaxyBuds "); executeSpam(Samsung); break;
-                    case 2: Serial.print("Surface "); executeSpam(Microsoft); break;
-                    case 3: Serial.print("AppleTV "); executeSpam(SourApple); break;
-                    case 4: Serial.print("AirPods "); executeSpam(AppleJuice); break;
-                    case 5: Serial.print("Apple Pencil "); executeSpam(Apple_Fixed); break;
-                    case 6: Serial.print("AirPods Pro 2 "); executeSpam(AirPods_Pro_2); break;
+                    case 0: executeSpam(Google); break;
+                    case 1: executeSpam(Samsung); break;
+                    case 2: executeSpam(Microsoft); break;
+                    case 3: executeSpam(SourApple); break;
+                    case 4: executeSpam(AppleJuice); break;
+                    case 5: executeSpam(Apple_Fixed); break;
+                    case 6: executeSpam(AirPods_Pro_2); break;
                 }
-                Serial.println("");
                 mael++;
                 break;
             case 6:
                 displayTextLine(spamName + " (" + String(count) + ")");
-                Serial.println("Custom: " + spamName);
                 executeCustomSpam(spamName);
                 break;
             case 7:
                 displayTextLine("Apple Fixed (" + String(count) + ")");
-                Serial.println("Apple Pencil (fixed)");
                 executeSpam(Apple_Fixed);
                 break;
             case 8:
                 displayTextLine("AirPods Pro 2 (" + String(count) + ")");
-                Serial.println("AirPods Pro 2");
                 executeSpam(AirPods_Pro_2);
                 break;
         }
@@ -496,7 +473,6 @@ void aj_adv(int ble_choice) {
         vTaskDelay(250 / portTICK_PERIOD_MS);
 
         if (check(EscPress)) {
-            Serial.println("=== STOP ===");
             returnToMenu = true;
             break;
         }
