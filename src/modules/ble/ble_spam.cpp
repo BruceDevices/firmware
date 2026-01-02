@@ -130,63 +130,6 @@ String getGoogleDeviceName() {
     return name;
 }
 
-struct TimingProfile {
-    uint16_t minInterval;
-    uint16_t maxInterval;
-    uint8_t rssiVariation;
-};
-
-TimingProfile getSamsungTiming() {
-    static uint8_t phase = 0;
-    static uint32_t lastChange = 0;
-    TimingProfile profile;
-    
-    if (millis() - lastChange > 5000) {
-        phase = (phase + 1) % 3;
-        lastChange = millis();
-    }
-    
-    switch(phase) {
-        case 0:
-            profile.minInterval = 200;
-            profile.maxInterval = 300;
-            profile.rssiVariation = 5;
-            break;
-        case 1:
-            profile.minInterval = 500;
-            profile.maxInterval = 700;
-            profile.rssiVariation = 3;
-            break;
-        case 2:
-            profile.minInterval = 1200;
-            profile.maxInterval = 1500;
-            profile.rssiVariation = 1;
-            break;
-    }
-    
-    return profile;
-}
-
-TimingProfile getGoogleTiming() {
-    TimingProfile profile;
-    profile.minInterval = 400 + random(-50, 50);
-    profile.maxInterval = 600 + random(-50, 50);
-    profile.rssiVariation = 2 + random(0, 3);
-    return profile;
-}
-
-int8_t getDynamicRSSI(uint8_t baseRSSI, uint8_t variation) {
-    static int8_t lastRSSI = baseRSSI;
-    int8_t change = random(-variation, variation + 1);
-    int8_t newRSSI = lastRSSI + change;
-    
-    if (newRSSI > -30) newRSSI = -30;
-    if (newRSSI < -90) newRSSI = -90;
-    
-    lastRSSI = newRSSI;
-    return newRSSI;
-}
-
 void initializeAppleSignatures() {
     if (!apple_signatures_initialized) {
         esp_fill_random(apple_device_id, 3);
@@ -400,19 +343,11 @@ void executeAndroidFriendlySpam(EBLEPayloadType type) {
     BLEAdvertisementData scanResponseData = BLEAdvertisementData();
 
     if (type == Samsung) {
-        TimingProfile samsungTiming = getSamsungTiming();
-        pAdvertising->setMinInterval(samsungTiming.minInterval * 0.625);
-        pAdvertising->setMaxInterval(samsungTiming.maxInterval * 0.625);
-        
-        int8_t dynamicRSSI = getDynamicRSSI(-55, samsungTiming.rssiVariation);
-        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, dynamicRSSI + 90);
+        pAdvertising->setMinInterval(0x30);
+        pAdvertising->setMaxInterval(0x50);
     } else if (type == Google) {
-        TimingProfile googleTiming = getGoogleTiming();
-        pAdvertising->setMinInterval(googleTiming.minInterval * 0.625);
-        pAdvertising->setMaxInterval(googleTiming.maxInterval * 0.625);
-        
-        int8_t dynamicRSSI = getDynamicRSSI(-60, googleTiming.rssiVariation);
-        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, dynamicRSSI + 90);
+        pAdvertising->setMinInterval(0x40);
+        pAdvertising->setMaxInterval(0x60);
     } else {
         pAdvertising->setMinInterval(0x30);
         pAdvertising->setMaxInterval(0x60);
