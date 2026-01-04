@@ -311,7 +311,7 @@ void aj_adv(int ble_choice) {
     static int samsung_index = 0;
     static int spam_all_index = 0;
     
-    if (ble_choice == 5) { spamName = keyboard("", 10, "Name to spam"); }
+    if (ble_choice == 6) { spamName = keyboard("", 10, "Name to spam"); }
     timer = millis();
     
     while (1) {
