@@ -35,9 +35,10 @@ void BleMenu::optionsMenu() {
     options.push_back({"SwiftPair", lambdaHelper(aj_adv, 1)});
     options.push_back({"Samsung Watch", lambdaHelper(aj_adv, 2)});
     options.push_back({"Samsung Buds", lambdaHelper(aj_adv, 3)});
-    options.push_back({"Google FastPair", lambdaHelper(aj_adv, 4)});
-    options.push_back({"Spam All", lambdaHelper(aj_adv, 5)});
-    options.push_back({"Custom Name", lambdaHelper(aj_adv, 6)});
+    options.push_back({"Samsung Raw", lambdaHelper(aj_adv, 4)});
+    options.push_back({"Google FastPair", lambdaHelper(aj_adv, 5)});
+    options.push_back({"Spam All", lambdaHelper(aj_adv, 6)});
+    options.push_back({"Custom Name", lambdaHelper(aj_adv, 7)});
 #if !defined(LITE_VERSION)
     options.push_back({"Ninebot", [=]() { BLENinebot(); }});
 #endif
