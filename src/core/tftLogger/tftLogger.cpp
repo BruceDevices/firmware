@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <esp32-hal-psram.h>
 #include <globals.h>
 #include <tftLogger.h>
 
@@ -7,16 +9,23 @@ AUXILIARY FUNCTIONS TO CREATE THE JSONS
 
 /* TFT LOGGER FUNCTIONS */
 tft_logger::tft_logger(int16_t w, int16_t h) : BRUCE_TFT_DRIVER(w, h) {}
-tft_logger::~tft_logger() { clearLog(); }
+tft_logger::~tft_logger() {
+    clearLog();
+    if (log) free(log);
+    if (images) free(images);
+    log = nullptr;
+    images = nullptr;
+}
 
 void tft_logger::clearLog() {
-    memset(log, 0, sizeof(log));
-    memset(images, 0, sizeof(images));
+    if (log) memset(log, 0, sizeof(tftLog) * MAX_LOG_ENTRIES);
+    if (images) memset(images, 0, MAX_LOG_IMAGES * MAX_LOG_IMG_PATH);
     logWriteIndex = 0;
     logCount = 0;
 }
 
 void tft_logger::addLogEntry(const uint8_t *buffer, uint8_t size) {
+    if (!log) return;
     memcpy(log[logWriteIndex].data, buffer, size);
     logWriteIndex = (logWriteIndex + 1) % MAX_LOG_ENTRIES;
     if (logCount < MAX_LOG_ENTRIES) ++logCount;
@@ -34,9 +43,39 @@ void tft_logger::writeUint16(uint8_t *buffer, uint8_t &pos, uint16_t value) {
 }
 
 void tft_logger::setLogging(bool _log) {
+    clearLog();
+    if (_log) {
+        size_t logBytes = sizeof(tftLog) * MAX_LOG_ENTRIES;
+        size_t imageBytes = MAX_LOG_IMAGES * MAX_LOG_IMG_PATH;
+        if (psramFound()) {
+            log = static_cast<tftLog *>(ps_malloc(logBytes));
+            images = static_cast<char (*)[MAX_LOG_IMG_PATH]>(ps_malloc(imageBytes));
+        }
+        if (!log) log = static_cast<tftLog *>(malloc(logBytes));
+        if (!images) images = static_cast<char (*)[MAX_LOG_IMG_PATH]>(malloc(imageBytes));
+        if (!log) log_e("tft_logger: failed to allocate log buffer (%u bytes)", (unsigned)logBytes);
+        if (!images) log_e("tft_logger: failed to allocate image buffer (%u bytes)", (unsigned)imageBytes);
+        if (!log || !images) {
+            if (log) {
+                free(log);
+                log = nullptr;
+            }
+            if (images) {
+                free(images);
+                images = nullptr;
+            }
+            _log = false;
+            log_e("tft_logger: failed to start logging screen data due to insufficient memory");
+        }
+    } else {
+        if (log) free(log);
+        if (images) free(images);
+        log = nullptr;
+        images = nullptr;
+    }
     logging = _logging = _log;
     logWriteIndex = 0;
-    memset(log, 0, sizeof(log));
+    if (log) memset(log, 0, sizeof(tftLog) * MAX_LOG_ENTRIES);
     logCount = 0;
 };
 void tft_logger::asyncSerialTaskFunc(void *pv) {
@@ -47,6 +86,11 @@ void tft_logger::asyncSerialTaskFunc(void *pv) {
             uint8_t *entry = item.data;
             uint8_t fn = entry[2];
             if (fn == DRAWIMAGE) {
+                if (!logger->images) {
+                    uint8_t size = entry[1];
+                    serialDevice->write(entry, size);
+                    continue;
+                }
                 uint8_t imageSlot = entry[12];
                 const char *imgPath = logger->images[imageSlot];
                 size_t baseLen = 12; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS
@@ -77,6 +121,7 @@ void tft_logger::startAsyncSerial() {
     setLogging(true);
     asyncSerialQueue = xQueueCreate(MAX_LOG_ENTRIES, sizeof(tftLog));
     getTftInfo();
+    // Can it work with 2048 bytes of heap??
     xTaskCreate(asyncSerialTaskFunc, "async_serial", 4096, this, 1, &asyncSerialTask);
 }
 
@@ -112,12 +157,14 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     memcpy(outBuffer + outSize, buffer, pos);
     outSize += pos;
 
+    if (!log) return;
     for (int i = 0; i < logCount; i++) {
         if (log[i].data[0] != LOG_PACKET_HEADER) continue;
         uint8_t *entry = log[i].data;
         uint8_t fn = entry[2];
 
         if (fn == DRAWIMAGE) {
+            if (!images) continue;
             uint8_t imageSlot = entry[12]; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS SLOT
                                            // 0  1  2  3  4  5  6  7  8  9  10 11 12
             const char *imgPath = images[imageSlot];
@@ -152,6 +199,7 @@ bool tft_logger::isLogEqual(const tftLog &a, const tftLog &b) {
 }
 
 void tft_logger::pushLogIfUnique(const tftLog &l) {
+    if (!log) return;
     for (int i = 0; i < logCount; i++) {
         if (isLogEqual(log[i], l)) {
             return; // Entry already exists
@@ -170,6 +218,7 @@ bool tft_logger::removeLogEntriesInsideRect(int rx, int ry, int rw, int rh) {
     int rx2 = rx + rw;
     int ry2 = ry + rh;
 
+    if (!log) return false;
     for (int i = 0; i < logCount; i++) {
         uint8_t *data = log[i].data;
         if (data[0] != LOG_PACKET_HEADER) continue;
@@ -184,6 +233,7 @@ bool tft_logger::removeLogEntriesInsideRect(int rx, int ry, int rw, int rh) {
 }
 
 void tft_logger::removeOverlappedImages(int x, int y, int center, int ms) {
+    if (!log) return;
     for (int i = 0; i < logCount; i++) {
         uint8_t *data = log[i].data;
         if (data[0] != LOG_PACKET_HEADER) continue;
@@ -210,6 +260,7 @@ void tft_logger::fillScreen(int32_t color) {
 
 void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, int Ms) {
     if (!logging) return;
+    if (!log || !images) return;
 
     removeOverlappedImages(x, y, center, Ms);
 
@@ -385,6 +436,7 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
+    if (!log) return;
     if (removeLogEntriesInsideRect(x, y, s.length() * LW * textsize, s.length() * LH * textsize)) {
         // debug purpose
         // Serial.printf("Something was removed while processing: %s\n", s.c_str());
@@ -443,6 +495,7 @@ int16_t tft_logger::drawRightString(const String &string, int32_t x, int32_t y, 
 
 void tft_logger::log_print(String s) {
     if (!logging) return;
+    if (!log) return;
 
     removeLogEntriesInsideRect(
         cursor_x - 1, cursor_y - 1, s.length() * LW * textsize + 2, s.length() * LH * textsize + 2

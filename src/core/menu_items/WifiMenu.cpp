@@ -152,11 +152,6 @@ void WifiMenu::configMenu() {
     loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Config");
 }
 
-void WifiMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.wifi), 0, imgCenterY, true
-    );
-}
 void WifiMenu::drawIcon(float scale) {
     clearIconArea();
     int deltaY = scale * 20;

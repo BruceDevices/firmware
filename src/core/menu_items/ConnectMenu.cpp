@@ -1,4 +1,3 @@
-
 #include "ConnectMenu.h"
 #include "core/connect/file_sharing.h"
 #include "core/connect/serial_commands.h"
@@ -21,15 +20,7 @@ void ConnectMenu::optionsMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, getName().c_str());
 }
-void ConnectMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.connect),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ConnectMenu::drawIcon(float scale) {
     clearIconArea();
 

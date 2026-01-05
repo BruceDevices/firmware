@@ -15,8 +15,6 @@ void LoRaMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
 
-void LoRaMenu::drawIconImg() { drawIcon(1.0); }
-
 void LoRaMenu::drawIcon(float scale) {
     clearIconArea();
     scale *= 0.75;

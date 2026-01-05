@@ -27,11 +27,7 @@ void GpsMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "GPS Config");
 }
-void GpsMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.gps), 0, imgCenterY, true
-    );
-}
+
 void GpsMenu::drawIcon(float scale) {
     clearIconArea();
     int radius = scale * 18;

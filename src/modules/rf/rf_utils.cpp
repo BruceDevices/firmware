@@ -83,7 +83,6 @@ bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 
 bool initRfModule(String mode, float frequency) {
-
     // use default frequency if no one is passed
     if (!frequency) frequency = bruceConfigPins.rfFreq;
 
@@ -104,11 +103,18 @@ bool initRfModule(String mode, float frequency) {
                        bruceConfigPins.SDCARD_bus
                            .mosi) { // This board uses the same Bus for NRF and CC1101, but with
                                     // different CS pins, different from Stick_Cs down below..
-            CC_NRF_SPI.begin(
-                bruceConfigPins.CC1101_bus.sck,
-                bruceConfigPins.CC1101_bus.miso,
-                bruceConfigPins.CC1101_bus.mosi
-            );
+
+            CC_NRF_SPI.end(); // Closes in case it was already in use, it will overwrite the attempt
+                              // of SD start over to save configurations
+            delay(10);
+            if (!CC_NRF_SPI.begin(
+                    bruceConfigPins.CC1101_bus.sck,
+                    bruceConfigPins.CC1101_bus.miso,
+                    bruceConfigPins.CC1101_bus.mosi
+                )) {
+                Serial.println("Failed to start CC1101 SPI on NRF24 pins!");
+            }
+
             initCC1101once(&CC_NRF_SPI);
         } else {
             // (STICK_C_PLUS) || (STICK_C_PLUS2) and others that doesn´t share SPI with other devices (need to

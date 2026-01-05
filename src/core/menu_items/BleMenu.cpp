@@ -46,11 +46,6 @@ void BleMenu::optionsMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Bluetooth");
 }
-void BleMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.ble), 0, imgCenterY, true
-    );
-}
 
 void BleMenu::drawIcon(float scale) {
     clearIconArea();

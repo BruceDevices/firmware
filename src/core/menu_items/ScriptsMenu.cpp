@@ -1,4 +1,3 @@
-
 #include "ScriptsMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
@@ -76,15 +75,7 @@ void ScriptsMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "Scripts");
 #endif
 }
-void ScriptsMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.interpreter),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ScriptsMenu::drawIcon(float scale) {
     clearIconArea();
 

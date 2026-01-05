@@ -16,7 +16,6 @@
 #include "core/serial_commands/cli.h"
 #include "core/startup_app.h"
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <ESP32Time.h>
 #include <LittleFS.h>
 #include <NTPClient.h>

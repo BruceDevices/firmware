@@ -246,7 +246,7 @@ void setUIColor() {
                  bruceConfig.setColorInverted(!bruceConfig.colorInverted);
                  tft.invertDisplay(bruceConfig.colorInverted);
              },
-             bruceConfig.colorInverted}
+             bruceConfig.colorInverted > 0}
         );
 
         addOptionToMainMenu();
@@ -635,6 +635,14 @@ void setRFModuleMenu() {
                  (gpio_num_t)CC1101_GDO0_PIN,
                  GPIO_NUM_NC}
             );
+            bruceConfigPins.setNrf24Pins(
+                {(gpio_num_t)CC1101_SCK_PIN,
+                 (gpio_num_t)CC1101_MISO_PIN,
+                 (gpio_num_t)CC1101_MOSI_PIN,
+                 (gpio_num_t)CC1101_SS_PIN,
+                 (gpio_num_t)CC1101_GDO0_PIN,
+                 GPIO_NUM_NC}
+            );
         } else if (pins_setup == 2) {
 #if CONFIG_SOC_GPIO_OUT_RANGE_MAX > 30
             result = CC1101_SPI_MODULE;
@@ -646,10 +654,20 @@ void setRFModuleMenu() {
                  GPIO_NUM_32,
                  GPIO_NUM_NC}
             );
+            bruceConfigPins.setNrf24Pins(
+                {(gpio_num_t)SDCARD_SCK,
+                 (gpio_num_t)SDCARD_MISO,
+                 (gpio_num_t)SDCARD_MOSI,
+                 GPIO_NUM_33,
+                 GPIO_NUM_32,
+                 GPIO_NUM_NC}
+            );
 #endif
         }
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
+            deinitRfModule();
+            if (pins_setup == 1) CC_NRF_SPI.end();
             return;
         }
         // else display an error
@@ -1312,8 +1330,8 @@ void setBadUSBBLEKeyboardLayoutMenu() {
 **  Main Menu for setting Bad USB/BLE Keyboard Key Delay
 **********************************************************************/
 void setBadUSBBLEKeyDelayMenu() {
-    String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 4, "Key Delay (ms):");
-    uint8_t delayVal = static_cast<uint8_t>(delayStr.toInt());
+    String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
+    uint16_t delayVal = static_cast<uint16_t>(delayStr.toInt());
     if (delayVal >= 25 && delayVal <= 500) {
         bruceConfig.setBadUSBBLEKeyDelay(delayVal);
     } else if (delayVal != 0) {
@@ -1408,7 +1426,7 @@ RELOAD:
             String tmp = String(i);
             options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
         }
-        loopOptions(options);
+        loopOptions(options, index);
         options.clear();
         if (opt == 1) points.sck = sel;
         else if (opt == 2) points.miso = sel;
