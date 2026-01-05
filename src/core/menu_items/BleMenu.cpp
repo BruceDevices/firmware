@@ -8,7 +8,7 @@
 #include <globals.h>
 
 void BleMenu::optionsMenu() {
-    std::vector<MenuItem> options;
+    options.clear();
 
     if (BLEConnected) {
         options.push_back({"Disconnect", [=]() {
