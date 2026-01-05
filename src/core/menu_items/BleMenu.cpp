@@ -31,11 +31,11 @@ void BleMenu::optionsMenu() {
     options.push_back({"Bad BLE", [=]() { ducky_setup(hid_ble, true); }});
 #endif
     options.push_back({"BLE Keyboard", [=]() { ducky_keyboard(hid_ble, true); }});
-    options.push_back({"Enhanced Apple", lambdaHelper(aj_adv, 0)});
+    options.push_back({"Apple iOS", lambdaHelper(aj_adv, 0)});
     options.push_back({"SwiftPair", lambdaHelper(aj_adv, 1)});
-    options.push_back({"Samsung", lambdaHelper(aj_adv, 2)});
-    options.push_back({"Samsung Raw", lambdaHelper(aj_adv, 3)});
-    options.push_back({"Android", lambdaHelper(aj_adv, 4)});
+    options.push_back({"Samsung Watch", lambdaHelper(aj_adv, 2)});
+    options.push_back({"Samsung Buds", lambdaHelper(aj_adv, 3)});
+    options.push_back({"Google FastPair", lambdaHelper(aj_adv, 4)});
     options.push_back({"Spam All", lambdaHelper(aj_adv, 5)});
     options.push_back({"Custom Name", lambdaHelper(aj_adv, 6)});
 #if !defined(LITE_VERSION)
