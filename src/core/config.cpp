@@ -1,6 +1,6 @@
 #include "config.h"
+#include "mifare_keys_manager.h"
 #include "sd_functions.h"
-#include <globals.h>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -369,11 +369,10 @@ void BruceConfig::fromFile(bool checkFS) {
     validateConfig();
     if (count > 0) saveFile();
 
-    log_i("Using config from file");
+    // Load MIFARE keys (loading via manager)
+    MifareKeysManager::ensureLoaded(mifareKeys);
 
-    // NEW: Load MIFARE keys from separate file
-    loadMifareKeysFile();
-    jsonDoc.clear();
+    log_i("Using config from file");
 }
 
 void BruceConfig::saveFile() {
@@ -394,16 +393,14 @@ void BruceConfig::saveFile() {
     else log_i("config file written successfully");
 
     file.close();
-    jsonDoc.clear();
-    // don't try to mount SD Card if not previously mounted
-    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
+
+    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfig::factoryReset() {
     FS *fs = &LittleFS;
     fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    // don't try to mount SD Card if not previously mounted
-    if (sdcardMounted) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
+    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
     ESP.restart();
 }
 
@@ -653,282 +650,6 @@ void BruceConfig::validateEvilPasswordMode() {
     if (evilPortalPasswordMode < 0 || evilPortalPasswordMode > 2) evilPortalPasswordMode = FULL_PASSWORD;
 }
 
-void BruceConfig::addMifareKey(String value) {
-    // Convert to uppercase for consistency
-    value.toUpperCase();
-
-    // Validate hexadecimal format
-    if (!isValidHexKey(value)) {
-        log_e("Invalid MIFARE key format (must be 12 hex characters)");
-        return;
-    }
-
-    // Check if file exists, if not create it with defaults
-    if (!LittleFS.exists(mifareKeysPath)) {
-        log_i("Keys file doesn't exist, creating with defaults");
-        mifareKeys.insert("FFFFFFFFFFFF");
-        mifareKeys.insert("A0A1A2A3A4A5");
-        mifareKeys.insert("D3F7D3F7D3F7");
-        saveMifareKeysFile(); // Create file with full header
-        // Don't clear, keep the standard keys in memory
-    } else {
-        // File exists, load current keys if not already loaded
-        if (mifareKeys.empty()) { loadMifareKeysFile(); }
-    }
-
-    // Check if key already exists (AFTER loading)
-    if (mifareKeys.find(value) != mifareKeys.end()) {
-        log_w("MIFARE key already exists: " + value);
-        return;
-    }
-
-    // Add to set and append to file
-    mifareKeys.insert(value);
-    appendMifareKey(value); // Only append new key
-    log_i("MIFARE key added: " + value);
-}
-
-void BruceConfig::validateMifareKeysItems() {
-    for (auto key = mifareKeys.begin(); key != mifareKeys.end();) {
-        if (!isValidHexKey(*key)) {
-            log_w("Removing invalid MIFARE key: " + *key);
-            key = mifareKeys.erase(key);
-        } else {
-            ++key;
-        }
-    }
-}
-/**
- * @brief Validates if a key string is valid hexadecimal format
- * @param key String to validate (must be 12 hex characters)
- * @return true if valid, false otherwise
- */
-bool BruceConfig::isValidHexKey(const String &key) {
-    if (key.length() != 12) return false;
-
-    for (int i = 0; i < key.length(); i++) {
-        char c = key.charAt(i);
-        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) { return false; }
-    }
-    return true;
-}
-
-/**
- * @brief Ensures the BruceRFID directory exists on LittleFS
- */
-void BruceConfig::ensureMifareKeysDirExists(FS *fs) {
-    // Not used anymore, kept for compatibility
-}
-
-/**
- * @brief Saves MIFARE keys to separate file (/BruceRFID/keys.conf)
- * Format: One key per line, plain text with header
- */
-/**
- * @brief Saves MIFARE keys to separate file (/BruceRFID/keys.conf)
- * Format: One key per line, plain text with header
- */
-void BruceConfig::saveMifareKeysFile() {
-    // Create directory on LittleFS if needed
-    if (!LittleFS.exists(mifareKeysDir)) {
-        LittleFS.mkdir(mifareKeysDir);
-        log_i("Created directory on LittleFS: " + String(mifareKeysDir));
-    }
-
-    // Save to LittleFS first
-    File file = LittleFS.open(mifareKeysPath, FILE_WRITE);
-    if (!file) {
-        log_e("Failed to open MIFARE keys file for writing");
-        return;
-    }
-
-    // Write header and standard keys template
-    file.println("//BRUCE MIFARE KEYS FILE");
-    file.println("//ADD YOUR KEYS ONE PER LINE");
-    file.println("//");
-    file.println("//STANDARD MIFARE KEYS");
-
-    // Write keys (one per line)
-    for (const auto &key : mifareKeys) { file.println(key); }
-
-    file.println("//CUSTOM KEYS");
-
-    file.close();
-    log_i("MIFARE keys saved to LittleFS (" + String(mifareKeys.size()) + " keys)");
-
-    // Copy to SD card if available
-    if (setupSdCard()) {
-        // Create directory on SD if needed
-        if (!SD.exists(mifareKeysDir)) {
-            if (!SD.mkdir(mifareKeysDir)) {
-                log_e("Failed to create directory on SD: " + String(mifareKeysDir));
-                return;
-            }
-            log_i("Created directory on SD: " + String(mifareKeysDir));
-        }
-
-        // Manual copy to ensure correct path
-        File srcFile = LittleFS.open(mifareKeysPath, FILE_READ);
-        if (!srcFile) {
-            log_e("Failed to open source file for SD copy");
-            return;
-        }
-
-        File dstFile = SD.open(mifareKeysPath, FILE_WRITE);
-        if (!dstFile) {
-            log_e("Failed to open destination file on SD");
-            srcFile.close();
-            return;
-        }
-
-        // Copy content
-        while (srcFile.available()) { dstFile.write(srcFile.read()); }
-
-        srcFile.close();
-        dstFile.close();
-        log_i("MIFARE keys copied to SD card: " + String(mifareKeysPath));
-    }
-}
-/**
- * @brief Appends a single MIFARE key to existing file
- * @param key Key to append (already validated)
- */
-void BruceConfig::appendMifareKey(const String &key) {
-    // Append to LittleFS
-    File file = LittleFS.open(mifareKeysPath, FILE_APPEND);
-    if (!file) {
-        log_e("Failed to open MIFARE keys file for appending");
-        return;
-    }
-
-    file.println(key);
-    file.close();
-    log_i("MIFARE key appended to LittleFS: " + key);
-
-    // Append to SD card if available
-    if (setupSdCard()) {
-        // Ensure directory exists on SD
-        if (!SD.exists(mifareKeysDir)) {
-            SD.mkdir(mifareKeysDir);
-            log_i("Created directory on SD: " + String(mifareKeysDir));
-        }
-
-        // Check if SD file exists, if not copy from LittleFS first
-        if (!SD.exists(mifareKeysPath)) {
-            log_i("SD keys file missing, copying from LittleFS");
-
-            // Manual copy instead of copyToFs
-            File srcFile = LittleFS.open(mifareKeysPath, FILE_READ);
-            File dstFile = SD.open(mifareKeysPath, FILE_WRITE);
-
-            if (srcFile && dstFile) {
-                while (srcFile.available()) { dstFile.write(srcFile.read()); }
-                srcFile.close();
-                dstFile.close();
-                log_i("File copied to SD successfully");
-            } else {
-                log_e("Failed to copy file to SD");
-                if (srcFile) srcFile.close();
-                if (dstFile) dstFile.close();
-            }
-        } else {
-            // File exists, just append
-            File sdFile = SD.open(mifareKeysPath, FILE_APPEND);
-            if (sdFile) {
-                sdFile.println(key);
-                sdFile.close();
-                log_i("MIFARE key appended to SD card");
-            } else {
-                log_w("Failed to append to SD, will resync on next load");
-            }
-        }
-    }
-}
-
-/**
- * @brief Loads MIFARE keys from separate file (/BruceRFID/keys.conf)
- * Tries LittleFS first, then SD card
- * Creates default file with standard keys if not found
- */
-void BruceConfig::loadMifareKeysFile() {
-    bool fileExists = false;
-    bool useSD = false;
-
-    // Try LittleFS first, then SD card
-    if (LittleFS.exists(mifareKeysPath)) {
-        fileExists = true;
-        useSD = false;
-    } else if (setupSdCard() && SD.exists(mifareKeysPath)) {
-        fileExists = true;
-        useSD = true;
-        log_i("Loading MIFARE keys from SD card");
-    }
-
-    // If file doesn't exist, create default with standard keys
-    if (!fileExists) {
-        log_i("MIFARE keys file not found, creating default");
-
-        // Add standard MIFARE keys
-        mifareKeys.insert("FFFFFFFFFFFF");
-        mifareKeys.insert("A0A1A2A3A4A5");
-        mifareKeys.insert("D3F7D3F7D3F7");
-
-        // Save default file
-        saveMifareKeysFile();
-        return;
-    }
-
-    // Load existing file
-    File file;
-    if (useSD) {
-        file = SD.open(mifareKeysPath, FILE_READ);
-    } else {
-        file = LittleFS.open(mifareKeysPath, FILE_READ);
-    }
-
-    if (!file) {
-        log_e("Failed to open MIFARE keys file for reading");
-        return;
-    }
-
-    mifareKeys.clear();
-    int loadedKeys = 0;
-    int skippedKeys = 0;
-
-    while (file.available()) {
-        String line = file.readStringUntil('\n');
-        line.trim(); // Remove whitespace and newlines
-
-        // Skip empty lines and comments
-        if (line.length() == 0 || line.startsWith("//")) { continue; }
-
-        // Convert to uppercase for consistency
-        line.toUpperCase();
-
-        // Validate and add
-        if (isValidHexKey(line)) {
-            mifareKeys.insert(line);
-            loadedKeys++;
-        } else {
-            log_w("Invalid key format, skipped: " + line);
-            skippedKeys++;
-        }
-    }
-
-    file.close();
-
-    // NEW: If loaded from SD, sync to LittleFS for faster access next time
-    if (useSD && loadedKeys > 0) {
-        log_i("Syncing keys from SD to LittleFS");
-        saveMifareKeysFile(); // This saves to LittleFS first
-    }
-
-    log_i(
-        "Loaded " + String(loadedKeys) + " MIFARE keys" +
-        (skippedKeys > 0 ? " (skipped " + String(skippedKeys) + " invalid)" : "")
-    );
-}
-
 void BruceConfig::setStartupApp(String value) {
     startupApp = value;
     saveFile();
@@ -979,6 +700,10 @@ void BruceConfig::validateBadUSBBLEKeyDelay() {
     if (badUSBBLEKeyDelay < 20) badUSBBLEKeyDelay = 20;
     if (badUSBBLEKeyDelay > 500) badUSBBLEKeyDelay = 500;
 }
+
+void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
+
+void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }
 
 void BruceConfig::addDisabledMenu(String value) {
     // TODO: check if duplicate
