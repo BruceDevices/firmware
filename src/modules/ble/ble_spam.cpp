@@ -373,7 +373,7 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
             
             uint32_t service_id = random(0xFFFF);
             char service_str[10];
-            snprintf(service_str, sizeof(service_str), "%04X", service_id);
+            snprintf(service_str, sizeof(service_str), "%04lX", (unsigned long)service_id);
             String service_uuid = String("0000") + service_str + "-0000-1000-8000-00805f9b34fb";
             AdvData.setCompleteServices(BLEUUID(service_uuid.c_str()));
             break;
@@ -400,33 +400,30 @@ void executeEnhancedSpam(EBLEPayloadType type) {
     vTaskDelay(3 / portTICK_PERIOD_MS);
     
     int8_t tx_power_variation = (packet_counter % 5) - 2;
-    esp_pwr_lvl_t actual_power = (esp_pwr_lvl_t)(MAX_TX_POWER + tx_power_variation);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, actual_power);
+    int actual_power = MAX_TX_POWER + tx_power_variation;
+    if(actual_power < ESP_PWR_LVL_N12) actual_power = ESP_PWR_LVL_N12;
+    if(actual_power > MAX_TX_POWER) actual_power = MAX_TX_POWER;
+    
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, (esp_power_level_t)actual_power);
     
     pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
     
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
     
     BLEAdvertisementData scanResponse = BLEAdvertisementData();
     if(random(100) < 70) {
         char local_name[16];
-        snprintf(local_name, sizeof(local_name), "Device_%04X", esp_random() & 0xFFFF);
+        snprintf(local_name, sizeof(local_name), "Device_%04lX", (unsigned long)(esp_random() & 0xFFFF));
         scanResponse.setName(local_name);
         
         uint32_t service_uuid = 0xFE95 + (packet_counter % 0x100);
         char uuid_str[40];
-        snprintf(uuid_str, sizeof(uuid_str), "0000%04X-0000-1000-8000-00805f9b34fb", service_uuid);
+        snprintf(uuid_str, sizeof(uuid_str), "0000%04lX-0000-1000-8000-00805f9b34fb", (unsigned long)service_uuid);
         scanResponse.addServiceUUID(BLEUUID(uuid_str));
     }
     pAdvertising->setScanResponseData(scanResponse);
     
     pAdvertising->setAdvertisementData(advertisementData);
-    
-    if(type == AppleIOS || type == GoogleFastPair) {
-        pAdvertising->setMinInterval(32);
-        pAdvertising->setMaxInterval(48);
-    }
     
     pAdvertising->start();
     vTaskDelay(actualDelay / portTICK_PERIOD_MS);
@@ -457,7 +454,6 @@ void executeStealthSpam(EBLEPayloadType type) {
             esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N12);
             
             pAdvertising = BLEDevice::getAdvertising();
-            pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
             
             BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
             pAdvertising->setAdvertisementData(advertisementData);
@@ -494,7 +490,6 @@ void executeCustomSpam(String spamName) {
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     
     pAdvertising = BLEDevice::getAdvertising();
-    pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
     
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x06);
@@ -502,7 +497,7 @@ void executeCustomSpam(String spamName) {
     
     uint32_t service_id = random(0xFFFF);
     char service_str[10];
-    snprintf(service_str, sizeof(service_str), "%04X", service_id);
+    snprintf(service_str, sizeof(service_str), "%04lX", (unsigned long)service_id);
     String service_uuid = String("0000") + service_str + "-0000-1000-8000-00805f9b34fb";
     advertisementData.setCompleteServices(BLEUUID(service_uuid.c_str()));
     
