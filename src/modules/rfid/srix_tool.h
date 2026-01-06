@@ -1,6 +1,6 @@
 /**
  * @file srix_tool.cpp
- * @brief SRIX4K/SRIX512 Reader/Writer Tool v1.2
+ * @brief SRIX4K/SRIX512 Reader/Writer Tool v1.3
  * @author Senape3000
  * @info https://github.com/Senape3000/firmware/blob/main/docs_custom/SRIX/SRIX_Tool_README.md
  * @date 2026-01-01
@@ -11,6 +11,18 @@
 
 // DEBUG MODE: uncomment for read the write process output from serial
 // #define SRIX_DEBUG_WRITE_SIMULATION
+
+// Uncomment to enable verbose debug output on Serial
+//#define SRIX_DEBUG 
+
+// Helper macro for debug
+#ifdef SRIX_DEBUG
+    #define SRIX_LOG(...) Serial.printf(__VA_ARGS__); Serial.println()
+    #define SRIX_PRINT(...) Serial.print(__VA_ARGS__)
+#else
+    #define SRIX_LOG(...) 
+    #define SRIX_PRINT(...) 
+#endif
 
 #include "pn532_srix.h"
 #include <Arduino.h>
@@ -33,6 +45,24 @@ public:
 
     void setup();
     void loop();
+// ========== JS INTERPRETER SUPPORT ==========
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    // Headless constructor (no UI, no loop)
+    SRIXTool(bool headless_mode);
+
+    // Headless method for JS
+    String read_tag_headless(int timeout_seconds);
+    int write_tag_headless(int timeout_seconds);
+    String save_file_headless(String filename);
+    int load_file_headless(String filename);
+    int write_single_block_headless(uint8_t block_num, const uint8_t *block_data);
+    bool waitForTagHeadless(uint32_t timeout_ms);
+
+    // Getter for data access
+    uint8_t *getDump() { return _dump; }
+    uint8_t *getUID() { return _uid; }
+    bool isDumpValid() { return _dump_valid_from_read || _dump_valid_from_load; }
+#endif
 
 private:
 // PN532 for SRIX - uses IRQ/RST if board has them defined
