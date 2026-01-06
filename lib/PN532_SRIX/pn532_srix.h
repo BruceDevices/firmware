@@ -14,7 +14,7 @@
  *
  * @author Lilz
  * @license  GNU Lesser General Public License v3.0 (see license.txt)
- *  Refactored by Senape3000 to reuse Adafruit_PN532 constants only
+ *  Refactored by Senape3000 to reuse Adafruit_PN532 constants only (v1.2)
  *  This is a library for the communication with an I2C PN532 NFC/RFID breakout board.
  *  adapted from Adafruit's library.
  *  This library supports only I2C to communicate.
@@ -26,6 +26,18 @@
 #include <Adafruit_PN532.h> // Only for constants (#define)
 #include <Arduino.h>
 #include <Wire.h>
+
+// Uncomment to enable verbose debug output on Serial
+// #define SRIX_LIB_DEBUG
+
+// Helper macro for debug
+#ifdef SRIX_LIB_DEBUG
+    #define SRIX_LIB_LOG(...) Serial.printf(__VA_ARGS__); Serial.println()
+    #define SRIX_LIB_PRINT(...) Serial.print(__VA_ARGS__)
+#else
+    #define SRIX_LIB_LOG(...) 
+    #define SRIX_LIB_PRINT(...) 
+#endif
 
 // SRIX4K-specific commands
 #define SRIX4K_INITIATE (0x06)
