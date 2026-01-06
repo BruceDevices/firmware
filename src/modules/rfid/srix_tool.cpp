@@ -1,6 +1,6 @@
 /**
  * @file srix_tool.cpp
- * @brief SRIX4K/SRIX512 Reader/Writer Tool v1.2
+ * @brief SRIX4K/SRIX512 Reader/Writer Tool v1.3
  * @author Senape3000
  * @info https://github.com/Senape3000/firmware/blob/main/docs_custom/SRIX/SRIX_Tool_README.md
  * @date 2026-01-01
@@ -11,8 +11,9 @@
 #include "core/settings.h"
 #include <vector>
 
-#define TAG_TIMEOUT_MS 500
+#define TAG_TIMEOUT_MS 100
 #define TAG_MAX_ATTEMPTS 5
+static constexpr uint32_t SRIX_EEPROM_WRITE_DELAY_MS = 15; //Delay for write operation
 
 SRIXTool::SRIXTool() {
     current_state = IDLE_MODE;
@@ -169,7 +170,7 @@ void SRIXTool::show_main_menu() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
 
-    padprintln("SRIX Tool for SRIX4K/512 v1.2");
+    padprintln("SRIX Tool for SRIX4K/512 v1.3");
     padprintln("");
     padprintln("Features:");
     padprintln("- Read/Clone complete tag (512B)");
@@ -377,14 +378,17 @@ void SRIXTool::write_tag() {
         block[3] = _dump[off + 3];
 
         if (!nfc->SRIX_write_block(b, block)) {
-
+            SRIX_LOG("[WriteBlock_GUI] ❌ WRITE BLOCK FAILED");
             blocks_failed++;
             if (blocks_failed <= 10) { // Max 10 block for report
                 if (failed_blocks.length() > 0) failed_blocks += ",";
                 failed_blocks += String(b);
             }
         } else {
+            SRIX_LOG("[WriteBlock_GUI] ✅ WRITE BLOCK: %u", blocks_written);
             blocks_written++;
+            delay(SRIX_EEPROM_WRITE_DELAY_MS); //Delay for write
+            waitForTagHeadless(600);
         }
 
         progressHandler(b + 1, 128, "Writing data blocks");
@@ -827,6 +831,426 @@ void SRIXTool::delayWithReturn(uint32_t ms) {
     auto tm = millis();
     while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
 }
+
+// ========== JS INTERPRETER SUPPORT ==========
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+
+SRIXTool::SRIXTool(bool headless_mode) {
+    SRIX_LOG("[SRIX] Headless Constructor start");
+
+    current_state = IDLE_MODE;
+    _dump_valid_from_read = false;
+    _dump_valid_from_load = false;
+    _tag_read = false;
+    _screen_drawn = false;
+    _lastReadTime = 0;
+
+    memset(_dump, 0, sizeof(_dump));
+    memset(_uid, 0, sizeof(_uid));
+
+    int sda_pin = bruceConfigPins.i2c_bus.sda;
+    int scl_pin = bruceConfigPins.i2c_bus.scl;
+    
+    SRIX_LOG("[SRIX] I2C pins: SDA=%d, SCL=%d", sda_pin, scl_pin);
+    
+    Wire.begin(sda_pin, scl_pin);
+    Wire.setClock(100000);
+
+#if defined(PN532_IRQ) && defined(PN532_RF_REST)
+    SRIX_LOG("[SRIX] Using HW IRQ: %d, RST: %d", PN532_IRQ, PN532_RF_REST);
+    nfc = new Arduino_PN532_SRIX(PN532_IRQ, PN532_RF_REST);
+#else
+    SRIX_LOG("[SRIX] Using POLLING mode (No IRQ pin defined)");
+    nfc = new Arduino_PN532_SRIX(255, 255); // Use 255 pin
+#endif
+
+    if (nfc) {
+        SRIX_LOG("[SRIX] NFC object created. Initializing...");
+        if (nfc->init()) {
+            SRIX_LOG("[SRIX] Init OK. Configuring...");
+            nfc->setPassiveActivationRetries(0xFF);
+            nfc->SRIX_init();
+            SRIX_LOG("[SRIX] Ready.");
+        } else {
+            SRIX_LOG("[SRIX] ❌ Init FAILED! (Check wiring)");
+        }
+    } else {
+         SRIX_LOG("[SRIX] ❌ Failed to create NFC object (Out of memory?)");
+    }
+}
+
+bool SRIXTool::waitForTagHeadless(uint32_t timeout_ms) {
+    if (!nfc) return false;
+
+    uint32_t startTime = millis();
+    bool rfResetDone = false;
+
+    SRIX_LOG("[WaitHeadless] Waiting for tag... (Timeout: %lu ms)", timeout_ms);
+
+    while ((millis() - startTime) < timeout_ms) {
+        
+        // Init_select
+        if (nfc->SRIX_initiate_select()) {
+            SRIX_LOG("[WaitHeadless] ✅ Tag detected!");
+            return true;
+        }
+        
+        // Delay for i2C Bus
+        delay(100);
+    }
+
+    SRIX_LOG("[WaitHeadless] ❌ Timeout. No tag found.");
+    return false;
+}
+
+String SRIXTool::read_tag_headless(int timeout_seconds) {
+    if (!nfc) return "";
+
+    uint32_t startTime = millis();
+
+    while ((millis() - startTime) < (timeout_seconds * 1000)) {
+        // Try to detect tag
+        if (!nfc->SRIX_initiate_select()) {
+            delay(100);
+            continue;
+        }
+
+        // Tag detected! Read UID
+        if (!nfc->SRIX_get_uid(_uid)) {
+            delay(100);
+            continue;
+        }
+
+        // Read all 128 blocks (512 bytes)
+        uint8_t block[4];
+        bool read_success = true;
+
+        for (uint8_t b = 0; b < 128; b++) {
+            if (!nfc->SRIX_read_block(b, block)) {
+                read_success = false;
+                break;
+            }
+
+            const uint16_t off = (uint16_t)b * 4;
+            _dump[off + 0] = block[0];
+            _dump[off + 1] = block[1];
+            _dump[off + 2] = block[2];
+            _dump[off + 3] = block[3];
+        }
+
+        if (!read_success) {
+            delay(100);
+            continue;
+        }
+
+        // Mark dump as valid
+        _dump_valid_from_read = true;
+        _dump_valid_from_load = false;
+
+        // Build UID string (8 bytes with spaces)
+        String uid_str = "";
+        for (uint8_t i = 0; i < 8; i++) {
+            if (_uid[i] < 0x10) uid_str += "0";
+            uid_str += String(_uid[i], HEX);
+            if (i < 7) uid_str += " ";
+        }
+        uid_str.toUpperCase();
+
+        // Build data hex string (1024 hex chars = 512 bytes)
+        String dump_str = "";
+        for (uint16_t i = 0; i < 512; i++) {
+            if (_dump[i] < 0x10) dump_str += "0";
+            dump_str += String(_dump[i], HEX);
+        }
+        dump_str.toUpperCase();
+
+        // Build JSON response
+        String result = "{";
+        result += "\"uid\":\"" + uid_str + "\",";
+        result += "\"blocks\":128,";
+        result += "\"size\":512,";
+        result += "\"data\":\"" + dump_str + "\"";
+        result += "}";
+
+        return result;
+    }
+
+    return ""; // Timeout
+}
+
+int SRIXTool::write_tag_headless(int timeout_seconds) {
+
+    if (!nfc) {
+        SRIX_LOG("[WriteTag_Headless] ❌ NFC object is NULL");
+        return -6;
+    }
+
+    if (!_dump_valid_from_read && !_dump_valid_from_load) {
+        SRIX_LOG("[WriteTag_Headless] ❌ No dump loaded in memory");
+        return -2;
+    }
+
+    // Wait tag headless mode
+    if (!waitForTagHeadless((uint32_t)timeout_seconds * 1000UL)) {
+        SRIX_LOG("[WriteTag_Headless] ❌ Timeout waiting for tag");
+        return -1;
+    }
+
+    SRIX_LOG("[WriteTag_Headless] ✅ Tag detected, starting write");
+
+    uint8_t block[4];
+    uint8_t readCheck[4];
+
+    uint8_t blocks_written = 0;
+    uint8_t blocks_verified = 0;
+
+    // Write
+    for (uint8_t b = 0; b < 128; b++) {
+
+        const uint16_t off = (uint16_t)b * 4;
+        block[0] = _dump[off + 0];
+        block[1] = _dump[off + 1];
+        block[2] = _dump[off + 2];
+        block[3] = _dump[off + 3];
+
+        // WRITE (critical)
+        if (!nfc->SRIX_write_block(b, block)) {
+            SRIX_LOG("[WriteTag_Headless] ❌ WRITE FAILED at block %u", b);
+            return -5; // Error
+        }
+
+        blocks_written++;
+        delay(SRIX_EEPROM_WRITE_DELAY_MS);
+        SRIX_LOG("[WriteTag_Headless] ✅ WRITE BLOCK: %u", blocks_written);
+
+        // VERIFY (best-effort)
+        if (nfc->SRIX_read_block(b, readCheck)) {
+            if (memcmp(block, readCheck, 4) == 0) {
+                blocks_verified++;
+            }   
+        }
+        if (!waitForTagHeadless(600)) {
+            SRIX_LOG("[WriteTag_Headless] ❌ Tag lost at block %u", b);
+            return blocks_written;
+        }
+    }
+
+    SRIX_LOG("[WriteTag_Headless] ✅ WRITE COMPLETE. Written=%u Verified=%u",
+             blocks_written, blocks_verified);
+
+    // Return if OK
+    if (blocks_verified == 128) {
+        return 0; // WRITE + VERIFY OK
+    }
+
+    return blocks_verified; // WRITE OK, VERIFY partial / skipped
+}
+
+String SRIXTool::save_file_headless(String filename) {
+    if (!_dump_valid_from_read && !_dump_valid_from_load) return ""; // No data
+
+    FS *fs;
+    if (!getFsStorage(fs)) return "";
+
+    // Create directories if needed
+    if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
+    if (!(*fs).exists("/BruceRFID/SRIX")) (*fs).mkdir("/BruceRFID/SRIX");
+
+    // Build filepath
+    String filepath = "/BruceRFID/SRIX/" + filename;
+    if (!filename.endsWith(".srix")) filepath += ".srix";
+
+    // Handle existing file
+    if ((*fs).exists(filepath)) {
+        int i = 1;
+        String base = filepath.substring(0, filepath.length() - 5); // Remove .srix
+        while ((*fs).exists(base + "_" + String(i) + ".srix")) i++;
+        filepath = base + "_" + String(i) + ".srix";
+    }
+
+    // Open file for writing
+    File file = (*fs).open(filepath, FILE_WRITE);
+    if (!file) return "";
+
+    // Build UID string
+    String uid_str = "";
+    for (uint8_t i = 0; i < 8; i++) {
+        if (_uid[i] < 0x10) uid_str += "0";
+        uid_str += String(_uid[i], HEX);
+    }
+    uid_str.toUpperCase();
+
+    // Write header
+    file.println("Filetype: Bruce SRIX Dump");
+    file.println("UID: " + uid_str);
+    file.println("Blocks: 128");
+    file.println("Data size: 512");
+    file.println("# Data:");
+
+    // Write blocks in format: [XX] YYYYYYYY
+    for (uint8_t block = 0; block < 128; block++) {
+        uint16_t offset = block * 4;
+        String line = "[";
+        if (block < 0x10) line += "0";
+        line += String(block, HEX);
+        line += "] ";
+
+        for (uint8_t i = 0; i < 4; i++) {
+            if (_dump[offset + i] < 0x10) line += "0";
+            line += String(_dump[offset + i], HEX);
+        }
+        line.toUpperCase();
+        file.println(line);
+    }
+
+    file.close();
+    return filepath;
+}
+
+int SRIXTool::load_file_headless(String filename) {
+    if (!nfc) return -1;
+
+    FS *fs;
+    if (!getFsStorage(fs)) return -1;
+
+    // Build filepath
+    String filepath = "/BruceRFID/SRIX/" + filename;
+    if (!filename.endsWith(".srix")) filepath += ".srix";
+
+    if (!(*fs).exists(filepath)) return -2; // File not found
+
+    // Open file
+    File file = (*fs).open(filepath, FILE_READ);
+    if (!file) return -1;
+
+    // Reset buffers
+    memset(_dump, 0, sizeof(_dump));
+    memset(_uid, 0, sizeof(_uid));
+
+    bool header_passed = false;
+    int blocks_loaded = 0;
+
+    // Parse file line by line
+    while (file.available()) {
+        String line = file.readStringUntil('\n');
+        line.trim();
+        if (line.isEmpty()) continue;
+
+        // Parse UID from header
+        if (line.startsWith("UID:")) {
+            String uid_str = line.substring(5);
+            uid_str.trim();
+            uid_str.replace(" ", "");
+
+            for (uint8_t i = 0; i < 8 && i * 2 < uid_str.length(); i++) {
+                String byteStr = uid_str.substring(i * 2, i * 2 + 2);
+                _uid[i] = strtoul(byteStr.c_str(), NULL, 16);
+            }
+            continue;
+        }
+
+        // Skip header until "# Data:"
+        if (!header_passed) {
+            if (line.startsWith("# Data:")) header_passed = true;
+            continue;
+        }
+
+        // Parse blocks in format: [XX] YYYYYYYY
+        if (line.startsWith("[") && line.indexOf("]") > 0) {
+            int bracket_end = line.indexOf("]");
+            String block_num_str = line.substring(1, bracket_end);
+            String data_str = line.substring(bracket_end + 1);
+            data_str.trim();
+            data_str.replace(" ", "");
+
+            uint8_t block_num = strtoul(block_num_str.c_str(), NULL, 16);
+            if (block_num >= 128) continue; // Skip invalid blocks
+
+            // Convert 8 hex chars to 4 bytes
+            if (data_str.length() >= 8) {
+                uint16_t offset = block_num * 4;
+                for (uint8_t i = 0; i < 4; i++) {
+                    String byteStr = data_str.substring(i * 2, i * 2 + 2);
+                    _dump[offset + i] = strtoul(byteStr.c_str(), NULL, 16);
+                }
+                blocks_loaded++;
+            }
+        }
+    }
+
+    file.close();
+
+    if (blocks_loaded < 128) return -3; // Incomplete dump
+
+    // Mark dump as valid
+    _dump_valid_from_load = true;
+    _dump_valid_from_read = false;
+
+    return 0; // Success
+}
+
+int SRIXTool::write_single_block_headless(uint8_t block_num, const uint8_t *block_data) {
+    if (!nfc) {
+        SRIX_LOG("[WriteBlock_Headless] ❌ NFC object is NULL");
+        return -6;
+    }
+    if (block_num > 127) {
+        SRIX_LOG("[WriteBlock_Headless] ❌ Invalid block num: %d", block_num);
+        return -4;
+    }
+    if (!block_data) {
+        SRIX_LOG("[WriteBlock_Headless] ❌ Invalid data pointer");
+        return -3;
+    }
+
+    SRIX_LOG("[WriteBlock_Headless] Start writing block %u. Data: %02X %02X %02X %02X", 
+             block_num, block_data[0], block_data[1], block_data[2], block_data[3]);
+
+    // 1. Wait Tag
+    // Timeout 2500ms
+    if (!waitForTagHeadless(2500)) {
+        SRIX_LOG("[WriteBlock_Headless] ❌ Timeout: Tag not found");
+        return -1; 
+    }
+
+    // 2. Tag found and selected
+    SRIX_LOG("[WriteBlock_Headless] Tag ready. Sending write command...");
+    
+    if (nfc->SRIX_write_block(block_num, (uint8_t *)block_data)) {
+
+        // 3. Wait HW write (Critical Wait)
+        delay(SRIX_EEPROM_WRITE_DELAY_MS);
+        SRIX_LOG("[WriteBlock_Headless] ✅ WRITE SENT OK");
+
+    // ==============================
+    // 4. VERIFY (NEED BIGGER UPGRADE)
+    // ==============================
+    uint8_t readBuffer[4];
+
+    // Re-select: NEED TO IMPLEMNTAT VERIFY WRITTEN BLOCK - NOT POSSIBLE NOW
+    if (!nfc->SRIX_initiate_select()) {
+    SRIX_LOG("[WriteBlock_Headless] ⚠️ Re-select failed (ignored)");}
+    delay(10);
+
+    if (nfc->SRIX_read_block(block_num, readBuffer)) {
+        delay(5);
+        if (memcmp(block_data, readBuffer, 4) == 0) {
+            SRIX_LOG("[WriteBlock_Headless] ✅ VERIFY OK");
+            return 0; // WRITE + VERIFY OK
+        } else {
+            SRIX_LOG("[WriteBlock_Headless] ⚠️ VERIFY MISMATCH (write assumed OK)");
+            return 1; // WRITE OK, VERIFY FAIL
+        }
+    }
+
+    SRIX_LOG("[WriteBlock_Headless] ⚠️ VERIFY SKIPPED (no RST / RF dirty)");
+    return 2; // WRITE OK, VERIFY NOT POSSIBLE
+    }   else {
+    SRIX_LOG("[WriteBlock_Headless] ❌ WRITE FAILED");
+    return -5;}
+}
+
+#endif
 
 // Entry point
 void PN532_SRIX() { SRIXTool srix_tool; }
