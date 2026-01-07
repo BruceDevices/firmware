@@ -101,7 +101,7 @@ bool MifareKeysManager::isValidHexKey(const String &key) {
 void MifareKeysManager::validateKeys(std::set<String> &keys) {
     for (auto it = keys.begin(); it != keys.end();) {
         if (!isValidHexKey(*it)) {
-            log_w("Removing invalid key: " + *it);
+            log_w("Removing invalid key: %s", it->c_str());
             it = keys.erase(it);
         } else {
             ++it;
@@ -147,7 +147,7 @@ void MifareKeysManager::loadFromFile(std::set<String> &keys) {
             keys.insert(line);
             loaded++;
         } else {
-            log_w("Invalid key skipped: " + line);
+            log_w("Invalid key skipped: %s", line.c_str());
             skipped++;
         }
     }
@@ -162,14 +162,14 @@ void MifareKeysManager::loadFromFile(std::set<String> &keys) {
         copyFileToFS(&LittleFS, &SD, "SD");
     }
 
-    log_i("Loaded " + String(loaded) + " keys" + (skipped > 0 ? " (" + String(skipped) + " skipped)" : ""));
+    log_i("Loaded %d keys%s", loaded, (skipped > 0 ? " (" + String(skipped) + " skipped)" : "").c_str());
 }
 
 bool MifareKeysManager::copyFileToFS(FS *sourceFS, FS *destFS, const char *destFsName) {
     // Ensure destination directory exists
     if (!destFS->exists(KEYS_DIR)) {
         if (!destFS->mkdir(KEYS_DIR)) {
-            log_e(String("Failed to create dir on ") + destFsName);
+            log_e("Failed to create dir on %s", destFsName);
             return false;
         }
     }
@@ -184,7 +184,7 @@ bool MifareKeysManager::copyFileToFS(FS *sourceFS, FS *destFS, const char *destF
     // Open destination file for writing
     File destFile = destFS->open(KEYS_PATH, FILE_WRITE);
     if (!destFile) {
-        log_e(String("Failed to open destination file on ") + destFsName);
+        log_e("Failed to open destination file on %s", destFsName);
         sourceFile.close();
         return false;
     }
@@ -205,7 +205,7 @@ bool MifareKeysManager::copyFileToFS(FS *sourceFS, FS *destFS, const char *destF
     sourceFile.close();
     destFile.close();
 
-    log_i(String("File copied to ") + destFsName + " (" + String(totalCopied) + " bytes)");
+    log_i("File copied to %s (%d bytes)", destFsName, totalCopied);
     return true;
 }
 
@@ -248,14 +248,14 @@ void MifareKeysManager::createDefaultFile(std::set<String> &keys) {
 bool MifareKeysManager::writeToFS(FS *fs, const char *fsName, const std::set<String> &keys) {
     if (!fs->exists(KEYS_DIR)) {
         if (!fs->mkdir(KEYS_DIR)) {
-            log_e(String("Failed to create dir on ") + fsName);
+            log_e("Failed to create dir on %s", fsName);
             return false;
         }
     }
 
     File file = fs->open(KEYS_PATH, FILE_WRITE);
     if (!file) {
-        log_e(String("Failed to open file on ") + fsName);
+        log_e("Failed to open file on %s", fsName);
         return false;
     }
 
@@ -269,7 +269,7 @@ bool MifareKeysManager::writeToFS(FS *fs, const char *fsName, const std::set<Str
     file.println("//CUSTOM KEYS");
     file.close();
 
-    log_i(String(keys.size()) + " keys saved to " + fsName);
+    log_i("%d keys saved to %s", keys.size(), fsName);
     return true;
 }
 
@@ -277,14 +277,14 @@ bool MifareKeysManager::appendToFS(FS *fs, const char *fsName, const String &key
     if (!fs->exists(KEYS_DIR)) { fs->mkdir(KEYS_DIR); }
 
     if (!fs->exists(KEYS_PATH)) {
-        log_i(String("File missing on ") + fsName + ", creating");
+        log_i("File missing on %s, creating", fsName);
         // Need to create full file - will be done by caller
         return false;
     }
 
     File file = fs->open(KEYS_PATH, FILE_APPEND);
     if (!file) {
-        log_w(String("Failed to append to ") + fsName);
+        log_w("Failed to append to %s", fsName);
         return false;
     }
 
