@@ -24,9 +24,6 @@ If you already use M5Launcher to manage your m5stack device, you can install it 
 Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/download), just search for 'Bruce' (My official builds will be uploaded by "owner" and have photos.) on the device category you want to and click on burn
 
 
-## :keyboard: Discord Server
-
-Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT)!
 
 ## :bookmark_tabs: Wiki
 
