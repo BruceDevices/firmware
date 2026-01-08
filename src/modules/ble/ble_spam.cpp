@@ -243,8 +243,9 @@ void executeSpam(EBLEPayloadType type) {
     
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
-    esp_base_mac_addr_set(macAddr);
+    esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     BLEDevice::init("");
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
@@ -259,7 +260,7 @@ void executeSpam(EBLEPayloadType type) {
     pAdvertising->setMinInterval(32);
     pAdvertising->setMaxInterval(48);
     pAdvertising->start();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 
     pAdvertising->stop();
     vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -268,13 +269,14 @@ void executeSpam(EBLEPayloadType type) {
 #else
     BLEDevice::deinit();
 #endif
+    vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void executeCustomSpam(String spamName) {
     uint8_t macAddr[6];
     for (int i = 0; i < 6; i++) { macAddr[i] = esp_random() & 0xFF; }
     macAddr[0] = (macAddr[0] | 0xF0) & 0xFE;
-    esp_base_mac_addr_set(macAddr);
+    esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init("sh4rk");
 
@@ -304,7 +306,7 @@ void executeCustomSpam(String spamName) {
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
-    esp_base_mac_addr_set(macAddr);
+    esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init(DeviceName);
     vTaskDelay(5 / portTICK_PERIOD_MS);
