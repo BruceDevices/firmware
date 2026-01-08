@@ -245,7 +245,6 @@ void executeSpam(EBLEPayloadType type) {
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);
     BLEDevice::init("");
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
@@ -269,7 +268,6 @@ void executeSpam(EBLEPayloadType type) {
 #else
     BLEDevice::deinit();
 #endif
-    vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void executeCustomSpam(String spamName) {
