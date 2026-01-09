@@ -304,6 +304,8 @@ duk_ret_t native_require(duk_context *ctx) {
         putPropKeyboardFunctions(ctx, obj_idx, 0);
     } else if (filepath == "math") {
         putPropMathFunctions(ctx, obj_idx, 0);
+    } else if (filepath == "mic") {
+        putPropMicFunctions(ctx, obj_idx, 0);
     } else if (filepath == "notification") {
         putPropNotificationFunctions(ctx, obj_idx, 0);
     } else if (filepath == "serial") {
