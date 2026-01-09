@@ -1,4 +1,5 @@
 #include "apple_spam.h"
+#include "ble_spam.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -241,6 +242,19 @@ void startAppleSpam(int payloadIndex) {
     }
 }
 
+
+void legacySubMenu() {
+    std::vector<Option> legacyOptions;
+    
+    legacyOptions.push_back({"SourApple", []() { aj_adv(7); }});
+    legacyOptions.push_back({"AppleJuice", []() { aj_adv(8); }});
+    
+    
+    legacyOptions.push_back({"Back", []() { returnToMenu = true; }});
+    
+    loopOptions(legacyOptions, MENU_TYPE_SUBMENU, "Legacy Apple Spam");
+}
+
 void appleSubMenu() {
     std::vector<Option> appleOptions;
     
@@ -254,6 +268,10 @@ void appleSubMenu() {
         }});
     }
     
+    appleOptions.push_back({"Legacy", []() {
+        legacySubMenu();
+    }});
+
     appleOptions.push_back({"Back", []() {
         returnToMenu = true;
     }});

