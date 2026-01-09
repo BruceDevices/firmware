@@ -32,7 +32,7 @@ void BleMenu::optionsMenu() {
     options.push_back({"Bad BLE", [=]() { ducky_setup(hid_ble, true); }});
 #endif
     options.push_back({"BLE Keyboard", [=]() { ducky_keyboard(hid_ble, true); }});
-    options.push_back({"Apple", [=]() { appleSubMenu(); }});
+    options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
     options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
     options.push_back({"Samsung Spam", lambdaHelper(aj_adv, 3)});
     options.push_back({"Android Spam", lambdaHelper(aj_adv, 4)});
