@@ -462,10 +462,22 @@ void aj_adv(int ble_choice) {
 #endif
 }
 
+void legacySubMenu() {
+    std::vector<Option> legacyOptions;
+    
+    legacyOptions.push_back({"SourApple", []() { aj_adv(7); }});
+    legacyOptions.push_back({"AppleJuice", []() { aj_adv(8); }});
+    
+    
+    legacyOptions.push_back({"Back", []() { returnToMenu = true; }});
+    
+    loopOptions(legacyOptions, MENU_TYPE_SUBMENU, "Apple Spam (Legacy)");
+}
 void spamMenu() {
     std::vector<Option> options;
 
     options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
+    options.push_back({"Apple Spam (Legacy)", [=]() { legacySubMenu(); }});
     options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
     options.push_back({"Samsung Spam", lambdaHelper(aj_adv, 3)});
     options.push_back({"Android Spam", lambdaHelper(aj_adv, 4)});
