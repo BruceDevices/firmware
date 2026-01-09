@@ -30,7 +30,7 @@ StartupApp::StartupApp() {
     _startupApps["Clock"] = []() { runClockLoop(); };
     _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
     _startupApps["GPS Tracker"] = []() { GPSTracker(); };
-#if defined(SOC_USB_OTG_SUPPORTED) && !defined(USE_SD_MMC)
+#if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(); };

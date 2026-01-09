@@ -48,7 +48,7 @@ void rf_listen() {
         if (check(SelPress)) break;
     }
 
-    if (bruceConfig.rfModule != CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
         displayError("Listener needs a CC1101!", true);
         return;
     }

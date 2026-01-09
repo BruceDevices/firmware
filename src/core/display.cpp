@@ -21,6 +21,8 @@ void panelSleep(bool on) {
         delay(120);
     }
 #endif
+    // Disables tft writings on the display
+    tft.setSleepMode(on);
 }
 
 bool __attribute__((weak)) isCharging() { return false; }
@@ -519,6 +521,15 @@ int loopOptions(
             displayScrollingText(txt, coord);
         }
 
+        // Checks ESC Press first, to not exit after PrevPress is processed
+        // PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
+        // Same happens to Core and some other boards
+        if (EscPress && PrevPress) EscPress = false;
+        if (menuType != MENU_TYPE_MAIN && check(EscPress)) {
+            index = -1;
+            break;
+        }
+
         if (PrevPress || check(UpPress)) {
             devModeCounter = 0;
 #ifdef HAS_KEYBOARD
@@ -588,29 +599,6 @@ int loopOptions(
         // interpreter_start -> running the interpreter
         // interpreter -> loopOptions helper inside the Javascript
         if (interpreter_start && !interpreter) { break; }
-
-#ifdef HAS_KEYBOARD
-        if (check(EscPress)) {
-            index = -1;
-            break;
-        }
-        /* DISABLED: may conflict with custom shortcuts
-        int pressed_number = checkNumberShortcutPress();
-        if (pressed_number >= 0) {
-            if (index == pressed_number) {
-                // press 2 times the same number to confirm
-                options[index].operation();
-                break;
-            }
-            // else only highlight the option
-            index = pressed_number;
-            if ((index + 1) > options.size()) index = options.size() - 1;
-            redraw = true;
-        }*/
-
-#elif defined(T_EMBED) || defined(HAS_TOUCH) || !defined(HAS_SCREEN)
-        if (menuType != MENU_TYPE_MAIN && check(EscPress)) break;
-#endif
     }
     return index;
 }
@@ -880,18 +868,8 @@ void printCenterFootnote(String text) {
 }
 
 /***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    int percent = 0;
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
-}
-
-/***************************************************************************************
 ** Function name: drawBatteryStatus()
-** Description:   Delivers the battery value from 1-100
+** Description:   Draws battery info into the Status bar
 ***************************************************************************************/
 void drawBatteryStatus(uint8_t bat) {
     if (bat == 0) return;
@@ -1778,9 +1756,8 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
     // Allocate decoder only while drawing, then release to keep RAM available for Wi-Fi/AP usage
 #if defined(ESP32)
     bool usedHeapCaps = true;
-    void *mem =
-        psramFound() ? heap_caps_malloc(sizeof(PNG), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
-                     : heap_caps_malloc(sizeof(PNG), MALLOC_CAP_8BIT);
+    void *mem = psramFound() ? heap_caps_malloc(sizeof(PNG), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+                             : heap_caps_malloc(sizeof(PNG), MALLOC_CAP_8BIT);
     if (!mem) {
         mem = malloc(sizeof(PNG));
         usedHeapCaps = false;
@@ -1848,10 +1825,8 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
     // Destroy placement-new object and free memory so RAM is available after rendering
     png->~PNG();
 #if defined(ESP32)
-    if (usedHeapCaps)
-        heap_caps_free(mem);
-    else
-        free(mem);
+    if (usedHeapCaps) heap_caps_free(mem);
+    else free(mem);
 #else
     free(mem);
 #endif

@@ -90,7 +90,7 @@ int getBattery() {
     int percent = 0;
     percent = (PMU.getSystemVoltage() - 3300) * 100 / (float)(4150 - 3350);
 
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************
@@ -139,21 +139,21 @@ void InputHandler(void) {
         }
         if (touched && touch.isPressed()) {
             tm = millis();
-            if (bruceConfig.rotation == 1) { t.y[0] = TFT_WIDTH - t.y[0]; }
-            if (bruceConfig.rotation == 3) { t.x[0] = TFT_HEIGHT - t.x[0]; }
+            if (bruceConfigPins.rotation == 1) { t.y[0] = TFT_WIDTH - t.y[0]; }
+            if (bruceConfigPins.rotation == 3) { t.x[0] = TFT_HEIGHT - t.x[0]; }
             // Need to test these 2
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x[0];
                 t.x[0] = t.y[0];
                 t.y[0] = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x[0];
                 t.x[0] = TFT_WIDTH - t.y[0];
                 t.y[0] = TFT_HEIGHT - tmp;
             }
 
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x[0], t.y[0], bruceConfig.rotation);
+            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x[0], t.y[0], bruceConfigPins.rotation);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;

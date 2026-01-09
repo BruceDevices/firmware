@@ -202,7 +202,6 @@ void EspConnection::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, 
     recvQueue.push_back(recvMessage);
 }
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
 void EspConnection::onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_status_t status) {
     if (instance) instance->onDataSent(info->src_addr, status);
 }
@@ -210,4 +209,3 @@ void EspConnection::onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_st
 void EspConnection::onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
     if (instance) instance->onDataRecv(info->src_addr, incomingData, len);
 }
-#endif

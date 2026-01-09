@@ -1,7 +1,6 @@
 #include "record.h"
 #include "rf_utils.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
 static bool
 record_rmt_rx_done_callback(rmt_channel_t *channel, const rmt_rx_done_event_data_t *edata, void *user_data) {
     BaseType_t high_task_wakeup = pdFALSE;
@@ -10,7 +9,6 @@ record_rmt_rx_done_callback(rmt_channel_t *channel, const rmt_rx_done_event_data
     xQueueSendFromISR(receive_queue, edata, &high_task_wakeup);
     return high_task_wakeup == pdTRUE;
 }
-#endif
 float phase = 0.0;
 float lastPhase = 2 * PI;
 unsigned long lastAnimationUpdate = 0;
@@ -86,7 +84,7 @@ void rf_raw_record_draw(RawRecordingStatus status) {
 #define FREQUENCY_SCAN_MAX_TRIES 5
 float rf_freq_scan() {
     float frequency = 0;
-    int idx = range_limits[bruceConfig.rfScanRange][0];
+    int idx = range_limits[bruceConfigPins.rfScanRange][0];
     uint8_t attempt = 0;
     int rssi = -80, rssiThreshold = -65;
 
@@ -99,10 +97,10 @@ float rf_freq_scan() {
     while (frequency <= 0 && !check(EscPress)) { // FastScan
         sinewave_animation();
         previousMillis = millis();
-        if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
-            if (idx < range_limits[bruceConfig.rfScanRange][0] ||
-                idx > range_limits[bruceConfig.rfScanRange][1]) {
-                idx = range_limits[bruceConfig.rfScanRange][0];
+        if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+            if (idx < range_limits[bruceConfigPins.rfScanRange][0] ||
+                idx > range_limits[bruceConfigPins.rfScanRange][1]) {
+                idx = range_limits[bruceConfigPins.rfScanRange][0];
             }
             float checkFrequency = subghz_frequency_list[idx];
             setMHZ(checkFrequency);
@@ -119,52 +117,21 @@ float rf_freq_scan() {
                         if (best_frequencies[i].rssi > best_frequencies[max_index].rssi) { max_index = i; }
                     }
 
-                    bruceConfig.setRfFreq(best_frequencies[max_index].freq, 0);
+                    bruceConfigPins.setRfFreq(best_frequencies[max_index].freq, 0);
                     frequency = best_frequencies[max_index].freq;
                     Serial.println("Frequency Found: " + String(frequency));
+                    deinitRfModule();
+                    initRfModule("rx", frequency);
                 }
             }
             ++idx;
         } else {
 
             frequency = 433.92;
-            bruceConfig.setRfFreq(433.92, 2);
+            bruceConfigPins.setRfFreq(433.92, 2);
         }
     }
     return frequency;
-}
-
-// TODO: replace frequency selection throughout rf.cpp with this unified function
-void rf_range_selection(float currentFrequency = 0.0) {
-    int option = 0;
-    options = {
-        {String("Fixed [" + String(bruceConfig.rfFreq) + "]").c_str(),
-         [=]() { bruceConfig.setRfFreq(bruceConfig.rfFreq, 2); }                                               },
-        {String("Choose Fixed").c_str(),                               [&]() { option = 1; }                   },
-        {subghz_frequency_ranges[0],                                   [=]() { bruceConfig.setRfScanRange(0); }},
-        {subghz_frequency_ranges[1],                                   [=]() { bruceConfig.setRfScanRange(1); }},
-        {subghz_frequency_ranges[2],                                   [=]() { bruceConfig.setRfScanRange(2); }},
-        {subghz_frequency_ranges[3],                                   [=]() { bruceConfig.setRfScanRange(3); }},
-    };
-
-    loopOptions(options);
-    options.clear();
-
-    if (option == 1) { // Fixed Frequency Selector
-        options = {};
-        int ind = 0;
-        int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
-        for (int i = 0; i < arraySize; i++) {
-            String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
-            options.push_back({tmp.c_str(), [=]() { bruceConfig.setRfFreq(subghz_frequency_list[i], 2); }});
-            if (int(currentFrequency * 100) == int(subghz_frequency_list[i] * 100)) ind = i;
-        }
-        loopOptions(options, ind);
-        options.clear();
-    }
-
-    if (bruceConfig.rfFxdFreq) displayTextLine("Scan freq set to " + String(bruceConfig.rfFreq));
-    else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfig.rfScanRange]));
 }
 
 void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
@@ -172,12 +139,12 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
 
     bool fakeRssiPresent = false;
     bool rssiFeature = false;
-    rssiFeature = bruceConfig.rfModule == CC1101_SPI_MODULE;
+    rssiFeature = bruceConfigPins.rfModule == CC1101_SPI_MODULE;
 
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
 
-    if (rssiFeature) rf_range_selection(bruceConfig.rfFreq);
+    if (rssiFeature) rf_range_selection(bruceConfigPins.rfFreq);
 
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
@@ -190,10 +157,10 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
     Serial.println("RF Module Initialized");
 
     // Set frequency if fixed frequency mode is enabled
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
-        if (bruceConfig.rfFxdFreq || !rssiFeature) status.frequency = bruceConfig.rfFreq;
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+        if (bruceConfigPins.rfFxdFreq || !rssiFeature) status.frequency = bruceConfigPins.rfFreq;
         else status.frequency = rf_freq_scan();
-    } else status.frequency = bruceConfig.rfFreq;
+    } else status.frequency = bruceConfigPins.rfFreq;
 
     // Something went wrong with scan, probably it was cancelled
     if (status.frequency < 300) return;
@@ -207,7 +174,6 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
 
     // Start recording
     delay(200);
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
     rmt_channel_handle_t rx_ch = NULL;
     rx_ch = setup_rf_rx();
     if (rx_ch == NULL) return;
@@ -226,67 +192,32 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
     rmt_symbol_word_t item[64];
     rmt_rx_done_event_data_t rx_data;
     ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
-#else
-    initRMT();
-    RingbufHandle_t rb;
-    rmt_get_ringbuf_handle(RMT_RX_CHANNEL, &rb);
-    if (rb == NULL) {
-        Serial.println("Failed to get ring buffer handle!");
-        return; // Exit if ring buffer handle is not valid
-    }
-    rmt_rx_start(RMT_RX_CHANNEL, true);
-    rmt_item32_t *item;
-#endif
     Serial.println("RMT Initialized");
 
     while (!status.recordingFinished) {
         previousMillis = millis();
         size_t rx_size = 0;
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
         rmt_symbol_word_t *rx_items = NULL;
-        if (xQueueReceive(receive_queue, &rx_data, pdMS_TO_TICKS(1000)) == pdPASS) {
+        if (xQueueReceive(receive_queue, &rx_data, 0) == pdPASS) {
             rx_size = rx_data.num_symbols;
             rx_items = rx_data.received_symbols;
         }
-        if (rx_size != 0)
-#else
-        item = (rmt_item32_t *)xRingbufferReceive(rb, &rx_size, 500);
-        if (item != nullptr)
-#endif
-        {
+        if (rx_size != 0) {
             bool valid_signal = false;
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
             if (rx_size >= 5) valid_signal = true;
-#else
-            if (rx_size >= 5 * sizeof(rmt_item32_t)) valid_signal = true;
-#endif
-            if (valid_signal) {                       // ignore codes shorter than 5 items
-                fakeRssiPresent = true;               // For rssi display on single-pinned RF Modules
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
+            if (valid_signal) {         // ignore codes shorter than 5 items
+                fakeRssiPresent = true; // For rssi display on single-pinned RF Modules
                 rmt_symbol_word_t *code = (rmt_symbol_word_t *)malloc(rx_size * sizeof(rmt_symbol_word_t));
-#else
-                size_t item_count = rx_size / sizeof(rmt_item32_t);
-                rmt_item32_t *code = (rmt_item32_t *)malloc(rx_size);
-#endif
 
                 // Gap calculation
                 unsigned long receivedTime = millis();
                 unsigned long long signalDuration = 0;
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
                 for (size_t i = 0; i < rx_size; i++) {
                     code[i] = rx_items[i];
                     signalDuration += rx_items[i].duration0 + rx_items[i].duration1;
                 }
                 recorded.codes.push_back(code);
                 recorded.codeLengths.push_back(rx_size);
-#else
-                for (size_t i = 0; i < item_count; i++) {
-                    code[i] = item[i];
-                    signalDuration += item[i].duration0 + item[i].duration1;
-                }
-                recorded.codes.push_back(code);
-                recorded.codeLengths.push_back(item_count);
-#endif
 
                 if (status.lastSignalTime != 0) {
                     unsigned long signalDurationMs = signalDuration / RMT_1MS_TICKS;
@@ -301,12 +232,8 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
                 }
                 status.lastSignalTime = receivedTime;
             }
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
             ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
             rx_size = 0;
-#else
-            vRingbufferReturnItem(rb, (void *)item);
-#endif
         }
 
         // Periodically update RSSI
@@ -333,14 +260,9 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
         rf_raw_record_draw(status);
     }
     Serial.println("Recording stopped.");
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
     rmt_disable(rx_ch);
     rmt_del_channel(rx_ch);
     vQueueDelete(receive_queue);
-#else
-    rmt_rx_stop(RMT_RX_CHANNEL);
-    deinitRMT();
-#endif
     deinitRfModule();
 }
 

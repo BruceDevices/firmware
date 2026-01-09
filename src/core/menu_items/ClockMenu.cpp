@@ -3,15 +3,7 @@
 #include "core/settings.h"
 
 void ClockMenu::optionsMenu() { runClockLoop(); }
-void ClockMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.clock),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ClockMenu::drawIcon(float scale) {
     clearIconArea();
     int radius = scale * 30;

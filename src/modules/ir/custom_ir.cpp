@@ -78,8 +78,8 @@ bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
 
     File databaseFile = fs->open(filepath, FILE_READ);
 
-    setup_ir_pin(bruceConfig.irTx, OUTPUT);
-    // digitalWrite(bruceConfig.irTx, LED_ON);
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
+    // digitalWrite(bruceConfigPins.irTx, LED_ON);
 
     if (!databaseFile) {
         Serial.println("Failed to open database file.");
@@ -212,16 +212,14 @@ bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
     Serial.println("EXTRA finished");
 
     resetCodesArray();
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
     return true;
 }
 
 void otherIRcodes() {
     checkIrTxPin();
     resetCodesArray();
-    int total_codes = 0;
     String filepath;
-    File databaseFile;
     FS *fs = NULL;
 
     returnToMenu = true; // make sure menu is redrawn when quitting in any point
@@ -264,85 +262,14 @@ void otherIRcodes() {
         return;
     }
 
-    // else continue and try to parse the file
-
-    databaseFile = fs->open(filepath, FILE_READ);
-    drawMainBorder();
-
-    if (!databaseFile) {
-        Serial.println("Failed to open database file.");
-        // displayError("Fail to open file");
-        // delay(2000);
-        return;
-    }
-    Serial.println("Opened database file.");
-
-    setup_ir_pin(bruceConfig.irTx, OUTPUT);
-    // digitalWrite(bruceConfig.irTx, LED_ON);
-
-    // Mode to choose and send command by command limitted to 100 commands
-    String line;
-    String txt;
-    codes.push_back(new IRCode());
-    while (databaseFile.available() && total_codes < 100) {
-        line = databaseFile.readStringUntil('\n');
-        txt = line.substring(line.indexOf(":") + 1);
-        txt.trim();
-        if (line.startsWith("name:")) {
-            // in case that the separation between codes are not made by "#" line
-            if (codes[total_codes]->name != "") {
-                total_codes++;
-                codes.push_back(new IRCode());
-            }
-            // save signal name
-            codes[total_codes]->name = txt;
-            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
-        }
-        if (line.startsWith("type:")) codes[total_codes]->type = txt;
-        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
-        if (line.startsWith("address:")) codes[total_codes]->address = txt;
-        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
-        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
-        if (line.startsWith("command:")) codes[total_codes]->command = txt;
-        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
-            codes[total_codes]->data = txt;
-        }
-        // if there are a line with "#", and the code name isnt't "" (there are a signal saved), go to next
-        // signal
-        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
-            total_codes++;
-            codes.push_back(new IRCode());
-        }
-        // if(line.startsWith("duty_cycle:")) codes[total_codes]->duty_cycle = txt.toFloat();
-    }
-    options = {};
-    for (auto code : codes) {
-        if (code->name != "") {
-            options.push_back({code->name.c_str(), [code]() {
-                                   sendIRCommand(code);
-                                   addToRecentCodes(code);
-                               }});
-        }
-    }
-    options.push_back({"Main Menu", [&]() { exit = true; }});
-    databaseFile.close();
-
-#ifdef USE_BOOST /// DISABLE 5V OUTPUT
-    PPM.disableOTG();
-#endif
-
-    digitalWrite(bruceConfig.irTx, LED_OFF);
-    int idx = 0;
-    while (1) {
-        idx = loopOptions(options, idx);
-        if (check(EscPress) || exit) break;
-    }
-    options.clear();
+    // else continue and call chooseCmdIrFile
+    chooseCmdIrFile(fs, filepath);
 } // end of otherIRcodes
 
 // IR commands
 
 void sendIRCommand(IRCode *code, bool hideDefaultUI) {
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
     // https://developer.flipper.net/flipperzero/doxygen/infrared_file_format.html
     if (code->type.equalsIgnoreCase("raw")) sendRawCommand(code->frequency, code->data, hideDefaultUI);
     else if (code->protocol.equalsIgnoreCase("NEC"))
@@ -370,7 +297,7 @@ void sendIRCommand(IRCode *code, bool hideDefaultUI) {
 }
 
 void sendNECCommand(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
     uint16_t addressValue = strtoul(address.substring(0, 2).c_str(), nullptr, 16);
@@ -378,20 +305,21 @@ void sendNECCommand(String address, String command, bool hideDefaultUI) {
     uint64_t data = irsend.encodeNEC(addressValue, commandValue);
     irsend.sendNEC(data, 32);
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendNEC(data, 32); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendNEC(data, 32); }
     }
 
     Serial.println(
-        "Sent NEC Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent NEC Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
     );
 
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendNECextCommand(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
 
@@ -417,19 +345,20 @@ void sendNECextCommand(String address, String command, bool hideDefaultUI) {
     uint32_t data = ((uint32_t)lsbAddress << 16) | lsbCommand;
     irsend.sendNEC(data, 32); // Sends MSB first
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendNEC(data, 32); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendNEC(data, 32); }
     }
 
     Serial.println(
-        "Sent NECext Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent NECext Command" + (bruceConfigPins.irTxRepeats > 0
+                                     ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                     : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendRC5Command(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx, true); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx, true); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
     uint8_t addressValue = strtoul(address.substring(0, 2).c_str(), nullptr, 16);
@@ -437,18 +366,19 @@ void sendRC5Command(String address, String command, bool hideDefaultUI) {
     uint16_t data = irsend.encodeRC5(addressValue, commandValue);
     irsend.sendRC5(data, 13);
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendRC5(data, 13); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendRC5(data, 13); }
     }
     Serial.println(
-        "Sent RC5 Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent RC5 Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendRC6Command(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx, true); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx, true); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
     address.replace(" ", "");
@@ -459,19 +389,20 @@ void sendRC6Command(String address, String command, bool hideDefaultUI) {
 
     irsend.sendRC6(data, 20);
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendRC6(data, 20); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendRC6(data, 20); }
     }
 
     Serial.println(
-        "Sent RC6 Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent RC6 Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendSamsungCommand(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
     uint8_t addressValue = strtoul(address.substring(0, 2).c_str(), nullptr, 16);
@@ -480,19 +411,20 @@ void sendSamsungCommand(String address, String command, bool hideDefaultUI) {
 
     irsend.sendSAMSUNG(data, 32);
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendSAMSUNG(data, 32); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendSAMSUNG(data, 32); }
     }
 
     Serial.println(
-        "Sent Samsung Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent Samsung Command" + (bruceConfigPins.irTxRepeats > 0
+                                      ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                      : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
 
@@ -527,19 +459,20 @@ void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDef
     // 1 initial + 2 repeat
     irsend.sendSony(data, nbits, 2); // Sends MSB First
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendSony(data, nbits, 2); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendSony(data, nbits, 2); }
     }
 
     Serial.println(
-        "Sent Sony Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent Sony Command" + (bruceConfigPins.irTxRepeats > 0
+                                   ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                   : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 void sendKaseikyoCommand(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
 
@@ -580,15 +513,16 @@ void sendKaseikyoCommand(String address, String command, bool hideDefaultUI) {
 
     irsend.sendPanasonic64(msb_data, 48); // Sends MSB First
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.sendPanasonic64(msb_data, 48); }
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.sendPanasonic64(msb_data, 48); }
     }
 
     Serial.println(
-        "Sent Kaseikyo Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent Kaseikyo Command" + (bruceConfigPins.irTxRepeats > 0
+                                       ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                       : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
 bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDefaultUI) {
@@ -597,7 +531,7 @@ bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDe
     decode_type_t type = strToDecodeType(protocol.c_str());
     if (type == decode_type_t::UNKNOWN) return false;
 
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     bool success = false;
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
@@ -616,8 +550,10 @@ bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDe
         // success = irsend.send(type, state, bits / 8);
         success = irsend.send(type, state, state_pos); // safer
 
-        if (bruceConfig.irTxRepeats > 0) {
-            for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.send(type, state, state_pos); }
+        if (bruceConfigPins.irTxRepeats > 0) {
+            for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) {
+                irsend.send(type, state, state_pos);
+            }
         }
 
     } else {
@@ -628,17 +564,18 @@ bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDe
             irsend.send(type, value_int, bits); // bool send(const decode_type_t type, const uint64_t data,
                                                 // const uint16_t nbits, const uint16_t repeat = kNoRepeat);
 
-        if (bruceConfig.irTxRepeats > 0) {
-            for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) { irsend.send(type, value_int, bits); }
+        if (bruceConfigPins.irTxRepeats > 0) {
+            for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) { irsend.send(type, value_int, bits); }
         }
     }
 
     delay(20);
     Serial.println(
-        "Sent Decoded Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent Decoded Command" + (bruceConfigPins.irTxRepeats > 0
+                                      ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                      : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
     return success;
 #else
     if (!hideDefaultUI) { displayTextLine("Unavailable on this Version"); }
@@ -652,7 +589,7 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
     PPM.enableOTG();
 #endif
 
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
 
@@ -680,8 +617,8 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
     // Send raw command
     irsend.sendRaw(dataBuffer, count, frequency);
 
-    if (bruceConfig.irTxRepeats > 0) {
-        for (uint8_t i = 1; i <= bruceConfig.irTxRepeats; i++) {
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) {
             irsend.sendRaw(dataBuffer, count, frequency);
         }
     }
@@ -689,8 +626,93 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
     free(dataBuffer);
 
     Serial.println(
-        "Sent Raw Command" +
-        (bruceConfig.irTxRepeats > 0 ? " (1 initial + " + String(bruceConfig.irTxRepeats) + " repeats)" : "")
+        "Sent Raw Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
     );
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+}
+
+bool chooseCmdIrFile(FS *fs, String filepath) {
+    checkIrTxPin();
+    resetCodesArray();
+    int total_codes = 0;
+    File databaseFile;
+
+    returnToMenu = true;
+
+    databaseFile = fs->open(filepath, FILE_READ);
+    drawMainBorder();
+
+    if (!databaseFile) {
+        Serial.println("Failed to open IR file.");
+        return false;
+    }
+    Serial.println("Opened IR file.");
+
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
+
+    // Mode to choose and send command by command (limitted to 100 commands)
+    String line;
+    String txt;
+    codes.push_back(new IRCode());
+
+    while (databaseFile.available() && total_codes < 100) {
+        line = databaseFile.readStringUntil('\n');
+        txt = line.substring(line.indexOf(":") + 1);
+        txt.trim();
+
+        if (line.startsWith("name:")) {
+            if (codes[total_codes]->name != "") {
+                total_codes++;
+                codes.push_back(new IRCode());
+            }
+            // save signal name
+            codes[total_codes]->name = txt;
+            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
+        }
+
+        if (line.startsWith("type:")) codes[total_codes]->type = txt;
+        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
+        if (line.startsWith("address:")) codes[total_codes]->address = txt;
+        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
+        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
+        if (line.startsWith("command:")) codes[total_codes]->command = txt;
+        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
+            codes[total_codes]->data = txt;
+        }
+
+        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
+            total_codes++;
+            codes.push_back(new IRCode());
+        }
+    }
+
+    options = {};
+    for (auto code : codes) {
+        if (code->name != "") {
+            options.push_back({code->name.c_str(), [code]() {
+                               sendIRCommand(code);
+                               addToRecentCodes(code);
+                           }});
+        }
+    }
+
+    bool exit = false;
+    options.push_back({"Main Menu", [&]() { exit = true; }});
+    databaseFile.close();
+
+#ifdef USE_BOOST /// DISABLE 5V OUTPUT
+    PPM.disableOTG();
+#endif
+
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+    int idx = 0;
+    while (1) {
+        idx = loopOptions(options, idx);
+        if (check(EscPress) || exit) break;
+    }
+    options.clear();
+    resetCodesArray();
+    return true;
 }

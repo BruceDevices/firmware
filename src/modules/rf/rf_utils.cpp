@@ -83,11 +83,10 @@ bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 
 bool initRfModule(String mode, float frequency) {
-
     // use default frequency if no one is passed
-    if (!frequency) frequency = bruceConfig.rfFreq;
+    if (!frequency) frequency = bruceConfigPins.rfFreq;
 
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
         if (bruceConfigPins.CC1101_bus.mosi == (gpio_num_t)TFT_MOSI &&
             bruceConfigPins.CC1101_bus.mosi != GPIO_NUM_NC) { // (T_EMBED), CORE2 and others
 #if TFT_MOSI > 0
@@ -104,11 +103,18 @@ bool initRfModule(String mode, float frequency) {
                        bruceConfigPins.SDCARD_bus
                            .mosi) { // This board uses the same Bus for NRF and CC1101, but with
                                     // different CS pins, different from Stick_Cs down below..
-            CC_NRF_SPI.begin(
-                bruceConfigPins.CC1101_bus.sck,
-                bruceConfigPins.CC1101_bus.miso,
-                bruceConfigPins.CC1101_bus.mosi
-            );
+
+            CC_NRF_SPI.end(); // Closes in case it was already in use, it will overwrite the attempt
+                              // of SD start over to save configurations
+            delay(10);
+            if (!CC_NRF_SPI.begin(
+                    bruceConfigPins.CC1101_bus.sck,
+                    bruceConfigPins.CC1101_bus.miso,
+                    bruceConfigPins.CC1101_bus.mosi
+                )) {
+                Serial.println("Failed to start CC1101 SPI on NRF24 pins!");
+            }
+
             initCC1101once(&CC_NRF_SPI);
         } else {
             // (STICK_C_PLUS) || (STICK_C_PLUS2) and others that doesn´t share SPI with other devices (need to
@@ -178,24 +184,24 @@ bool initRfModule(String mode, float frequency) {
         cc1101_spi_ready = true;
     } else {
         // single-pinned module
-        if (abs(frequency - bruceConfig.rfFreq) > 1) {
+        if (abs(frequency - bruceConfigPins.rfFreq) > 1) {
             Serial.print("warn: unsupported frequency, trying anyway...");
             // return false;
         }
 
         if (mode == "tx") {
             gsetRfTxPin(false);
-            if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfig.rfTx)) sdcardSPI.end();
-            gpio_reset_pin((gpio_num_t)bruceConfig.rfTx);
-            pinMode(bruceConfig.rfTx, OUTPUT);
-            digitalWrite(bruceConfig.rfTx, LOW);
+            if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfTx)) sdcardSPI.end();
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.rfTx);
+            pinMode(bruceConfigPins.rfTx, OUTPUT);
+            digitalWrite(bruceConfigPins.rfTx, LOW);
 
         } else if (mode == "rx") {
             // Rx Mode
             gsetRfRxPin(false);
-            if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfig.rfRx)) sdcardSPI.end();
-            gpio_reset_pin((gpio_num_t)bruceConfig.rfRx);
-            pinMode(bruceConfig.rfRx, INPUT);
+            if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
+            pinMode(bruceConfigPins.rfRx, INPUT);
         }
     }
     // no error
@@ -203,7 +209,7 @@ bool initRfModule(String mode, float frequency) {
 }
 
 void deinitRfModule() {
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         if (cc1101_spi_ready) {
             ELECHOUSE_cc1101.setSidle();
             cc1101_spi_ready = false;
@@ -212,7 +218,7 @@ void deinitRfModule() {
         digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
         ioExpander.turnPinOnOff(IO_EXP_CC_RX, LOW);
         ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-    } else digitalWrite(bruceConfig.rfTx, LED_OFF);
+    } else digitalWrite(bruceConfigPins.rfTx, LED_OFF);
 }
 
 void initCC1101once(SPIClass *SSPI) {
@@ -234,60 +240,12 @@ void initCC1101once(SPIClass *SSPI) {
     return;
 }
 
-void deinitRMT() {
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
-#pragma message("Should not be using deinitRMT()")
-#else
-    if (rmtInstalled) {
-        esp_err_t err = rmt_driver_uninstall((rmt_channel_t)RMT_RX_CHANNEL);
-        if (err == ESP_OK) {
-            rmtInstalled = false;
-        } else {
-            Serial.printf("RMT uninstall failed: %s\n", esp_err_to_name(err));
-        }
-    } else {
-        Serial.println("RMT already uninstalled.");
-    }
-
-#endif
-}
-
-void initRMT() {
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
-#pragma message("Should not be using initRMT()")
-#else
-    deinitRMT();
-
-    rmt_config_t rxconfig;
-    rxconfig.rmt_mode = RMT_MODE_RX;
-    rxconfig.channel = RMT_RX_CHANNEL;
-    rxconfig.gpio_num = gpio_num_t(bruceConfig.rfRx);
-
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE)
-        rxconfig.gpio_num = gpio_num_t(bruceConfigPins.CC1101_bus.io0);
-
-    rxconfig.clk_div = RMT_CLK_DIV; // RMT_DEFAULT_CLK_DIV=32
-    rxconfig.mem_block_num = 2;
-    rxconfig.flags = 0;
-    rxconfig.rx_config.idle_threshold = 3 * RMT_1MS_TICKS,
-    rxconfig.rx_config.filter_ticks_thresh = 200 * RMT_1US_TICKS;
-    rxconfig.rx_config.filter_en = true;
-
-    ESP_ERROR_CHECK(rmt_config(&rxconfig));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rmt_driver_install(rxconfig.channel, 8192, 0));
-
-    if (ESP_OK == rmt_config(&rxconfig) && ESP_OK == rmt_driver_install(rxconfig.channel, 8192, 0)) {
-        rmtInstalled = true;
-    }
-#endif
-}
-
 void setMHZ(float frequency) {
     if (frequency > 928 || frequency < 280) {
         frequency = 433.92;
         Serial.println("Frequency out of band");
     }
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
 #if defined(T_EMBED)
         static uint8_t antenna =
             200; // 0=(<300), 1=(350-468), 2=(>778), 200=start to settle at the fisrt time
@@ -389,15 +347,14 @@ struct RfCodes selectRecentRfMenu() {
 
     return selected_code;
 }
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
 rmt_channel_handle_t setup_rf_rx() {
-    if (!initRfModule("rx", bruceConfig.rfFreq)) return NULL;
-    setMHZ(bruceConfig.rfFreq);
+    if (!initRfModule("rx", bruceConfigPins.rfFreq)) return NULL;
+    setMHZ(bruceConfigPins.rfFreq);
     rmt_rx_channel_config_t rx_channel_cfg = {};
-    rx_channel_cfg.gpio_num = bruceConfig.rfModule == CC1101_SPI_MODULE
+    rx_channel_cfg.gpio_num = bruceConfigPins.rfModule == CC1101_SPI_MODULE
                                   ? gpio_num_t(bruceConfigPins.CC1101_bus.io0)
-                                  : gpio_num_t(bruceConfig.rfRx); // GPIO number
-    rx_channel_cfg.clk_src = RMT_CLK_SRC_DEFAULT;                 // select source clock
+                                  : gpio_num_t(bruceConfigPins.rfRx); // GPIO number
+    rx_channel_cfg.clk_src = RMT_CLK_SRC_DEFAULT;                     // select source clock
     rx_channel_cfg.resolution_hz = 1 * 1000 * 1000; // 1 MHz tick resolution, i.e., 1 tick = 1 µs
     rx_channel_cfg.mem_block_symbols = 64;          // memory block size, 64 * 4 = 256 Bytes
     rx_channel_cfg.intr_priority = 0;               // interrupt priority
@@ -410,4 +367,56 @@ rmt_channel_handle_t setup_rf_rx() {
     ESP_ERROR_CHECK(rmt_new_rx_channel(&rx_channel_cfg, &rx_channel));
     return rx_channel;
 }
-#endif
+
+bool setMHZMenu() {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) return false;
+    if (check(SelPress)) {
+        options = {};
+        int ind = 0;
+        int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
+        for (int i = 0; i < arraySize; i++) {
+            if (subghz_frequency_list[i] - bruceConfigPins.rfFreq < 0.1) ind = i;
+            String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
+            options.push_back({tmp.c_str(), [=]() { bruceConfigPins.rfFreq = subghz_frequency_list[i]; }});
+        }
+        loopOptions(options, ind);
+        options.clear();
+        setMHZ(bruceConfigPins.rfFreq);
+        return true;
+    }
+    return false;
+}
+
+void rf_range_selection(float currentFrequency) {
+    int option = 0;
+    options = {
+        {String("Fixed [" + String(bruceConfigPins.rfFreq) + "]").c_str(),
+         [=]() { bruceConfigPins.setRfFreq(bruceConfigPins.rfFreq, 2); }                                               },
+        {String("Choose Fixed").c_str(),                                   [&]() { option = 1; }                       },
+        {subghz_frequency_ranges[0],                                       [=]() { bruceConfigPins.setRfScanRange(0); }},
+        {subghz_frequency_ranges[1],                                       [=]() { bruceConfigPins.setRfScanRange(1); }},
+        {subghz_frequency_ranges[2],                                       [=]() { bruceConfigPins.setRfScanRange(2); }},
+        {subghz_frequency_ranges[3],                                       [=]() { bruceConfigPins.setRfScanRange(3); }},
+    };
+
+    loopOptions(options);
+    options.clear();
+
+    if (option == 1) { // Fixed Frequency Selector
+        options = {};
+        int ind = 0;
+        int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
+        for (int i = 0; i < arraySize; i++) {
+            String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
+            options.push_back({tmp.c_str(), [=]() {
+                                   bruceConfigPins.setRfFreq(subghz_frequency_list[i], 2);
+                               }});
+            if (int(currentFrequency * 100) == int(subghz_frequency_list[i] * 100)) ind = i;
+        }
+        loopOptions(options, ind);
+        options.clear();
+    }
+
+    if (bruceConfigPins.rfFxdFreq) displayTextLine("Scan freq set to " + String(bruceConfigPins.rfFreq));
+    else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
+}

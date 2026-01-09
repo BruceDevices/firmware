@@ -697,7 +697,7 @@ duk_ret_t native_createSprite(duk_context *ctx) {
 }
 
 duk_ret_t native_getRotation(duk_context *ctx) {
-    duk_push_int(ctx, bruceConfig.rotation);
+    duk_push_int(ctx, bruceConfigPins.rotation);
     return 1;
 }
 

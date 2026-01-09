@@ -68,7 +68,7 @@ static const uint8_t ADC = 10;
 
 #define HAS_TOUCH
 
-#define LED GROVE_SDA
+#define TXLED GROVE_SDA
 #define LED_ON HIGH
 #define LED_OFF LOW
 

@@ -106,9 +106,12 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Brucegotchi", brucegotchi_start});
 #endif
     options.push_back({"Config", [this]() { configMenu(); }});
+
     addOptionToMainMenu();
 
     loopOptions(options, MENU_TYPE_SUBMENU, "WiFi");
+
+    options.clear();
 }
 
 void WifiMenu::configMenu() {
@@ -132,18 +135,14 @@ void WifiMenu::configMenu() {
                                loopOptions(evilOptions, MENU_TYPE_SUBMENU, "Evil Wifi Settings");
                            }});
 
-    // NEW: Show Hidden Networks toggle
     {
-        // build the label showing current state
-        std::string label = std::string("Show Hidden Networks: ") + (showHiddenNetworks ? "ON" : "OFF");
+
+        String hidden__wifi_option = String("Hidden Networks:") + (showHiddenNetworks ? "ON" : "OFF");
 
         // construct Option explicitly using char* label
-        Option opt(label.c_str(), [this]() {
-            // toggle the global flag
+        Option opt(hidden__wifi_option.c_str(), [this]() {
             showHiddenNetworks = !showHiddenNetworks;
-            // immediate feedback
-            displayInfo(String("Show Hidden Networks: ") + (showHiddenNetworks ? "ON" : "OFF"), true);
-            // refresh menu so the label updates
+            displayInfo(String("Hidden Networks:") + (showHiddenNetworks ? "ON" : "OFF"), true);
             configMenu();
         });
 
@@ -153,11 +152,6 @@ void WifiMenu::configMenu() {
     loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Config");
 }
 
-void WifiMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.wifi), 0, imgCenterY, true
-    );
-}
 void WifiMenu::drawIcon(float scale) {
     clearIconArea();
     int deltaY = scale * 20;

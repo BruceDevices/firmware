@@ -162,6 +162,18 @@ static void cleanupStaleBeacons();
 static size_t countActiveBeaconsOnChannel(uint8_t channel);
 static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems = 5);
 
+// --Deauth sent clean
+bool deauth_displayed = false;
+unsigned long deauth_display_ts = 0;
+const unsigned long DEAUTH_MSG_MS = 1500; // how long to keep message visible (ms)
+
+// message position/size (tweak width/height if needed)
+const int DEAUTH_MSG_X = 10;
+const int DEAUTH_MSG_Y = tftHeight - 27;
+const int DEAUTH_MSG_W = 75;
+const int DEAUTH_MSG_H = 8;
+const uint16_t DEAUTH_BG = TFT_BLACK; // background color used to clear the text
+
 //===== FUNCTIONS =====//
 
 // Thank you 7h30th3r0n3 for helping me solve this issue! and for sharing your EAPOL/Handshake sniffer
@@ -1243,16 +1255,33 @@ void sniffer_setup() {
                     wsl_bypasser_send_raw_frame(
                         &ap_record, registeredBeacon.channel
                     ); // writes the buffer with the information
-                       // XXX: ap_record reused between this and wifi_atks.h
+                    // XXX: ap_record reused between this and wifi_atks.h
                     send_raw_frame(deauth_frame, 26);
                     deauth_sent = true;
                     deauth_counter++;
                     vTaskDelay(2 / portTICK_RATE_MS);
                 }
             }
-            if (deauth_sent) tft.drawString("Deauth sent.", 10, tftHeight - 14);
+
+            if (deauth_sent) {
+                // draw the message and start the timer
+                tft.setTextSize(1);  // optional, keep consistent with your UI
+                tft.setTextDatum(0); // optional: ensure text draws from top-left if using TFT_eSPI-like API
+                tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
+                deauth_displayed = true;
+                deauth_display_ts = millis();
+            }
 
             deauth_tmp = millis();
+        }
+
+        // clear the message after timeout so it disappears
+        if (deauth_displayed && (millis() - deauth_display_ts) > DEAUTH_MSG_MS) {
+            // erase the area where the message was (fill with background)
+            tft.fillRect(DEAUTH_MSG_X, DEAUTH_MSG_Y, DEAUTH_MSG_W, DEAUTH_MSG_H, DEAUTH_BG);
+            deauth_displayed = false;
+            // optionally force a redraw of other UI elements next cycle
+            redraw = true;
         }
 
         if (millis() - lastRedraw > 1000) {

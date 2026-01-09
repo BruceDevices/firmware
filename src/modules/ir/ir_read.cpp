@@ -67,11 +67,11 @@ void IrRead::setup() {
     const std::vector<std::pair<String, int>> pins = IR_RX_PINS;
     int count = 0;
     for (auto pin : pins) {
-        if (pin.second == bruceConfig.irRx) count++;
+        if (pin.second == bruceConfigPins.irRx) count++;
     }
     if (count == 0) gsetIrRxPin(true); // Open dialog to choose irRx pin
 
-    setup_ir_pin(bruceConfig.irRx, INPUT);
+    setup_ir_pin(bruceConfigPins.irRx, INPUT);
     if (headless) return;
     // else
     returnToMenu = true; // make sure menu is redrawn when quitting in any point

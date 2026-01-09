@@ -66,9 +66,9 @@ void rf_raw_emit(RawRecording &recorded, bool &returnToMenu) {
 
     initRfModule("tx", recorded.frequency);
 
-    gpio_num_t txPin = gpio_num_t(bruceConfig.rfTx);
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) txPin = gpio_num_t(bruceConfigPins.CC1101_bus.io0);
-    
+    gpio_num_t txPin = gpio_num_t(bruceConfigPins.rfTx);
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) txPin = gpio_num_t(bruceConfigPins.CC1101_bus.io0);
+
     pinMode(txPin, OUTPUT);
 
     // Create the FreeRTOS task for periodic updates

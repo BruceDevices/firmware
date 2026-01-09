@@ -32,31 +32,36 @@
 #define CC1101_MISO_PIN 2
 
 #define USE_NRF24_VIA_SPI
-#define NRF24_CE_PIN 44
-#define NRF24_SS_PIN 1
+#ifndef NRF24_SS_PIN    // if touch, set on lilygo-t-display-s3.ini
+#define NRF24_CE_PIN 17 // if touch, set on lilygo-t-display-s3.ini
+#define NRF24_SS_PIN 18 // if touch, set on lilygo-t-display-s3.ini
+#endif
 #define NRF24_MOSI_PIN 3
 #define NRF24_SCK_PIN 43
 #define NRF24_MISO_PIN 2
 
 #define USE_W5500_VIA_SPI
-#define W5500_SS_PIN 1
+#define W5500_SS_PIN -1
 #define W5500_MOSI_PIN 3
 #define W5500_SCK_PIN 43
 #define W5500_MISO_PIN 2
-#define W5500_INT_PIN 44
+#define W5500_INT_PIN -1
 
 // Set Main I2C Bus
-#define GROVE_SDA 13
-#define GROVE_SCL 12
+#ifndef GROVE_SDA    // if touch, set on lilygo-t-display-s3.ini
+#define GROVE_SDA 16 // if touch, set on lilygo-t-display-s3.ini
+#define GROVE_SCL 21 // if touch, set on lilygo-t-display-s3.ini
+#endif
 static const uint8_t SDA = GROVE_SDA;
 static const uint8_t SCL = GROVE_SCL;
 
 // Serial
-#define SERIAL_TX 12
-#define SERIAL_RX 13
+#define SERIAL_TX 21
+#define SERIAL_RX 16
 
-#define LED 10
-#define RXLED 11
+// Infrared
+#define TXLED 10
+#define RXLED 44
 
 #else
 
@@ -85,15 +90,21 @@ static const uint8_t SCL = GROVE_SCL;
 #define NRF24_MISO_PIN SPI_MISO_PIN
 
 #define USE_W5500_VIA_SPI
-#define W5500_SS_PIN SPI_SS_PIN
+#define W5500_SS_PIN -1
 #define W5500_MOSI_PIN SPI_MOSI_PIN
 #define W5500_SCK_PIN SPI_SCK_PIN
 #define W5500_MISO_PIN SPI_MISO_PIN
-#define W5500_INT_PIN 3
+#define W5500_INT_PIN -1
 
 // Set Main I2C Bus
-#define GROVE_SDA 44
-#define GROVE_SCL 43
+#ifndef GROVE_SDA    // if touch, set on lilygo-t-display-s3.ini
+#define GROVE_SDA 44 // if touch, set on lilygo-t-display-s3.ini
+#define GROVE_SCL 43 // if touch, set on lilygo-t-display-s3.ini
+// InfraRed pis
+#define TXLED 17     // if touch, set on lilygo-t-display-s3.ini
+#define RXLED 18     // if touch, set on lilygo-t-display-s3.ini
+#endif
+
 static const uint8_t SDA = GROVE_SDA;
 static const uint8_t SCL = GROVE_SCL;
 
@@ -101,8 +112,6 @@ static const uint8_t SCL = GROVE_SCL;
 #define SERIAL_TX 44
 #define SERIAL_RX 43
 
-#define LED 17
-#define RXLED 18
 #endif
 
 static const uint8_t SS = SPI_SS_PIN;
@@ -152,7 +161,7 @@ static const uint8_t MISO = SPI_SCK_PIN;
 
 // Battery PIN
 #define PIN_POWER_ON 15
-#define BAT_PIN 4
+#define ANALOG_BAT_PIN 4
 
 // Mic
 #define PIN_CLK 39

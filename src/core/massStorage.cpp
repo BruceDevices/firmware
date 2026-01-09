@@ -3,7 +3,7 @@
 #include "massStorage.h"
 #include "core/display.h"
 #include <USB.h>
-#if defined(SOC_USB_OTG_SUPPORTED) && !defined(USE_SD_MMC)
+#if defined(SOC_USB_OTG_SUPPORTED)
 bool MassStorage::shouldStop = false;
 int32_t MassStorage::status = -1;
 
@@ -135,7 +135,7 @@ void drawUSBStickIcon(bool plugged) {
     static bool first = true;
 
     float scale;
-    if (bruceConfig.rotation & 0b01) scale = float((float)tftHeight / (float)135);
+    if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
     else scale = float((float)tftWidth / (float)240);
 
     int iconW = scale * 120;

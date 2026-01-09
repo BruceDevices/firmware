@@ -141,7 +141,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 displayError("Restart your Device");
                 returnToMenu = true;
             }
-            hid = new BleKeyboard(bruceConfig.bleName, "BruceFW", 100);
+            hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
         } else {
 #if defined(USB_as_HID)
             hid = new USBHIDKeyboard();
@@ -590,4 +590,3 @@ void MediaCommands(HIDInterface *hid, bool ble) {
     }
     returnToMenu = true;
 }
-

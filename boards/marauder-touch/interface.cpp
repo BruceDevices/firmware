@@ -17,7 +17,7 @@ IRAM_ATTR void checkPosition() { encoder->tick(); }
 ***************************************************************************************/
 void _setup_gpio() {
     bruceConfig.colorInverted = 0;
-    bruceConfig.rotation = 0; // portrait mode for Phantom
+    bruceConfigPins.rotation = 0; // portrait mode for Phantom
     pinMode(TFT_BL, OUTPUT);
 #ifdef WAVESENTRY
     pinMode(ENCODER_KEY, INPUT);
@@ -67,21 +67,21 @@ void InputHandler(void) {
             auto t = touch.getPointScaled();
             t = touch.getPointScaled();
             tm = millis();
-            if (bruceConfig.rotation == 3) {
+            if (bruceConfigPins.rotation == 3) {
                 t.y = (tftHeight + 20) - t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = t.y;
                 t.y = (tftHeight + 20) - tmp;
             }
-            Serial.printf("Touched at x=%d, y=%d, rot=%d\n", t.x, t.y, bruceConfig.rotation);
+            Serial.printf("Touched at x=%d, y=%d, rot=%d\n", t.x, t.y, bruceConfigPins.rotation);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;

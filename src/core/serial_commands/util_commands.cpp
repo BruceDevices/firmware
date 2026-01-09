@@ -107,7 +107,8 @@ uint32_t infoCallback(cmd *c) {
     serialDevice->print("Bruce v");
     serialDevice->println(BRUCE_VERSION);
     serialDevice->println(GIT_COMMIT_HASH);
-    serialDevice->printf("SDK: %s\n", ESP.getSdkVersion());
+    serialDevice->print("SDK: ");              
+    serialDevice->println(ESP.getSdkVersion());
     serialDevice->println("MAC addr: " + String(WiFi.macAddress()));
     // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/ChipID/GetChipID/GetChipID.ino
     // serialDevice->printf("Chip is %s (revision v%d)\n", ESP.getChipModel(), ESP.getChipRevision());
@@ -141,6 +142,9 @@ uint32_t helpCallback(cmd *c) {
         "  wifi on  (Connects to a known Wifi network. if there's no known network, starts in AP Mode)"
     );
     serialDevice->println("  wifi add \"SSID\" \"Password\" (adds a network to the list)");
+    serialDevice->println("  arp - Starts Scan Hosts ARP Scanner");
+    serialDevice->println("  listen   - Starts listening TCP default port");
+    serialDevice->println("  sniffer - Starts Raw Sniffer");
     serialDevice->println("\nWebUI Commands:");
     serialDevice->println("  webui      - WebUI Webserver start");
     serialDevice->println("\nIR Commands:");

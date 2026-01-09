@@ -20,6 +20,8 @@ static const uint8_t SCK = 18;
 #define SERIAL_TX 1
 #define BAD_RX SERIAL_RX
 #define BAD_TX SERIAL_TX
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 #define USB_as_HID 1
 
 #define BTN_ALIAS "\"OK\""
@@ -32,7 +34,7 @@ static const uint8_t SCK = 18;
 #define BTN_ACT LOW
 
 #define RXLED 4
-#define LED 5
+#define TXLED 5
 #define LED_ON HIGH
 #define LED_OFF LOW
 
@@ -106,7 +108,6 @@ static const uint8_t SCK = 18;
 
 // USE BOOST ENABLE PMIC 5V OUTPUT
 #define USE_BOOST
-
 
 // Mic#
 #define PIN_CLK 1

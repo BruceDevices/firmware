@@ -140,7 +140,7 @@ static const uint8_t LP_TX = 11;
 
 // InfraRed
 #define RXLED 26
-#define LED 3
+#define TXLED 3
 #define LED_ON HIGH
 #define LED_OFF LOW
 // SDCard

@@ -1,5 +1,5 @@
 #pragma once
-
+#if !defined(LITE_VERSION)
 #include "BruceBLEService.hpp"
 
 #include <SerialDevice.h>
@@ -8,9 +8,10 @@
 
 class BLESerialCallbacks;
 
-class BLESerialService: public BruceBLEService, public SerialDevice {
+class BLESerialService : public BruceBLEService, public SerialDevice {
     NimBLECharacteristic *serial_char = nullptr;
     BLESerialCallbacks *callbacks = nullptr;
+
 public:
     BLESerialService();
     ~BLESerialService() override;
@@ -24,9 +25,10 @@ public:
     size_t print(int n, int format = DEC) override;
     void vprintf(const char *str, va_list args) override;
     size_t println(uint32_t n) override;
-    size_t write(uint8_t * str, size_t size) override;
+    size_t write(uint8_t *str, size_t size) override;
     void flush() override {}
     String readStringUntil(char terminator) override;
     int available() override;
     void setMTU(uint16_t mtu);
 };
+#endif

@@ -23,7 +23,7 @@ void interpreterHandler(void *pvParameters) {
     );
     if (script == NULL) { return; }
     tft.fillScreen(TFT_BLACK);
-    tft.setRotation(bruceConfig.rotation);
+    tft.setRotation(bruceConfigPins.rotation);
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
     // Create context.

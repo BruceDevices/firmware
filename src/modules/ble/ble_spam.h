@@ -10,3 +10,5 @@ void ibeacon(
     const char *DeviceName = "Bruce iBeacon", const char *BEACON_UUID = "8ec76ea3-6668-48da-9866-75be8bc86f4d",
     int ManufacturerId = 0x4C00
 );
+
+#include "apple_spam.h"

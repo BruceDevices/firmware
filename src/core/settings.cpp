@@ -54,7 +54,7 @@ void getBrightness() {
 **  get/set rotation value
 **********************************************************************/
 int gsetRotation(bool set) {
-    int getRot = bruceConfig.rotation;
+    int getRot = bruceConfigPins.rotation;
     int result = ROTATION;
     int mask = ROTATION > 1 ? -2 : 2;
 
@@ -76,7 +76,7 @@ int gsetRotation(bool set) {
         set = true;
     }
     if (set) {
-        bruceConfig.setRotation(result);
+        bruceConfigPins.setRotation(result);
         tft.setRotation(result);
         tft.setRotation(result); // must repeat, sometimes ESP32S3 miss one SPI command and it just
                                  // jumps this step and don't rotate
@@ -246,7 +246,7 @@ void setUIColor() {
                  bruceConfig.setColorInverted(!bruceConfig.colorInverted);
                  tft.invertDisplay(bruceConfig.colorInverted);
              },
-             bruceConfig.colorInverted}
+             bruceConfig.colorInverted > 0}
         );
 
         addOptionToMainMenu();
@@ -600,8 +600,8 @@ void setRFModuleMenu() {
     int result = 0;
     int idx = 0;
     uint8_t pins_setup = 0;
-    if (bruceConfig.rfModule == M5_RF_MODULE) idx = 0;
-    else if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) idx = 0;
+    else if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         idx = 1;
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
         if (bruceConfigPins.CC1101_bus.mosi == GPIO_NUM_26) idx = 2;
@@ -635,6 +635,14 @@ void setRFModuleMenu() {
                  (gpio_num_t)CC1101_GDO0_PIN,
                  GPIO_NUM_NC}
             );
+            bruceConfigPins.setNrf24Pins(
+                {(gpio_num_t)CC1101_SCK_PIN,
+                 (gpio_num_t)CC1101_MISO_PIN,
+                 (gpio_num_t)CC1101_MOSI_PIN,
+                 (gpio_num_t)CC1101_SS_PIN,
+                 (gpio_num_t)CC1101_GDO0_PIN,
+                 GPIO_NUM_NC}
+            );
         } else if (pins_setup == 2) {
 #if CONFIG_SOC_GPIO_OUT_RANGE_MAX > 30
             result = CC1101_SPI_MODULE;
@@ -646,10 +654,20 @@ void setRFModuleMenu() {
                  GPIO_NUM_32,
                  GPIO_NUM_NC}
             );
+            bruceConfigPins.setNrf24Pins(
+                {(gpio_num_t)SDCARD_SCK,
+                 (gpio_num_t)SDCARD_MISO,
+                 (gpio_num_t)SDCARD_MOSI,
+                 GPIO_NUM_33,
+                 GPIO_NUM_32,
+                 GPIO_NUM_NC}
+            );
 #endif
         }
         if (initRfModule()) {
-            bruceConfig.setRfModule(CC1101_SPI_MODULE);
+            bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
+            deinitRfModule();
+            if (pins_setup == 1) CC_NRF_SPI.end();
             return;
         }
         // else display an error
@@ -663,7 +681,7 @@ void setRFModuleMenu() {
         while (!check(AnyKeyPress)) vTaskDelay(50 / portTICK_PERIOD_MS);
     }
     // fallback to "M5 RF433T/R" on errors
-    bruceConfig.setRfModule(M5_RF_MODULE);
+    bruceConfigPins.setRfModule(M5_RF_MODULE);
 }
 
 /*********************************************************************
@@ -672,17 +690,17 @@ void setRFModuleMenu() {
 **********************************************************************/
 void setRFFreqMenu() {
     float result = 433.92;
-    String freq_str = keyboard(String(bruceConfig.rfFreq), 10, "Default frequency:");
+    String freq_str = keyboard(String(bruceConfigPins.rfFreq), 10, "Default frequency:");
     if (freq_str.length() > 1) {
         result = freq_str.toFloat();          // returns 0 if not valid
         if (result >= 280 && result <= 928) { // TODO: check valid freq according to current module?
-            bruceConfig.setRfFreq(result);
+            bruceConfigPins.setRfFreq(result);
             return;
         }
     }
     // else
     displayError("Invalid frequency");
-    bruceConfig.setRfFreq(433.92); // reset to default
+    bruceConfigPins.setRfFreq(433.92); // reset to default
     delay(1000);
 }
 
@@ -693,28 +711,28 @@ void setRFFreqMenu() {
 void setRFIDModuleMenu() {
     options = {
         {"M5 RFID2",
-         [=]() { bruceConfig.setRfidModule(M5_RFID2_MODULE); },
-         bruceConfig.rfidModule == M5_RFID2_MODULE     },
+         [=]() { bruceConfigPins.setRfidModule(M5_RFID2_MODULE); },
+         bruceConfigPins.rfidModule == M5_RFID2_MODULE     },
 #ifdef M5STICK
         {"PN532 I2C G33",
-         [=]() { bruceConfig.setRfidModule(PN532_I2C_MODULE); },
-         bruceConfig.rfidModule == PN532_I2C_MODULE    },
+         [=]() { bruceConfigPins.setRfidModule(PN532_I2C_MODULE); },
+         bruceConfigPins.rfidModule == PN532_I2C_MODULE    },
         {"PN532 I2C G36",
-         [=]() { bruceConfig.setRfidModule(PN532_I2C_SPI_MODULE); },
-         bruceConfig.rfidModule == PN532_I2C_SPI_MODULE},
+         [=]() { bruceConfigPins.setRfidModule(PN532_I2C_SPI_MODULE); },
+         bruceConfigPins.rfidModule == PN532_I2C_SPI_MODULE},
 #else
         {"PN532 on I2C",
-         [=]() { bruceConfig.setRfidModule(PN532_I2C_MODULE); },
-         bruceConfig.rfidModule == PN532_I2C_MODULE},
+         [=]() { bruceConfigPins.setRfidModule(PN532_I2C_MODULE); },
+         bruceConfigPins.rfidModule == PN532_I2C_MODULE},
 #endif
         {"PN532 on SPI",
-         [=]() { bruceConfig.setRfidModule(PN532_SPI_MODULE); },
-         bruceConfig.rfidModule == PN532_SPI_MODULE    },
+         [=]() { bruceConfigPins.setRfidModule(PN532_SPI_MODULE); },
+         bruceConfigPins.rfidModule == PN532_SPI_MODULE    },
         {"RC522 on SPI",
-         [=]() { bruceConfig.setRfidModule(RC522_SPI_MODULE); },
-         bruceConfig.rfidModule == RC522_SPI_MODULE    },
+         [=]() { bruceConfigPins.setRfidModule(RC522_SPI_MODULE); },
+         bruceConfigPins.rfidModule == RC522_SPI_MODULE    },
     };
-    loopOptions(options, bruceConfig.rfidModule);
+    loopOptions(options, bruceConfigPins.rfidModule);
 }
 
 /*********************************************************************
@@ -954,9 +972,9 @@ void runClockLoop() {
 **  get or set IR Tx Pin
 **********************************************************************/
 int gsetIrTxPin(bool set) {
-    int result = bruceConfig.irTx;
+    int result = bruceConfigPins.irTx;
 
-    if (result > 50) bruceConfig.setIrTxPin(LED);
+    if (result > 50) bruceConfigPins.setIrTxPin(TXLED);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -964,7 +982,7 @@ int gsetIrTxPin(bool set) {
         int idx = 100;
         int j = 0;
         for (auto pin : pins) {
-            if (pin.second == bruceConfig.irTx && idx == 100) idx = j;
+            if (pin.second == bruceConfigPins.irTx && idx == 100) idx = j;
             j++;
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
@@ -972,18 +990,20 @@ int gsetIrTxPin(bool set) {
                 i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
 #endif
                 options.push_back(
-                    {pin.first, [=]() { bruceConfig.setIrTxPin(pin.second); }, pin.second == bruceConfig.irTx}
+                    {pin.first,
+                     [=]() { bruceConfigPins.setIrTxPin(pin.second); },
+                     pin.second == bruceConfigPins.irTx}
                 );
         }
 
         loopOptions(options, idx);
         options.clear();
 
-        Serial.println("Saved pin: " + String(bruceConfig.irTx));
+        Serial.println("Saved pin: " + String(bruceConfigPins.irTx));
     }
 
     returnToMenu = true;
-    return bruceConfig.irTx;
+    return bruceConfigPins.irTx;
 }
 
 void setIrTxRepeats() {
@@ -995,7 +1015,7 @@ void setIrTxRepeats() {
         {"10 (+ 1 initial)", [&]() { chRpts = 10; }},
         {"Custom",           [&]() {
              // up to 99 repeats
-             String rpt = keyboard(String(bruceConfig.irTxRepeats), 2, "Nbr of Repeats (+ 1 initial)");
+             String rpt = keyboard(String(bruceConfigPins.irTxRepeats), 2, "Nbr of Repeats (+ 1 initial)");
              chRpts = static_cast<uint8_t>(rpt.toInt());
          }                       },
     };
@@ -1005,16 +1025,16 @@ void setIrTxRepeats() {
 
     if (returnToMenu) return;
 
-    bruceConfig.setIrTxRepeats(chRpts);
+    bruceConfigPins.setIrTxRepeats(chRpts);
 }
 /*********************************************************************
 **  Function: gsetIrRxPin
 **  get or set IR Rx Pin
 **********************************************************************/
 int gsetIrRxPin(bool set) {
-    int result = bruceConfig.irRx;
+    int result = bruceConfigPins.irRx;
 
-    if (result > 45) bruceConfig.setIrRxPin(GROVE_SCL);
+    if (result > 45) bruceConfigPins.setIrRxPin(GROVE_SCL);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1022,7 +1042,7 @@ int gsetIrRxPin(bool set) {
         int idx = -1;
         int j = 0;
         for (auto pin : pins) {
-            if (pin.second == bruceConfig.irRx && idx < 0) idx = j;
+            if (pin.second == bruceConfigPins.irRx && idx < 0) idx = j;
             j++;
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
@@ -1030,7 +1050,9 @@ int gsetIrRxPin(bool set) {
                 i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
 #endif
                 options.push_back(
-                    {pin.first, [=]() { bruceConfig.setIrRxPin(pin.second); }, pin.second == bruceConfig.irRx}
+                    {pin.first,
+                     [=]() { bruceConfigPins.setIrRxPin(pin.second); },
+                     pin.second == bruceConfigPins.irRx}
                 );
         }
 
@@ -1038,7 +1060,7 @@ int gsetIrRxPin(bool set) {
     }
 
     returnToMenu = true;
-    return bruceConfig.irRx;
+    return bruceConfigPins.irRx;
 }
 
 /*********************************************************************
@@ -1046,9 +1068,9 @@ int gsetIrRxPin(bool set) {
 **  get or set RF Tx Pin
 **********************************************************************/
 int gsetRfTxPin(bool set) {
-    int result = bruceConfig.rfTx;
+    int result = bruceConfigPins.rfTx;
 
-    if (result > 45) bruceConfig.setRfTxPin(GROVE_SDA);
+    if (result > 45) bruceConfigPins.setRfTxPin(GROVE_SDA);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1056,7 +1078,7 @@ int gsetRfTxPin(bool set) {
         int idx = -1;
         int j = 0;
         for (auto pin : pins) {
-            if (pin.second == bruceConfig.rfTx && idx < 0) idx = j;
+            if (pin.second == bruceConfigPins.rfTx && idx < 0) idx = j;
             j++;
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
@@ -1064,7 +1086,9 @@ int gsetRfTxPin(bool set) {
                 i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
 #endif
                 options.push_back(
-                    {pin.first, [=]() { bruceConfig.setRfTxPin(pin.second); }, pin.second == bruceConfig.rfTx}
+                    {pin.first,
+                     [=]() { bruceConfigPins.setRfTxPin(pin.second); },
+                     pin.second == bruceConfigPins.rfTx}
                 );
         }
 
@@ -1073,7 +1097,7 @@ int gsetRfTxPin(bool set) {
     }
 
     returnToMenu = true;
-    return bruceConfig.rfTx;
+    return bruceConfigPins.rfTx;
 }
 
 /*********************************************************************
@@ -1081,9 +1105,9 @@ int gsetRfTxPin(bool set) {
 **  get or set FR Rx Pin
 **********************************************************************/
 int gsetRfRxPin(bool set) {
-    int result = bruceConfig.rfRx;
+    int result = bruceConfigPins.rfRx;
 
-    if (result > 36) bruceConfig.setRfRxPin(GROVE_SCL);
+    if (result > 36) bruceConfigPins.setRfRxPin(GROVE_SCL);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1091,7 +1115,7 @@ int gsetRfRxPin(bool set) {
         int idx = -1;
         int j = 0;
         for (auto pin : pins) {
-            if (pin.second == bruceConfig.rfRx && idx < 0) idx = j;
+            if (pin.second == bruceConfigPins.rfRx && idx < 0) idx = j;
             j++;
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
@@ -1099,7 +1123,9 @@ int gsetRfRxPin(bool set) {
                 i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
 #endif
                 options.push_back(
-                    {pin.first, [=]() { bruceConfig.setRfRxPin(pin.second); }, pin.second == bruceConfig.rfRx}
+                    {pin.first,
+                     [=]() { bruceConfigPins.setRfRxPin(pin.second); },
+                     pin.second == bruceConfigPins.rfRx}
                 );
         }
 
@@ -1108,7 +1134,7 @@ int gsetRfRxPin(bool set) {
     }
 
     returnToMenu = true;
-    return bruceConfig.rfRx;
+    return bruceConfigPins.rfRx;
 }
 
 /*********************************************************************
@@ -1144,14 +1170,16 @@ void setStartupApp() {
 **********************************************************************/
 void setGpsBaudrateMenu() {
     options = {
-        {"9600 bps",   [=]() { bruceConfig.setGpsBaudrate(9600); },   bruceConfig.gpsBaudrate == 9600  },
-        {"19200 bps",  [=]() { bruceConfig.setGpsBaudrate(19200); },  bruceConfig.gpsBaudrate == 19200 },
-        {"38400 bps",  [=]() { bruceConfig.setGpsBaudrate(38400); },  bruceConfig.gpsBaudrate == 38400 },
-        {"57600 bps",  [=]() { bruceConfig.setGpsBaudrate(57600); },  bruceConfig.gpsBaudrate == 57600 },
-        {"115200 bps", [=]() { bruceConfig.setGpsBaudrate(115200); }, bruceConfig.gpsBaudrate == 115200},
+        {"9600 bps",   [=]() { bruceConfigPins.setGpsBaudrate(9600); },  bruceConfigPins.gpsBaudrate == 9600 },
+        {"19200 bps",  [=]() { bruceConfigPins.setGpsBaudrate(19200); }, bruceConfigPins.gpsBaudrate == 19200},
+        {"38400 bps",  [=]() { bruceConfigPins.setGpsBaudrate(38400); }, bruceConfigPins.gpsBaudrate == 38400},
+        {"57600 bps",  [=]() { bruceConfigPins.setGpsBaudrate(57600); }, bruceConfigPins.gpsBaudrate == 57600},
+        {"115200 bps",
+         [=]() { bruceConfigPins.setGpsBaudrate(115200); },
+         bruceConfigPins.gpsBaudrate == 115200                                                               },
     };
 
-    loopOptions(options, bruceConfig.gpsBaudrate);
+    loopOptions(options, bruceConfigPins.gpsBaudrate);
 }
 
 /*********************************************************************
@@ -1161,16 +1189,16 @@ void setGpsBaudrateMenu() {
 void setBleNameMenu() {
     const String defaultBleName = "Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX);
 
-    const bool isDefault = bruceConfig.bleName == defaultBleName;
+    const bool isDefault = bruceConfigPins.bleName == defaultBleName;
 
     options = {
-        {"Default", [=]() { bruceConfig.setBleName(defaultBleName); }, isDefault },
+        {"Default", [=]() { bruceConfigPins.setBleName(defaultBleName); }, isDefault },
         {"Custom",
          [=]() {
-             String newBleName = keyboard(bruceConfig.bleName, 30, "BLE Device Name:");
-             if (!newBleName.isEmpty()) bruceConfig.setBleName(newBleName);
+             String newBleName = keyboard(bruceConfigPins.bleName, 30, "BLE Device Name:");
+             if (!newBleName.isEmpty()) bruceConfigPins.setBleName(newBleName);
              else displayError("BLE Name cannot be empty", true);
-         },                                                            !isDefault},
+         },                                                                !isDefault},
     };
     addOptionToMainMenu();
 
@@ -1302,8 +1330,8 @@ void setBadUSBBLEKeyboardLayoutMenu() {
 **  Main Menu for setting Bad USB/BLE Keyboard Key Delay
 **********************************************************************/
 void setBadUSBBLEKeyDelayMenu() {
-    String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 4, "Key Delay (ms):");
-    uint8_t delayVal = static_cast<uint8_t>(delayStr.toInt());
+    String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
+    uint16_t delayVal = static_cast<uint16_t>(delayStr.toInt());
     if (delayVal >= 25 && delayVal <= 500) {
         bruceConfig.setBadUSBBLEKeyDelay(delayVal);
     } else if (delayVal != 0) {
@@ -1398,7 +1426,7 @@ RELOAD:
             String tmp = String(i);
             options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
         }
-        loopOptions(options);
+        loopOptions(options, index);
         options.clear();
         if (opt == 1) points.sck = sel;
         else if (opt == 2) points.miso = sel;
@@ -1542,7 +1570,7 @@ void setTheme() {
         bruceConfig.saveFile();
     }
 }
-
+#if !defined(LITE_VERSION)
 BLE_API bleApi;
 static bool ble_api_enabled = false;
 
@@ -1559,3 +1587,4 @@ void enableBLEAPI() {
 
     ble_api_enabled = !ble_api_enabled;
 }
+#endif

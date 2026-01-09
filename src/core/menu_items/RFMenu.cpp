@@ -20,6 +20,7 @@ void RFMenu::optionsMenu() {
 #endif
         {"Spectrum",        rf_spectrum               },
 #if !defined(LITE_VERSION)
+        {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
         {"SquareWave Spec", rf_SquareWave             }, // @Pirata
         {"Spectogram",      rf_waterfall              }, // dev_eclipse
 #if defined(BUZZ_PIN) or defined(HAS_NS4168_SPKR) and defined(RF_LISTEN_H)
@@ -35,8 +36,8 @@ void RFMenu::optionsMenu() {
 
     delay(200);
     String txt = "Radio Frequency";
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) txt += " (CC1101)"; // Indicates if CC1101 is connected
-    else txt += " Tx: " + String(bruceConfig.rfTx) + " Rx: " + String(bruceConfig.rfRx);
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) txt += " (CC1101)"; // Indicates if CC1101 is connected
+    else txt += " Tx: " + String(bruceConfigPins.rfTx) + " Rx: " + String(bruceConfigPins.rfRx);
 
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
@@ -52,11 +53,7 @@ void RFMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "RF Config");
 }
-void RFMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.rf), 0, imgCenterY, true
-    );
-}
+
 void RFMenu::drawIcon(float scale) {
     clearIconArea();
     int radius = scale * 7;

@@ -11,8 +11,8 @@
 
 class IrRead {
 public:
-    // IRrecv irrecv = IRrecv(bruceConfig.irRx);
-    IRrecv irrecv = IRrecv(bruceConfig.irRx, SAFE_STACK_BUFFER_SIZE / 2, 50);
+    // IRrecv irrecv = IRrecv(bruceConfigPins.irRx);
+    IRrecv irrecv = IRrecv(bruceConfigPins.irRx, SAFE_STACK_BUFFER_SIZE / 2, 50);
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor

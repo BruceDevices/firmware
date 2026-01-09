@@ -79,6 +79,7 @@ void ARPoisoner::loop() {
             }
 
             for (int i = 1; i < 255; i++) {
+                if (AnyKeyPress) break;
                 victimIP[3] = i;
                 for (int i = 0; i < 6; i++) {
                     victimMAC[i] = random(256); // Create random MAC to all hosts

@@ -10,7 +10,7 @@ byte buffer[8];
 
 void setup_ibutton() {
 Reset:
-    oneWire = new OneWire(bruceConfig.iButton);
+    oneWire = new OneWire(bruceConfigPins.iButton);
     tft.fillScreen(TFT_BLACK);
     setiButtonPinMenu();
     drawMainBorderWithTitle("iButton");
@@ -45,7 +45,7 @@ Reset:
 
 void write_byte_rw1990(byte data) {
     int data_bit;
-    uint8_t pin = bruceConfig.iButton;
+    uint8_t pin = bruceConfigPins.iButton;
     for (data_bit = 0; data_bit < 8; data_bit++) {
         if (data & 1) {
             digitalWrite(pin, LOW);
@@ -109,7 +109,7 @@ void write_ibutton() {
     delay(50);
 
     // Write don't work without this code
-    uint8_t pin = bruceConfig.iButton;
+    uint8_t pin = bruceConfigPins.iButton;
     digitalWrite(pin, LOW);
     pinMode(pin, OUTPUT);
     delayMicroseconds(60);
@@ -192,8 +192,8 @@ void setiButtonPinMenu() {
         String tmp = "GPIO " + String(i);
         options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
     }
-    loopOptions(options, bruceConfig.iButton + 1);
+    loopOptions(options, bruceConfigPins.iButton + 1);
     options.clear();
-    bruceConfig.setiButtonPin(sel);
+    bruceConfigPins.setiButtonPin(sel);
 }
 #endif

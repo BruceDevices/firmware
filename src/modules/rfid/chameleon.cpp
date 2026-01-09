@@ -28,7 +28,7 @@ void Chameleon::setup() {
     displayBanner();
 
     setMode(BATTERY_INFO_MODE);
-    delay(500);
+    vTaskDelay(pdMS_TO_TICKS(500));
     return loop();
 }
 
@@ -40,19 +40,17 @@ bool Chameleon::connect() {
     padprintln("Searching Chameleon Device...");
 
     if (!chmUltra.searchChameleonDevice()) {
-        displayError("Chameleon not found");
-        delay(1000);
+        displayError("Chameleon not found", true);
         return false;
     }
 
     if (!chmUltra.connectToChamelon()) {
-        displayError("Chameleon connect error");
-        delay(1000);
+        displayError("Chameleon connect error", true);
         return false;
     }
 
     displaySuccess("Chameleon Connected");
-    delay(1000);
+    delayWithReturn(1000);
 
     return true;
 }
@@ -183,7 +181,7 @@ void Chameleon::setMode(AppMode mode) {
         case FACTORY_RESET_MODE: break;
         default: padprintln("Mode not supported"); break;
     }
-    delay(300);
+    delayWithReturn(300);
 }
 
 void Chameleon::displayBanner() {
@@ -268,7 +266,7 @@ void Chameleon::getBatteryInfo() {
 
     _battery_set = true;
 
-    delay(500);
+    vTaskDelay(pdMS_TO_TICKS(200));
 }
 
 void Chameleon::factoryReset() {
@@ -284,13 +282,15 @@ void Chameleon::factoryReset() {
 
     if (!proceed) {
         displayInfo("Aborting factory reset.");
+        delayWithReturn(500);
     } else if (chmUltra.cmdFactoryReset()) {
         displaySuccess("Factory reset success");
+        delayWithReturn(500);
     } else {
-        displayError("Factory reset error");
+        displayError("Factory reset error", true);
     }
 
-    delay(1000);
+    delayWithReturn(500);
     returnToMenu = true;
 }
 
@@ -309,7 +309,7 @@ void Chameleon::readLFTag() {
 
     _lf_read_uid = true;
     _lastReadTime = millis();
-    delay(500);
+    delayWithReturn(500);
 }
 
 void Chameleon::scanLFTags() {
@@ -326,7 +326,7 @@ void Chameleon::scanLFTags() {
     displayBanner();
     dumpScanResults();
 
-    delay(200);
+    delayWithReturn(200);
 }
 
 void Chameleon::cloneLFTag() {
@@ -334,11 +334,11 @@ void Chameleon::cloneLFTag() {
 
     if (chmUltra.cmdLFWrite(lfTagData.uidByte, lfTagData.size)) {
         displaySuccess("UID written successfully.");
+        delayWithReturn(500);
     } else {
-        displayError("Error writing UID to tag.");
+        displayError("Error writing UID to tag.", true);
     }
-
-    delay(1000);
+    delayWithReturn(500);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -352,8 +352,7 @@ void Chameleon::customLFUid() {
     displayBanner();
 
     if (custom_uid.length() != 10) {
-        displayError("Invalid UID");
-        delay(1000);
+        displayError("Invalid UID", true);
         return setMode(BATTERY_INFO_MODE);
     }
 
@@ -380,11 +379,11 @@ void Chameleon::emulateLF() {
         chmUltra.cmdLFEconfig(lfTagData.uidByte, lfTagData.size) &&
         chmUltra.cmdChangeMode(chmUltra.HW_MODE_EMULATOR)) {
         displaySuccess("Emulation successful.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error emulating LF tag.");
+        displayError("Error emulating LF tag.", true);
     }
 
-    delay(1000);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -393,7 +392,7 @@ void Chameleon::loadFileLF() {
 
     if (readFileLF()) {
         displaySuccess("File loaded");
-        delay(1000);
+        delayWithReturn(1000);
         _lf_read_uid = true;
 
         options = {
@@ -402,8 +401,7 @@ void Chameleon::loadFileLF() {
         };
         loopOptions(options);
     } else {
-        displayError("Error loading file");
-        delay(1000);
+        displayError("Error loading file", true);
         setMode(BATTERY_INFO_MODE);
     }
 }
@@ -417,10 +415,10 @@ void Chameleon::saveFileLF() {
 
     if (writeFileLF(filename)) {
         displaySuccess("File saved.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error writing file.");
+        displayError("Error writing file.", true);
     }
-    delay(1000);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -447,7 +445,7 @@ bool Chameleon::readFileLF() {
     }
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
     parseLFUID();
 
     return true;
@@ -473,7 +471,7 @@ bool Chameleon::writeFileLF(String filename) {
     file.println("UID: " + printableLFUID);
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
     return true;
 }
 
@@ -518,7 +516,7 @@ void Chameleon::readHFTag() {
 
     _hf_read_uid = true;
     _lastReadTime = millis();
-    delay(500);
+    delayWithReturn(500);
 }
 
 void Chameleon::scanHFTags() {
@@ -535,25 +533,24 @@ void Chameleon::scanHFTags() {
     displayBanner();
     dumpScanResults();
 
-    delay(200);
+    delayWithReturn(200);
 }
 
 void Chameleon::cloneHFTag() {
     if (!chmUltra.cmd14aScan()) return;
 
     if (chmUltra.hfTagData.sak != hfTagData.sak) {
-        displayError("Tag types do not match.");
-        delay(1000);
+        displayError("Tag types do not match.", true);
         return;
     }
 
     if (chmUltra.cmdMfSetUid(hfTagData.uidByte, hfTagData.size)) {
         displaySuccess("UID written successfully.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error writing UID to tag.");
+        displayError("Error writing UID to tag.", true);
     }
 
-    delay(1000);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -561,18 +558,17 @@ void Chameleon::writeHFData() {
     if (!chmUltra.cmd14aScan()) return;
 
     if (chmUltra.hfTagData.sak != hfTagData.sak) {
-        displayError("Tag types do not match.");
-        delay(1000);
+        displayError("Tag types do not match.", true);
         return;
     }
 
     if (writeHFDataBlocks()) {
         displaySuccess("Tag written successfully.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error writing data to tag.");
+        displayError("Error writing data to tag.", true);
     }
 
-    delay(1000);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -586,8 +582,7 @@ void Chameleon::customHFUid() {
     displayBanner();
 
     if (custom_uid.length() != 8 && custom_uid.length() != 14) {
-        displayError("Invalid UID");
-        delay(1000);
+        displayError("Invalid UID", true);
         return setMode(BATTERY_INFO_MODE);
     }
 
@@ -612,8 +607,7 @@ void Chameleon::customHFUid() {
 
 void Chameleon::emulateHF() {
     if (!isMifareClassic(hfTagData.sak)) {
-        displayError("Not implemented for this tag type");
-        delay(1000);
+        displayError("Not implemented for this tag type", true);
         return setMode(BATTERY_INFO_MODE);
     }
 
@@ -650,11 +644,11 @@ void Chameleon::emulateHF() {
         chmUltra.cmdMfEconfig(hfTagData.uidByte, hfTagData.size, hfTagData.atqaByte, hfTagData.sak) &&
         chmUltra.cmdChangeMode(chmUltra.HW_MODE_EMULATOR)) {
         displaySuccess("Emulation successful.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error emulating HF tag.");
+        displayError("Error emulating HF tag.", true);
     }
 
-    delay(1000);
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -663,7 +657,7 @@ void Chameleon::loadFileHF() {
 
     if (readFileHF()) {
         displaySuccess("File loaded");
-        delay(1000);
+        delayWithReturn(1000);
         _hf_read_uid = true;
 
         options = {
@@ -674,8 +668,7 @@ void Chameleon::loadFileHF() {
         };
         loopOptions(options);
     } else {
-        displayError("Error loading file");
-        delay(1000);
+        displayError("Error loading file", true);
         setMode(BATTERY_INFO_MODE);
     }
 }
@@ -689,10 +682,11 @@ void Chameleon::saveFileHF() {
 
     if (writeFileHF(filename)) {
         displaySuccess("File saved.");
+        delayWithReturn(1000);
     } else {
-        displayError("Error writing file.");
+        displayError("Error writing file.", true);
     }
-    delay(1000);
+
     setMode(BATTERY_INFO_MODE);
 }
 
@@ -727,7 +721,7 @@ bool Chameleon::readFileHF() {
     }
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
     parseHFData();
 
     return true;
@@ -761,7 +755,7 @@ bool Chameleon::writeFileHF(String filename) {
     file.print(strAllPages);
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
     return true;
 }
 
@@ -985,11 +979,16 @@ void Chameleon::saveScanResult() {
     for (ScanResult scanResult : _scanned_tags) { file.println(scanResult.tagType + " | " + scanResult.uid); }
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
     return;
 }
 
 void Chameleon::fullScanTags() {
     scanLFTags();
     scanHFTags();
+}
+
+void Chameleon::delayWithReturn(uint32_t ms) {
+    auto tm = millis();
+    while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
 }

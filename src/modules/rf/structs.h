@@ -2,7 +2,6 @@
 #define RF_STRUCTS_H
 
 #include "core/display.h"
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) // RMT
 #include <driver/rmt_rx.h>
 #include <driver/rmt_tx.h>
 
@@ -13,17 +12,6 @@ struct RawRecording {
     std::vector<uint16_t> gaps;
 };
 
-#else
-#include <driver/rmt.h>
-
-struct RawRecording {
-    float frequency;
-    std::vector<rmt_item32_t *> codes;
-    std::vector<uint16_t> codeLengths;
-    std::vector<uint16_t> gaps;
-};
-
-#endif
 struct RawRecordingStatus {
     float frequency = 0.f;
     int rssiCount = 0;  // Counter for the number of RSSI readings

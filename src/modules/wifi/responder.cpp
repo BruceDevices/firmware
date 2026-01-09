@@ -296,7 +296,7 @@ void extractAndPrintHash(uint8_t* pkt, uint32_t smbLength, uint8_t* ntlm) {
   Serial.println(F("------------------------------------"));
 
   // 8. Save sur SD
-  File file = SD.open("/evil/NTLM/ntlm_hashes.txt", FILE_APPEND);
+  File file = SD.open("/NTLM/ntlm_hashes.txt", FILE_APPEND);
   if (file) {
     file.println(finalHash);
     file.close();

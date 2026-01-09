@@ -41,6 +41,11 @@ SensorDRV2605 drv;
 void hapticTest(uint8_t effect);
 uint8_t effect = 1;
 
+// Audio
+#include "AudioBoard.h"
+DriverPins PinsAudioBoardES8311;
+AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
+
 // Keyboard
 bool fn_key_pressed = false;
 bool shift_key_pressed = false;
@@ -148,7 +153,7 @@ void _setup_gpio() {
     if (pmu_ret) {
         PPM.setSysPowerDownVoltage(3300);
         PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", PPM.getInputCurrentLimit());
+        Serial.printf("getInputCurrentLimit: %ld mA\n", PPM.getInputCurrentLimit());
         PPM.disableCurrentLimitPin();
         PPM.setChargeTargetVoltage(4208);
         PPM.setPrechargeCurr(64);
@@ -190,6 +195,10 @@ void _setup_gpio() {
             EXPANDS_SD_EN,
             EXPANDS_DRV_EN,
             EXPANDS_AMP_EN, // Audio
+            EXPANDS_LORA_EN,
+            EXPANDS_GPS_EN,
+            EXPANDS_GPS_RST,
+            EXPANDS_NFC_EN,
         };
         for (auto pin : expands) {
             io.pinMode(pin, OUTPUT);
@@ -213,10 +222,10 @@ void _setup_gpio() {
     keyboard->flush();
 
     // Start with default IR, RF, GPS and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = ST25R3916_SPI_MODULE;
-    bruceConfig.irRx = 1;
-    bruceConfig.gpsBaudrate = 38400;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = ST25R3916_SPI_MODULE;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.gpsBaudrate = 38400;
 
     // Encoder
     pinMode(ENCODER_KEY, INPUT);
@@ -227,17 +236,35 @@ void _setup_gpio() {
     // Haptic driver
     if (!drv.begin(Wire, SDA, SCL)) {
         Serial.println("Failed to find DRV2605.");
-        while (1) { delay(1000); }
-    }
-    Serial.println("Init DRV2605 Sensor success!");
-    drv.selectLibrary(1);
-    drv.setMode(SensorDRV2605::MODE_INTTRIG);
-    drv.useERM();
+    } else {
+        Serial.println("Init DRV2605 Sensor success!");
+        drv.selectLibrary(1);
+        drv.setMode(SensorDRV2605::MODE_INTTRIG);
+        drv.useERM();
 
-    // Startup buzz
-    drv.setWaveform(0, 70);
-    drv.setWaveform(1, 0);
-    drv.run();
+        // Startup buzz
+        drv.setWaveform(0, 70);
+        drv.setWaveform(1, 0);
+        drv.run();
+    }
+
+    // Audio
+    // https://github.com/meshtastic/firmware/blob/ee6449746bf8c5358b8adbde05b96e2b2d04f450/src/platform/extra_variants/t_lora_pager/variant.cpp
+    // AudioDriverLogger.begin(Serial, AudioDriverLogLevel::Debug);
+    // I2C: function, scl, sda
+    PinsAudioBoardES8311.addI2C(PinFunction::CODEC, Wire);
+    // I2S: function, mclk, bck, ws, data_out, data_in
+    PinsAudioBoardES8311.addI2S(
+        PinFunction::CODEC, AUDIO_I2S_MCLK, AUDIO_I2S_SCK, AUDIO_I2S_WS, AUDIO_I2S_SDOUT, AUDIO_I2S_SDIN
+    );
+
+    // configure codec
+    CodecConfig cfg;
+    cfg.input_device = ADC_INPUT_LINE1;
+    cfg.output_device = DAC_OUTPUT_ALL;
+    cfg.i2s.bits = BIT_LENGTH_16BITS;
+    cfg.i2s.rate = RATE_44K;
+    board.begin(cfg);
 }
 
 /***************************************************************************************
@@ -370,60 +397,16 @@ bool isCharging() { return bq.getIsCharging(); }
 bool isCharging() { return false; }
 #endif
 
-
 /*********************************************************************
 ** Function: _setup_codec_speaker
 ** location: modules/others/audio.cpp
 ** Handles audio CODEC to enable/disable speaker
 **********************************************************************/
-void _setup_codec_speaker(bool enable) {
-
-    static constexpr const uint8_t enabled_bulk_data[] = {
-        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
-        2, 0x01, 0xB5, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
-        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
-        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
-        2, 0x12, 0x00, // 0x12 SYSTEM/ power-up DAC - NOT default
-        2, 0x13, 0x10, // 0x13 SYSTEM/ Enable output to HP drive - NOT default
-        2, 0x32, 0xBF, // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
-        2, 0x37, 0x08, // 0x37 DAC/ Bypass DAC equalizer - NOT default
-        0
-    };
-    static constexpr const uint8_t disabled_bulk_data[] = {0};
-
-    i2c_bulk_write(&Wire, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
-}
+void _setup_codec_speaker(bool enable) {}
 
 /*********************************************************************
 ** Function: _setup_codec_mic
 ** location: modules/others/mic.cpp
 ** Handles audio CODEC to enable/disable microphone
 **********************************************************************/
-void _setup_codec_mic(bool enable) {
-
-    static constexpr const uint8_t enabled_bulk_data[] = {
-        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
-        2, 0x01, 0xBA, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
-        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
-        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
-        2, 0x0E, 0x02, // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
-        2, 0x14, 0x10, // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
-        2, 0x17, 0xBF, // ES8311_ADC_REG17 : ADC_VOLUME 0xBF == ± 0 dB
-        2, 0x1C, 0x6A, // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
-        0
-    };
-    static constexpr const uint8_t disabled_bulk_data[] = {
-        2,
-        0x0D,
-        0xFC, // 0x0D SYSTEM/ Power down analog circuitry
-        2,
-        0x0E,
-        0x6A, // 0x0E SYSTEM
-        2,
-        0x00,
-        0x00, // 0x00 RESET/  CSM POWER DOWN
-        0
-    };
-
-    i2c_bulk_write(&Wire, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
-}
+void _setup_codec_mic(bool enable) {}

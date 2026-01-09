@@ -257,7 +257,11 @@ void disPlayBLESend() {
     tft.setTextColor(TFT_WHITE);
     pService->~NimBLEService();
     pServer->getAdvertising()->stop();
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+    esp_bt_controller_deinit();
+#else
     BLEDevice::deinit();
+#endif
     BLEConnected = false;
 }
 

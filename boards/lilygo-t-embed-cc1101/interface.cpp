@@ -53,8 +53,11 @@ void _setup_gpio() {
     digitalWrite(TFT_CS, HIGH);
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
-    pinMode(44, OUTPUT); // NRF24 on Plus
-    digitalWrite(44, HIGH);
+    pinMode(NRF24_SS_PIN, OUTPUT); // NRF24 on Plus
+    digitalWrite(NRF24_SS_PIN, HIGH);
+
+    pinMode(NRF24_CE_PIN, OUTPUT); // put nRF24 in standby
+    digitalWrite(NRF24_CE_PIN, LOW);
 
     // Power chip pin
     pinMode(PIN_POWER_ON, OUTPUT);
@@ -78,11 +81,11 @@ void _setup_gpio() {
     }
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
     // Start with default IR, RF and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = PN532_I2C_MODULE;
-    bruceConfig.irRx = 1;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_I2C_MODULE;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.irTx = 2;
 #else
-    pinMode(BAT_PIN, INPUT); // Battery value
     Wire.begin(GROVE_SDA, GROVE_SCL);
     Wire.beginTransmission(0x40);
     if (Wire.endTransmission() == 0) {
@@ -92,13 +95,13 @@ void _setup_gpio() {
         Serial.println("Probably CC1101 exists");
         bruceConfigPins.CC1101_bus.cs = GPIO_NUM_17;
         bruceConfigPins.CC1101_bus.io0 = GPIO_NUM_18;
-        bruceConfig.rfModule = CC1101_SPI_MODULE;
+        bruceConfigPins.rfModule = CC1101_SPI_MODULE;
 
         //* If it does not exist, then the CC1101 shield may exist, so there is no need for Wire to exist.
         Wire.endTransmission();
         Wire.end();
     }
-    bruceConfig.rfidModule = PN532_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_SPI_MODULE;
 
 #endif
 
@@ -115,18 +118,13 @@ void _setup_gpio() {
 ** Function name: getBattery()
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
+#if defined(USE_BQ27220_VIA_I2C)
 int getBattery() {
     int percent = 0;
-#if defined(USE_BQ27220_VIA_I2C)
     percent = bq.getChargePcnt();
-#elif defined(T_EMBED)
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_4);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-#endif
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
+#endif
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
@@ -220,7 +218,7 @@ void powerDownNFC() {
 }
 
 void powerDownCC1101() {
-    if (!initRfModule("rx", bruceConfig.rfFreq)) { Serial.println("Can't init CC1101"); }
+    if (!initRfModule("rx", bruceConfigPins.rfFreq)) { Serial.println("Can't init CC1101"); }
 
     ELECHOUSE_cc1101.goSleep();
 }

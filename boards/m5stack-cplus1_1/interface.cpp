@@ -22,7 +22,7 @@ int getBattery() {
     float b = axp192.GetBatVoltage();
     percent = ((b - 3.0) / 1.2) * 100;
 
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************

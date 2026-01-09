@@ -98,15 +98,11 @@ bool deinitMicroPhone() {
     // Disable codec, if exists
     _setup_codec_mic(false);
     esp_err_t err = ESP_OK;
-#if ESP_IDF_VERSION_MAJOR >= 5
     if (i2s_chan) {
         i2s_channel_disable(i2s_chan);
         err |= i2s_del_channel(i2s_chan);
         i2s_chan = nullptr;
     }
-#else
-    err |= i2s_driver_uninstall(I2S_NUM_0);
-#endif
     gpio_reset_pin(GPIO_NUM_0);
     return err;
 }

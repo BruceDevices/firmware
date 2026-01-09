@@ -5,8 +5,9 @@
 
 #include <pins_arduino.h>
 
+#ifdef BOARD_HAS_PSRAM
 #ifndef SERIAL_CMDS_TASK_STACK_SIZE
-  #define SERIAL_CMDS_TASK_STACK_SIZE 20000
+  #define SERIAL_CMDS_TASK_STACK_SIZE 8192
 #endif
 #ifndef INTERPRETER_TASK_STACK_SIZE
   #define INTERPRETER_TASK_STACK_SIZE 16384
@@ -15,12 +16,31 @@
   #define INPUT_HANDLER_TASK_STACK_SIZE 4096
 #endif
 #ifndef SSH_TASK_STACK_SIZE
-  #define SSH_TASK_STACK_SIZE 20000
+  #define SSH_TASK_STACK_SIZE 1024*10
 #endif
-
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 4096
 #endif
+#else
+// Boards without PSRAM need smaller stack sizes to be able to run properly
+#ifndef SERIAL_CMDS_TASK_STACK_SIZE
+  #define SERIAL_CMDS_TASK_STACK_SIZE 8192
+#endif
+#ifndef INTERPRETER_TASK_STACK_SIZE
+  #define INTERPRETER_TASK_STACK_SIZE 16384
+#endif
+#ifndef INPUT_HANDLER_TASK_STACK_SIZE
+  #define INPUT_HANDLER_TASK_STACK_SIZE 2048
+#endif
+#ifndef SSH_TASK_STACK_SIZE
+  #define SSH_TASK_STACK_SIZE 1024*8
+#endif
+#ifndef SAFE_STACK_BUFFER_SIZE
+  #define SAFE_STACK_BUFFER_SIZE 1024
+#endif
+
+#endif
+
 
 #ifndef GROVE_SDA           // Pin to be used in I2C communications
   #define GROVE_SDA -1
@@ -31,10 +51,10 @@
 #ifndef RXLED               // Default RX Infrared LED
   #define RXLED GROVE_SCL
 #endif
-#ifndef LED                 // Default TC Infrared Led
-  #define LED GROVE_SDA
+#ifndef TXLED                 // Default TX Infrared Led
+  #define TXLED GROVE_SDA
 #endif
-#ifndef LED_ON              // Infrared LED On state
+#ifndef LED_ON              // Infrared TXLED On state
   #define LED_ON 1
 #endif
 #ifndef LED_OFF             // Infrared LED Off state
@@ -206,28 +226,28 @@
 #define CC1101_GDO0_PIN -1
 #endif
 
-#ifndef LORA_SCK
-#define LORA_SCK -1
+#ifndef W5500_SCK_PIN
+#define W5500_SCK_PIN -1
 #endif
 
-#ifndef LORA_MISO
-#define LORA_MISO -1
+#ifndef W5500_MISO_PIN
+#define W5500_MISO_PIN -1
 #endif
 
-#ifndef LORA_MOSI
-#define LORA_MOSI -1
+#ifndef W5500_MOSI_PIN
+#define W5500_MOSI_PIN -1
 #endif
 
-#ifndef LORA_CS
-#define LORA_CS -1
+#ifndef W5500_SS_PIN
+#define W5500_SS_PIN -1
 #endif
 
-#ifndef LORA_RST
-#define LORA_RST -1
+#ifndef W5500_INT_PIN
+#define W5500_INT_PIN -1
 #endif
 
-#ifndef LORA_DIO0
-#define LORA_DIO0 -1
+#ifndef W5500_RST_PIN
+#define W5500_RST_PIN -1
 #endif
 
 // Temporary, delete after finish Interfaces

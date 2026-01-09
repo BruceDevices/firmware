@@ -110,7 +110,7 @@ void checkIrTxPin() {
     const std::vector<std::pair<String, int>> pins = IR_TX_PINS;
     int count = 0;
     for (auto pin : pins) {
-        if (pin.second == bruceConfig.irTx) count++;
+        if (pin.second == bruceConfigPins.irTx) count++;
     }
     if (count > 0) return;
     else gsetIrTxPin(true);
@@ -122,9 +122,9 @@ void StartTvBGone() {
     PPM.enableOTG();
 #endif
     checkIrTxPin();
-    IRsend irsend(bruceConfig.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
     irsend.begin();
-    setup_ir_pin(bruceConfig.irTx, OUTPUT);
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
 
     // determine region
     options = {
@@ -197,7 +197,7 @@ void StartTvBGone() {
         }
 
         // turnoff LED
-        digitalWrite(bruceConfig.irTx, LED_OFF);
+        digitalWrite(bruceConfigPins.irTx, LED_OFF);
 
 #ifdef USE_BOOST
 

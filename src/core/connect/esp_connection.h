@@ -44,17 +44,9 @@ public:
 
     static void setInstance(EspConnection *conn) { instance = conn; }
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
     static void onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_status_t status);
     static void onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);
-#else
-    static void onDataSentStatic(const uint8_t *mac_addr, esp_now_send_status_t status) {
-        if (instance) instance->onDataSent(mac_addr, status);
-    };
-    static void onDataRecvStatic(const uint8_t *mac, const uint8_t *incomingData, int len) {
-        if (instance) instance->onDataRecv(mac, incomingData, len);
-    };
-#endif
+
 protected:
     Status recvStatus;
     Status sendStatus;

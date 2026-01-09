@@ -4,9 +4,6 @@
 #include "soc/soc_caps.h"
 #include <stdint.h>
 
-
-
-
 #define SPI_SCK_PIN 17
 #define SPI_MOSI_PIN 18
 #define SPI_MISO_PIN 8
@@ -21,18 +18,16 @@ static const uint8_t SCK = SPI_SCK_PIN;
 #define SERIAL_TX 43
 #define BAD_RX SERIAL_RX
 #define BAD_TX SERIAL_TX
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 #define USB_as_HID 1
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
-
 
 #define GROVE_SDA 47
 #define GROVE_SCL 48
 static const uint8_t SDA = 47;
 static const uint8_t SCL = 48;
-
-
-
 
 #define BTN_ALIAS "\"OK\""
 #define HAS_5_BUTTONS
@@ -44,7 +39,7 @@ static const uint8_t SCL = 48;
 #define BTN_ACT LOW
 
 #define RXLED 1
-#define LED 2
+#define TXLED 2
 #define LED_ON HIGH
 #define LED_OFF LOW
 
@@ -88,15 +83,12 @@ static const uint8_t SCL = 48;
 #define SPI_FREQUENCY 80000000
 #define SPI_READ_FREQUENCY 20000000
 
-
 #define SDCARD_CS 3
 #define SDCARD_SCK SPI_SCK_PIN
 #define SDCARD_MISO SPI_MISO_PIN
 #define SDCARD_MOSI SPI_MOSI_PIN
 
-
 #define USE_BOOST
 #define XPOWERS_CHIP_BQ25896
 
 #endif
-

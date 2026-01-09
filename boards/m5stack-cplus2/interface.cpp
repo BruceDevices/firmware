@@ -19,36 +19,22 @@ void _setup_gpio() {
     digitalWrite(32, LOW);
     digitalWrite(33, HIGH);
     //=========================================================================
-    //Issue: During startup, the SD card might keep the MISO line at a high level continuously, causing RF initialization to fail.
-    //Solution：Forcing switch to SD card and sending dummy clocks
+    // Issue: During startup, the SD card might keep the MISO line at a high level continuously, causing RF
+    // initialization to fail. Solution：Forcing switch to SD card and sending dummy clocks
     //=========================================================================
     int pin_shared_ctrl = 33; // Controls CS: HIGH=SD_Select, LOW=RF_Select
     int pin_sck = 0;          // SCK Pin for M5StickC Plus 2
-    pinMode(pin_shared_ctrl, OUTPUT); 
+    pinMode(pin_shared_ctrl, OUTPUT);
     pinMode(pin_sck, OUTPUT);
-    digitalWrite(pin_shared_ctrl, HIGH); //Force Select SD Card
+    digitalWrite(pin_shared_ctrl, HIGH); // Force Select SD Card
     delay(10);
     for (int i = 0; i < 80; i++) {
         digitalWrite(pin_sck, HIGH);
         delayMicroseconds(10);
         digitalWrite(pin_sck, LOW);
         delayMicroseconds(10);
-    } //send dummy clocks
-    digitalWrite(pin_shared_ctrl, HIGH);  //Keep the SD card selected.
-}
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    uint8_t percent;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_38);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent >= 100) ? 100 : percent;
+    } // send dummy clocks
+    digitalWrite(pin_shared_ctrl, HIGH); // Keep the SD card selected.
 }
 
 /*********************************************************************

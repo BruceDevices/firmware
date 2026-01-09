@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "LoRaMenu.h"
 #include "core/display.h"
 #include "core/utils.h"
@@ -13,8 +14,6 @@ void LoRaMenu::optionsMenu() {
     String txt = "LoRa";
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
-
-void LoRaMenu::drawIconImg() { drawIcon(1.0); }
 
 void LoRaMenu::drawIcon(float scale) {
     clearIconArea();
@@ -90,3 +89,4 @@ void LoRaMenu::drawIcon(float scale) {
     tft.drawArc(cx, ballY, r1 + lineWidth, r1, 240, 300, bruceConfig.priColor, bruceConfig.bgColor);
     tft.drawArc(cx, ballY, r2 + lineWidth, r2, 240, 300, bruceConfig.priColor, bruceConfig.bgColor);
 }
+#endif

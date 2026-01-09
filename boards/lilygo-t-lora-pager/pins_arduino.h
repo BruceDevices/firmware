@@ -113,6 +113,14 @@ static const uint8_t SCL = GROVE_SCL;
 #define W5500_MISO_PIN SPI_MISO_PIN
 #define W5500_INT_PIN 43
 
+// Lora setup pins
+#define LORA_SCK SPI_SCK_PIN
+#define LORA_MISO SPI_MISO_PIN
+#define LORA_MOSI SPI_MOSI_PIN
+#define LORA_CS 36
+#define LORA_RST 47
+#define LORA_DIO0 14
+
 // Serial
 #define SERIAL_TX 43
 #define SERIAL_RX 44
@@ -141,7 +149,7 @@ static const uint8_t RX = SERIAL_RX;
 #define BTN_ACT LOW
 
 // IR
-#define LED -1
+#define TXLED -1
 #define TXLED -1
 #define RXLED -1
 #define LED_ON HIGH

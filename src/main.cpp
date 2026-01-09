@@ -6,6 +6,7 @@
 #include "core/utils.h"
 #include "esp32-hal-psram.h"
 #include "esp_task_wdt.h"
+#include "esp_wifi.h"
 #include <functional>
 #include <string>
 #include <vector>
@@ -200,9 +201,9 @@ void setup_gpio() {
  **  Config tft
  *********************************************************************/
 void begin_tft() {
-    tft.setRotation(bruceConfig.rotation); // sometimes it misses the first command
+    tft.setRotation(bruceConfigPins.rotation); // sometimes it misses the first command
     tft.invertDisplay(bruceConfig.colorInverted);
-    tft.setRotation(bruceConfig.rotation);
+    tft.setRotation(bruceConfigPins.rotation);
     tftWidth = tft.width();
 #ifdef HAS_TOUCH
     tftHeight = tft.height() - 20;
@@ -394,11 +395,11 @@ void setup() {
     wifiConnected = false;
     BLEConnected = false;
     bruceConfig.bright = 100; // theres is no value yet
-    bruceConfig.rotation = ROTATION;
+    bruceConfigPins.rotation = ROTATION;
     setup_gpio();
 #if defined(HAS_SCREEN)
     tft.init();
-    tft.setRotation(bruceConfig.rotation);
+    tft.setRotation(bruceConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
@@ -410,6 +411,18 @@ void setup() {
     begin_tft();
     init_clock();
     init_led();
+
+    // Set WiFi country to avoid warnings and ensure max power
+    wifi_country_t country = {
+        .cc = "US",
+        .schan = 1,
+        .nchan = 14,
+        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
+        .policy = WIFI_COUNTRY_POLICY_MANUAL
+    };
+
+    esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
+    esp_wifi_set_country(&country);
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();

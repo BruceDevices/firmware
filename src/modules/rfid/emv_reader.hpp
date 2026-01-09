@@ -68,6 +68,7 @@ private:
 
     PN532 *_rfid;
     Adafruit_PN532 *nfc = nullptr;
+    bool _cancelled = false;
     EMVCard read_emv_card();
     void display_emv(EMVCard card);
     void save_emv(const char *aid, const char *pan, const char *validfrom, const char *validto);

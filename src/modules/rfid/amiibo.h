@@ -53,6 +53,7 @@ private:
 
     bool openDumpFile();
     bool checkEmulationTagType();
+    void delayWithReturn(uint32_t ms);
 };
 
 #endif

@@ -103,7 +103,6 @@ void RFID125::set_state(RFID125_State state) {
             // case ERASE_MODE:
             break;
     }
-    delay(300);
 }
 
 void RFID125::cls() {

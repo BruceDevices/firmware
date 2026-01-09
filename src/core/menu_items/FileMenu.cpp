@@ -11,21 +11,12 @@ void FileMenu::optionsMenu() {
     options.push_back({"LittleFS", [=]() { loopSD(LittleFS); }});
     options.push_back({"WebUI", loopOptionsWebUi});
 
-#if defined(SOC_USB_OTG_SUPPORTED) && !defined(USE_SD_MMC)
+#if defined(SOC_USB_OTG_SUPPORTED)
     options.push_back({"Mass Storage", [=]() { MassStorage(); }});
 #endif
     addOptionToMainMenu();
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Files");
-}
-void FileMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.files),
-        0,
-        imgCenterY,
-        true
-    );
 }
 void FileMenu::drawIcon(float scale) {
     clearIconArea();

@@ -6,7 +6,7 @@
  * @version 0.1
  * @date 2025-07-07
  */
-
+#if !defined(LITE_VERSION)
 #include "DHCPStarvation.h"
 #include "Arduino.h"
 #include "core/display.h"
@@ -44,38 +44,14 @@ DHCPStarvation::~DHCPStarvation() { pbuf_free(p); }
 void DHCPStarvation::show_gui() {
     drawMainBorderWithTitle("DHCP Starvation");
 
-    displayTextLine("Press prev to stop");
+    displayTextLine("Press Any key to stop");
 }
 
 void DHCPStarvation::loop() {
+    AnyKeyPress = false;
     while (true) {
         send_DHCP_packet();
-        if (PrevPress) {
-#if !defined(HAS_KEYBOARD) && !defined(HAS_ENCODER)
-            LongPress = true;
-            long _tmp = millis();
-            while (PrevPress) {
-                if (millis() - _tmp > 150)
-                    tft.drawArc(
-                        tftWidth / 2,
-                        tftHeight / 2,
-                        25,
-                        15,
-                        0,
-                        360 * (millis() - _tmp) / 700,
-                        getColorVariation(bruceConfig.priColor),
-                        bruceConfig.bgColor
-                    );
-                vTaskDelay(10 / portTICK_RATE_MS);
-            }
-            LongPress = false;
-            if (millis() - _tmp > 700) { // longpress detected to exit
-                returnToMenu = true;
-                break;
-            }
-#endif
-            check(PrevPress);
-        }
+        if (check(AnyKeyPress)) { break; }
     }
 }
 
@@ -196,3 +172,4 @@ void DHCPStarvation::send_DHCP_packet() {
     // Send packet
     netif->linkoutput(netif, p);
 }
+#endif

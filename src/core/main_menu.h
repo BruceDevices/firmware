@@ -35,8 +35,8 @@ public:
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     WifiMenu wifiMenu;
-    LoRaMenu loraMenu;
 #if !defined(LITE_VERSION)
+    LoRaMenu loraMenu;
     EthernetMenu ethernetMenu;
 #endif
 

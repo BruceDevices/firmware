@@ -123,13 +123,14 @@ bool EvilPortal::verifyCreds(String &Ssid, String &Password) {
 
     int i = 1;
     while (WiFi.status() != WL_CONNECTED) {
-        if (i > 8) break; // 8 times, 4 seconds ma
+        if (i > 12) break; // 12 times, 6 seconds
         vTaskDelay(500 / portTICK_PERIOD_MS);
         i++;
     }
-    WiFi.disconnect(false);
 
     if (WiFi.status() == WL_CONNECTED) { isConnected = true; }
+
+    WiFi.disconnect(false);
     // re enable
     _deauth = temp;
 

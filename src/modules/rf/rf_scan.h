@@ -46,7 +46,7 @@ private:
     float frequency = 0.f;
     uint8_t _try = 0;
     FreqFound _freqs[_MAX_TRIES]; // get the best RSSI out of 5 tries
-    int idx = range_limits[bruceConfig.rfScanRange][0];
+    int idx = range_limits[bruceConfigPins.rfScanRange][0];
     float found_freq = 0.f;
     int rssi = -80;
     int rssiThreshold = -65;
@@ -67,7 +67,7 @@ private:
     void save_signal(bool asRaw = false);
     void reset_signals();
     void set_threshold();
-    void set_range();
+    // void set_range(); // Using similar function from rf_utils.h
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Utils

@@ -15,12 +15,8 @@
 
 #include <MD5Builder.h>
 #include <algorithm> // for std::sort
-
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
 #include <esp_rom_crc.h>
-#else
-#include <esp32/rom/crc.h> // for CRC32
-#endif
+
 // SPIClass sdcardSPI;
 String fileToCopy;
 std::vector<FileList> fileList;
@@ -78,7 +74,14 @@ bool setupSdCard() {
             (int8_t)bruceConfigPins.SDCARD_bus.cs
         ); // start SPI communications
         delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+            result = false;
+#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
+            // If using Shared SPI, do not stop the bus if SDCard is not present
+            // If using Legacy, release the pins from this SPI Bus
+            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
+#endif
+        }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
 #endif
@@ -206,7 +209,7 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
         return false;
     }
     const int bufSize = 1024;
-    uint8_t buff[1024] = {0};
+    static uint8_t buff[bufSize] = {0}; // static to keep this buffer off the task stack
     // tft.drawRect(5,tftHeight-12, (tftWidth-10), 9, bruceConfig.priColor);
     while ((bytesRead = source.read(buff, bufSize)) > 0) {
         if (dest.write(buff, bytesRead) != bytesRead) {
@@ -430,15 +433,11 @@ String md5File(FS &fs, String filepath) {
 String crc32File(FS &fs, String filepath) {
     if (!fs.exists(filepath)) return "";
     String txt = readSmallFile(fs, filepath);
-// derived from
-// https://techoverflow.net/2022/08/05/how-to-compute-crc32-with-ethernet-polynomial-0x04c11db7-on-esp32-crc-h/
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
+    // derived from
+    // https://techoverflow.net/2022/08/05/how-to-compute-crc32-with-ethernet-polynomial-0x04c11db7-on-esp32-crc-h/
     uint32_t romCRC =
         (~esp_rom_crc32_le((uint32_t)~(0xffffffff), (const uint8_t *)txt.c_str(), txt.length())) ^ 0xffffffff;
-#else
-    uint32_t romCRC =
-        (~crc32_le((uint32_t)~(0xffffffff), (const uint8_t *)txt.c_str(), txt.length())) ^ 0xffffffff;
-#endif
+
     char s[18] = {0};
     char crcBytes[4] = {0};
     memcpy(crcBytes, &romCRC, sizeof(uint32_t));
@@ -605,9 +604,14 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
         }
         displayScrollingText(fileList[index].filename, coord);
 
+        // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
+        // This condition is important for StickCPlus, Core and other 3 Btn devices
+        if (EscPress && PrevPress) EscPress = false;
+        char pressed_letter;
+        if (check(EscPress)) goto BACK_FOLDER;
+
 #ifdef HAS_KEYBOARD
-        char pressed_letter = checkLetterShortcutPress();
-        if (check(EscPress)) goto BACK_FOLDER; // quit
+        pressed_letter = checkLetterShortcutPress();
 
         // check letter shortcuts
         if (pressed_letter > 0) {
@@ -630,8 +634,6 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                 }
             }
         }
-#elif defined(T_EMBED) || defined(HAS_TOUCH) || !defined(HAS_SCREEN)
-        if (check(EscPress)) goto BACK_FOLDER;
 #endif
 
         if (check(PrevPress) || check(UpPress)) {
@@ -735,11 +737,16 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
                                                          }});
-                    if (filepath.endsWith(".ir"))
+					if (filepath.endsWith(".ir")) {
+                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
+                                                             delay(200);
+                                                             chooseCmdIrFile(&fs, filepath);
+                                                         }});
                         options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
                                                          }});
+					}
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
@@ -904,7 +911,8 @@ bool checkLittleFsSizeNM() { return (LittleFS.totalBytes() - LittleFS.usedBytes(
 **  and LittleFS otherwise. If LittleFS is full it wil return false.
 **********************************************************************/
 bool getFsStorage(FS *&fs) {
-    if (setupSdCard()) fs = &SD;
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) fs = &SD;
     else if (checkLittleFsSize()) fs = &LittleFS;
     else return false;
 

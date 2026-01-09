@@ -19,8 +19,7 @@ void Amiibo::setup() {
 
     if (!connect()) return;
 
-    delay(500);
-
+    vTaskDelay(pdMS_TO_TICKS(500));
     selectMode();
 }
 
@@ -33,18 +32,17 @@ bool Amiibo::connect() {
 
     if (!amiibolink.searchDevice()) {
         displayError("Amiibolink not found");
-        delay(1000);
+        delayWithReturn(1000);
         return false;
     }
 
     if (!amiibolink.connectToDevice()) {
-        displayError("Amiibolink connect error");
-        delay(1000);
+        displayError("Amiibolink connect error", true);
         return false;
     }
 
     displaySuccess("Amiibolink Connected");
-    delay(1000);
+    delayWithReturn(1000);
 
     return true;
 }
@@ -75,8 +73,7 @@ void Amiibo::uploadAmiibo() {
     if (!openDumpFile()) return;
 
     if (!checkEmulationTagType()) {
-        displayError("Invalid tag type");
-        delay(1000);
+        displayError("Invalid tag type", true);
         return;
     }
 
@@ -89,11 +86,12 @@ void Amiibo::uploadAmiibo() {
 
     if (success) {
         displaySuccess("Success");
+        delayWithReturn(500);
     } else {
-        displayError("Amiibolink communication error");
+        displayError("Amiibolink communication error", true);
     }
 
-    delay(1000);
+    delayWithReturn(500);
 }
 
 void Amiibo::changeUIDMode() {
@@ -109,11 +107,12 @@ void Amiibo::changeUIDMode() {
 
     if (amiibolink.cmdSetUIDMode(uidMode)) {
         displaySuccess("Success");
+        delayWithReturn(500);
     } else {
-        displayError("Amiibolink communication error");
+        displayError("Amiibolink communication error", true);
     }
 
-    delay(1000);
+    delayWithReturn(500);
 }
 
 bool Amiibo::openDumpFile() {
@@ -122,8 +121,7 @@ bool Amiibo::openDumpFile() {
     FS *fs;
 
     if (!getFsStorage(fs)) {
-        displayError("Storage error");
-        delay(1000);
+        displayError("Storage error", true);
         return false;
     }
 
@@ -132,8 +130,7 @@ bool Amiibo::openDumpFile() {
     file = fs->open(filepath, FILE_READ);
 
     if (!file) {
-        displayError("Dump file error");
-        delay(1000);
+        displayError("Dump file error", true);
         return false;
     }
 
@@ -155,11 +152,10 @@ bool Amiibo::openDumpFile() {
     }
 
     file.close();
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     if (!pageReadSuccess) {
-        displayError("Incomplete dump file");
-        delay(1000);
+        displayError("Incomplete dump file", true);
         return false;
     }
 
@@ -198,4 +194,10 @@ bool Amiibo::checkEmulationTagType() {
 
     return true;
 }
+
+void Amiibo::delayWithReturn(uint32_t ms) {
+    auto tm = millis();
+    while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
+}
+
 #endif

@@ -39,81 +39,23 @@ uint8_t deauth_frame[sizeof(deauth_frame_default)]; // 26 = [sizeof(deauth_frame
 wifi_ap_record_t ap_record;
 
 // Beacon packet template
+// clang-format off
 constexpr size_t BEACON_PKT_LEN = 109;
 const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
-    /*  0 - 3  */ 0x80,
-    0x00,
-    0x00,
-    0x00, // Type/Subtype: management beacon frame
-    /*  4 - 9  */ 0xFF,
-    0xFF,
-    0xFF,
-    0xFF,
-    0xFF,
-    0xFF, // Destination: broadcast
-    /* 10 - 15 */ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // Source (placeholder - overwritten)
-    /* 16 - 21 */ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // BSSID (placeholder - overwritten)
-    /* 22 - 23 */ 0x00,
-    0x00, // Fragment & sequence number (SDK will set)
-    /* 24 - 31 */ 0x83,
-    0x51,
-    0xf7,
-    0x8f,
-    0x0f,
-    0x00,
-    0x00,
-    0x00, // Timestamp
-    /* 32 - 33 */ 0xe8,
-    0x03, // Interval (1s)
-    /* 34 - 35 */ 0x31,
-    0x00, // Capability info (will set WPA flag later)
-    /* 36 - 37 */ 0x00,
-    0x20,         // Tag: SSID parameter set, tag length 32 (we will write SSID into bytes 38..69)
-    /* 38 - 69 */ // 32 bytes for SSID (template filled with spaces)
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    /* 70 - 71 */ 0x01,
-    0x08, // Supported rates tag length 8
+    /*  0 - 3  */ 0x80, 0x00, 0x00, 0x00, // Type/Subtype: management beacon frame
+    /*  4 - 9  */ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast
+    /* 10 - 15 */ 0x01, 0x02,  0x03, 0x04, 0x05, 0x06, // Source (placeholder - overwritten)
+    /* 16 - 21 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, // BSSID (placeholder - overwritten)
+    /* 22 - 23 */ 0x00, 0x00, // Fragment & sequence number (SDK will set)
+    /* 24 - 31 */ 0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, // Timestamp
+    /* 32 - 33 */ 0xe8, 0x03, // Interval (1s)
+    /* 34 - 35 */ 0x31, 0x00, // Capability info (will set WPA flag later)
+    /* 36 - 37 */ 0x00, 0x20,         // Tag: SSID parameter set, tag length 32 (we will write SSID into bytes 38..69)
+    /* 38 - 69 */ 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+    /* 70 - 71 */ 0x01, 0x08, // Supported rates tag length 8
     /* 72 */ 0x82,
     /* 73 */ 0x84,
     /* 74 */ 0x8b,
@@ -122,37 +64,18 @@ const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
     /* 77 */ 0x30,
     /* 78 */ 0x48,
     /* 79 */ 0x6c,
-    /* 80 - 81 */ 0x03,
-    0x01,          // Current Channel tag
+    /* 80 - 81 */ 0x03, 0x01,          // Current Channel tag
     /* 82 */ 0x01, // Current channel (overwritten)
-    /* 83 - 84 */ 0x30,
-    0x18, // RSN information (start)
-    /* 85 - 86 */ 0x01,
-    0x00,
-    /* 87 - 90 */ 0x00,
-    0x0f,
-    0xac,
-    0x02,
-    /* 91 - 92 */ 0x02,
-    0x00,
-    /* 93 -100 */ 0x00,
-    0x0f,
-    0xac,
-    0x04,
-    0x00,
-    0x0f,
-    0xac,
-    0x04,
-    /*101 -102 */ 0x01,
-    0x00,
-    /*103 -106 */ 0x00,
-    0x0f,
-    0xac,
-    0x02,
-    /*107 -108 */ 0x00,
-    0x00
+    /* 83 - 84 */ 0x30, 0x18, // RSN information (start)
+    /* 85 - 86 */ 0x01, 0x00,
+    /* 87 - 90 */ 0x00, 0x0f, 0xac, 0x02,
+    /* 91 - 92 */ 0x02, 0x00,
+    /* 93 -100 */ 0x00, 0x0f, 0xac, 0x04, 0x00, 0x0f, 0xac, 0x04,
+    /*101 -102 */ 0x01, 0x00,
+    /*103 -106 */ 0x00, 0x0f, 0xac, 0x02,
+    /*107 -108 */ 0x00, 0x00
 };
-
+// clang-format on
 static inline void prepareBeaconPacket(
     uint8_t outPacket[BEACON_PKT_LEN], const uint8_t macAddr[6], const char *ssid, uint8_t ssidLen,
     uint8_t channel, bool setWPAflag = true
@@ -678,7 +601,9 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
             padprintln("");
             padprintln("Deauth sent: " + String(deauthCount));
             padprintln("");
-            tft.drawString("Press " + String(BTN_ALIAS) + " to send deauth", 10, tftHeight - 35);
+            tft.drawRightString(
+                "Press " + String(BTN_ALIAS) + " to send deauth", tftWidth - 10, tftHeight - 35, 1
+            );
             tft.drawString("Press Back to exit", 10, tftHeight - 20);
 
             // reset redraw flag
@@ -866,47 +791,6 @@ const char rickrollssids[] PROGMEM = {"01 Never gonna give you up\n"
                                       "07 Never gonna tell a lie\n"
                                       "08 and hurt you\n"};
 
-const uint8_t packet[128] = {
-    0x80,
-    0x00,
-    0x00,
-    0x00, // Frame Control, Duration
-    /*4*/ 0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff, // Destination address
-    /*10*/ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // Source address - overwritten later
-    /*16*/ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // BSSID - overwritten to the same as the source address
-    /*22*/ 0xc0,
-    0x6c, // Seq-ctl
-    /*24*/ 0x83,
-    0x51,
-    0xf7,
-    0x8f,
-    0x0f,
-    0x00,
-    0x00,
-    0x00, // timestamp - the number of microseconds the AP has been active
-    /*32*/ 0x64,
-    0x00, // Beacon interval
-    /*34*/ 0x01,
-    0x04, // Capability info
-          /* SSID */
-    /*36*/ 0x00
-};
-
 void beaconSpamList(const char list[]) {
     uint8_t beaconPacket[BEACON_PKT_LEN];
     uint8_t macAddr[6];
@@ -918,21 +802,17 @@ void beaconSpamList(const char list[]) {
 
     while (i < ssidsLen) {
         // Read next SSID from PROGMEM up to newline
-        char ssidBuf[33];
+        char ssidBuf[32];
         int j = 0;
         char tmp;
         // read chars from PROGMEM until newline
         do {
-            tmp = (char)pgm_read_byte(list + i + j);
-            // handle malformed PROGMEM or running past end
-            if ((i + j) >= ssidsLen) { tmp = '\n'; }
-            if (tmp == '\n') break;
-            if (j < 32) ssidBuf[j] = tmp;
+            tmp = pgm_read_byte(list + i + j);
+            if (j < 32 && tmp != '\n') ssidBuf[j] = tmp;
             j++;
-        } while (tmp != '\n');
+        } while (tmp != '\n' && i + j < ssidsLen);
 
-        uint8_t ssidLen = (j > 32) ? 32 : j;
-        ssidBuf[ssidLen] = '\0';
+        uint8_t ssidLen = (j > 32) ? 32 : j - 1;
 
         // generate MAC and prepare packet
         generateRandomWiFiMac(macAddr);
@@ -945,7 +825,7 @@ void beaconSpamList(const char list[]) {
         }
 
         // move cursor past the SSID and newline
-        i += (j + 1); // +1 to skip endline
+        i += j;
         if (EscPress) break;
     }
 }

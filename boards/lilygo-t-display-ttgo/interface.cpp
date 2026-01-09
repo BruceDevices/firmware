@@ -60,34 +60,14 @@ void _setup_gpio() {
     pinMode(ADC_EN, OUTPUT);
     digitalWrite(ADC_EN, HIGH);
 
-    // setup Battery pin for reading voltage value
-    pinMode(ADC_PIN, INPUT);
-
     // Start with default IR, RF and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = PN532_I2C_MODULE;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_I2C_MODULE;
 
-    bruceConfig.irRx = RXLED;
-    bruceConfig.irTx = LED;
+    bruceConfigPins.irRx = RXLED;
+    bruceConfigPins.irTx = TXLED;
 
     Serial.begin(115200);
-}
-
-/***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    int percent = 0;
-    uint32_t v1 = analogReadMilliVolts(ADC_PIN);
-
-    if (v1 > 4150) {
-        percent = 0;
-    } else {
-        percent = map(v1, 3200, 4150, 0, 100);
-    }
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************

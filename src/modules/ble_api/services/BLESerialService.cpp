@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "BLESerialService.h"
 #include <NimBLEDevice.h>
 
@@ -8,9 +9,9 @@ BLESerialService::~BLESerialService() {}
 static bool newValue = false;
 
 class BLESerialCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
-      newValue = true;
-  }
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
+        newValue = true;
+    }
 };
 
 void BLESerialService::setup(NimBLEServer *pServer) {
@@ -28,9 +29,7 @@ void BLESerialService::setup(NimBLEServer *pServer) {
     pServer->getAdvertising()->addServiceUUID(pService->getUUID());
 }
 
-void BLESerialService::end() {
-    delete callbacks;
-}
+void BLESerialService::end() { delete callbacks; }
 
 int BLESerialService::available() {
     if (!newValue) return 0;
@@ -42,7 +41,7 @@ int BLESerialService::available() {
 size_t BLESerialService::println(const String &s) {
     String toSend = s + "\r\n";
     serial_char->notify(toSend);
-    vTaskDelay(pdMS_TO_TICKS(10));  // Add some delay to ensure data is read by the client
+    vTaskDelay(pdMS_TO_TICKS(10)); // Add some delay to ensure data is read by the client
     return toSend.length();
 }
 
@@ -57,8 +56,8 @@ size_t BLESerialService::println(size_t n) {
     return println(s);
 }
 
-void BLESerialService::vprintf(const char * fmt, va_list args) {
-    int size = sprintf(nullptr, fmt, args);
+void BLESerialService::vprintf(const char *fmt, va_list args) {
+    int size = vsnprintf(NULL, 0, fmt, args) + 1;
     char str[BUFFER_SIZE];
     sprintf(str, fmt, args);
 
@@ -92,9 +91,7 @@ size_t BLESerialService::println(const int n, int format) {
     return println(s);
 }
 
-size_t BLESerialService::println() {
-    return println("");
-}
+size_t BLESerialService::println() { return println(""); }
 
 size_t BLESerialService::write(uint8_t *str, size_t size) {
     serial_char->notify(str, size);
@@ -102,7 +99,6 @@ size_t BLESerialService::write(uint8_t *str, size_t size) {
     return size;
 }
 
-void BLESerialService::setMTU(uint16_t mtu) {
-    this->mtu = mtu;
-}
+void BLESerialService::setMTU(uint16_t mtu) { this->mtu = mtu; }
 
+#endif

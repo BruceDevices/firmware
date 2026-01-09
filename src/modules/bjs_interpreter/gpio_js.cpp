@@ -80,22 +80,14 @@ duk_ret_t native_dacWrite(duk_context *ctx) {
 }
 
 duk_ret_t native_ledcSetup(duk_context *ctx) {
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
     int val = ledcAttach(duk_get_int(ctx, 0), 50, duk_get_int(ctx, 1));
-#else
-    int val = ledcSetup(duk_get_int(ctx, 0), duk_get_int(ctx, 1), duk_get_int(ctx, 2));
-#endif
     duk_push_int(ctx, val);
 
     return 1;
 }
 
 duk_ret_t native_ledcAttachPin(duk_context *ctx) {
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0))
     ledcAttach(duk_get_int(ctx, 0), 50, duk_get_int(ctx, 1));
-#else
-    ledcAttachPin(duk_get_int(ctx, 0), duk_get_int(ctx, 1));
-#endif
     return 0;
 }
 
@@ -155,7 +147,7 @@ duk_ret_t native_pins(duk_context *ctx) {
     bduk_put_prop(ctx, obj_idx, "spi_mosi", duk_push_uint, SPI_MOSI_PIN);
     bduk_put_prop(ctx, obj_idx, "spi_miso", duk_push_uint, SPI_MISO_PIN);
     bduk_put_prop(ctx, obj_idx, "spi_ss", duk_push_uint, SPI_SS_PIN);
-    bduk_put_prop(ctx, obj_idx, "ir_tx", duk_push_uint, LED);
+    bduk_put_prop(ctx, obj_idx, "ir_tx", duk_push_uint, TXLED);
     bduk_put_prop(ctx, obj_idx, "ir_rx", duk_push_uint, RXLED);
 
     return 1;

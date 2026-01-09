@@ -33,8 +33,8 @@ void _setup_gpio() {
 
     // Starts SPI instance for CC1101 and NRF24 with CS pins blocking communication at start
 
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.irRx = RXLED;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.irRx = RXLED;
     // Wire.setPins(GROVE_SDA, GROVE_SCL);
     //  Wire.begin();
     bool pmu_ret = false;
@@ -64,7 +64,7 @@ int getBattery() {
     int voltage = PPM.getBattVoltage();
     int percent = (voltage - 3300) * 100 / (float)(4150 - 3350);
 
-    if (percent < 0) return 0;
+    if (percent < 0) return 1;
     if (percent > 100) percent = 100;
 
     if (PPM.isCharging() && percent >= 97) {

@@ -6,7 +6,7 @@ float m_rf_waterfall_start_freq = 433.0;
 float m_rf_waterfall_end_freq = 435.0;
 
 void rf_waterfall() {
-    if (bruceConfig.rfModule != CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
         displayError("Waterfall needs a CC1101!", true);
         return;
     }
@@ -16,17 +16,17 @@ void rf_waterfall() {
     }
 
     ELECHOUSE_cc1101.setRxBW(200);
-
+    int option, idx = 0;
 select:
 
-    int option = 0;
+    option = 0;
     options = {
-        {"Start Freq.", [&]() { option = 1; }},
-        {"End Freq.",   [&]() { option = 2; }},
-        {"Start",       [&]() { option = 3; }},
-        {"Main Menu",   [&]() { option = 4; }},
+        {"Start Waterfall", [&]() { option = 3; }},
+        {"Start Freq.",     [&]() { option = 1; }},
+        {"End Freq.",       [&]() { option = 2; }},
+        {"Main Menu",       [&]() { option = 4; }},
     };
-    loopOptions(options);
+    idx = loopOptions(options, idx);
 
     tft.fillScreen(0x0);
 
@@ -36,33 +36,21 @@ select:
         rf_waterfall_run();
         goto select;
     } else if (option == 1) {
-        rf_waterfall_start_freq();
+        rf_waterfall_boundary_freq(m_rf_waterfall_start_freq);
         goto select;
     } else if (option == 2) {
-        rf_waterfall_end_freq();
+        rf_waterfall_boundary_freq(m_rf_waterfall_end_freq);
         goto select;
     }
 }
-
-void rf_waterfall_start_freq() {
+void rf_waterfall_boundary_freq(float &boundary) {
     options = {};
     int ind = 0;
     int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
     for (int i = 0; i < arraySize; i++) {
+        if (subghz_frequency_list[i] - boundary < 0.1) ind = i;
         String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
-        options.push_back({tmp.c_str(), [=]() { m_rf_waterfall_start_freq = subghz_frequency_list[i]; }});
-    }
-    loopOptions(options, ind);
-    options.clear();
-}
-
-void rf_waterfall_end_freq() {
-    options = {};
-    int ind = 0;
-    int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
-    for (int i = 0; i < arraySize; i++) {
-        String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
-        options.push_back({tmp.c_str(), [=]() { m_rf_waterfall_end_freq = subghz_frequency_list[i]; }});
+        options.push_back({tmp.c_str(), [&boundary, i]() { boundary = subghz_frequency_list[i]; }});
     }
     loopOptions(options, ind);
     options.clear();

@@ -20,8 +20,8 @@ void IRMenu::optionsMenu() {
     addOptionToMainMenu();
 
     String txt = "Infrared";
-    txt += " Tx: " + String(bruceConfig.irTx) + " Rx: " + String(bruceConfig.irRx) +
-           " Rpts: " + String(bruceConfig.irTxRepeats);
+    txt += " Tx: " + String(bruceConfigPins.irTx) + " Rx: " + String(bruceConfigPins.irRx) +
+           " Rpts: " + String(bruceConfigPins.irTxRepeats);
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
 
@@ -35,11 +35,7 @@ void IRMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "IR Config");
 }
-void IRMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.ir), 0, imgCenterY, true
-    );
-}
+
 void IRMenu::drawIcon(float scale) {
     clearIconArea();
     int iconSize = scale * 60;

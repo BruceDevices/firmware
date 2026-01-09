@@ -5,7 +5,8 @@
 #include <globals.h>
 
 void EMVReader::setup() {
-    switch (bruceConfig.rfidModule) {
+    _cancelled = false;
+    switch (bruceConfigPins.rfidModule) {
         case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
 #ifdef M5STICK
         case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C_SPI); break;
@@ -22,6 +23,7 @@ void EMVReader::setup() {
 
     displayInfo("Waiting for EMV card...");
     EMVCard card = read_emv_card();
+    if (_cancelled) return;
     display_emv(card);
 
     free(card.pan);
@@ -73,20 +75,31 @@ std::vector<uint8_t> EMVReader::emv_ask_for_aid() {
     uint8_t response[240];
     uint8_t response_len = 0;
     std::vector<uint8_t> aid;
-    if (nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len)) {
-        /* Select Application */
-        uint8_t ask_for_aid_apdu[] = {0x00, 0xA4, 0x04, 0x00, 0x0e, 0x32, 0x50, 0x41, 0x59, 0x2e,
-                                      0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0x00};
-        if (nfc->EMVinDataExchange(ask_for_aid_apdu, sizeof(ask_for_aid_apdu), response, &response_len)) {
-            std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-            BerTlv Tlv;
-            Tlv.SetTlv(response_vector);
-            if (Tlv.GetValue("4F", &aid) != OK) { // Application ID
-                Serial.println("Can't get aidFeliCa");
-                aid.clear();
-            }
-            Serial.println("Success AID");
+    while (!_cancelled) {
+        if (check(EscPress)) {
+            _cancelled = true;
+            break;
         }
+
+        // Short timeout allows us to poll for EscPress while waiting for a card
+        if (nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 100)) {
+            /* Select Application */
+            uint8_t ask_for_aid_apdu[] = {0x00, 0xA4, 0x04, 0x00, 0x0e, 0x32, 0x50, 0x41, 0x59, 0x2e,
+                                          0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0x00};
+            if (nfc->EMVinDataExchange(ask_for_aid_apdu, sizeof(ask_for_aid_apdu), response, &response_len)) {
+                std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
+                BerTlv Tlv;
+                Tlv.SetTlv(response_vector);
+                if (Tlv.GetValue("4F", &aid) != OK) { // Application ID
+                    Serial.println("Can't get aidFeliCa");
+                    aid.clear();
+                }
+                Serial.println("Success AID");
+            }
+            break;
+        }
+
+        delay(50);
     }
     return aid;
 }
@@ -310,8 +323,12 @@ bool is_visa(EMVCard *card) {
 
 EMVCard EMVReader::read_emv_card() {
     EMVCard res;
+    if (_cancelled) return res;
+
     std::vector<uint8_t> aid = emv_ask_for_aid(); // Perform Application Selection
-    if (aid.empty()) {                            // If we can't get AID, we can't read the card
+    if (_cancelled) return res;
+
+    if (aid.empty()) { // If we can't get AID, we can't read the card
         res.parsed = false;
         Serial.println("Can't read card");
     } else {

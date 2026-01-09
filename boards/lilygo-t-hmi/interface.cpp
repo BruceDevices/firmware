@@ -70,20 +70,20 @@ void InputHandler(void) {
         if (touch.touched()) {
             auto t = touch.getPointScaled();
             // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d", t.x, t.y);
-            if (bruceConfig.rotation == 3) {
+            if (bruceConfigPins.rotation == 3) {
                 // t.y = t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 1) {
+            if (bruceConfigPins.rotation == 1) {
                 t.y = (tftHeight + 20) - t.y;
                 // t.x = t.x;
             }
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
                 t.y = (tftHeight + 20) - tmp;
@@ -120,17 +120,3 @@ void powerOff() {
 ** Btn logic to tornoff the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    uint8_t percent;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_5);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
-}

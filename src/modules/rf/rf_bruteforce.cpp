@@ -63,11 +63,11 @@ void rf_brute_repeats() {
 bool rf_brute_start() {
     int txpin;
 
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         txpin = bruceConfigPins.CC1101_bus.io0;
         if (!initRfModule("tx", brute_frequency)) return false;
     } else {
-        txpin = bruceConfig.rfTx;
+        txpin = bruceConfigPins.rfTx;
         if (!initRfModule("tx")) return false;
     }
 

@@ -95,24 +95,10 @@ void _setup_gpio() {
     attachInterrupt(R_BTN, ISR_right, FALLING);
 
 #ifdef T_DECK_PLUS
-    bruceConfig.gpsBaudrate = 38400;
+    bruceConfigPins.gpsBaudrate = 38400;
 #endif
 }
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    int percent = 0;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_4);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
-}
-bool isCharging() { return false; }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
 ** Location: main.cpp
@@ -160,28 +146,28 @@ void InputHandler(void) {
 #else
     bool isPlus = true;
 #endif
-    if (rot != bruceConfig.rotation) {
-        if (bruceConfig.rotation == 1) {
+    if (rot != bruceConfigPins.rotation) {
+        if (bruceConfigPins.rotation == 1) {
             touch.setMaxCoordinates(320, 240);
             touch.setSwapXY(true);
             touch.setMirrorXY(!isPlus, true);
         }
-        if (bruceConfig.rotation == 3) {
+        if (bruceConfigPins.rotation == 3) {
             touch.setMaxCoordinates(320, 240);
             touch.setSwapXY(true);
             touch.setMirrorXY(isPlus, false);
         }
-        if (bruceConfig.rotation == 0) {
+        if (bruceConfigPins.rotation == 0) {
             touch.setMaxCoordinates(240, 320);
             touch.setSwapXY(false);
             touch.setMirrorXY(false, !isPlus);
         }
-        if (bruceConfig.rotation == 2) {
+        if (bruceConfigPins.rotation == 2) {
             touch.setMaxCoordinates(240, 320);
             touch.setSwapXY(false);
             touch.setMirrorXY(true, isPlus);
         }
-        rot = bruceConfig.rotation;
+        rot = bruceConfigPins.rotation;
     }
     touched = touch.getPoint(&t.x, &t.y);
     delay(1);
@@ -250,7 +236,7 @@ void InputHandler(void) {
     if ((millis() - tm) > 190 || LongPress) { // one reading each 190ms
         if (touched) {
 
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x, t.y, bruceConfig.rotation);
+            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x, t.y, bruceConfigPins.rotation);
             tm = millis();
 
             if (!wakeUpScreen()) AnyKeyPress = true;

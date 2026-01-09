@@ -401,7 +401,7 @@ void telnet_setup() {
 
     // auto cfg = M5.config();
     // M5Cardputer.begin(cfg, true);
-    tft.setRotation(bruceConfig.rotation);
+    tft.setRotation(bruceConfigPins.rotation);
     tft.setTextSize(1); // Set text size
 
     cursorY = tft.getCursorY();

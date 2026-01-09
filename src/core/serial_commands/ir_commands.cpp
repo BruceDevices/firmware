@@ -8,7 +8,7 @@
 
 uint32_t irCallback(cmd *c) {
     serialDevice->println("Turning off IR LED");
-    digitalWrite(bruceConfig.irTx, LED_OFF);
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
     return true;
 }
 

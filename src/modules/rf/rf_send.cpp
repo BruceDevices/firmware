@@ -223,7 +223,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
 
     // init transmitter
     if (!initRfModule("", frequency / 1000000.0)) return;
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
         // derived from
         // https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/blob/master/examples/Rc-Switch%20examples%20cc1101/SendDemo_cc1101/SendDemo_cc1101.ino
         ELECHOUSE_cc1101.setModulation(modulation);
@@ -319,7 +319,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         return;
     }
 
-    // digitalWrite(bruceConfig.rfTx, LED_OFF);
+    // digitalWrite(bruceConfigPins.rfTx, LED_OFF);
     deinitRfModule();
 }
 
@@ -329,10 +329,10 @@ void RCSwitch_send(uint64_t data, unsigned int bits, int pulse, int protocol, in
 
     RCSwitch mySwitch = RCSwitch();
 
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         mySwitch.enableTransmit(bruceConfigPins.CC1101_bus.io0);
     } else {
-        mySwitch.enableTransmit(bruceConfig.rfTx);
+        mySwitch.enableTransmit(bruceConfigPins.rfTx);
     }
 
     mySwitch.setProtocol(protocol); // override
@@ -355,8 +355,8 @@ void RCSwitch_send(uint64_t data, unsigned int bits, int pulse, int protocol, in
 
 // ported from https://github.com/sui77/rc-switch/blob/3a536a172ab752f3c7a58d831c5075ca24fd920b/RCSwitch.cpp
 void RCSwitch_RAW_Bit_send(RfCodes data) {
-    int nTransmitterPin = bruceConfig.rfTx;
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
+    int nTransmitterPin = bruceConfigPins.rfTx;
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
 
     if (data.data == "") return;
     bool currentlogiclevel = false;
@@ -390,8 +390,8 @@ void RCSwitch_RAW_Bit_send(RfCodes data) {
 }
 
 void RCSwitch_RAW_send(int *ptrtransmittimings) {
-    int nTransmitterPin = bruceConfig.rfTx;
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
+    int nTransmitterPin = bruceConfigPins.rfTx;
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
 
     if (!ptrtransmittimings) return;
 

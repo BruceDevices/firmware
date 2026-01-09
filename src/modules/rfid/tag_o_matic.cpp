@@ -39,7 +39,7 @@ TagOMatic::~TagOMatic() {
 }
 
 void TagOMatic::set_rfid_module() {
-    switch (bruceConfig.rfidModule) {
+    switch (bruceConfigPins.rfidModule) {
         case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
 #ifdef M5STICK
         case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C_SPI); break;
@@ -55,13 +55,11 @@ void TagOMatic::setup() {
     set_rfid_module();
 
     if (!_rfid->begin()) {
-        displayError("RFID module not found!");
-        delay(2000);
+        displayError("RFID module not found!", true);
         return;
     }
 
     set_state(_initial_state);
-    delay(500);
     return loop();
 }
 
@@ -224,7 +222,7 @@ void TagOMatic::read_card() {
     if (millis() - _lastReadTime < 2000) return;
 
     if (_rfid->read() != RFIDInterface::SUCCESS) {
-        if (bruceConfig.rfidModule != M5_RFID2_MODULE) { // Read felica if module is PN532
+        if (bruceConfigPins.rfidModule != M5_RFID2_MODULE) { // Read felica if module is PN532
             if (_rfid->read(1) != RFIDInterface::SUCCESS) return;
         } else {
             return;
@@ -239,7 +237,7 @@ void TagOMatic::read_card() {
 
     _read_uid = true;
     _lastReadTime = millis();
-    delay(500);
+    delayWithReturn(500);
 }
 
 void TagOMatic::scan_cards() {
@@ -254,7 +252,7 @@ void TagOMatic::scan_cards() {
     display_banner();
     dump_scan_results();
 
-    delay(200);
+    delayWithReturn(200);
 }
 
 void TagOMatic::check_card() {
@@ -266,7 +264,7 @@ void TagOMatic::check_card() {
     dump_check_details();
 
     _lastReadTime = millis();
-    delay(500);
+    delayWithReturn(500);
 }
 
 void TagOMatic::clone_card() {
@@ -280,7 +278,7 @@ void TagOMatic::clone_card() {
         default: displayError("Error writing UID to tag."); break;
     }
 
-    delay(1000);
+    delayWithReturn(1000);
     set_state(READ_MODE);
 }
 
@@ -294,8 +292,7 @@ void TagOMatic::write_custom_uid() {
     display_banner();
 
     if (custom_uid.length() != _rfid->uid.size * 2) {
-        displayError("Invalid UID.");
-        delay(1000);
+        displayError("Invalid UID.", true);
         set_state(READ_MODE);
         return;
     }
@@ -307,7 +304,7 @@ void TagOMatic::write_custom_uid() {
     }
     _rfid->printableUID.uid.trim();
 
-    delay(200);
+    delayWithReturn(200);
     set_state(CLONE_MODE);
 }
 
@@ -320,7 +317,7 @@ void TagOMatic::erase_card() {
         default: displayError("Error erasing data from tag."); break;
     }
 
-    delay(1000);
+    delayWithReturn(1000);
     set_state(READ_MODE);
 }
 
@@ -339,7 +336,7 @@ void TagOMatic::write_data() {
         default: displayError("Error writing data to tag."); break;
     }
 
-    delay(1000);
+    delayWithReturn(1000);
     set_state(READ_MODE);
 }
 
@@ -359,7 +356,7 @@ void TagOMatic::write_ndef_data() {
         default: displayError("Error writing data to tag."); break;
     }
 
-    delay(1000);
+    delayWithReturn(1000);
     set_state(READ_MODE);
 }
 
@@ -454,7 +451,7 @@ void TagOMatic::load_file() {
 
     if (result == RFIDInterface::SUCCESS) {
         displaySuccess("File loaded.");
-        delay(1000);
+        delay(500);
         _read_uid = true;
 
         options = {
@@ -465,8 +462,7 @@ void TagOMatic::load_file() {
 
         loopOptions(options);
     } else {
-        displayError("Error loading file.");
-        delay(1000);
+        displayError("Error loading file.", true);
         set_state(READ_MODE);
     }
 }
@@ -485,7 +481,7 @@ void TagOMatic::save_file() {
     } else {
         displayError("Error writing file.");
     }
-    delay(1000);
+    delayWithReturn(1000);
     set_state(READ_MODE);
 }
 
@@ -511,6 +507,10 @@ void TagOMatic::save_scan_result() {
     for (String uid : _scanned_tags) { file.println(uid); }
 
     file.close();
-    delay(100);
     return;
+}
+
+void TagOMatic::delayWithReturn(uint32_t ms) {
+    auto tm = millis();
+    while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
 }

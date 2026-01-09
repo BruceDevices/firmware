@@ -14,9 +14,9 @@ SPIClass touchSPI;
 void _setup_gpio() {
     pinMode(XPT2046_CS, OUTPUT);
     digitalWrite(XPT2046_CS, HIGH);
-    bruceConfig.rotation = 0;      // portrait mode for Phantom
+    bruceConfigPins.rotation = 0;  // portrait mode for Phantom
     bruceConfig.colorInverted = 0; // color invert for Phantom
-    tft.setRotation(bruceConfig.rotation);
+    tft.setRotation(bruceConfigPins.rotation);
     uint16_t calData[5] = {275, 3500, 280, 3590, 3}; // 0011 = 3
     tft.setTouch(calData);
 }
@@ -28,7 +28,7 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
     // uint16_t calData[5];
-    // bruceConfig.rotation = 0;
+    // bruceConfigPins.rotation = 0;
     // tft.setRotation(0);
     // tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 10);
     // Serial.printf("%d\n%d\n%d\n%d\n%d\n", calData[0], calData[1], calData[2], calData[3], calData[4]);
@@ -89,21 +89,22 @@ void InputHandler(void) {
 
             // Serial.printf("\nRAWRaw: Touch Pressed on x=%d, y=%d", t2.x, t2.y);
             // Serial.printf("\nRAW:    Touch Pressed on x=%d, y=%d", t.x, t.y);
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 t.y = (tftHeight + 20) - t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 3) {
+            if (bruceConfigPins.rotation == 3) {
                 uint16_t tmp = t.x;
                 t.x = map((tftHeight + 20) - t.y, 0, 240, 0, 320);
                 t.y = map(tmp, 0, 320, 0, 240);
             }
-            if (bruceConfig.rotation == 1) {
+            if (bruceConfigPins.rotation == 1) {
                 uint16_t tmp = t.x;
                 t.x = map(t.y, 0, 240, 0, 320);
                 t.y = map(tftWidth - tmp, 0, 320, 0, 240);
             }
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d, rot: %d\n", t.x, t.y, bruceConfig.rotation);
+            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d, rot: %d\n", t.x, t.y,
+            // bruceConfigPins.rotation);
             tm = millis();
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;

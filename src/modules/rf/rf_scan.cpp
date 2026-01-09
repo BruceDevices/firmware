@@ -11,16 +11,18 @@ RFScan::RFScan() { setup(); }
 RFScan::~RFScan() { deinitRfModule(); }
 
 void RFScan::setup() {
-    if (!initRfModule("rx", bruceConfig.rfFreq)) { return; }
+    if (!initRfModule("rx", bruceConfigPins.rfFreq)) { return; }
 
     RCSwitch_Enable_Receive(rcswitch);
 
-    if (bruceConfig.rfScanRange < 0 || bruceConfig.rfScanRange > 3) { bruceConfig.setRfScanRange(3); }
-    if (bruceConfig.rfModule != CC1101_SPI_MODULE) { bruceConfig.setRfFxdFreq(1); }
+    if (bruceConfigPins.rfScanRange < 0 || bruceConfigPins.rfScanRange > 3) {
+        bruceConfigPins.setRfScanRange(3);
+    }
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) { bruceConfigPins.setRfFxdFreq(1); }
 
     display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
 
-    if (bruceConfig.rfFxdFreq) frequency = bruceConfig.rfFreq;
+    if (bruceConfigPins.rfFxdFreq) frequency = bruceConfigPins.rfFreq;
 
     // Clear cache for RAW signal
     rcswitch.resetAvailable();
@@ -40,7 +42,7 @@ void RFScan::loop() {
         }
         if (restartScan) return setup();
 
-        if (bruceConfig.rfFxdFreq) frequency = bruceConfig.rfFreq;
+        if (bruceConfigPins.rfFxdFreq) frequency = bruceConfigPins.rfFreq;
         if (frequency <= 0) init_freqs();
 
         while (frequency <= 0) { // FastScan
@@ -66,10 +68,10 @@ void RFScan::loop() {
 }
 
 void RFScan::RCSwitch_Enable_Receive(RCSwitch rcswitch) {
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         rcswitch.enableReceive(bruceConfigPins.CC1101_bus.io0);
     } else {
-        rcswitch.enableReceive(bruceConfig.rfRx);
+        rcswitch.enableReceive(bruceConfigPins.rfRx);
     }
 }
 
@@ -83,8 +85,9 @@ void RFScan::init_freqs() {
 
 bool RFScan::fast_scan() {
 
-    if (idx < range_limits[bruceConfig.rfScanRange][0] || idx > range_limits[bruceConfig.rfScanRange][1]) {
-        idx = range_limits[bruceConfig.rfScanRange][0];
+    if (idx < range_limits[bruceConfigPins.rfScanRange][0] ||
+        idx > range_limits[bruceConfigPins.rfScanRange][1]) {
+        idx = range_limits[bruceConfigPins.rfScanRange][0];
     }
     float checkFrequency = subghz_frequency_list[idx];
     setMHZ(checkFrequency);
@@ -101,11 +104,14 @@ bool RFScan::fast_scan() {
                 if (_freqs[i].rssi > _freqs[max_index].rssi) { max_index = i; }
             }
 
-            bruceConfig.setRfFreq(_freqs[max_index].freq, 2); // change to fixed frequency
+            bruceConfigPins.setRfFreq(_freqs[max_index].freq, 2); // change to fixed frequency
             frequency = _freqs[max_index].freq;
             setMHZ(frequency);
             Serial.println("Frequency Found: " + String(frequency));
             rcswitch.resetAvailable();
+            // When changing to fixed frequency, need to restart the module to reset the registers
+            // so we get good signal reception at this frequency
+            deinitRfModule();
 
             return true;
         }
@@ -238,9 +244,9 @@ void RFScan::select_menu_option() {
 
     if (received.protocol != "") options.emplace_back("Reset Signal", [this]() { set_option(RESET); });
 
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE)
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE)
         options.emplace_back("Range", [this]() { set_option(RANGE); });
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE && !bruceConfig.rfFxdFreq)
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE && !bruceConfigPins.rfFxdFreq)
         options.emplace_back("Threshold", [this]() { set_option(THRESHOLD); });
 
     if (ReadRAW)
@@ -290,7 +296,7 @@ void RFScan::set_option(RFMenuOption option) {
         case SAVE:
         case SAVE_RAW: save_signal(option == SAVE_RAW); break;
 
-        case RANGE: set_range(); break;
+        case RANGE: rf_range_selection(); break; // using a common function to other features
         case RESET: reset_signals(); break;
         case THRESHOLD: set_threshold(); break;
 
@@ -340,18 +346,20 @@ void RFScan::set_threshold() {
     };
     loopOptions(options);
 }
-
+/*
+// Using similar function from rf_utils.h
 void RFScan::set_range() {
     bool chooseFixedOpt = false;
 
     options = {
-        {String("Fxd [" + String(bruceConfig.rfFreq) + "]").c_str(),
-         [=]() { bruceConfig.setRfScanRange(bruceConfig.rfScanRange, 1); }                                   },
-        {"Choose Fxd",                                               [&]() { chooseFixedOpt = true; }        },
-        {subghz_frequency_ranges[0],                                 [=]() { bruceConfig.setRfScanRange(0); }},
-        {subghz_frequency_ranges[1],                                 [=]() { bruceConfig.setRfScanRange(1); }},
-        {subghz_frequency_ranges[2],                                 [=]() { bruceConfig.setRfScanRange(2); }},
-        {subghz_frequency_ranges[3],                                 [=]() { bruceConfig.setRfScanRange(3); }},
+        {String("Fxd [" + String(bruceConfigPins.rfFreq) + "]").c_str(),
+         [=]() { bruceConfigPins.setRfScanRange(bruceConfigPins.rfScanRange, 1); } },
+        {"Choose Fxd",                                                   [&]() { chooseFixedOpt = true; } },
+        {subghz_frequency_ranges[0],                                     [=]() {
+bruceConfigPins.setRfScanRange(0); }}, {subghz_frequency_ranges[1],                                     [=]()
+{ bruceConfigPins.setRfScanRange(1); }}, {subghz_frequency_ranges[2], [=]() {
+bruceConfigPins.setRfScanRange(2); }}, {subghz_frequency_ranges[3],                                     [=]()
+{ bruceConfigPins.setRfScanRange(3); }},
     };
 
     loopOptions(options);
@@ -362,18 +370,18 @@ void RFScan::set_range() {
         int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
         for (int i = 0; i < arraySize; i++) {
             String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
-            options.emplace_back(tmp.c_str(), [=]() { bruceConfig.rfFreq = subghz_frequency_list[i]; });
+            options.emplace_back(tmp.c_str(), [=]() { bruceConfigPins.rfFreq = subghz_frequency_list[i]; });
             if (int(frequency * 100) == int(subghz_frequency_list[i] * 100)) ind = i;
         }
         loopOptions(options, ind);
         options.clear();
-        bruceConfig.setRfScanRange(bruceConfig.rfScanRange, 1);
+        bruceConfigPins.setRfScanRange(bruceConfigPins.rfScanRange, 1);
     }
 
-    if (bruceConfig.rfFxdFreq) displayTextLine("Scan freq set to " + String(bruceConfig.rfFreq));
-    else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfig.rfScanRange]));
+    if (bruceConfigPins.rfFxdFreq) displayTextLine("Scan freq set to " + String(bruceConfigPins.rfFreq));
+    else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
 }
-
+*/
 void display_info(RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title) {
     if (title != "") drawMainBorderWithTitle(title);
     else drawMainBorder();
@@ -388,8 +396,8 @@ void display_info(RfCodes received, int signals, bool ReadRAW, bool codesOnly, b
 
     if (autoSave) padprintln("Auto save: Enabled");
 
-    if (bruceConfig.rfFxdFreq) padprintln("Scanning: " + String(bruceConfig.rfFreq) + " MHz");
-    else padprintln("Scanning: " + String(subghz_frequency_ranges[bruceConfig.rfScanRange]));
+    if (bruceConfigPins.rfFxdFreq) padprintln("Scanning: " + String(bruceConfigPins.rfFreq) + " MHz");
+    else padprintln("Scanning: " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
 
     padprintln("Total signals found: " + String(signals));
 
@@ -433,7 +441,7 @@ void display_signal_data(RfCodes received) {
     if (received.protocol == "RAW") padprintln("CRC: " + String(hexString));
     else padprintln("Key: " + String(hexString));
 
-    // if (bruceConfig.rfModule == CC1101_SPI_MODULE) {
+    // if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
     //     int rssi = ELECHOUSE_cc1101.getRssi();
     //     tft.drawPixel(0, 0, 0);
     //     padprintln("Rssi: " + String(rssi));
@@ -509,7 +517,7 @@ bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bo
 String rf_scan(float start_freq, float stop_freq, int max_loops) {
     // derived from https://github.com/mcore1976/cc1101-tool/blob/main/cc1101-tool-esp32.ino#L480
 
-    if (bruceConfig.rfModule != CC1101_SPI_MODULE) {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
         displayError("rf scanning is available with CC1101 only", true);
         return ""; // only CC1101 is supported for this
     }
@@ -575,7 +583,7 @@ String RCSwitch_Read(float frequency, int max_loops, bool raw) {
     RCSwitch rcswitch = RCSwitch();
     RfCodes received;
 
-    if (!frequency) frequency = bruceConfig.rfFreq; // default from config
+    if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
 
     char hexString[64];
 
@@ -587,12 +595,12 @@ RestartRec:
 
     // init receive
     if (!initRfModule("rx", frequency)) return "";
-    if (bruceConfig.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
         rcswitch.enableReceive(bruceConfigPins.CC1101_bus.io0);
         Serial.println("CC1101 enableReceive()");
 
     } else {
-        rcswitch.enableReceive(bruceConfig.rfRx);
+        rcswitch.enableReceive(bruceConfigPins.rfRx);
     }
     while (!check(EscPress)) {
         if (rcswitch.available()) {

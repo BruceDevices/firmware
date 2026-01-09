@@ -97,34 +97,14 @@ void _setup_gpio() {
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
 
-    // setup Battery pin for reading voltage value
-    pinMode(BAT_PIN, INPUT);
-
     // Start with default IR, RF and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = PN532_I2C_MODULE;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_I2C_MODULE;
 
-    bruceConfig.irRx = RXLED;
-    bruceConfig.irTx = LED;
+    bruceConfigPins.irRx = RXLED;
+    bruceConfigPins.irTx = TXLED;
 
     Serial.begin(115200);
-}
-
-/***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    int percent = 0;
-    uint32_t v1 = analogReadMilliVolts(BAT_PIN);
-
-    if (v1 > 4150) {
-        percent = 0;
-    } else {
-        percent = map(v1, 3200, 4150, 0, 100);
-    }
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************
@@ -156,28 +136,28 @@ void InputHandler(void) {
         if (touch.read()) {
             auto t = touch.getPoint(0);
             tm = millis();
-            if (bruceConfig.rotation == 1) {
+            if (bruceConfigPins.rotation == 1) {
                 t.y = (tftHeight + 20) - t.y;
                 // t.x = tftWidth-t.x;
             }
-            if (bruceConfig.rotation == 3) {
+            if (bruceConfigPins.rotation == 3) {
                 // t.y = (tftHeight+20)-t.y;
                 t.x = tftWidth - t.x;
             }
             // Need to test the other orientations
 
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = t.y;
                 t.y = (tftHeight + 20) - tmp;
             }
 
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d",t.x, t.y, bruceConfig.rotation);
+            // Serial.printf("\nPressed x=%d , y=%d, rot: %d",t.x, t.y, bruceConfigPins.rotation);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;

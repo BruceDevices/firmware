@@ -40,7 +40,6 @@
 // touch screen XPT2046
 // Pins set on .ini file
 #define HAS_TOUCH 1
-
 // Set Main I2C Bus
 #define GROVE_SDA 17
 #define GROVE_SCL 18
@@ -50,8 +49,9 @@ static const uint8_t SCL = GROVE_SCL;
 // Serial
 #define SERIAL_TX 44
 #define SERIAL_RX 43
-
-#define LED 17
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
+#define TXLED 17
 #define RXLED 18
 
 static const uint8_t SS = SPI_SS_PIN;
@@ -97,7 +97,7 @@ static const uint8_t MISO = SPI_SCK_PIN;
 // Battery PIN
 #define PWR_EN_PIN 10
 #define PWR_ON_PIN 14
-#define BAT_PIN 5
+#define ANALOG_BAT_PIN 5
 
 // Mic
 #define PIN_CLK -1

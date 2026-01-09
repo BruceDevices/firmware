@@ -188,8 +188,6 @@ void drawWireguardStatus(int x, int y);
 
 void progressHandler(int progress, size_t total, String message = "Running, Wait");
 
-int getBattery() __attribute__((weak));
-
 bool __attribute__((weak)) isCharging();
 
 void drawBatteryStatus(uint8_t bat);

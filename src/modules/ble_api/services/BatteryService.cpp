@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "BatteryService.hpp"
 #include "ArduinoJson.h"
 #include <NimBLEDevice.h>
@@ -44,6 +45,5 @@ void BatteryService::setup(BLEServer *pServer) {
     );
 }
 
-void BatteryService::end() {
-    vTaskDelete(battery_task_handle);
-}
+void BatteryService::end() { vTaskDelete(battery_task_handle); }
+#endif
