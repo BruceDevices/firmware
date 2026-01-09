@@ -100,7 +100,7 @@
 					<h3 class="mt-3 mb-3 text-lg font-bold">📶 2.4/5Ghz Wi-Fi Attacks</h3>
 					<p>
 						Supports Evil Portal, Wardriving, EAPOL handshake capture, Deauth
-						<b><a href="https://github.com/pr3y/bruce/?tab=readme-ov-file#wifi" target="_blank">and more</a></b>.
+						<b><a href="https://github.com/BruceDevices/firmware/?tab=readme-ov-file#wifi" target="_blank">and more</a></b>.
 					</p>
 				</Card>
 				<Card size="xs">
@@ -131,11 +131,11 @@
 					Our new Release is out now! Update your device
 					<a href="https://bruce.computer/flasher" target="_blank"><b>now</b></a>
 				</p>
-				<Btn href="https://github.com/pr3y/Bruce/releases/tag/{VERSION}">Read Changelog</Btn>
+				<Btn href="https://github.com/BruceDevices/firmware/releases/tag/{VERSION}">Read Changelog</Btn>
 			</News>
 			<News title="Bruce PCB">
 				<p class="mb-4 text-[1.2rem]">Open Source Bruce PCB, fully compatible with Bruce</p>
-				<Btn href="https://github.com/pr3y/Bruce/tree/main/pcbs">Download</Btn>
+				<Btn href="https://github.com/BruceDevices/firmware/tree/main/pcbs">Download</Btn>
 				<Btn href="https://www.pcbway.com/project/shareproject/Bruce_PCB_Smoochiee_d6a0284b.html" outline className="max-sm:mt-2">Buy</Btn>
 			</News>
 		</div>
@@ -149,10 +149,10 @@
 	<div class="max-sm:flex max-sm:flex-col">
 		<h2 class="mb-5 text-2xl font-bold">Need more help?</h2>
 		<p>
-			Check out our <a href="https://wiki.bruce.computer/faq" target="_blank" rel="noopener noreferrer"><b>FAQ</b></a>!
+			Check out our <a href="https://wiki.bruce.computer/faq/" target="_blank" rel="noopener noreferrer"><b>FAQ</b></a>!
 		</p>
-		<Btn className="mt-5" href="https://discord.gg/WJ9XF9czVT">Join us on Discord!</Btn>
-		<Btn className="mt-5" href="https://forum.bruce.computer">Join our forum!</Btn>
+		<Btn className="mt-5 mr-2" href="https://discord.gg/WJ9XF9czVT">Join us on Discord!</Btn>
+		<Btn className="mt-5 ml-2" href="https://forum.bruce.computer">Join our forum!</Btn>
 	</div>
 </div>
 

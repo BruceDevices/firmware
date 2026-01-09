@@ -28,7 +28,7 @@
 					? latestVersionTag
 					: document.getElementById('otherReleaseDropdown').value;
 
-		const fileUrl = 'https://github.com/pr3y/Bruce/releases/download/' + releaseTag + '/Bruce-' + encodeURIComponent(file) + '.bin';
+		const fileUrl = 'https://github.com/BruceDevices/firmware/releases/download/' + releaseTag + '/Bruce-' + encodeURIComponent(file) + '.bin';
 
 		const link = document.createElement('a');
 		link.href = fileUrl;
