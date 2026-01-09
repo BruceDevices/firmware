@@ -106,7 +106,7 @@
 		{#if source != null && source != ''}
 			<a class="text-2xl font-bold" href={source}><p>Source code</p></a>
 		{/if}
-		<a class="text-2xl font-bold underline" target="_blank" href="https://github.com/pr3y/Bruce/edit/WebPage{filename}">
+		<a class="text-2xl font-bold underline" target="_blank" href="https://github.com/BruceDevices/firmware/edit/WebPage{filename}">
 			<p>Improve this page</p>
 		</a>
 	</div>

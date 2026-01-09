@@ -54,7 +54,7 @@
 				<NavLink href="/" selected={$current_page == Page.Home}>Home</NavLink>
 				<NavLink href="https://github.com/pr3y/Bruce" target="_blank">GitHub</NavLink>
 				<NavLink href="{base}/flasher" variant="install">Install</NavLink>
-				<NavLink href="https://github.com/pr3y/Bruce/wiki" target="_blank">Docs</NavLink>
+				<NavLink href="https://wiki.bruce.computer" target="_blank">Docs</NavLink>
 				<NavLink href="{base}/store" selected={$current_page == Page.AppStore}>App Store</NavLink>
 				<NavLink href="{base}/build_theme.html">Theme Builder</NavLink>
 				<NavLink href="{base}/my_bruce" selected={$current_page == Page.MyBruce}>Bruce Lab</NavLink>
@@ -70,7 +70,7 @@
 					<NavLink href={base} selected={$current_page == Page.Home}>Home</NavLink>
 					<NavLink href="https://github.com/pr3y/Bruce" target="_blank">GitHub</NavLink>
 					<NavLink href="{base}/flasher" variant="install">Install</NavLink>
-					<NavLink href="https://github.com/pr3y/Bruce/wiki" target="_blank">Docs</NavLink>
+					<NavLink href="https://wiki.bruce.computer" target="_blank">Docs</NavLink>
 					<NavLink href="{base}/boards">Boards</NavLink>
 					<!-- <Dropdown title="Bruce Lab"></Dropdown> -->
 					<NavLink href="{base}/store" selected={$current_page == Page.AppStore}>App Store</NavLink>

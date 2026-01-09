@@ -126,8 +126,8 @@
 		<br />
 		<h2 class="text-lg">
 			For <strong>Wiring Diagrams</strong> check the
-			<a href="https://github.com/pr3y/Bruce/tree/main/media/connections"><b>connections</b></a>
-			or <a href="https://github.com/pr3y/Bruce/wiki"><b>Wiki</b></a>!
+			<a href="https://github.com/BruceDevices/firmware/tree/main/media/connections"><b>connections</b></a>
+			or <a href="https://wiki.bruce.computer"><b>Wiki</b></a>!
 		</h2>
 		<h2 class="text-lg">Every feature is also listed on Github.</h2>
 	</div>

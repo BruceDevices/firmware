@@ -15,8 +15,8 @@ Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT).
 
 ## :bookmark_tabs: Wiki
 
-For more information on each function supported by Bruce, [read our wiki here](https://github.com/pr3y/Bruce/wiki).
-Also, [read our FAQ](https://github.com/pr3y/Bruce/wiki/FAQ)
+For more information on each function supported by Bruce, [read our wiki here](https://wiki.bruce.computer).
+Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 
 ## :clap: Acknowledgements
 

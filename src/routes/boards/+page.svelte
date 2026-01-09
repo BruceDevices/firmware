@@ -51,7 +51,7 @@
 		<!-- Action Buttons -->
 		<div class="flex flex-wrap justify-center gap-4 pt-8">
 			<a
-				href="https://github.com/pr3y/Bruce/tree/main/pcbs"
+				href="https://github.com/BruceDevices/firmware/tree/main/pcbs"
 				class="min-w-48 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-center font-bold text-white transition-all duration-300 hover:bg-white/20"
 			>
 				Download Gerber and BOM Files
@@ -63,7 +63,7 @@
 				Download Manual Build Files
 			</a>
 			<a
-				href="https://github.com/pr3y/Bruce/tree/main/pcbs/Bruce_PCB_smoochie/3d"
+				href="https://github.com/BruceDevices/firmware/tree/main/pcbs/Bruce_PCB_smoochie/3d"
 				class="min-w-48 rounded-md border border-white/20 bg-white/10 px-6 py-3 text-center font-bold text-white transition-all duration-300 hover:bg-white/20"
 			>
 				Download 3D case model
@@ -92,7 +92,7 @@
 		description="Compact PCB to use with m5sticks."
 	>
 		<div class="mt-13 flex justify-center">
-			<Btn href="https://github.com/pr3y/Bruce/tree/main/pcbs/M5Stick_Intermidiate_ultramarines">Download files</Btn>
+			<Btn href="https://github.com/BruceDevices/firmware/tree/main/pcbs/M5Stick_Intermidiate_ultramarines">Download files</Btn>
 		</div>
 	</BoardCard>
 
@@ -103,7 +103,7 @@
 		description="Pirata's PCB to m5sticks with NRF24 and CC1101 switches support."
 	>
 		<div class="flex justify-center">
-			<Btn href="https://github.com/pr3y/Bruce/tree/main/pcbs/StickCPlus_PCB_Pirata">Download files</Btn>
+			<Btn href="https://github.com/BruceDevices/firmware/tree/main/pcbs/StickCPlus_PCB_Pirata">Download files</Btn>
 		</div>
 	</BoardCard>
 </div>
