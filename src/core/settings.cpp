@@ -748,16 +748,6 @@ void addMifareKeyMenu() {
 **  Function: setClock
 **  Handles Menu to set timezone to NTP
 **********************************************************************/
-const char *ntpServer = "pool.ntp.org";
-long selectedTimezone;
-const int daylightOffset_sec = 0;
-int timeHour;
-
-TimeChangeRule BRST = {"BRST", Last, Sun, Oct, 0, timeHour};
-Timezone myTZ(BRST, BRST);
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, ntpServer, selectedTimezone, daylightOffset_sec);
 
 void setClock() {
     bool auto_mode = true;
@@ -766,102 +756,88 @@ void setClock() {
     RTC_TimeTypeDef TimeStruct;
     _rtc.GetBm8563Time();
 #endif
+#if defined(HAS_RTC_PCF85063A)
+    _rtc.GetPcf85063Time();
+#endif
+#endif
 
-    options = {
-        {"NTP Timezone", [&]() { auto_mode = true; } },
-        {"Manually set", [&]() { auto_mode = false; }},
-    };
+    options.clear();
+
+    options.push_back({"Automatic Time and Timezone", [&]() {
+                           bruceConfig.setTimeUpdateMode(TIME_UPDATE_MODE_AUTO_DETECT);
+                       }});
+
+    options.push_back({"Automatic Time Only", [&]() {
+                           bruceConfig.setTimeUpdateMode(TIME_UPDATE_MODE_AUTO_UPDATE_MANUAL_TIMEZONE);
+                       }});
+
+    // Only add Daylight Savings options if time update mode is Automatic Time Only
+    if (bruceConfig.timeUpdateMode == TIME_UPDATE_MODE_AUTO_UPDATE_MANUAL_TIMEZONE) {
+        options.push_back({("Daylight Savings " + String(bruceConfig.dst ? "On" : "Off")).c_str(), [&]() {
+                               bruceConfig.setDST(!bruceConfig.dst);
+                               updateClockTimezone();
+                               returnToMenu = true;
+                           }});
+    }
+
+    options.push_back({"Manually Set Time", [&]() {
+                           bruceConfig.setTimeUpdateMode(TIME_UPDATE_MODE_MANUAL);
+                       }});
+
+    options.push_back({(bruceConfig.clock24hr ? "24-Hour Format" : "12-Hour Format"), [&]() {
+                           bruceConfig.setClock24Hr(!bruceConfig.clock24hr);
+                           returnToMenu = true;
+                       }});
     addOptionToMainMenu();
     loopOptions(options);
 
     if (returnToMenu) return;
 
-    if (auto_mode) {
+    if (bruceConfig.timeUpdateMode != TIME_UPDATE_MODE_MANUAL) {
         if (!wifiConnected) wifiConnectMenu();
 
-        float selectedTimezone = bruceConfig.tmz; // Store current timezone as default
+        if (bruceConfig.timeUpdateMode == TIME_UPDATE_MODE_AUTO_UPDATE_MANUAL_TIMEZONE) {
+            struct TimezoneMapping {
+                const char *name;
+                float offset;
+            };
 
-        struct TimezoneMapping {
-            const char *name;
-            float offset;
-        };
+            constexpr float timezoneOffsets[] = {-12, -11, -10,  -9.5, -9,  -8,    -7, -6, -5,   -4,
+                                                 -3,  -2,  -1,   0,    0.5, 1,     2,  3,  3.5,  4,
+                                                 4.5, 5,   5.5,  5.75, 6,   6.5,   7,  8,  8.75, 9,
+                                                 9.5, 10,  10.5, 11,   12,  12.75, 13, 14};
 
-        constexpr TimezoneMapping timezoneMappings[] = {
-            {"UTC-12 (Baker Island, Howland Island)",     -12  },
-            {"UTC-11 (Niue, Pago Pago)",                  -11  },
-            {"UTC-10 (Honolulu, Papeete)",                -10  },
-            {"UTC-9 (Anchorage, Gambell)",                -9   },
-            {"UTC-9.5 (Marquesas Islands)",               -9.5 },
-            {"UTC-8 (Los Angeles, Vancouver, Tijuana)",   -8   },
-            {"UTC-7 (Denver, Phoenix, Edmonton)",         -7   },
-            {"UTC-6 (Mexico City, Chicago, Tegucigalpa)", -6   },
-            {"UTC-5 (New York, Toronto, Lima)",           -5   },
-            {"UTC-4 (Caracas, Santiago, La Paz)",         -4   },
-            {"UTC-3 (Brasilia, Sao Paulo, Montevideo)",   -3   },
-            {"UTC-2 (South Georgia, Mid-Atlantic)",       -2   },
-            {"UTC-1 (Azores, Cape Verde)",                -1   },
-            {"UTC+0 (London, Lisbon, Casablanca)",        0    },
-            {"UTC+0.5 (Tehran)",                          0.5  },
-            {"UTC+1 (Berlin, Paris, Rome)",               1    },
-            {"UTC+2 (Cairo, Athens, Johannesburg)",       2    },
-            {"UTC+3 (Moscow, Riyadh, Nairobi)",           3    },
-            {"UTC+3.5 (Tehran)",                          3.5  },
-            {"UTC+4 (Dubai, Baku, Muscat)",               4    },
-            {"UTC+4.5 (Kabul)",                           4.5  },
-            {"UTC+5 (Islamabad, Karachi, Tashkent)",      5    },
-            {"UTC+5.5 (New Delhi, Mumbai, Colombo)",      5.5  },
-            {"UTC+5.75 (Kathmandu)",                      5.75 },
-            {"UTC+6 (Dhaka, Almaty, Omsk)",               6    },
-            {"UTC+6.5 (Yangon, Cocos Islands)",           6.5  },
-            {"UTC+7 (Bangkok, Jakarta, Hanoi)",           7    },
-            {"UTC+8 (Beijing, Singapore, Perth)",         8    },
-            {"UTC+8.75 (Eucla)",                          8.75 },
-            {"UTC+9 (Tokyo, Seoul, Pyongyang)",           9    },
-            {"UTC+9.5 (Adelaide, Darwin)",                9.5  },
-            {"UTC+10 (Sydney, Melbourne, Vladivostok)",   10   },
-            {"UTC+10.5 (Lord Howe Island)",               10.5 },
-            {"UTC+11 (Solomon Islands, Nouméa)",          11   },
-            {"UTC+12 (Auckland, Fiji, Kamchatka)",        12   },
-            {"UTC+12.75 (Chatham Islands)",               12.75},
-            {"UTC+13 (Tonga, Phoenix Islands)",           13   },
-            {"UTC+14 (Kiritimati)",                       14   }
-        };
+            options.clear();
+            int idx = 0;
 
-        options.clear();
-        int idx = sizeof(timezoneMappings) / sizeof(timezoneMappings[0]);
-        int i = 0;
-        for (const auto &mapping : timezoneMappings) {
-            if (bruceConfig.tmz == mapping.offset) { idx = i; }
+            for (int i = 0; i < sizeof(timezoneOffsets) / sizeof(timezoneOffsets[0]); i++) {
+                float offset = timezoneOffsets[i];
+                String tzName = "UTC" + String(offset >= 0 ? "+" : "") + String(offset);
+                if (bruceConfig.tmz == offset * 3600) idx = i;
+                options.emplace_back(
+                    tzName.c_str(),
+                    [=]() { bruceConfig.setTmz(offset * 3600); },
+                    bruceConfig.tmz == offset * 3600
+                );
+            }
 
-            options.emplace_back(
-                mapping.name, [=, &mapping]() { bruceConfig.setTmz(mapping.offset); }, idx == i
-            );
-            ++i;
+            addOptionToMainMenu();
+
+            loopOptions(options, idx);
+
+            // if (returnToMenu) return;
+
+            if (!updateClockTimezone()) {
+                displayError("Fail getting Time/Date");
+                return;
+            }
+
+        } else {
+            if (!updateClockTimezone(true)) {
+                displayError("Fail getting Time/Date");
+                return;
+            }
         }
-
-        addOptionToMainMenu();
-
-        loopOptions(options, idx);
-
-        if (returnToMenu) return;
-
-        timeClient.setTimeOffset(bruceConfig.tmz * 3600);
-        timeClient.begin();
-        timeClient.update();
-        localTime = myTZ.toLocal(timeClient.getEpochTime());
-
-#if defined(HAS_RTC)
-        struct tm *timeinfo = localtime(&localTime);
-        TimeStruct.Hours = timeinfo->tm_hour;
-        TimeStruct.Minutes = timeinfo->tm_min;
-        TimeStruct.Seconds = timeinfo->tm_sec;
-        _rtc.SetTime(&TimeStruct);
-#else
-        rtc.setTime(timeClient.getEpochTime());
-#endif
-
-        clock_set = true;
-        runClockLoop();
     } else {
         int hr, mn, am;
         options = {};
@@ -897,7 +873,6 @@ void setClock() {
         rtc.setTime(0, mn, hr + am, 20, 06, 2024); // send me a gift, @Pirata!
 #endif
         clock_set = true;
-        runClockLoop();
     }
 }
 

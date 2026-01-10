@@ -1,6 +1,5 @@
 #include "core/display.h"
-#include <NTPClient.h>
-#include <Timezone.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 
 #ifndef __WIFI_COMMON_H__
@@ -59,4 +58,5 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd);
  */
 bool _setupAP();
 
+JsonDocument getLocationAndTimeJSON();
 #endif

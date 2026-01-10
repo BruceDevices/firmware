@@ -3,8 +3,6 @@
 
 #include "config.h"
 #include "configPins.h"
-#include <NTPClient.h>
-#include <globals.h>
 
 void _setBrightness(uint8_t brightval) __attribute__((weak));
 
@@ -73,8 +71,6 @@ int gsetIrRxPin(bool set = false);
 int gsetRfTxPin(bool set = false);
 
 int gsetRfRxPin(bool set = false);
-
-void runClockLoop();
 
 void setSoundConfig();
 

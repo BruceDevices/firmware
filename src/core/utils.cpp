@@ -56,24 +56,57 @@ int getBattery() {
     return 0;
 }
 
-void updateClockTimezone() {
-    timeClient.begin();
-    timeClient.update();
+bool updateClockTimezone(bool print) {
+    Serial.println("updateClockTimezone: Updating Time");
+    JsonDocument TimeNPlace = getLocationAndTimeJSON();
+    serializeJsonPretty(TimeNPlace, Serial);
+    if (TimeNPlace["epoch"].isNull()) {
+        Serial.println("updateClockTimezone: Fail getting Time/Date");
+        return false;
+    }
+    // Only update timezone if in auto-detect mode
+    if (bruceConfig.timeUpdateMode == TIME_UPDATE_MODE_AUTO_DETECT) {
+        bruceConfig.setTmz(TimeNPlace["offset"].as<int>() | 0);
+    }
 
-    timeClient.setTimeOffset(bruceConfig.tmz * 3600);
-
-    localTime = myTZ.toLocal(timeClient.getEpochTime());
+    localTime = TimeNPlace["epoch"].as<time_t>() + bruceConfig.tmz +
+                (bruceConfig.timeUpdateMode != TIME_UPDATE_MODE_AUTO_DETECT && bruceConfig.dst ? 3600 : 0);
 
 #if !defined(HAS_RTC)
     rtc.setTime(timeClient.getEpochTime());
     updateTimeStr(rtc.getTimeStruct());
     clock_set = true;
 #endif
+
+    if (print) {
+        drawMainBorderWithTitle("Time Information");
+        padprintln("");
+        // Loop through all JSON fields dynamically
+        for (JsonPair kv : TimeNPlace.as<JsonObject>()) {
+            String key = kv.key().c_str();
+            String value = kv.value().as<String>();
+            padprintln(key + ": " + value);
+        }
+
+        delay(200);
+        while (!check(AnyKeyPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    return true;
 }
 
-void updateTimeStr(struct tm timeInfo) {
-    // Atualiza timeStr com a hora e minuto
-    snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+void updateTimeStr(struct tm timeInfo) { formatTimeStr(timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec); }
+
+void formatTimeStr(int hours, int minutes, int seconds) {
+    if (bruceConfig.clock24hr) {
+        // Use 24 hour format
+        snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", hours, minutes, seconds);
+    } else {
+        // Use 12 hour format with AM/PM
+        int hour12 = (hours == 0) ? 12 : (hours > 12) ? hours - 12 : hours;
+        const char *ampm = (hours < 12) ? "AM" : "PM";
+
+        snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d %s", hour12, minutes, seconds, ampm);
+    }
 }
 
 void showDeviceInfo() {

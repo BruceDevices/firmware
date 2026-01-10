@@ -14,7 +14,10 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["dimmerSet"] = dimmerSet;
     setting["bright"] = bright;
+    setting["timeUpdateMode"] = timeUpdateMode;
     setting["tmz"] = tmz;
+    setting["dst"] = dst;
+    setting["clock24hr"] = clock24hr;
     setting["soundEnabled"] = soundEnabled;
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
@@ -155,8 +158,26 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["timeUpdateMode"].isNull()) {
+        timeUpdateMode = setting["timeUpdateMode"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
     if (!setting["tmz"].isNull()) {
-        tmz = setting["tmz"].as<float>();
+        tmz = setting["tmz"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["dst"].isNull()) {
+        dst = setting["dst"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["clock24hr"].isNull()) {
+        clock24hr = setting["clock24hr"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -455,14 +476,35 @@ void BruceConfig::validateBrightValue() {
     if (bright > 100) bright = 100;
 }
 
-void BruceConfig::setTmz(float value) {
+void BruceConfig::setTimeUpdateMode(int value) {
+    timeUpdateMode = value;
+    validateTimeUpdateModeValue();
+    saveFile();
+}
+
+void BruceConfig::validateTimeUpdateModeValue() {
+    if (timeUpdateMode < 0 || timeUpdateMode > 2)
+        timeUpdateMode = 0; // 0 = Auto Detect Timezone, 1 = Auto Update + Manual Timezone, 2 = Manual
+}
+
+void BruceConfig::setTmz(int value) {
     tmz = value;
     validateTmzValue();
     saveFile();
 }
 
 void BruceConfig::validateTmzValue() {
-    if (tmz < -12 || tmz > 14) tmz = 0;
+    if (tmz < -43200 || tmz > 50400) tmz = 0; // Between -12 and 14 hours
+}
+
+void BruceConfig::setDST(bool value) {
+    dst = value;
+    saveFile();
+}
+
+void BruceConfig::setClock24Hr(bool value) {
+    clock24hr = value;
+    saveFile();
 }
 
 void BruceConfig::setSoundEnabled(int value) {
