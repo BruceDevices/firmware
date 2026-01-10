@@ -223,20 +223,29 @@ void powerDownCC1101() {
     ELECHOUSE_cc1101.goSleep();
 }
 
+/*********************************************************************
+** Function: checkReboot
+** location: mykeyboard.cpp
+** Btn logic to tornoff the device (name is odd btw)
+**********************************************************************/
 void checkReboot() {
 #ifdef T_EMBED_1101
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (digitalRead(BK_BTN) == BTN_ACT) {
         uint32_t time_count = millis();
         while (digitalRead(BK_BTN) == BTN_ACT) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("DEEP SLEEP IN 3/3", 1);
+                    tft.fillRect(tftWidth / 2 - textWidth / 2, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 countDown = (millis() - time_count) / 1000 + 1;
                 if (countDown < 4)
-                    tft.drawCentreString("DeepSleep in " + String(countDown) + "/3", tftWidth / 2, 12, 1);
+                    tft.drawCentreString("DEEP SLEEP IN " + String(countDown) + "/3", tftWidth / 2, 12, 1);
                 else {
                     tft.fillScreen(bruceConfig.bgColor);
                     while (digitalRead(BK_BTN) == BTN_ACT);
@@ -254,11 +263,14 @@ void checkReboot() {
 
         // Clear text after releasing the button
         delay(30);
-        if (millis() - time_count > 500)
+        if (millis() - time_count > 500) {
             tft.fillRect(tftWidth / 2 - 9 * LW, 12, 18 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
     }
 #endif
 }
+
 /***************************************************************************************
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging
