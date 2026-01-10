@@ -346,14 +346,22 @@ duk_ret_t native_httpFetch(duk_context *ctx) {
         }
         startMillis = millis();
     }
-    if (payload != NULL) { payload[bytesRead] = '\0'; }
 
     if (returnResponseType == 0) {
-        duk_buffer_to_string(ctx, -1);
+        void *buffer_data = duk_get_buffer_data(ctx, -1, NULL);
+        if (buffer_data != NULL && bytesRead > 0) {
+            // Create string from buffer data while buffer is still on stack
+            duk_push_lstring(ctx, (const char *)buffer_data, bytesRead);
+            duk_remove(ctx, -2); // Remove the buffer, keep the string
+        } else {
+            duk_pop(ctx);             // Remove buffer from stack
+            duk_push_string(ctx, ""); // Empty string if no data
+        }
     } else {
-        duk_push_buffer_object(ctx, -1, 0, payloadSize, DUK_BUFOBJ_UINT8ARRAY);
+        duk_push_buffer_object(ctx, -1, 0, bytesRead, DUK_BUFOBJ_UINT8ARRAY);
     }
     duk_put_prop_string(ctx, obj_idx, "body");
+    bduk_put_prop(ctx, obj_idx, "length", duk_push_int, contentLength);
     bduk_put_prop(ctx, obj_idx, "response", duk_push_int, httpResponseCode);
     bduk_put_prop(ctx, obj_idx, "status", duk_push_int, httpResponseCode);
     bduk_put_prop(ctx, obj_idx, "ok", duk_push_boolean, httpResponseCode >= 200 && httpResponseCode < 300);
