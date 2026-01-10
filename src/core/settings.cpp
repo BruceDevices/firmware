@@ -1149,9 +1149,10 @@ void setStartupApp() {
         {"None", [=]() { bruceConfig.setStartupApp(""); }, bruceConfig.startupApp == ""}
     };
 
-    int index = 1;
+    int index = 0;
     for (String appName : startupApp.getAppNames()) {
-        if (bruceConfig.startupApp == appName) idx = index++;
+        index++;
+        if (bruceConfig.startupApp == appName) idx = index;
 
         options.push_back(
             {appName.c_str(),
