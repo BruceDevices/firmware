@@ -172,6 +172,7 @@ static const uint8_t RX = SERIAL_RX;
 #define HAS_RTC
 #define RTC_SDA GROVE_SDA
 #define RTC_SCL GROVE_SCL
+#define RTC_INTERRUPT_PIN 1
 #define HAS_RTC_PCF85063A
 
 // BadUSB
