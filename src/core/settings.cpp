@@ -754,6 +754,7 @@ void setClock() {
 
 #if defined(HAS_RTC)
     RTC_TimeTypeDef TimeStruct;
+#if defined(HAS_RTC_BM8563)
     _rtc.GetBm8563Time();
 #endif
 #if defined(HAS_RTC_PCF85063A)
@@ -880,7 +881,12 @@ void runClockLoop() {
     int tmp = 0;
 
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_BM8563)
     _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+    _rtc.GetPcf85063Time();
+#endif
     _rtc.GetTime(&_time);
 #endif
 
@@ -890,7 +896,9 @@ void runClockLoop() {
 
     for (;;) {
         if (millis() - tmp > 1000) {
-#if !defined(HAS_RTC)
+#if defined(HAS_RTC)
+            updateTimeStr(_rtc.getTimeStruct());
+#else
             updateTimeStr(rtc.getTimeStruct());
 #endif
             Serial.print("Current time: ");
@@ -913,7 +921,12 @@ void runClockLoop() {
             }
             tft.setTextSize(f_size);
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_BM8563)
             _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+            _rtc.GetPcf85063Time();
+#endif
             _rtc.GetTime(&_time);
             char timeString[9]; // Buffer para armazenar a string formatada "HH:MM:SS"
             snprintf(

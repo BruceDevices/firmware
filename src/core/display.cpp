@@ -791,15 +791,13 @@ void drawStatusBar() {
     if (clock_set) {
         int clock_fontsize = 1; // Font size of the clock / BRUCE + BRUCE_VERSION
         setTftDisplay(12, 12, bruceConfig.priColor, clock_fontsize, bruceConfig.bgColor);
+        tft.fillRect(12, 12, 100, clock_fontsize * LH, bruceConfig.bgColor);
 #if defined(HAS_RTC)
-        _rtc.GetTime(&_time);
-        snprintf(timeStr, sizeof(timeStr), "%02d:%02d", _time.Hours, _time.Minutes);
-        tft.print(timeStr);
+        updateTimeStr(_rtc.getTimeStruct());
 #else
         updateTimeStr(rtc.getTimeStruct());
-        tft.fillRect(12, 12, 100, clock_fontsize * LH, bruceConfig.bgColor);
-        tft.print(timeStr);
 #endif
+        tft.print(timeStr);
     } else {
         setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
         tft.print("BRUCE " + String(BRUCE_VERSION));
