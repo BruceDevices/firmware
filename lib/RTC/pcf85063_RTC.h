@@ -58,7 +58,7 @@ public:
     uint8_t asc[14];
 
 private:
-    TwoWire *wr = &Wire1;
+    TwoWire *wr = &Wire;
     void Bcd2asc(void);
     void DataMask();
     void Str2Time(void);
