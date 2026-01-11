@@ -8,6 +8,10 @@
 #include <TouchDrvCSTXXX.hpp>
 TouchDrvCSTXXX touch;
 
+// Keyboard controller TCA8418
+#include <Adafruit_TCA8418.h>
+Adafruit_TCA8418 *keyboard;
+
 // Pin definitions for T-Deck Pro E-Paper
 #define BOARD_I2C_SDA 13
 #define BOARD_I2C_SCL 14
@@ -16,7 +20,7 @@ TouchDrvCSTXXX touch;
 #define BOARD_KEYBOARD_INT 15
 #define BOARD_KEYBOARD_LED 42
 #define PIN_POWER_ON 10
-#define SEL_BTN 0  // Placeholder for keyboard function key
+#define SEL_BTN 0  // Placeholder for function key
 
 // I2C addresses
 #define CST328_SLAVE_ADDRESS 0x1A
@@ -24,7 +28,7 @@ TouchDrvCSTXXX touch;
 #define BQ25896_CHARGER_ADDRESS 0x6B
 #define BQ27220_FUEL_GAUGE_ADDRESS 0x55
 
-// E-Paper display pins (already defined in INI)
+// E-Paper display pins
 #define EPD_BUSY 37
 #define EPD_DC 35
 #define EPD_CS 34
@@ -35,50 +39,123 @@ struct TouchPoint {
 };
 
 // Keyboard state variables
-static uint8_t lastKeyValue = 0;
-static unsigned long lastKeyTime = 0;
-static bool keyboardInitialized = false;
+bool fn_key_pressed = false;
+bool shift_key_pressed = false;
+bool caps_lock = false;
+
+// T-Deck Pro keyboard matrix: 4 rows x 10 columns (40 keys)
+// Based on standard QWERTY layout similar to T-LoRa Pager
+#define KB_ROWS 4
+#define KB_COLS 10
+
+struct KeyValue_t {
+    const char value_first;   // Normal key
+    const char value_second;  // Shift key
+    const char value_third;   // Fn key
+};
+
+// T-Deck Pro QWERTY Keymap
+// Row 0: Q W E R T Y U I O P
+// Row 1: A S D F G H J K L Enter
+// Row 2: Fn Z X C V B N M Shift Backspace
+// Row 3: Space (spanning multiple columns)
+const KeyValue_t _key_value_map[KB_ROWS][KB_COLS] = {
+    // Row 0: Top row - QWERTYUIOP
+    {{'q', 'Q', '1'},
+     {'w', 'W', '2'},
+     {'e', 'E', '3'},
+     {'r', 'R', '4'},
+     {'t', 'T', '5'},
+     {'y', 'Y', '6'},
+     {'u', 'U', '7'},
+     {'i', 'I', '8'},
+     {'o', 'O', '9'},
+     {'p', 'P', '0'}},
+
+    // Row 1: Middle row - ASDFGHJKL + Enter
+    {{'a', 'A', '!'},
+     {'s', 'S', '@'},
+     {'d', 'D', '#'},
+     {'f', 'F', '$'},
+     {'g', 'G', '%'},
+     {'h', 'H', '^'},
+     {'j', 'J', '&'},
+     {'k', 'K', '*'},
+     {'l', 'L', '('},
+     {KEY_ENTER, KEY_ENTER, ')'}},
+
+    // Row 2: Bottom letter row - Fn + ZXCVBNM + Shift + Backspace
+    {{KEY_FN, KEY_FN, KEY_FN},
+     {'z', 'Z', '-'},
+     {'x', 'X', '_'},
+     {'c', 'C', '='},
+     {'v', 'V', '+'},
+     {'b', 'B', '['},
+     {'n', 'N', ']'},
+     {'m', 'M', ';'},
+     {KEY_SHIFT, KEY_SHIFT, CAPS_LOCK},
+     {KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE}},
+
+    // Row 3: Space bar
+    {{' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {' ', ' ', ' '},
+     {',', '<', ','},
+     {'.', '>', '.'},
+     {'/', '?', '/'}}
+};
 
 /***************************************************************************************
-** Function name: initTCA8418Keyboard()
-** Description:   Initialize TCA8418 keyboard controller
+** Function name: getKeyChar
+** Description:   Get character based on modifier keys
 ***************************************************************************************/
-bool initTCA8418Keyboard() {
-    // Basic TCA8418 initialization
-    // For full keyboard support, a proper TCA8418 library would be needed
-    Wire.beginTransmission(TCA8418_KEYBOARD_ADDRESS);
-    if (Wire.endTransmission() == 0) {
-        Serial.println("TCA8418 Keyboard found");
-        // TODO: Add proper TCA8418 initialization sequence
-        // This would require setting up:
-        // - GPIO configuration
-        // - Key event FIFO
-        // - Interrupt configuration
-        // - Debounce settings
-        keyboardInitialized = true;
-        return true;
+char getKeyChar(uint8_t k) {
+    if (k >= KB_ROWS * KB_COLS) return '\0';
+
+    char keyVal;
+    uint8_t row = k / KB_COLS;
+    uint8_t col = k % KB_COLS;
+
+    if (fn_key_pressed) {
+        keyVal = _key_value_map[row][col].value_third;
+    } else if (shift_key_pressed ^ caps_lock) {
+        keyVal = _key_value_map[row][col].value_second;
     } else {
-        Serial.println("TCA8418 Keyboard NOT found");
-        keyboardInitialized = false;
-        return false;
+        keyVal = _key_value_map[row][col].value_first;
     }
+    return keyVal;
 }
 
 /***************************************************************************************
-** Function name: readTCA8418Key()
-** Description:   Read key from TCA8418 keyboard
-** Returns:       Key code or 0 if no key pressed
+** Function name: handleSpecialKeys
+** Description:   Handle Fn, Shift, and Caps Lock keys
+** Returns:       1 if special key handled, 0 otherwise
 ***************************************************************************************/
-uint8_t readTCA8418Key() {
-    if (!keyboardInitialized) return 0;
+int handleSpecialKeys(uint8_t k, bool pressed) {
+    if (k >= KB_ROWS * KB_COLS) return 0;
 
-    // TODO: Implement proper TCA8418 key reading
-    // This would require:
-    // - Reading from KEY_EVENT_A register (0x09)
-    // - Processing key codes
-    // - Converting to ASCII
+    char keyVal = _key_value_map[k / KB_COLS][k % KB_COLS].value_first;
 
-    // For now, return placeholder
+    switch (keyVal) {
+        case KEY_FN:
+            fn_key_pressed = pressed;
+            return 1;
+
+        case KEY_SHIFT:
+            shift_key_pressed = pressed;
+            // Fn + Shift = Caps Lock toggle
+            if (fn_key_pressed && shift_key_pressed) {
+                caps_lock = !caps_lock;
+            }
+            return 1;
+
+        default:
+            break;
+    }
     return 0;
 }
 
@@ -107,7 +184,7 @@ void _setup_gpio() {
     touch.setPins(BOARD_TOUCH_RST, BOARD_TOUCH_INT);
     if (touch.begin(Wire, CST328_SLAVE_ADDRESS, BOARD_I2C_SDA, BOARD_I2C_SCL)) {
         Serial.println("CST328 Touch initialized");
-        // Set coordinates for 320x240 E-Paper in landscape
+        // Set coordinates for 320x240 E-Paper in landscape (rotation 1)
         touch.setMaxCoordinates(320, 240);
         touch.setSwapXY(false);
         touch.setMirrorXY(false, false);
@@ -120,8 +197,15 @@ void _setup_gpio() {
     pinMode(BOARD_KEYBOARD_LED, OUTPUT);
     digitalWrite(BOARD_KEYBOARD_LED, LOW);
 
-    if (!initTCA8418Keyboard()) {
-        Serial.println("Warning: Keyboard initialization failed");
+    keyboard = new Adafruit_TCA8418();
+    if (!keyboard->begin(TCA8418_KEYBOARD_ADDRESS, &Wire)) {
+        Serial.println("Failed to find TCA8418 Keyboard");
+    } else {
+        Serial.println("TCA8418 Keyboard initialized successfully");
+        // Configure keyboard matrix: 4 rows, 10 columns
+        keyboard->matrix(KB_ROWS, KB_COLS);
+        // Clear any pending events
+        keyboard->flush();
     }
 
     // Initialize placeholder button
@@ -151,34 +235,40 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
     // E-Paper has no backlight, so no PWM setup needed
-    // Keyboard LED could be used for status indication
+    // Turn on keyboard LED for status indication
+    digitalWrite(BOARD_KEYBOARD_LED, HIGH);
+    delay(500);
     digitalWrite(BOARD_KEYBOARD_LED, LOW);
 }
 
 /***************************************************************************************
 ** Function name: _setBrightness
 ** Location: settings.cpp
-** Description:   Set brightness (not applicable for E-Paper)
+** Description:   Set brightness (controls keyboard LED for E-Paper)
 ***************************************************************************************/
 void _setBrightness(uint8_t brightval) {
     // E-Paper displays have no backlight
-    // This function is a no-op for E-Paper
-    // Could be used to control keyboard LED brightness instead
+    // Use keyboard LED to indicate brightness setting
+    if (brightval > 0) {
+        analogWrite(BOARD_KEYBOARD_LED, map(brightval, 0, 100, 0, 255));
+    } else {
+        digitalWrite(BOARD_KEYBOARD_LED, LOW);
+    }
 }
 
 /***************************************************************************************
 ** Function name: getBattery
 ** Location: display.cpp
-** Description:   Get battery percentage from BQ27220 fuel gauge
+** Description:   Get battery percentage from ADC
 ***************************************************************************************/
 int getBattery() {
-    // TODO: Implement BQ27220 fuel gauge reading
+    // TODO: Implement BQ27220 fuel gauge reading for accurate percentage
     // For now, use simple ADC reading from battery pin
     int adcValue = analogRead(4); // ANALOG_BAT_PIN
 
     // Simple voltage divider calculation
-    // Adjust these values based on actual voltage divider
-    float voltage = (adcValue / 4095.0) * 3.3 * 2.0; // Assuming 1:1 divider
+    // Adjust multiplier based on actual voltage divider ratio
+    float voltage = (adcValue / 4095.0) * 3.3 * 2.0;
 
     // LiPo voltage range: 3.3V (0%) to 4.2V (100%)
     int percent = ((voltage - 3.3) / (4.2 - 3.3)) * 100;
@@ -203,16 +293,73 @@ bool isCharging() {
 ***************************************************************************************/
 void InputHandler(void) {
     static unsigned long lastInputTime = millis();
+    static unsigned long lastKeyTime = millis();
     TouchPoint t;
     uint8_t touched = 0;
-    uint8_t keyValue = 0;
 
-    // Check touch input
-    if (touch.isPressed()) {
-        touched = touch.getPoint(&t.x, &t.y);
+    // Check keyboard input first (higher priority)
+    if (keyboard->available() > 0) {
+        int keyEvent = keyboard->getEvent();
+        bool pressed = keyEvent & 0x80;  // Bit 7: 1=pressed, 0=released
+        uint8_t keyValue = keyEvent & 0x7F;  // Bits 0-6: key position
+        keyValue--;  // Adjust for 0-based indexing
 
-        if (touched) {
-            if (millis() - lastInputTime > 100) { // Debounce 100ms
+        if (keyValue < KB_ROWS * KB_COLS) {
+            // Handle special keys (Fn, Shift, Caps Lock)
+            if (handleSpecialKeys(keyValue, pressed) > 0) {
+                lastKeyTime = millis();
+                return;
+            }
+
+            // Get character for this key
+            char keyChar = getKeyChar(keyValue);
+
+            if (pressed && keyChar != '\0') {
+                if (!wakeUpScreen()) {
+                    AnyKeyPress = true;
+                    KeyStroke.Clear();
+                    KeyStroke.hid_keys.push_back(keyChar);
+
+                    // Handle special characters
+                    if (keyChar == KEY_BACKSPACE) {
+                        KeyStroke.del = true;
+                        EscPress = true;
+                    }
+                    if (keyChar == KEY_ENTER) {
+                        KeyStroke.enter = true;
+                        SelPress = true;
+                    }
+                    if (keyChar == KEY_FN) {
+                        KeyStroke.fn = true;
+                    }
+
+                    KeyStroke.word.push_back(keyChar);
+                    KeyStroke.pressed = true;
+
+                    Serial.printf("Key: '%c' (0x%02X) at pos %d\n", keyChar, keyChar, keyValue);
+
+                    // Brief LED blink for feedback
+                    digitalWrite(BOARD_KEYBOARD_LED, HIGH);
+                    delay(20);
+                    digitalWrite(BOARD_KEYBOARD_LED, LOW);
+                }
+                lastKeyTime = millis();
+                return;
+            }
+        }
+    } else {
+        // Clear keystroke if no keys in buffer
+        if (millis() - lastKeyTime > 100) {
+            KeyStroke.pressed = false;
+        }
+    }
+
+    // Check touch input (lower priority, only if no keyboard input)
+    if (millis() - lastInputTime > 100) { // Debounce 100ms
+        if (touch.isPressed()) {
+            touched = touch.getPoint(&t.x, &t.y);
+
+            if (touched) {
                 lastInputTime = millis();
 
                 if (!wakeUpScreen()) {
@@ -227,38 +374,6 @@ void InputHandler(void) {
                     return; // Screen was asleep, just wake it
                 }
             }
-        }
-    }
-
-    // Check keyboard input
-    if (keyboardInitialized) {
-        keyValue = readTCA8418Key();
-
-        if (keyValue != 0 && keyValue != lastKeyValue) {
-            lastKeyValue = keyValue;
-            lastKeyTime = millis();
-
-            if (!wakeUpScreen()) {
-                AnyKeyPress = true;
-                KeyStroke.Clear();
-                KeyStroke.hid_keys.push_back(keyValue);
-
-                // Map special keys
-                if (keyValue == 0x08) KeyStroke.del = true;  // Backspace
-                if (keyValue == 0x0D) KeyStroke.enter = true; // Enter
-                if (keyValue == 0x1B) EscPress = true;  // Escape
-                if (keyValue == ' ') KeyStroke.exit_key = true;
-
-                KeyStroke.word.push_back(keyValue);
-                KeyStroke.pressed = true;
-
-                Serial.printf("Key pressed: 0x%02X\n", keyValue);
-            } else {
-                return; // Screen was asleep, just wake it
-            }
-        } else if (millis() - lastKeyTime > 100) {
-            lastKeyValue = 0;
-            KeyStroke.pressed = false;
         }
     }
 
@@ -283,9 +398,13 @@ void InputHandler(void) {
 ** Description:   Power off the device
 ***************************************************************************************/
 void powerOff() {
+    // Turn off keyboard LED
+    digitalWrite(BOARD_KEYBOARD_LED, LOW);
+
     // Set power pin low to turn off
     digitalWrite(PIN_POWER_ON, LOW);
     delay(1000);
+
     // If still running, enter deep sleep
     esp_deep_sleep_start();
 }
@@ -296,5 +415,6 @@ void powerOff() {
 ** Description:   Check for reboot condition
 ***************************************************************************************/
 void checkReboot() {
-    // Could implement long-press detection here
+    // Could implement long-press detection here for reboot/reset
+    // For now, no-op
 }

@@ -62,6 +62,39 @@ This board configuration is experimental and has significant limitations due to 
 - **Power Control**: GPIO 10
 - **Battery ADC**: GPIO 4
 
+## Keyboard Layout
+
+The T-Deck Pro features a 40-key QWERTY keyboard (4 rows × 10 columns) with three layers:
+
+### Normal Layer (Default)
+```
+Row 0: q w e r t y u i o p
+Row 1: a s d f g h j k l ↵
+Row 2: Fn z x c v b n m ⇧ ⌫
+Row 3: [     Space Bar     ] , . /
+```
+
+### Shift Layer (Hold Shift)
+```
+Row 0: Q W E R T Y U I O P
+Row 1: A S D F G H J K L ↵
+Row 2: Fn Z X C V B N M ⇧ ⌫
+Row 3: [     Space Bar     ] < > ?
+```
+
+### Fn Layer (Hold Fn)
+```
+Row 0: 1 2 3 4 5 6 7 8 9 0
+Row 1: ! @ # $ % ^ & * ( )
+Row 2: Fn - _ = + [ ] ; ⇪ ⌫
+Row 3: [     Space Bar     ] , . /
+```
+
+**Special Key Combinations:**
+- **Fn + Shift** = Toggle Caps Lock (⇪)
+- **Caps Lock** affects letter keys only (numbers/symbols unaffected)
+- **Keyboard LED** provides visual feedback on key presses
+
 ## Known Limitations
 
 ### E-Paper Display Limitations
@@ -86,23 +119,28 @@ This board configuration is experimental and has significant limitations due to 
 ### Current Implementation Status
 
 ✅ **Working:**
-- Touch input (CST328)
+- Touch input (CST328 capacitive touchscreen)
+- **Keyboard input (TCA8418 QWERTY keyboard) - NEW!**
+  - Full QWERTY layout with 40 keys
+  - Fn, Shift, and Caps Lock support
+  - Key event handling with LED feedback
+  - Debouncing and proper key press/release detection
 - Basic GPIO setup
 - Power management
 - SD Card support
-- LoRa module support
+- LoRa module support (SX1262)
 
 ⚠️ **Partially Working:**
 - Display output (using TFT_eSPI with ST7789 driver as placeholder)
   - **CRITICAL**: E-Paper requires GxEPD2 library, not TFT_eSPI
   - Current config will NOT work correctly with E-Paper
   - This is a temporary workaround for compilation
+- Battery monitoring (basic ADC reading, needs BQ27220 integration)
 
 ❌ **Not Implemented:**
-- Keyboard input (TCA8418 needs proper driver library)
 - 4G Modem (A7682E not supported in Bruce)
 - Gyroscope (BHI260AP not used in Bruce)
-- Battery fuel gauge (BQ27220 reading)
+- Battery fuel gauge (BQ27220 precise reading)
 - Charger status (BQ25896 reading)
 
 ## Required Changes for Full E-Paper Support
@@ -120,12 +158,7 @@ To properly support the E-Paper display, the following major changes are needed:
    - Use partial refreshes where possible
    - Convert color schemes to high-contrast B&W
 
-3. **Add TCA8418 Keyboard Driver**
-   - Implement full TCA8418 driver or add library dependency
-   - Map keyboard matrix to ASCII codes
-   - Handle function keys and modifiers
-
-4. **Add Battery Management**
+3. **Add Battery Management** ✅ **Keyboard Driver Complete!**
    - Implement BQ27220 fuel gauge reading
    - Implement BQ25896 charger status
    - Proper battery percentage calculation
