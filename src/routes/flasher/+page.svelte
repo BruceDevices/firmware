@@ -160,7 +160,7 @@
 </script>
 
 <svelte:head>
-	<script type="module" src="/esp-web-tools-10.1.1/dist/web/install-button.js?module"></script>
+	<script type="module" src="/vendor/bruce-esp-web-tools/web/install-button.js?module"></script>
 </svelte:head>
 
 <section class="relative flex h-[500px] w-full flex-col overflow-hidden pr-4 pl-4 md:flex-row">

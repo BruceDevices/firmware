@@ -11,7 +11,11 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint ."
+		"lint": "prettier --check . && eslint .",
+		"copy-dist": "mkdirp static/vendor/bruce-esp-web-tools && cpx \"node_modules/bruce-esp-web-tools/dist/**/*\" static/vendor/bruce-esp-web-tools",
+		"prebuild": "npm run copy-dist",
+		"predev": "npm run copy-dist",
+		"postinstall": "npm run copy-dist"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.0",
@@ -21,11 +25,14 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.3",
 		"@tailwindcss/typography": "^0.5.15",
 		"@tailwindcss/vite": "^4.0.0",
+		"cpx": "^1.5.0",
+		"cross-env": "^10.1.0",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
 		"globals": "^17.0.0",
 		"mdsvex": "^0.12.6",
+		"mkdirp": "^3.0.1",
 		"prettier": "^3.4.2",
 		"prettier-plugin-svelte": "^3.3.3",
 		"prettier-plugin-tailwindcss": "^0.7.2",
@@ -38,7 +45,8 @@
 	},
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@types/w3c-web-serial": "^1.0.8"
+		"@types/w3c-web-serial": "^1.0.8",
+		"bruce-esp-web-tools": "https://github.com/BruceDevices/esp-web-tools/releases/download/1.1.0a/bruce-esp-web-tools.tgz"
 	},
 	"overrides": {
 		"cookie": "^1.1.1"

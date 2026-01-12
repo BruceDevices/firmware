@@ -23,3 +23,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Vendor files
+static/vendor/*
