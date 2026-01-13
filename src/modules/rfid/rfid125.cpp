@@ -12,17 +12,24 @@
 #include "core/sd_functions.h"
 #include <globals.h>
 
+#define _HEX_DIGIT_ERROR 0xFF
+
 static uint8_t hex2digit(char ch) {
     if (ch >= '0' && ch <= '9') return ch - '0';
     if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
     if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
-    return -1;
+    return _HEX_DIGIT_ERROR;
 }
 
 static uint8_t hex2int(char *ch) {
-    uint8_t lnib = hex2digit(ch[0]);
-    uint8_t rnib = hex2digit(ch[1]);
-    uint8_t res = ((lnib << 4) | 0x0F) & (rnib | 0xF0);
+    uint8_t lnib, rnib, res;
+    lnib = hex2digit(ch[0]);
+    if (lnib == _HEX_DIGIT_ERROR) return _HEX_DIGIT_ERROR;
+
+    rnib = hex2digit(ch[1]);
+    if (rnib == _HEX_DIGIT_ERROR) return _HEX_DIGIT_ERROR;
+
+    res = ((lnib << 4) | 0x0F) & (rnib | 0xF0);
     return res;
 }
 
@@ -204,14 +211,16 @@ bool RFID125::read_card_data() {
 
     /* We read the provided checksum integer read from UART*/
     checksum = hex2int(buff + 11);
+    if (checksum == _HEX_DIGIT_ERROR) return false;
 
     /* We compute xor check on payload data */
     check = hex2int(&buff[1]);
+    if (check == _HEX_DIGIT_ERROR) return false;
+
     for (int i = 3; i < 11; i += 2) {
         uint8_t value = hex2int(buff + i);
         check ^= value;
     }
-
     return check == checksum;
 }
 
