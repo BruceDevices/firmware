@@ -7,7 +7,9 @@
 #include "modules/rfid/chameleon.h"
 #include "modules/rfid/pn532ble.h"
 #include "modules/rfid/rfid125.h"
+#include "modules/rfid/srix_tool.h" //added for srix Tool
 #include "modules/rfid/tag_o_matic.h"
+
 #ifndef LITE_VERSION
 #include "modules/rfid/emv_reader.hpp"
 #endif
@@ -36,6 +38,16 @@ void RFIDMenu::optionsMenu() {
 #endif
         {"Config",      [this]() { configMenu(); }                      },
     };
+
+#if !defined(REMOVE_RFID_HW_INTERFACE)
+#ifndef LITE_VERSION
+    if (bruceConfigPins.rfidModule == PN532_I2C_MODULE) {
+        // Added SRIX Menu only if PN is set to i2c mode
+        options.insert(options.begin() + 3, {"SRIX Tool", [=]() { PN532_SRIX(); }});
+    }
+#endif
+#endif
+
     addOptionToMainMenu();
 
     vTaskDelay(pdMS_TO_TICKS(200));
