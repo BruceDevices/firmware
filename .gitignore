@@ -14,3 +14,5 @@ include/current_year.h
 checksum.sha256
 /*.bin
 .vscode/extensions.json
+
+build_output/
