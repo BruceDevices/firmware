@@ -1,43 +1,37 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "audio_js.h"
 
-#include "helpers_js.h"
+JSValue native_playAudioFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) { return JS_NewBool(false); }
 
-duk_ret_t putPropAudioFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "playFile", native_playAudioFile, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "tone", native_tone, 3, magic);
-    return 0;
+    JSCStringBuf buf;
+    const char *filename = JS_ToCString(ctx, argv[0], &buf);
+    if (!filename) { return JS_EXCEPTION; }
+
+    bool r = serialCli.parse("music_player " + String(filename));
+
+    return JS_NewBool(r);
 }
 
-duk_ret_t registerAudio(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "playAudioFile", native_playAudioFile, 1);
-    bduk_register_c_lightfunc(ctx, "tone", native_tone, 3);
-    return 0;
-}
+JSValue native_tone(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (!bruceConfig.soundEnabled) { return JS_UNDEFINED; }
 
-duk_ret_t native_playAudioFile(duk_context *ctx) {
-    // usage: playAudioFile(filename : string);
-    // returns: bool==true on success, false on any error
-    // MEMO: no need to check for board support (done in serialCli.parse)
-    bool r = serialCli.parse("music_player " + String(duk_to_string(ctx, 0)));
-    duk_push_boolean(ctx, r);
-    return 1;
-}
+    uint32_t freq = 500;
+    uint32_t duration = 1000;
+    int nonBlocking = false;
 
-duk_ret_t native_tone(duk_context *ctx) {
-    // usage: tone(frequency: number);
-    // usage: tone(frequency: number, duration: number, nonBlocking: boolean);
-    if (!bruceConfig.soundEnabled) return 0;
+    if (argc > 0) { JS_ToUint32(ctx, &freq, argv[0]); }
+    if (argc > 1) { JS_ToUint32(ctx, &duration, argv[1]); }
+    if (argc > 2) { nonBlocking = JS_ToInt32(ctx, &nonBlocking, argv[2]); }
 
 #if defined(BUZZ_PIN)
-    tone(BUZZ_PIN, duk_get_uint_default(ctx, 0, 500), duk_get_uint_default(ctx, 1, 1000));
+    tone(BUZZ_PIN, freq, duration);
+
 #elif defined(HAS_NS4168_SPKR)
-    //  alt. implementation using the speaker
-    if (!duk_get_int_default(ctx, 2, 0)) {
-        serialCli.parse("tone " + String(duk_to_int(ctx, 0)) + " " + String(duk_to_int(ctx, 1)));
-    }
+    if (!nonBlocking) { serialCli.parse("tone " + String(freq) + " " + String(duration)); }
 #endif
-    return 0;
+
+    return JS_UNDEFINED;
 }
 
 #endif

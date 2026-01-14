@@ -61,9 +61,11 @@ void _serialCmdsTaskLoop(void *pvParameters) {
     }
 }
 
-void startSerialCommandsHandlerTask() {
-    cmdQueue = xQueueCreate(2, sizeof(CmdPacket));
-    rspQueue = xQueueCreate(2, sizeof(bool));
+void startSerialCommandsHandlerTask(bool initQueues) {
+    if (initQueues) {
+        cmdQueue = xQueueCreate(2, sizeof(CmdPacket));
+        rspQueue = xQueueCreate(2, sizeof(bool));
+    }
 
     xTaskCreatePinnedToCore(
         _serialCmdsTaskLoop,         // Function to implement the task

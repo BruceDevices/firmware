@@ -43,5 +43,6 @@ void mic_function() {
 void mic_test();
 void mic_test_one_task();
 void mic_record();
+bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes);
 
 #endif

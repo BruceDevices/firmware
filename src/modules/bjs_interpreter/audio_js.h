@@ -2,13 +2,12 @@
 #ifndef __AUDIO_JS_H__
 #define __AUDIO_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropAudioFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerAudio(duk_context *ctx);
-
-duk_ret_t native_playAudioFile(duk_context *ctx);
-duk_ret_t native_tone(duk_context *ctx);
+extern "C" {
+JSValue native_playAudioFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_tone(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

@@ -220,3 +220,15 @@ void i2c_bulk_write(TwoWire *wire, uint8_t addr, const uint8_t *bulk_data) {
         delay(1);
     }
 }
+
+void printMemoryUsage(const char *msg) {
+    Serial.printf(
+        "%s:\nPSRAM: [Free: %lu, max alloc: %lu],\nRAM: [Free: %lu, "
+        "max alloc: %lu]\n\n",
+        msg,
+        ESP.getFreePsram(),
+        ESP.getMaxAllocPsram(),
+        ESP.getFreeHeap(),
+        ESP.getMaxAllocHeap()
+    );
+}

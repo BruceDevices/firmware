@@ -2,22 +2,21 @@
 #ifndef __GPIO_JS_H__
 #define __GPIO_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropGPIOFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerGPIO(duk_context *ctx);
-
-duk_ret_t native_digitalWrite(duk_context *ctx);
-duk_ret_t native_analogWrite(duk_context *ctx);
-duk_ret_t native_digitalRead(duk_context *ctx);
-duk_ret_t native_analogRead(duk_context *ctx);
-duk_ret_t native_touchRead(duk_context *ctx);
-duk_ret_t native_dacWrite(duk_context *ctx);
-duk_ret_t native_ledcSetup(duk_context *ctx);
-duk_ret_t native_ledcAttachPin(duk_context *ctx);
-duk_ret_t native_ledcWrite(duk_context *ctx);
-duk_ret_t native_pinMode(duk_context *ctx);
-duk_ret_t native_pins(duk_context *ctx);
+extern "C" {
+JSValue native_digitalWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_analogWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_digitalRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_analogRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_touchRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_dacWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_ledcSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_ledcAttachPin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_ledcWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_pinMode(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_pins(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

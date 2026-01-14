@@ -1,4 +1,5 @@
 #include "apple_spam.h"
+#include "ble_spam.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -241,6 +242,8 @@ void startAppleSpam(int payloadIndex) {
     }
 }
 
+
+
 void appleSubMenu() {
     std::vector<Option> appleOptions;
     
@@ -253,7 +256,7 @@ void appleSubMenu() {
             startAppleSpam(i);
         }});
     }
-    
+
     appleOptions.push_back({"Back", []() {
         returnToMenu = true;
     }});

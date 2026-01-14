@@ -2,21 +2,23 @@
 #ifndef __STORAGE_JS_H__
 #define __STORAGE_JS_H__
 
+#include "helpers_js.h"
 #include <SD.h>
-#include <duktape.h>
 
-duk_ret_t putPropStorageFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerStorage(duk_context *ctx);
+extern "C" {
+JSValue putPropStorageFunctions(JSContext *ctx, JSValue obj_idx, int magic);
+JSValue registerStorage(JSContext *ctx);
 
-duk_ret_t native_storageReaddir(duk_context *ctx);
-duk_ret_t native_storageRead(duk_context *ctx);
-duk_ret_t native_storageWrite(duk_context *ctx);
-duk_ret_t native_storageRename(duk_context *ctx);
-duk_ret_t native_storageRemove(duk_context *ctx);
-duk_ret_t native_storageMkdir(duk_context *ctx);
-duk_ret_t native_storageRmdir(duk_context *ctx);
-duk_ret_t native_storageSpaceLittleFS(duk_context *ctx);
-duk_ret_t native_storageSpaceSDCard(duk_context *ctx);
+JSValue native_storageReaddir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageRename(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageRemove(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageMkdir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageRmdir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageSpaceLittleFS(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_storageSpaceSDCard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

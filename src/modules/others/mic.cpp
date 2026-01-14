@@ -365,33 +365,101 @@ void CreateWavHeader(byte *header, int waveDataSize) {
     header[43] = (byte)((waveDataSize >> 24) & 0xFF);
 }
 
-void mic_record() {
+bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes) {
+    if (out_bytes) *out_bytes = 0;
+    if (fs == nullptr) return false;
+    if (path.length() == 0) return false;
+
     ioExpander.turnPinOnOff(IO_EXP_MIC, HIGH);
 
+    // Devices that use GPIO 0 to navigation (or any other purposes) can break after start mic
     bool gpioInput = false;
     if (!isGPIOOutput(GPIO_NUM_0)) {
         gpioInput = true;
         gpio_hold_en(GPIO_NUM_0);
     }
-    InitI2SMicroPhone();
 
-    // Alloc buffers in PSRAM if available
-    if (psramFound()) i2s_buffer = (int16_t *)ps_malloc(FFT_SIZE * sizeof(int16_t));
-    else i2s_buffer = (int16_t *)malloc(FFT_SIZE * sizeof(int16_t));
-    if (!i2s_buffer) {
-        displayError("Fail to alloc buffers, exiting", true);
-        return;
+    bool ok = false;
+    do {
+        if (!InitI2SMicroPhone()) break;
+
+        // Alloc buffer in PSRAM if available
+        if (psramFound()) i2s_buffer = (int16_t *)ps_malloc(FFT_SIZE * sizeof(int16_t));
+        else i2s_buffer = (int16_t *)malloc(FFT_SIZE * sizeof(int16_t));
+        if (!i2s_buffer) break;
+
+        String fixedPath = path;
+        if (!fixedPath.startsWith("/")) fixedPath = "/" + fixedPath;
+
+        // Ensure parent dir exists (best-effort)
+        int lastSlash = fixedPath.lastIndexOf('/');
+        if (lastSlash > 0) {
+            String dir = fixedPath.substring(0, lastSlash);
+            if (!fs->exists(dir)) fs->mkdir(dir);
+        }
+
+        File audioFile = fs->open(fixedPath, FILE_WRITE, true);
+        if (!audioFile) break;
+
+        const int headerSize = 44;
+        byte header[headerSize] = {0};
+        audioFile.write(header, headerSize);
+
+        uint32_t dataSize = 0;
+        const int bytesPerRead = FFT_SIZE * sizeof(int16_t);
+        const unsigned long startMillis = millis();
+
+        while (true) {
+            if (max_ms > 0 && (millis() - startMillis) >= max_ms) break;
+            if (stop_on_sel && check(SelPress)) break;
+
+            size_t bytesRead = 0;
+            i2s_channel_read(i2s_chan, (char *)i2s_buffer, bytesPerRead, &bytesRead, 1000);
+            if (bytesRead > 0) {
+                audioFile.write((const uint8_t *)i2s_buffer, bytesRead);
+                dataSize += (uint32_t)bytesRead;
+            }
+            // Yield a bit to avoid watchdog issues in long recordings
+            delay(1);
+        }
+
+        audioFile.seek(0);
+        CreateWavHeader(header, dataSize);
+        audioFile.write(header, headerSize);
+        audioFile.close();
+
+        if (out_bytes) *out_bytes = dataSize + headerSize;
+        ok = true;
+    } while (0);
+
+    if (i2s_buffer) {
+        free(i2s_buffer);
+        i2s_buffer = nullptr;
     }
 
+    delay(10);
+    deinitMicroPhone();
+
+    if (gpioInput) {
+        gpio_hold_dis(GPIO_NUM_0);
+        pinMode(GPIO_NUM_0, INPUT);
+    } else {
+        pinMode(GPIO_NUM_0, OUTPUT);
+        digitalWrite(GPIO_NUM_0, LOW);
+    }
+
+    ioExpander.turnPinOnOff(IO_EXP_MIC, LOW);
+    return ok;
+}
+
+void mic_record() {
     FS *fs = nullptr;
     if (!getFsStorage(fs) || fs == nullptr) {
         displayError("No space left on device", true);
         return;
     }
 
-    char filename[32];
-    int index = 0;
-
+    // Create directory
     if (!fs->exists("/BruceMIC")) {
         if (!fs->mkdir("/BruceMIC")) {
             displayError("Error creating directory", true);
@@ -399,15 +467,14 @@ void mic_record() {
         }
     }
 
+    // Generate unique filename
+    char filename[32];
+    int index = 0;
     do {
         snprintf(filename, sizeof(filename), "/BruceMIC/recording_%d.wav", index++);
     } while (fs->exists(filename));
-    File audioFile = fs->open(filename, FILE_WRITE, true);
-    if (!audioFile) {
-        displayError("Error creating file", true);
-        return;
-    }
 
+    // Interactive UI to select recording time
     int record_time = 3;
     int last_record_time = -1;
     bool redraw = false;
@@ -435,59 +502,38 @@ void mic_record() {
         }
     }
 
-    const int headerSize = 44;
-    byte header[headerSize] = {0};
-
-    audioFile.write(header, headerSize);
-
-    unsigned long dataSize = 0;
-
-    int bytesPerRead = FFT_SIZE * sizeof(int16_t);
-    unsigned long startMillis = millis();
+    // Show recording message
     if (record_time != 0) {
         displayRedStripe("Recording...", 0xffff, 0x5db9);
-        while (millis() - startMillis < (unsigned long)record_time * 1000) {
-            size_t bytesRead = 0;
-            i2s_channel_read(i2s_chan, i2s_buffer, bytesPerRead, &bytesRead, 1000);
-            if (bytesRead > 0) {
-                audioFile.write((const uint8_t *)i2s_buffer, bytesRead);
-                dataSize += bytesRead;
-            }
-        }
     } else {
         displayRedStripe("Rec... Press Sel to stop", 0xffff, 0x5db9);
-        while (!check(SelPress)) {
-            size_t bytesRead = 0;
-            i2s_channel_read(i2s_chan, (char *)i2s_buffer, bytesPerRead, &bytesRead, 1000);
-
-            if (bytesRead > 0) {
-                audioFile.write((const uint8_t *)i2s_buffer, bytesRead);
-                dataSize += bytesRead;
-            }
-        }
     }
 
-    audioFile.seek(0);
-    CreateWavHeader(header, dataSize);
-    audioFile.write(header, headerSize);
-    audioFile.close();
+    // Delegate to core recording function
+    uint32_t max_ms = (record_time == 0) ? 0 : (uint32_t)record_time * 1000;
+    bool stop_on_sel = (record_time == 0); // Only stop on Sel if unlimited
+    uint32_t out_bytes = 0;
 
-    delay(10);
-    if (deinitMicroPhone()) Serial.println("Fail disabling I2S Driver");
-    if (gpioInput) {
-        gpio_hold_dis(GPIO_NUM_0);
-        pinMode(GPIO_NUM_0, INPUT);
+    bool ok = mic_record_wav_to_path(fs, String(filename), max_ms, stop_on_sel, &out_bytes);
+
+    if (ok) {
+        Serial.println("Recording finished");
+        displaySuccess("Recording Finished", true);
     } else {
-        pinMode(GPIO_NUM_0, OUTPUT);
-        digitalWrite(GPIO_NUM_0, LOW);
+        displayError("Recording failed", true);
     }
-    Serial.println("Recording finished");
-    displaySuccess("Recording Finished", true);
-    ioExpander.turnPinOnOff(IO_EXP_MIC, LOW);
 }
 
 #else
 void mic_test() {}
 void mic_test_one_task() {}
 void mic_record() {}
+bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes) {
+    (void)fs;
+    (void)path;
+    (void)max_ms;
+    (void)stop_on_sel;
+    if (out_bytes) *out_bytes = 0;
+    return false;
+}
 #endif

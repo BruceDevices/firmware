@@ -1,52 +1,66 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "serial_js.h"
 
-#include "display_js.h"
+#include "core/display.h"
 
 #include "helpers_js.h"
 
-duk_ret_t putPropSerialFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "print", native_serialPrint, DUK_VARARGS, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "println", native_serialPrintln, DUK_VARARGS, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "readln", native_serialReadln, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "cmd", native_serialCmd, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "write", native_serialPrint, DUK_VARARGS, magic);
-    return 0;
+static void internal_print_mq(JSContext *ctx, int argc, JSValue *argv, uint8_t printTft, uint8_t newLine) {
+    for (int argIndex = 0; argIndex < argc && argIndex < 20; ++argIndex) {
+        if (argIndex > 0) {
+            if (printTft) tft.print(" ");
+            Serial.print(" ");
+        }
+
+        JSValue v = argv[argIndex];
+        if (JS_IsUndefined(v)) {
+            if (printTft) tft.print("undefined");
+            Serial.print("undefined");
+        } else if (JS_IsNull(v)) {
+            if (printTft) tft.print("null");
+            Serial.print("null");
+        } else if (JS_IsNumber(ctx, v)) {
+            double num;
+            JS_ToNumber(ctx, &num, v);
+            if (printTft) tft.printf("%g", num);
+            Serial.printf("%g", num);
+        } else if (JS_IsBool(v)) {
+            const char *bv = JS_IsBool(v) && JS_ToBool(ctx, v) ? "true" : "false";
+            if (printTft) tft.print(bv);
+            Serial.print(bv);
+        } else {
+            JSCStringBuf sb;
+            const char *s = JS_ToCString(ctx, v, &sb);
+            if (s) {
+                if (printTft) tft.print(s);
+                Serial.print(s);
+            }
+        }
+    }
+    if (newLine) {
+        if (printTft) tft.println();
+        Serial.println();
+    }
 }
 
-duk_ret_t registerSerial(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "serialReadln", native_serialReadln, 1);
-    bduk_register_c_lightfunc(ctx, "serialPrintln", native_serialPrintln, DUK_VARARGS);
-    bduk_register_c_lightfunc(ctx, "serialCmd", native_serialCmd, 1);
-    return 0;
+JSValue native_serialPrint(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    internal_print_mq(ctx, argc, argv, false, false);
+    return JS_UNDEFINED;
 }
 
-void registerConsole(duk_context *ctx) {
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "log", native_serialPrintln, DUK_VARARGS);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "debug", native_serialPrintln, DUK_VARARGS, 2);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "warn", native_serialPrintln, DUK_VARARGS, 3);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "error", native_serialPrintln, DUK_VARARGS, 4);
-
-    duk_put_global_string(ctx, "console");
+JSValue native_serialPrintln(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    internal_print_mq(ctx, argc, argv, false, true);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_serialPrint(duk_context *ctx) {
-    internal_print(ctx, false, false);
-    return 0;
-}
-
-duk_ret_t native_serialPrintln(duk_context *ctx) {
-    internal_print(ctx, false, true);
-    return 0;
-}
-
-duk_ret_t native_serialReadln(duk_context *ctx) {
-    // usage: serialReadln();   // default to 10s timeout
-    // usage: serialReadln(timeout_in_ms : number);
+JSValue native_serialReadln(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     String line;
     int maxloops = 1000 * 10;
-    if (duk_is_number(ctx, 0)) maxloops = duk_to_int(ctx, 0);
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
+        int t;
+        JS_ToInt32(ctx, &t, argv[0]);
+        maxloops = t;
+    }
     Serial.flush();
     while (maxloops) {
         if (!Serial.available()) {
@@ -54,17 +68,19 @@ duk_ret_t native_serialReadln(duk_context *ctx) {
             delay(1);
             continue;
         }
-        // data is ready to read
         line = Serial.readStringUntil('\n');
+        break;
     }
-    duk_push_string(ctx, line.c_str());
-    return 1;
+    return JS_NewString(ctx, line.c_str());
 }
 
-duk_ret_t native_serialCmd(duk_context *ctx) {
-    bool r = serialCli.parse(String(duk_to_string(ctx, 0)));
-    duk_push_boolean(ctx, r);
-    return 1;
+JSValue native_serialCmd(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    const char *cmd = NULL;
+    JSCStringBuf sb;
+    if (argc > 0 && JS_IsString(ctx, argv[0])) cmd = JS_ToCString(ctx, argv[0], &sb);
+    bool r = false;
+    if (cmd) r = serialCli.parse(String(cmd));
+    return JS_NewBool(r);
 }
 
 #endif

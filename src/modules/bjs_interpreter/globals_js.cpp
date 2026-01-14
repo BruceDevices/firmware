@@ -1,104 +1,414 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "globals_js.h"
+#include "user_classes_js.h"
+#include <chrono>
 
-#include "helpers_js.h"
-#include "interpreter.h"
-
-duk_ret_t putPropGlobalsFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) { return 0; }
-
-duk_ret_t registerGlobals(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "now", native_now, 0);
-    bduk_register_c_lightfunc(ctx, "delay", native_delay, 1);
-    bduk_register_c_lightfunc(ctx, "parse_int", native_parse_int, 1);
-    bduk_register_c_lightfunc(ctx, "to_string", native_to_string, 1);
-    bduk_register_c_lightfunc(ctx, "to_hex_string", native_to_hex_string, 1);
-    bduk_register_c_lightfunc(ctx, "to_lower_case", native_to_lower_case, 1);
-    bduk_register_c_lightfunc(ctx, "to_upper_case", native_to_upper_case, 1);
-    bduk_register_c_lightfunc(ctx, "random", native_random, 2);
-
-    if (scriptDirpath == NULL || scriptName == NULL) {
-        bduk_register_string(ctx, "__filepath", "");
-        bduk_register_string(ctx, "__dirpath", "");
-    } else {
-        bduk_register_string(ctx, "__filepath", (String(scriptDirpath) + String(scriptName)).c_str());
-        bduk_register_string(ctx, "__dirpath", scriptDirpath);
-    }
-    bduk_register_string(ctx, "BRUCE_VERSION", BRUCE_VERSION);
-    bduk_register_int(ctx, "BRUCE_PRICOLOR", bruceConfig.priColor);
-    bduk_register_int(ctx, "BRUCE_SECCOLOR", bruceConfig.secColor);
-    bduk_register_int(ctx, "BRUCE_BGCOLOR", bruceConfig.bgColor);
-    return 0;
+JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JS_GC(ctx);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_now(duk_context *ctx) {
+JSValue js_load(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSCStringBuf buf_str;
+    const char *filename = JS_ToCString(ctx, argv[0], &buf_str);
+    if (!filename) return JS_EXCEPTION;
+
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv);
+
+    size_t script_len = 0;
+    char *script = readBigFile(fileParams.fs, fileParams.path, false, &script_len);
+
+    JSValue ret = JS_Eval(ctx, (const char *)script, script_len, filename, 0);
+    free(script);
+    return ret;
+}
+
+/* timers */
+typedef struct {
+    bool allocated;
+    JSGCRef func;
+    int64_t timeout;     /* next due time in ms */
+    int32_t interval_ms; /* period for intervals */
+    bool repeat;
+    bool main;
+} JSTimer;
+
+#define MAX_TIMERS 16
+
+typedef struct {
+    JSTimer timers[MAX_TIMERS];
+} JSTimerContextState;
+
+static const char *kTimersStateProp = "__bruce_timers_state";
+
+static JSTimerContextState *get_timer_state(JSContext *ctx, bool create) {
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue holder = JS_GetPropertyStr(ctx, global, kTimersStateProp);
+
+    if (JS_IsObject(ctx, holder)) {
+        void *opaque = JS_GetOpaque(ctx, holder);
+        if (opaque) return (JSTimerContextState *)opaque;
+    }
+
+    if (!create) return NULL;
+
+    JSTimerContextState *state = (JSTimerContextState *)calloc(1, sizeof(JSTimerContextState));
+    if (!state) return NULL;
+
+    if (!JS_IsObject(ctx, holder)) { holder = JS_NewObjectClassUser(ctx, JS_CLASS_TIMERS_STATE); }
+    JS_SetOpaque(ctx, holder, state);
+    JS_SetPropertyStr(ctx, global, kTimersStateProp, holder);
+    return state;
+}
+
+void native_timers_state_finalizer(JSContext *ctx, void *opaque) {
+    JSTimerContextState *state = (JSTimerContextState *)opaque;
+    if (!state) return;
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (state->timers[i].allocated) {
+            JS_DeleteGCRef(ctx, &state->timers[i].func);
+            state->timers[i].allocated = false;
+        }
+    }
+    free(state);
+}
+
+void js_timers_init(JSContext *ctx) { (void)get_timer_state(ctx, true); }
+
+void js_timers_deinit(JSContext *ctx) {
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue holder = JS_GetPropertyStr(ctx, global, kTimersStateProp);
+    if (!JS_IsObject(ctx, holder)) return;
+
+    JSTimerContextState *state = (JSTimerContextState *)JS_GetOpaque(ctx, holder);
+    if (!state) return;
+
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (state->timers[i].allocated) {
+            JS_DeleteGCRef(ctx, &state->timers[i].func);
+            state->timers[i].allocated = false;
+        }
+    }
+
+    JS_SetOpaque(ctx, holder, NULL);
+    free(state);
+
+    JS_SetPropertyStr(ctx, global, kTimersStateProp, JS_UNDEFINED);
+}
+
+int js_add_main_timer(JSContext *ctx, JSValue func) {
+    JSTimer *th;
+    int i;
+    JSValue *pfunc;
+
+    if (!JS_IsFunction(ctx, func)) return -1;
+
+    JSTimerContextState *state = get_timer_state(ctx, true);
+    if (!state) return -1;
+
+    for (i = 0; i < MAX_TIMERS; i++) {
+        th = &state->timers[i];
+        if (!th->allocated) {
+            pfunc = JS_AddGCRef(ctx, &th->func);
+            *pfunc = func;
+            th->timeout = millis();
+            th->interval_ms = 0;
+            th->repeat = false;
+            th->main = true;
+            th->allocated = true;
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+JSValue js_setTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSTimer *th;
+    int delay, i;
+    JSValue *pfunc;
+
+    if (!JS_IsFunction(ctx, argv[0])) return JS_ThrowTypeError(ctx, "not a function");
+    if (JS_ToInt32(ctx, &delay, argv[1])) return JS_EXCEPTION;
+
+    JSTimerContextState *state = get_timer_state(ctx, true);
+    if (!state) return JS_ThrowInternalError(ctx, "out of memory");
+
+    for (i = 0; i < MAX_TIMERS; i++) {
+        th = &state->timers[i];
+        if (!th->allocated) {
+            pfunc = JS_AddGCRef(ctx, &th->func);
+            *pfunc = argv[0];
+            th->timeout = millis() + delay;
+            th->interval_ms = 0;
+            th->repeat = false;
+            th->main = false;
+            th->allocated = true;
+            return JS_NewInt32(ctx, i);
+        }
+    }
+    return JS_ThrowInternalError(ctx, "too many timers");
+}
+
+JSValue js_setInterval(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSTimer *th;
+    int delay, i;
+    JSValue *pfunc;
+
+    if (!JS_IsFunction(ctx, argv[0])) return JS_ThrowTypeError(ctx, "not a function");
+    if (JS_ToInt32(ctx, &delay, argv[1])) return JS_EXCEPTION;
+
+    JSTimerContextState *state = get_timer_state(ctx, true);
+    if (!state) return JS_ThrowInternalError(ctx, "out of memory");
+
+    for (i = 0; i < MAX_TIMERS; i++) {
+        th = &state->timers[i];
+        if (!th->allocated) {
+            pfunc = JS_AddGCRef(ctx, &th->func);
+            *pfunc = argv[0];
+            th->timeout = millis() + delay;
+            th->interval_ms = delay;
+            th->repeat = true;
+            th->main = false;
+            th->allocated = true;
+            return JS_NewInt32(ctx, i);
+        }
+    }
+    return JS_ThrowInternalError(ctx, "too many timers");
+}
+
+JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int timer_id;
+    JSTimer *th;
+
+    if (JS_ToInt32(ctx, &timer_id, argv[0])) return JS_EXCEPTION;
+    if (timer_id >= 0 && timer_id < MAX_TIMERS) {
+        JSTimerContextState *state = get_timer_state(ctx, false);
+        if (!state) return JS_UNDEFINED;
+
+        th = &state->timers[timer_id];
+        if (th->allocated) {
+            JS_DeleteGCRef(ctx, &th->func);
+            th->allocated = false;
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+JSValue js_clearInterval(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return js_clearTimeout(ctx, this_val, argc, argv);
+}
+
+void run_timers(JSContext *ctx) {
+    int64_t min_delay;
+    int64_t delayMs;
+    int64_t cur_time;
+    bool has_timer;
+    int i;
+    JSTimer *th;
+    struct timespec ts;
+
+    JSTimerContextState *state = get_timer_state(ctx, false);
+    if (!state) return;
+
+    while (true) {
+        min_delay = 1000;
+        cur_time = millis();
+        has_timer = false;
+        for (i = 0; i < MAX_TIMERS; i++) {
+            th = &state->timers[i];
+            if (th->allocated) {
+                if (th->main && interpreter_state != 2) { continue; }
+                if (th->main && interpreter_state == 2) { interpreter_state = 3; }
+                has_timer = true;
+                delayMs = th->timeout - cur_time;
+                if (delayMs <= 0) {
+                    JSValue ret;
+                    /* the timer expired */
+                    if (JS_StackCheck(ctx, 2)) goto fail;
+                    JS_PushArg(ctx, th->func.val); /* func name */
+                    JS_PushArg(ctx, JS_NULL);      /* this */
+
+                    if (!th->repeat && !th->main) {
+                        JS_DeleteGCRef(ctx, &th->func);
+                        th->allocated = false;
+                    } else {
+                        // Reschedule before calling so callbacks can clearInterval safely.
+                        // Keep cadence by advancing from the previous due time.
+                        th->timeout = th->timeout + (int64_t)th->interval_ms;
+                    }
+
+                    ret = JS_Call(ctx, 0);
+                    if (JS_IsException(ret)) {
+                    fail:
+                        log_e("Error in run_timers");
+                        JSValue obj = JS_GetException(ctx);
+                        JS_PrintValueF(ctx, obj, JS_DUMP_LONG);
+                        return;
+                    }
+
+                    if (th->main) { interpreter_state = 0; }
+
+                    // If interval callback threw, state may still be allocated; keep going.
+                    min_delay = 0;
+                    break;
+                } else if (delayMs < min_delay) {
+                    min_delay = delayMs;
+                }
+            }
+        }
+        if (!has_timer) break;
+        if (min_delay > 0) { delay(min_delay); }
+    }
+}
+
+JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int i;
+    JSValue v;
+
+    for (i = 0; i < argc; i++) {
+        if (i != 0) putchar(' ');
+        v = argv[i];
+        if (JS_IsString(ctx, v)) {
+            JSCStringBuf buf;
+            const char *str;
+            size_t len;
+            str = JS_ToCStringLen(ctx, &len, v, &buf);
+            fwrite(str, 1, (size_t)len, stdout);
+        } else {
+            JS_PrintValueF(ctx, argv[i], JS_DUMP_LONG);
+        }
+    }
+    putchar('\n');
+    return JS_UNDEFINED;
+}
+
+JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return JS_NewInt64(ctx, (int64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000));
+}
+
+JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return JS_NewInt64(ctx, (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL)));
+}
+
+// TODO: Implement user module
+JSValue native_require(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) { return JS_ThrowTypeError(ctx, "require() expects 1 argument"); }
+
+    JSCStringBuf name_buf;
+    const char *name = JS_ToCString(ctx, argv[0], &name_buf);
+    if (!name) { return JS_EXCEPTION; }
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue val = JS_GetPropertyStr(ctx, global, name);
+
+    return val;
+}
+
+JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    bool ok = false;
+    if (argc > 0) ok = JS_ToBool(ctx, argv[0]);
+    if (ok) { return JS_NewBool(1); }
+    const char *msg = "assert";
+    if (argc > 1 && JS_IsString(ctx, argv[1])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[1], &sb);
+        if (s) msg = s;
+    }
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Assertion failed: %s", msg);
+    return JS_ThrowTypeError(ctx, "%s", buf);
+}
+
+JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     using namespace std::chrono;
     auto now = high_resolution_clock::now();
     auto duration = now.time_since_epoch();
     auto millis = duration_cast<milliseconds>(duration).count();
-    duk_push_number(ctx, static_cast<double>(millis));
-    return 1; // Return 1 value (the timestamp) to JavaScript
+    return JS_NewInt64(ctx, (int64_t)millis);
 }
 
-duk_ret_t native_delay(duk_context *ctx) {
-    vTaskDelay(pdMS_TO_TICKS(duk_to_int(ctx, 0)));
-    return 0;
-}
-
-duk_ret_t native_random(duk_context *ctx) {
-    int val;
-    if (duk_is_number(ctx, 1)) {
-        val = random(duk_to_int(ctx, 0), duk_to_int(ctx, 1));
-    } else {
-        val = random(duk_to_int(ctx, 0));
+JSValue native_delay(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
+        int ms;
+        JS_ToInt32(ctx, &ms, argv[0]);
+        vTaskDelay(pdMS_TO_TICKS(ms));
     }
-    duk_push_int(ctx, val);
-    return 1;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_parse_int(duk_context *ctx) {
-    duk_uint_t arg0Type = duk_get_type_mask(ctx, 0);
-
-    if (arg0Type & (DUK_TYPE_MASK_STRING | DUK_TYPE_MASK_NUMBER)) {
-        duk_push_number(ctx, duk_to_number(ctx, 0));
+JSValue native_random(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int val = 0;
+    if (argc > 1 && JS_IsNumber(ctx, argv[0]) && JS_IsNumber(ctx, argv[1])) {
+        int a, b;
+        JS_ToInt32(ctx, &a, argv[0]);
+        JS_ToInt32(ctx, &b, argv[1]);
+        val = random(a, b);
+    } else if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
+        int a;
+        JS_ToInt32(ctx, &a, argv[0]);
+        val = random(a);
     } else {
-        duk_push_nan(ctx);
+        val = random();
     }
-
-    return 1;
+    return JS_NewInt32(ctx, val);
 }
 
-duk_ret_t native_to_string(duk_context *ctx) {
-    duk_push_string(ctx, duk_to_string(ctx, 0));
-
-    return 1;
-}
-
-duk_ret_t native_to_hex_string(duk_context *ctx) {
-    duk_uint_t arg0Type = duk_get_type_mask(ctx, 0);
-
-    if (arg0Type & (DUK_TYPE_MASK_STRING | DUK_TYPE_MASK_NUMBER | DUK_TYPE_MASK_BOOLEAN)) {
-        duk_push_string(ctx, String(duk_to_int(ctx, 0), HEX).c_str());
-    } else {
-        duk_push_string(ctx, "");
+JSValue native_parse_int(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && (JS_IsString(ctx, argv[0]) || JS_IsNumber(ctx, argv[0]) || JS_IsBool(argv[0]))) {
+        double d;
+        JS_ToNumber(ctx, &d, argv[0]);
+        return JS_NewFloat64(ctx, d);
     }
-
-    return 1;
+    return JS_NewFloat64(ctx, NAN);
 }
 
-duk_ret_t native_to_lower_case(duk_context *ctx) {
-    String text = duk_to_string(ctx, 0);
-    text.toLowerCase();
-    duk_push_string(ctx, text.c_str());
-
-    return 1;
+JSValue native_to_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0) { return JS_ToString(ctx, argv[0]); }
+    return JS_NewString(ctx, "");
 }
 
-duk_ret_t native_to_upper_case(duk_context *ctx) {
-    String text = duk_to_string(ctx, 0);
-    text.toUpperCase();
-    duk_push_string(ctx, text.c_str());
+JSValue native_to_hex_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && (JS_IsString(ctx, argv[0]) || JS_IsNumber(ctx, argv[0]) || JS_IsBool(argv[0]))) {
+        int value;
+        JS_ToInt32(ctx, &value, argv[0]);
+        return JS_NewString(ctx, String(value, HEX).c_str());
+    }
+    return JS_NewString(ctx, "");
+}
 
-    return 1;
+JSValue native_to_lower_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && JS_IsString(ctx, argv[0])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[0], &sb);
+        if (s) {
+            String text = String(s);
+            text.toLowerCase();
+            return JS_NewString(ctx, text.c_str());
+        }
+    }
+    return JS_NewString(ctx, "");
+}
+
+JSValue native_to_upper_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && JS_IsString(ctx, argv[0])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[0], &sb);
+        if (s) {
+            String text = String(s);
+            text.toUpperCase();
+            return JS_NewString(ctx, text.c_str());
+        }
+    }
+    return JS_NewString(ctx, "");
+}
+
+JSValue native_exit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_ThrowInternalError(ctx, "Script exited");
 }
 
 #endif

@@ -1,13 +1,13 @@
 #include "wifi_commands.h"
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
+#include "esp_netif.h"
+#include "esp_netif_net_stack.h"
+#include "modules/wifi/sniffer.h"
+#include "modules/wifi/tcp_utils.h"
 #include <globals.h>
 #include <modules/ethernet/ARPScanner.h>
-#include "esp_netif.h"          
-#include "esp_netif_net_stack.h"
-#include "modules/wifi/tcp_utils.h"
-#include "modules/wifi/sniffer.h"
-//#include "modules/wifi/responder.h"
+// #include "modules/wifi/responder.h"
 
 uint32_t wifiCallback(cmd *c) {
     Command cmd(c);
@@ -57,7 +57,7 @@ uint32_t webuiCallback(cmd *c) {
     Argument arg = cmd.getArgument("noAp");
     bool noAp = arg.isSet();
 
-    serialDevice->println("Starting Web UI " + !noAp ? "AP" : "STA");
+    serialDevice->println(String("Starting Web UI ") + !noAp ? "AP" : "STA");
     serialDevice->println("Press ESC to quit");
     startWebUi(!noAp); // MEMO: will quit when check(EscPress)
 
@@ -65,12 +65,11 @@ uint32_t webuiCallback(cmd *c) {
 }
 
 uint32_t scanHostsCallback(cmd *c) {
-    esp_netif_t *esp_netinterface =
-      esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-      if (esp_netinterface == nullptr) {
-          Serial.println("Failed to get netif handle\nTry connecting to a network first");
-          return false;
-      }
+    esp_netif_t *esp_netinterface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (esp_netinterface == nullptr) {
+        Serial.println("Failed to get netif handle\nTry connecting to a network first");
+        return false;
+    }
 
     ARPScanner{esp_netinterface};
 
@@ -84,7 +83,10 @@ uint32_t snifferCallback(cmd *c) {
 }
 
 uint32_t listenTCPCallback(cmd *c) {
-    if (!wifiConnected) Serial.println("Connect to a WiFi first."); return false;
+    if (!wifiConnected) {
+        Serial.println("Connect to a WiFi first.");
+        return false;
+    }
 
     listenTcpPort();
 
@@ -93,7 +95,10 @@ uint32_t listenTCPCallback(cmd *c) {
 
 /*
 uint32_t responderCallback(cmd *c) {
-    if (!wifiConnected) Serial.println("Connect to a WiFi first."); return false;
+    if (!wifiConnected) {
+        Serial.println("Connect to a WiFi first.");
+        return false;
+    }
 
     responder();
 
@@ -110,14 +115,16 @@ void createWifiCommands(SimpleCLI *cli) {
     wifiCmd.addPosArg("ssid", "");
     wifiCmd.addPosArg("pwd", "");
 
-    #if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION)
 
     Command ScanHostsCmd = cli->addCommand("arp", scanHostsCallback);
 
-    Command listenTCPCmd = cli->addCommand("listen", listenTCPCallback); //TODO: make possible to select port to open via Serial
-    
-    Command snifferCmd = cli->addCommand("sniffer", snifferCallback); //TODO: be able to exit from it from Serial
-    
-    #endif
-    //Command responderCmd = cli->addCommand("responder", responderCallback); TODO
+    Command listenTCPCmd =
+        cli->addCommand("listen", listenTCPCallback); // TODO: make possible to select port to open via Serial
+
+    Command snifferCmd =
+        cli->addCommand("sniffer", snifferCallback); // TODO: be able to exit from it from Serial
+
+#endif
+    // Command responderCmd = cli->addCommand("responder", responderCallback); TODO
 }

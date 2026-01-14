@@ -598,7 +598,7 @@ int loopOptions(
         }
         // interpreter_start -> running the interpreter
         // interpreter -> loopOptions helper inside the Javascript
-        if (interpreter_start && !interpreter) { break; }
+        if (interpreter_state > 0 && !interpreter) { break; }
     }
     return index;
 }

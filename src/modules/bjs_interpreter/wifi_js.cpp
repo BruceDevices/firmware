@@ -6,56 +6,46 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
-duk_ret_t putPropWiFiFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "connected", native_wifiConnected, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "connect", native_wifiConnect, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "connectDialog", native_wifiConnectDialog, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "disconnect", native_wifiDisconnect, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "scan", native_wifiScan, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "httpFetch", native_httpFetch, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getMACAddress", native_wifiMACAddress, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getIPAddress", native_ipAddress, 0, magic);
-    return 0;
+static const char *wifi_enc_types[] = {
+    "OPEN",
+    "WEP",
+    "WPA_PSK",
+    "WPA2_PSK",
+    "WPA_WPA2_PSK",
+    "ENTERPRISE",
+    "WPA2_ENTERPRISE",
+    "WPA3_PSK",
+    "WPA2_WPA3_PSK",
+    "WAPI_PSK",
+    "WPA3_ENT_192",
+    "MAX"
+};
+
+JSValue native_wifiConnected(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(wifiConnected);
 }
 
-duk_ret_t registerWiFi(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "wifiConnect", native_wifiConnect, 3);
-    bduk_register_c_lightfunc(ctx, "wifiConnectDialog", native_wifiConnectDialog, 0);
-    bduk_register_c_lightfunc(ctx, "wifiDisconnect", native_wifiDisconnect, 0);
-    bduk_register_c_lightfunc(ctx, "wifiScan", native_wifiScan, 0);
-    bduk_register_c_lightfunc(ctx, "httpFetch", native_httpFetch, 2, 0);
-    bduk_register_c_lightfunc(ctx, "httpGet", native_httpFetch, 2, 0);
-    bduk_register_c_lightfunc(ctx, "wifiMACAddress", native_wifiMACAddress, 0);
-    bduk_register_c_lightfunc(ctx, "wifiIPAddress", native_ipAddress, 0);
-    return 0;
-}
-
-duk_ret_t native_wifiConnected(duk_context *ctx) {
-    duk_push_boolean(ctx, wifiConnected);
-    return 1;
-}
-
-duk_ret_t native_wifiConnectDialog(duk_context *ctx) {
+JSValue native_wifiConnectDialog(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     bool connected = wifiConnectMenu();
-    duk_push_boolean(ctx, connected);
-    return 1;
+    return JS_NewBool(connected);
 }
 
-duk_ret_t native_wifiConnect(duk_context *ctx) {
-    // usage: wifiConnect(ssid : string )
-    // usage: wifiConnect(ssid : string, timeout_in_seconds : int)
-    // usage: wifiConnect(ssid : string, timeout_in_seconds : int, pwd : string)
-    String ssid = duk_to_string(ctx, 0);
+JSValue native_wifiConnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0]))
+        return JS_ThrowTypeError(ctx, "wifiConnect(ssid:string, timeout?:int, pwd?:string)");
+
+    JSCStringBuf ssb;
+    const char *ssid = JS_ToCString(ctx, argv[0], &ssb);
     int timeout_in_seconds = 10;
-    if (duk_is_number(ctx, 1)) timeout_in_seconds = duk_to_int(ctx, 1);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &timeout_in_seconds, argv[1]);
 
     bool r = false;
-
-    Serial.println("Connecting to: " + ssid);
+    Serial.println(String("Connecting to: ") + (ssid ? ssid : ""));
 
     WiFi.mode(WIFI_MODE_STA);
-    if (duk_is_string(ctx, 2)) {
-        String pwd = duk_to_string(ctx, 2);
+    if (argc > 2 && JS_IsString(ctx, argv[2])) {
+        JSCStringBuf psb;
+        const char *pwd = JS_ToCString(ctx, argv[2], &psb);
         WiFi.begin(ssid, pwd);
     } else {
         WiFi.begin(ssid);
@@ -73,309 +63,191 @@ duk_ret_t native_wifiConnect(duk_context *ctx) {
 
     if (WiFi.status() == WL_CONNECTED) {
         r = true;
-        wifiIP = WiFi.localIP().toString(); // update global var
+        wifiIP = WiFi.localIP().toString();
         wifiConnected = true;
     }
 
-    duk_push_boolean(ctx, r);
-    return 1;
+    return JS_NewBool(r);
 }
 
-const char *wifi_enc_types[] = {
-    "OPEN",
-    "WEP",
-    "WPA_PSK",
-    "WPA2_PSK",
-    "WPA_WPA2_PSK",
-    "ENTERPRISE",
-    "WPA2_ENTERPRISE",
-    "WPA3_PSK",
-    "WPA2_WPA3_PSK",
-    "WAPI_PSK",
-    "WPA3_ENT_192",
-    "MAX"
-};
-
-duk_ret_t native_wifiScan(duk_context *ctx) {
+JSValue native_wifiScan(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     WiFi.mode(WIFI_MODE_STA);
     int nets = WiFi.scanNetworks();
-    duk_idx_t arr_idx = duk_push_array(ctx);
-    int arrayIndex = 0;
-    duk_idx_t obj_idx;
-
+    JSValue arr = JS_NewArray(ctx, nets);
+    uint32_t idx = 0;
     for (int i = 0; i < nets; i++) {
-        obj_idx = duk_push_object(ctx);
+        JSValue obj = JS_NewObject(ctx);
         int enctypeInt = int(WiFi.encryptionType(i));
-
         const char *enctype = enctypeInt < 12 ? wifi_enc_types[enctypeInt] : "UNKNOWN";
-        bduk_put_prop(ctx, obj_idx, "encryptionType", duk_push_string, enctype);
-        bduk_put_prop(ctx, obj_idx, "SSID", duk_push_string, WiFi.SSID(i).c_str());
-        bduk_put_prop(ctx, obj_idx, "MAC", duk_push_string, WiFi.BSSIDstr(i).c_str());
-        duk_put_prop_index(ctx, arr_idx, arrayIndex);
-        arrayIndex++;
+        JS_SetPropertyStr(ctx, obj, "encryptionType", JS_NewString(ctx, enctype));
+        JS_SetPropertyStr(ctx, obj, "SSID", JS_NewString(ctx, WiFi.SSID(i).c_str()));
+        JS_SetPropertyStr(ctx, obj, "MAC", JS_NewString(ctx, WiFi.BSSIDstr(i).c_str()));
+        JS_SetPropertyUint32(ctx, arr, idx++, obj);
     }
-    return 1;
+    return arr;
 }
 
-duk_ret_t native_wifiDisconnect(duk_context *ctx) {
+JSValue native_wifiDisconnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     wifiDisconnect();
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_httpFetch(duk_context *ctx) {
+JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     HTTPClient http;
-
     http.setReuse(false);
 
+    JSCStringBuf stringBuffer;
+
     if (WiFi.status() != WL_CONNECTED) wifiConnectMenu();
+    if (WiFi.status() != WL_CONNECTED) return JS_ThrowTypeError(ctx, "WIFI Not Connected");
 
-    if (WiFi.status() != WL_CONNECTED) { return duk_error(ctx, DUK_ERR_ERROR, "WIFI Not Connected"); }
+    if (argc < 1 || !JS_IsString(ctx, argv[0]))
+        return JS_ThrowTypeError(ctx, "httpFetch(url:string, options?:object|headers?:array)");
 
-    // Your Domain name with URL path or IP address with path
-    http.begin(duk_to_string(ctx, 0));
+    const char *url = JS_ToCString(ctx, argv[0], &stringBuffer);
+    http.begin(url);
 
-    // Add Headers if headers are included.
-    if (duk_is_array(ctx, 1)) {
-        // Get the length of the array
-        duk_uint_t len = duk_get_length(ctx, 1);
-        for (duk_uint_t i = 0; i < len; i++) {
-            // Get each element in the array
-            duk_get_prop_index(ctx, 1, i);
-
-            // Ensure it's a string
-            if (!duk_is_string(ctx, -1)) {
-                duk_pop(ctx);
-                return duk_error(
-                    ctx, DUK_ERR_TYPE_ERROR, "%s: Header array elements must be strings.", "httpFetch"
-                );
+    // handle headers if a simple array of pairs was passed as second arg
+    if (argc > 1 && JS_GetClassID(ctx, argv[1]) == JS_CLASS_ARRAY) {
+        JSValue jsvArrayLength = JS_GetPropertyStr(ctx, argv[1], "length");
+        if (JS_IsNumber(ctx, jsvArrayLength)) {
+            uint32_t arrayLength = 0;
+            JS_ToUint32(ctx, &arrayLength, jsvArrayLength);
+            for (uint32_t i = 0; i + 1 < arrayLength; i += 2) {
+                JSValue jsvKey = JS_GetPropertyUint32(ctx, argv[1], i);
+                JSValue jsvValue = JS_GetPropertyUint32(ctx, argv[1], i + 1);
+                if (JS_IsString(ctx, jsvKey) && JS_IsString(ctx, jsvValue)) {
+                    const char *key = JS_ToCString(ctx, jsvKey, &stringBuffer);
+                    const char *value = JS_ToCString(ctx, jsvValue, &stringBuffer);
+                    http.addHeader(key ? key : "", value ? value : "");
+                }
             }
-
-            // Get the string
-            const char *headerKey = duk_get_string(ctx, -1);
-            duk_pop(ctx);
-            i++;
-            duk_get_prop_index(ctx, 1, i);
-
-            // Ensure it's a string
-            if (!duk_is_string(ctx, -1)) {
-                return duk_error(
-                    ctx, DUK_ERR_TYPE_ERROR, "%s: Header array elements must be strings.", "httpFetch"
-                );
-            }
-
-            // Get the string
-            const char *headerValue = duk_get_string(ctx, -1);
-            duk_pop(ctx);
-            http.addHeader(headerKey, headerValue);
         }
     }
 
+    // options object handling (body, method, responseType, headers)
     const char *bodyRequest = NULL;
     size_t bodyRequestLength = 0U;
-
     const char *requestType = "GET";
-    uint8_t returnResponseType = 0;
+    uint8_t returnResponseType = 0; // 0 = string
 
-    if (duk_is_object(ctx, 1)) {
-        if (duk_get_prop_string(ctx, 1, "body")) {
-            duk_uint_t arg1Type = duk_get_type_mask(ctx, -1);
-            if (arg1Type & (DUK_TYPE_MASK_STRING | DUK_TYPE_MASK_NUMBER | DUK_TYPE_MASK_BOOLEAN)) {
-                bodyRequest = duk_to_string(ctx, -1);
-            } else if (arg1Type & DUK_TYPE_MASK_OBJECT) {
-                // JSON.stringify body if it's object type
-                duk_push_global_object(ctx);       /* -> [ global ] */
-                duk_push_string(ctx, "JSON");      /* -> [ global "JSON" ] */
-                duk_get_prop(ctx, -2);             /* -> [ global JSON ] */
-                duk_push_string(ctx, "stringify"); /* -> [ global Object "stringify" ] */
-                duk_get_prop(ctx, -2);             /* -> [ global Object stringify ] */
-
-                duk_dup(ctx, 1);
-                duk_pcall(ctx, 1);
-                bodyRequest = duk_to_string(ctx, -1);
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue jsvBody = JS_GetPropertyStr(ctx, argv[1], "body");
+        if (!JS_IsUndefined(jsvBody)) {
+            if (JS_IsString(ctx, jsvBody) || JS_IsNumber(ctx, jsvBody) || JS_IsBool(jsvBody)) {
+                bodyRequest = JS_ToCString(ctx, jsvBody, &stringBuffer);
+            } else if (JS_IsObject(ctx, jsvBody)) {
+                JSValue global = JS_GetGlobalObject(ctx);
+                JSValue json = JS_GetPropertyStr(ctx, global, "JSON");
+                JSValue stringify = JS_GetPropertyStr(ctx, json, "stringify");
+                if (JS_IsFunction(ctx, stringify)) {
+                    JS_PushArg(ctx, jsvBody);
+                    JS_PushArg(ctx, stringify);
+                    JS_PushArg(ctx, json);
+                    JSValue jsvBodyRequest = JS_Call(ctx, 1);
+                    if (!JS_IsException(jsvBodyRequest) &&
+                        (JS_IsString(ctx, jsvBodyRequest) || JS_IsNumber(ctx, jsvBodyRequest) ||
+                         JS_IsBool(jsvBodyRequest))) {
+                        bodyRequest = JS_ToCString(ctx, jsvBodyRequest, &stringBuffer);
+                    }
+                }
             }
             bodyRequestLength = bodyRequest == NULL ? 0U : strlen(bodyRequest);
         }
 
-        if (duk_get_prop_string(ctx, 1, "method")) { requestType = duk_get_string_default(ctx, -1, "GET"); }
-
-        if (duk_get_prop_string(ctx, 1, "responseType")) {
-            const char *returnResponseTypeString = duk_get_string_default(ctx, -1, "string");
-            returnResponseType = (strcmp(returnResponseTypeString, "string") == 0);
+        jsvBody = JS_GetPropertyStr(ctx, argv[1], "method");
+        if (!JS_IsUndefined(jsvBody) && JS_IsString(ctx, jsvBody)) {
+            requestType = JS_ToCString(ctx, jsvBody, &stringBuffer);
         }
 
-        if (duk_get_prop_string(ctx, 1, "headers")) {
-            bool headersIsArray = duk_is_array(ctx, -1);
+        jsvBody = JS_GetPropertyStr(ctx, argv[1], "responseType");
+        if (!JS_IsUndefined(jsvBody) && JS_IsString(ctx, jsvBody)) {
+            const char *rts = JS_ToCString(ctx, jsvBody, &stringBuffer);
+            returnResponseType = (strcmp(rts ? rts : "string", "string") == 0) ? 0 : 1;
+        }
 
-            duk_enum(ctx, -1, 0);
-            while (duk_next(ctx, -1, 1)) {
-                const char *headerKey = NULL;
-                const char *headerValue = duk_get_string(ctx, -1);
-                if (!headersIsArray) { // If headers is object
-                    headerKey = duk_get_string(ctx, -2);
-                } else { // If headers is array
-                    if (duk_is_string(ctx, -1)) {
-                        headerKey = duk_get_string(ctx, -1);
-                        duk_pop_2(ctx);
-                        duk_bool_t isNextValue = duk_next(ctx, -1, 1);
-                        if (!isNextValue) break;
-                        headerValue = duk_get_string(ctx, -1);
-                    } else if (duk_is_array(ctx, -1)) {
-                        duk_get_prop_index(ctx, -1, 0);
-                        headerKey = duk_get_string(ctx, -1);
-                        duk_get_prop_index(ctx, -2, 1);
-                        headerValue = duk_get_string(ctx, -1);
-                        if (!duk_is_string(ctx, -1) || !duk_is_string(ctx, -2)) {
-                            duk_error(
-                                ctx,
-                                DUK_ERR_TYPE_ERROR,
-                                "%s: Header array elements must be strings.",
-                                "httpFetch"
-                            );
+        // headers inside options
+        jsvBody = JS_GetPropertyStr(ctx, argv[1], "headers");
+        if (!JS_IsUndefined(jsvBody)) {
+            if (JS_GetClassID(ctx, jsvBody) == JS_CLASS_ARRAY) {
+                JSValue l = JS_GetPropertyStr(ctx, jsvBody, "length");
+                if (JS_IsNumber(ctx, l)) {
+                    uint32_t len = 0;
+                    JS_ToUint32(ctx, &len, l);
+                    for (uint32_t i = 0; i + 1 < len; i += 2) {
+                        JSValue jsvKey = JS_GetPropertyUint32(ctx, jsvBody, i);
+                        JSValue jsvValue = JS_GetPropertyUint32(ctx, jsvBody, i + 1);
+                        if (JS_IsString(ctx, jsvKey) && JS_IsString(ctx, jsvValue)) {
+                            const char *key = JS_ToCString(ctx, jsvKey, &stringBuffer);
+                            const char *value = JS_ToCString(ctx, jsvValue, &stringBuffer);
+                            http.addHeader(key ? key : "", value ? value : "");
                         }
-                        duk_pop_2(ctx);
-                    } else {
-                        duk_error(
-                            ctx, DUK_ERR_TYPE_ERROR, "%s: Header array elements must be strings.", "httpFetch"
-                        );
                     }
                 }
-                duk_pop_2(ctx);
-                http.addHeader(headerKey, headerValue);
+            } else if (JS_IsObject(ctx, jsvBody)) {
+                uint32_t prop_count = 0;
+                for (uint32_t index = 0;; ++index) {
+                    const char *key = JS_GetOwnPropertyByIndex(ctx, index, &prop_count, jsvBody);
+                    if (key == NULL) break;
+                    JSValue hv = JS_GetPropertyStr(ctx, jsvBody, key);
+                    if (!JS_IsUndefined(hv) &&
+                        (JS_IsString(ctx, hv) || JS_IsNumber(ctx, hv) || JS_IsBool(hv))) {
+                        const char *val = JS_ToCString(ctx, hv, &stringBuffer);
+                        http.addHeader(key, val ? val : "");
+                    }
+                }
             }
         }
     }
 
-    // HTTPClient doesn't store headers unless you explicitly use collectHeaders
-    // TODO: Collect all headers manually
-    const char *headersKeys[] = {
-        "Content-Type", "Content-Length", "Transfer-Encoding", "Connection", "Cache-Control", "Date", "Server"
-    };
-    http.collectHeaders(headersKeys, 7);
-
-    // Send HTTP request
-    // MEMO: Docs is wrong: sendRequest returns httpResponseCode not
-    // Content-Length
+    // send
     int httpResponseCode = http.sendRequest(requestType, (uint8_t *)bodyRequest, bodyRequestLength);
-
     if (httpResponseCode <= 0) {
-        return duk_error(ctx, DUK_ERR_ERROR, http.errorToString(httpResponseCode).c_str());
+        return JS_ThrowTypeError(ctx, http.errorToString(httpResponseCode).c_str());
     }
 
     WiFiClient *stream = http.getStreamPtr();
-
-    int contentLength = http.getSize();
-    bool isChunked = false;
-    if (contentLength == -1) {
-        String transferEncoding = http.header("transfer-encoding");
-        isChunked = transferEncoding.equalsIgnoreCase("chunked");
+    String payload = "";
+    unsigned long startMillis = millis();
+    const unsigned long timeoutMillis = 30000;
+    while (http.connected()) {
+        if (millis() - startMillis > timeoutMillis) break;
+        while (stream->available()) { payload += (char)stream->read(); }
+        delay(1);
     }
 
-    duk_idx_t headersObjectIdx = duk_push_object(ctx);
+    JSValue headersObj = JS_NewObject(ctx);
     for (size_t i = 0; i < http.headers(); i++) {
-        bduk_put_prop(
-            ctx, headersObjectIdx, http.headerName(i).c_str(), duk_push_string, http.header(i).c_str()
+        JS_SetPropertyStr(
+            ctx, headersObj, http.headerName(i).c_str(), JS_NewString(ctx, http.header(i).c_str())
         );
     }
 
-    bool psramFoundValue = psramFound();
-    int payloadSize = 1; // MEMO: 1 for null terminated string
-    char *payload = NULL;
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    if (!isChunked) {
-        payloadSize = contentLength < 1 ? (psramFoundValue ? 16384 : 4096) : contentLength + 1;
-        payload = (char *)duk_push_fixed_buffer(ctx, payloadSize);
-
-        if (payload == NULL) {
-            return duk_error(ctx, DUK_ERR_ERROR, "%s: Memory allocation failed!", "httpFetch");
-        }
-    }
-
-    unsigned long startMillis = millis();
-    const unsigned long timeoutMillis = 30000;
-
-    size_t bytesRead = 0;
-    while (http.connected()) {
-        if (millis() - startMillis > timeoutMillis) {
-            Serial.println("Timeout while reading response!");
-            break;
-        }
-
-        if (isChunked) { // if header Transfer-Encoding: chunked
-            // Read chunk size
-            String chunkSizeStr = stream->readStringUntil('\r');
-            stream->read();                                         // Consume '\n'
-            int chunkSize = strtol(chunkSizeStr.c_str(), NULL, 16); // Convert hex to int
-            if (chunkSize == 0) break;                              // Last chunk
-
-            payloadSize += chunkSize;
-            if (payload == NULL) {
-                payload = (char *)duk_push_dynamic_buffer(ctx, payloadSize);
-            } else {
-                payload = (char *)duk_resize_buffer(ctx, -1, payloadSize);
-            }
-
-            if (payload == NULL) {
-                return duk_error(ctx, DUK_ERR_ERROR, "%s: Memory allocation failed!", "httpFetch");
-            }
-
-            // Read chunk data
-            int toRead = chunkSize;
-            while (toRead > 0) {
-                int readNow = stream->readBytes(payload + bytesRead, toRead);
-                if (readNow <= 0) break;
-                bytesRead += readNow;
-                toRead -= readNow;
-            }
-
-            // Consume trailing "\r\n" after chunk
-            stream->read();
-            stream->read();
-
-        } else {
-            int streamSize = stream->available();
-            if (streamSize > 0) {
-                size_t toRead = (streamSize > 512) ? 512 : streamSize;
-                if ((bytesRead + toRead + 1) > payloadSize) break;
-                int bytesReceived = stream->readBytes(payload + bytesRead, toRead);
-
-                bytesRead += bytesReceived;
-            } else {
-                delay(1);
-            }
-            if ((bytesRead + 1) >= payloadSize) break;
-        }
-        startMillis = millis();
-    }
-    if (payload != NULL) { payload[bytesRead] = '\0'; }
-
+    JSValue obj = JS_NewObject(ctx);
     if (returnResponseType == 0) {
-        duk_buffer_to_string(ctx, -1);
+        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, payload.c_str(), payload.length()));
     } else {
-        duk_push_buffer_object(ctx, -1, 0, payloadSize, DUK_BUFOBJ_UINT8ARRAY);
+        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, payload.c_str(), payload.length()));
     }
-    duk_put_prop_string(ctx, obj_idx, "body");
-    bduk_put_prop(ctx, obj_idx, "response", duk_push_int, httpResponseCode);
-    bduk_put_prop(ctx, obj_idx, "status", duk_push_int, httpResponseCode);
-    bduk_put_prop(ctx, obj_idx, "ok", duk_push_boolean, httpResponseCode >= 200 && httpResponseCode < 300);
+    JS_SetPropertyStr(ctx, obj, "headers", headersObj);
+    JS_SetPropertyStr(ctx, obj, "response", JS_NewInt32(ctx, httpResponseCode));
+    JS_SetPropertyStr(ctx, obj, "status", JS_NewInt32(ctx, httpResponseCode));
+    JS_SetPropertyStr(ctx, obj, "ok", JS_NewBool(httpResponseCode >= 200 && httpResponseCode < 300));
 
-    // Free resources
     http.end();
-    return 1;
+    return obj;
 }
 
-duk_ret_t native_wifiMACAddress(duk_context *ctx) {
+JSValue native_wifiMACAddress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     String macAddress = WiFi.macAddress();
-    duk_push_string(ctx, macAddress.c_str());
-    return 1;
+    return JS_NewString(ctx, macAddress.c_str());
 }
 
-duk_ret_t native_ipAddress(duk_context *ctx) {
+JSValue native_ipAddress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (wifiConnected) {
         String ipAddress = WiFi.localIP().toString();
-        duk_push_string(ctx, ipAddress.c_str());
-    } else {
-        duk_push_null(ctx);
+        return JS_NewString(ctx, ipAddress.c_str());
     }
-    return 1;
+    return JS_NULL;
 }
 #endif

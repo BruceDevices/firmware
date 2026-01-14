@@ -67,6 +67,12 @@ std::vector<Option> getScriptsOptionsList() {
 
 void ScriptsMenu::optionsMenu() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    if (interpreter_state >= 0) {
+        interpreter_state = 1;
+        returnToMenu = true;
+        return;
+    }
+
     options = getScriptsOptionsList();
 
     options.push_back({"Load...", run_bjs_script});

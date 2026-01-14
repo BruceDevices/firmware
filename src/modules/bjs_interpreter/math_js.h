@@ -1,16 +1,15 @@
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #ifndef __MATH_JS_H__
 #define __MATH_JS_H__
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropMathFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerMath(duk_context *ctx);
-
-duk_ret_t native_math_acosh(duk_context *ctx);
-duk_ret_t native_math_asinh(duk_context *ctx);
-duk_ret_t native_math_atanh(duk_context *ctx);
-duk_ret_t native_math_is_equal(duk_context *ctx);
+extern "C" {
+JSValue native_math_acosh(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_math_asinh(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_math_atanh(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_math_is_equal(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif
