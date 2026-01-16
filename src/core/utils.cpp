@@ -62,10 +62,18 @@ void updateClockTimezone() {
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
-    localTime = myTZ.toLocal(timeClient.getEpochTime() + bruceConfig.dst ? 3600 : 0);
+    localTime = timeClient.getEpochTime() + (bruceConfig.dst ? 3600 : 0);
 
-#if !defined(HAS_RTC)
-    rtc.setTime(timeClient.getEpochTime());
+#if defined(HAS_RTC)
+    struct tm *timeinfo = localtime(&localTime);
+    RTC_TimeTypeDef TimeStruct;
+    TimeStruct.Hours = timeinfo->tm_hour;
+    TimeStruct.Minutes = timeinfo->tm_min;
+    TimeStruct.Seconds = timeinfo->tm_sec;
+    _rtc.SetTime(&TimeStruct);
+    updateTimeStr(_rtc.getTimeStruct());
+#else
+    rtc.setTime(localTime);
     updateTimeStr(rtc.getTimeStruct());
     clock_set = true;
 #endif
