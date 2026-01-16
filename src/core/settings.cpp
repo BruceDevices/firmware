@@ -787,12 +787,14 @@ void setClock() {
     if (bruceConfig.automaticTimeUpdateViaNTP) {
         if (!wifiConnected) wifiConnectMenu();
 
+        options.clear();
+
+#ifndef LITE_VERSION
+
         struct TimezoneMapping {
             const char *name;
             float offset;
         };
-
-#ifndef LITE_VERSION
 
         constexpr TimezoneMapping timezoneMappings[] = {
             {"UTC-12 (Baker Island, Howland Island)",     -12  },
@@ -835,8 +837,7 @@ void setClock() {
             {"UTC+14 (Kiritimati)",                       14   }
         };
 
-        options.clear();
-        int idx = sizeof(timezoneMappings) / sizeof(timezoneMappings[0]);
+        int idx = 0;
         int i = 0;
         for (const auto &mapping : timezoneMappings) {
             if (bruceConfig.tmz == mapping.offset) { idx = i; }
@@ -853,16 +854,17 @@ void setClock() {
                                              4.5, 5,   5.5,  5.75, 6,   6.5,   7,  8,  8.75, 9,
                                              9.5, 10,  10.5, 11,   12,  12.75, 13, 14};
 
-        options.clear();
         int idx = 0;
+        int i = 0;
+        for (const auto &offset : timezoneOffsets) {
+            if (bruceConfig.tmz == offset) idx = i;
 
-        for (int i = 0; i < sizeof(timezoneOffsets) / sizeof(timezoneOffsets[0]); i++) {
-            float offset = timezoneOffsets[i];
-            String tzName = "UTC" + String(offset >= 0 ? "+" : "") + String(offset);
-            if (bruceConfig.tmz == offset * 3600) idx = i;
             options.emplace_back(
-                tzName.c_str(), [=]() { bruceConfig.setTmz(offset * 3600); }, bruceConfig.tmz == offset * 3600
+                ("UTC" + String(offset >= 0 ? "+" : "") + String(offset)).c_str(),
+                [=]() { bruceConfig.setTmz(offset); },
+                bruceConfig.tmz == offset
             );
+            ++i;
         }
 
 #endif
