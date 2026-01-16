@@ -70,7 +70,7 @@ extern SerialDevice *serialDevice;
 extern USBSerial USBserial;
 extern StartupApp startupApp;
 
-extern char timeStr[10];
+extern char timeStr[12];
 extern SPIClass sdcardSPI;
 extern SPIClass CC_NRF_SPI;
 extern bool clock_set;

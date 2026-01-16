@@ -14,7 +14,10 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["dimmerSet"] = dimmerSet;
     setting["bright"] = bright;
+    setting["automaticTimeUpdateViaNTP"] = automaticTimeUpdateViaNTP;
     setting["tmz"] = tmz;
+    setting["dst"] = dst;
+    setting["clock24hr"] = clock24hr;
     setting["soundEnabled"] = soundEnabled;
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
@@ -155,8 +158,26 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["automaticTimeUpdateViaNTP"].isNull()) {
+        automaticTimeUpdateViaNTP = setting["automaticTimeUpdateViaNTP"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
     if (!setting["tmz"].isNull()) {
         tmz = setting["tmz"].as<float>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["dst"].isNull()) {
+        dst = setting["dst"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["clock24hr"].isNull()) {
+        clock24hr = setting["clock24hr"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -455,6 +476,11 @@ void BruceConfig::validateBrightValue() {
     if (bright > 100) bright = 100;
 }
 
+void BruceConfig::setAutomaticTimeUpdateViaNTP(bool value) {
+    automaticTimeUpdateViaNTP = value;
+    saveFile();
+}
+
 void BruceConfig::setTmz(float value) {
     tmz = value;
     validateTmzValue();
@@ -463,6 +489,16 @@ void BruceConfig::setTmz(float value) {
 
 void BruceConfig::validateTmzValue() {
     if (tmz < -12 || tmz > 14) tmz = 0;
+}
+
+void BruceConfig::setDST(bool value) {
+    dst = value;
+    saveFile();
+}
+
+void BruceConfig::setClock24Hr(bool value) {
+    clock24hr = value;
+    saveFile();
 }
 
 void BruceConfig::setSoundEnabled(int value) {

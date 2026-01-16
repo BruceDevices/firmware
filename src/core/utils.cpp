@@ -62,7 +62,7 @@ void updateClockTimezone() {
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
-    localTime = myTZ.toLocal(timeClient.getEpochTime());
+    localTime = myTZ.toLocal(timeClient.getEpochTime() + bruceConfig.dst ? 3600 : 0);
 
 #if !defined(HAS_RTC)
     rtc.setTime(timeClient.getEpochTime());
@@ -72,8 +72,22 @@ void updateClockTimezone() {
 }
 
 void updateTimeStr(struct tm timeInfo) {
-    // Atualiza timeStr com a hora e minuto
-    snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+    if (bruceConfig.clock24hr) {
+        // Use 24 hour format
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec
+        );
+    } else {
+        // Use 12 hour format with AM/PM
+        int hour12 = (timeInfo.tm_hour == 0)   ? 12
+                     : (timeInfo.tm_hour > 12) ? timeInfo.tm_hour - 12
+                                               : timeInfo.tm_hour;
+        const char *ampm = (timeInfo.tm_hour < 12) ? "AM" : "PM";
+
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d %s", hour12, timeInfo.tm_min, timeInfo.tm_sec, ampm
+        );
+    }
 }
 
 void showDeviceInfo() {
