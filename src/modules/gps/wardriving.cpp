@@ -298,25 +298,6 @@ void Wardriving::loadAlertMACs() {
     }
 }
 
-bool Wardriving::checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName) {
-    String macLower = macAddress;
-    macLower.toLowerCase();
-
-    if (alertMACs.find(macLower) != alertMACs.end()) {
-        String alertMsg = "ALERT: " + deviceType + " found!";
-        if (deviceName.length() > 0) { alertMsg += " Name: " + deviceName; }
-        alertMsg += " MAC: " + macAddress;
-
-        displayError(alertMsg.c_str());
-        Serial.println("*** " + alertMsg + " ***");
-
-        // Brief delay to make alert visible
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        return true;
-    }
-    return false;
-}
-
 void Wardriving::create_filename() {
     char timestamp[20];
     sprintf(
@@ -375,11 +356,9 @@ void Wardriving::append_to_file(int network_amount, int bluetooth_amount) {
     for (int i = 0; i < network_amount; i++) {
         String macAddress = WiFi.BSSIDstr(i);
 
-        // Check for alert MAC
-        checkForAlert(macAddress, "WiFi", WiFi.SSID(i));
-
         // Check if MAC was already found in this session
         if (registeredMACs.find(macAddress) == registeredMACs.end()) {
+
             registeredMACs.insert(macAddress); // Adds MAC to file
             int32_t channel = WiFi.channel(i);
 
@@ -407,6 +386,9 @@ void Wardriving::append_to_file(int network_amount, int bluetooth_amount) {
             );
             file.print(buffer);
 
+            // Check for alert
+            checkForAlert(macAddress, "WiFi", WiFi.SSID(i));
+
             wifiNetworkCount++;
         }
     }
@@ -424,9 +406,6 @@ void Wardriving::append_to_file(int network_amount, int bluetooth_amount) {
             device.name.c_str(),
             device.rssi
         );
-
-        // Check for alert MAC
-        checkForAlert(device.address, "BLE", device.name);
 
         // Check if MAC was already found in this session
         if (registeredMACs.find(device.address) == registeredMACs.end()) {
@@ -458,6 +437,9 @@ void Wardriving::append_to_file(int network_amount, int bluetooth_amount) {
             );
             file.print(buffer);
 
+            // Check for alert
+            checkForAlert(device.address, "BLE", device.name);
+
             bluetoothDeviceCount++;
         }
     }
@@ -477,6 +459,24 @@ void Wardriving::releasePins() {
         // switch it to input so the GPS UART can drive it.
         pinMode(bruceConfigPins.gps_bus.rx, INPUT);
         rxPinReleased = true;
+    }
+}
+
+void Wardriving::checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName) {
+    String macLower = macAddress;
+    macLower.toLowerCase();
+
+    if (alertMACs.find(macLower) != alertMACs.end()) {
+        String alertMsg = "ALERT: " + deviceType + " found!";
+        if (deviceName.length() > 0) { alertMsg += " Name: " + deviceName; }
+        alertMsg += " MAC: " + macAddress;
+
+        foundMACAddressCount++;
+
+        displayError(alertMsg.c_str());
+
+        // Brief delay to make alert visible
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 }
 

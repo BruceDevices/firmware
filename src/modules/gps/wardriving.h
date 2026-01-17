@@ -45,6 +45,7 @@ private:
     bool scanBLE = false;                         // Flag to scan Bluetooth devices
     int wifiNetworkCount = 0;                     // Counter fo wifi networks
     int bluetoothDeviceCount = 0;                 // Counter for bluetooth devices
+    int foundMACAddressCount = 0;                 // Counter for found MAC addresses
 
     // Structure to safely store BLE device data
     struct BLEDeviceData {
@@ -79,7 +80,7 @@ private:
     int scanWiFiNetworks(void);
     int scanBLEDevices(void);
     void loadAlertMACs(void);
-    bool checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName = "");
+    void checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName = "");
     String auth_mode_to_string(wifi_auth_mode_t authMode);
     void append_to_file(int network_amount = 0, int bluetooth_amount = 0);
     void create_filename(void);
