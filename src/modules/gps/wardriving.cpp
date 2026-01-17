@@ -137,16 +137,16 @@ void Wardriving::set_position() {
 
 void Wardriving::display_banner() {
     drawMainBorderWithTitle("Wardriving");
-    padprintln("");
 
-    if (wifiNetworkCount > 0) {
-        padprintln("File: " + filename.substring(0, filename.length() - 4), 2);
-        if (scanWiFi) padprintln("Unique Networks Found: " + String(wifiNetworkCount), 2);
-        if (scanBLE) padprintln("Unique BLE Devices Found: " + String(bluetoothDeviceCount), 2);
-        padprintf(2, "Distance: %.2fkm\n", distance / 1000);
-    }
+    tft.println("");
+    if (filename != "") tft.println("File: " + filename.substring(0, filename.length() - 4));
+    tft.print("Found");
+    if (scanWiFi) tft.print(" WiFi: " + String(wifiNetworkCount));
+    if (scanBLE) tft.print(" BLE: " + String(bluetoothDeviceCount));
+    if (foundMACAddressCount) tft.print(" Alert: " + String(foundMACAddressCount));
 
-    padprintln("");
+    tft.println("");
+    tft.printf("Distance: %.2fkm\n", distance / 1000);
 }
 
 void Wardriving::dump_gps_data() {
@@ -184,17 +184,21 @@ void Wardriving::scanWiFiBLE() {
 }
 
 int Wardriving::scanWiFiNetworks() {
+    tft.print("Scanning Wi-Fi...");
     wifiConnected = true;
     int network_amount = WiFi.scanNetworks();
     if (network_amount == 0) {
-        padprintln("No Wi-Fi networks found", 2);
+        tft.print(" Found: None");
         return 0;
     }
-    padprintln("Networks Found: " + String(network_amount), 2);
+    tft.print(" Found: " + String(network_amount));
+    tft.println("");
+
     return network_amount;
 }
 
 int Wardriving::scanBLEDevices() {
+    tft.print("Scanning BLE....");
     ble_scan_setup();
     BLEScanResults foundDevices;
 
@@ -206,7 +210,7 @@ int Wardriving::scanBLEDevices() {
 
     int count = foundDevices.getCount();
     if (count == 0) {
-        padprintln("No BLE devices found", 2);
+        tft.print(" Found None");
         pBLEScan->clearResults();
         return 0;
     }
@@ -260,7 +264,9 @@ int Wardriving::scanBLEDevices() {
     }
 
     pBLEScan->clearResults();
-    padprintln("BLE Devices Found: " + String(bleDevices.size()), 2);
+    tft.print(" Found: " + String(bleDevices.size()));
+    tft.println("");
+
     return bleDevices.size();
 }
 
