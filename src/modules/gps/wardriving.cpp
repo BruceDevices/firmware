@@ -238,22 +238,23 @@ int Wardriving::scanBLEDevices() {
                     }
                 }
             } catch (const std::exception &e) {
-                Serial.printf(
-                    "Exception extracting manufacturer data for device %s: %s\n",
-                    deviceData.address.c_str(),
-                    e.what()
-                );
+                // Serial.printf(
+                //     "Exception extracting manufacturer data for device %s: %s\n",
+                //     deviceData.address.c_str(),
+                //     e.what()
+                // );
                 deviceData.manufacturerId = 0;
             } catch (...) {
-                Serial.printf(
-                    "Unknown error extracting manufacturer data for device %s\n", deviceData.address.c_str()
-                );
+                // Serial.printf(
+                //     "Unknown error extracting manufacturer data for device %s\n",
+                //     deviceData.address.c_str()
+                // );
                 deviceData.manufacturerId = 0;
             }
 
             bleDevices.push_back(deviceData);
         } catch (...) {
-            Serial.printf("Error extracting data for BLE device %d, skipping\n", i);
+            // Serial.printf("Error extracting data for BLE device %d, skipping\n", i);
             continue;
         }
     }
