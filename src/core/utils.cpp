@@ -62,18 +62,40 @@ void updateClockTimezone() {
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
-    localTime = myTZ.toLocal(timeClient.getEpochTime());
+    localTime = timeClient.getEpochTime() + (bruceConfig.dst ? 3600 : 0);
 
-#if !defined(HAS_RTC)
-    rtc.setTime(timeClient.getEpochTime());
+#if defined(HAS_RTC)
+    struct tm *timeinfo = localtime(&localTime);
+    RTC_TimeTypeDef TimeStruct;
+    TimeStruct.Hours = timeinfo->tm_hour;
+    TimeStruct.Minutes = timeinfo->tm_min;
+    TimeStruct.Seconds = timeinfo->tm_sec;
+    _rtc.SetTime(&TimeStruct);
+    updateTimeStr(_rtc.getTimeStruct());
+#else
+    rtc.setTime(localTime);
     updateTimeStr(rtc.getTimeStruct());
     clock_set = true;
 #endif
 }
 
 void updateTimeStr(struct tm timeInfo) {
-    // Atualiza timeStr com a hora e minuto
-    snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+    if (bruceConfig.clock24hr) {
+        // Use 24 hour format
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec
+        );
+    } else {
+        // Use 12 hour format with AM/PM
+        int hour12 = (timeInfo.tm_hour == 0)   ? 12
+                     : (timeInfo.tm_hour > 12) ? timeInfo.tm_hour - 12
+                                               : timeInfo.tm_hour;
+        const char *ampm = (timeInfo.tm_hour < 12) ? "AM" : "PM";
+
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d %s", hour12, timeInfo.tm_min, timeInfo.tm_sec, ampm
+        );
+    }
 }
 
 void showDeviceInfo() {
@@ -219,4 +241,16 @@ void i2c_bulk_write(TwoWire *wire, uint8_t addr, const uint8_t *bulk_data) {
         if (error != 0) { log_e("I2C Write error %d", error); }
         delay(1);
     }
+}
+
+void printMemoryUsage(const char *msg) {
+    Serial.printf(
+        "%s:\nPSRAM: [Free: %lu, max alloc: %lu],\nRAM: [Free: %lu, "
+        "max alloc: %lu]\n\n",
+        msg,
+        ESP.getFreePsram(),
+        ESP.getMaxAllocPsram(),
+        ESP.getFreeHeap(),
+        ESP.getMaxAllocHeap()
+    );
 }

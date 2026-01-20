@@ -5,126 +5,105 @@
 
 #include "helpers_js.h"
 
-duk_ret_t putPropKeyboardFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "keyboard", native_keyboard, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getKeysPressed", native_getKeysPressed, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getPrevPress", native_getPrevPress, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getSelPress", native_getSelPress, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getEscPress", native_getEscPress, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getNextPress", native_getNextPress, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getAnyPress", native_getAnyPress, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setLongPress", native_setLongPress, 1, magic);
-    return 0;
-}
-
-duk_ret_t registerKeyboard(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "getKeysPressed", native_getKeysPressed, 0);
-    bduk_register_c_lightfunc(ctx, "getPrevPress", native_getPrevPress, 0);
-    bduk_register_c_lightfunc(ctx, "getSelPress", native_getSelPress, 0);
-    bduk_register_c_lightfunc(ctx, "getEscPress", native_getEscPress, 0);
-    bduk_register_c_lightfunc(ctx, "getNextPress", native_getNextPress, 0);
-    bduk_register_c_lightfunc(ctx, "getAnyPress", native_getAnyPress, 0);
-    bduk_register_c_lightfunc(ctx, "setLongPress", native_setLongPress, 1);
-    return 0;
-}
-
-duk_ret_t native_keyboard(duk_context *ctx) {
-    // usage: keyboard() : string
-    // usage: keyboard(title: string) : string
-    // usage: keyboard(title: string, maxlen: int) : string
-    // usage: keyboard(title: string, maxlen: int, initval : string) : string
-    // usage: keyboard(maxlen: int, initval: string) : string
-    // returns: text typed by the user
+JSValue native_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     String result = "";
-    if (!duk_is_string(ctx, 0)) {
+    if (argc == 0) {
         result = keyboard("");
-    } else if (!duk_is_number(ctx, 1)) {
-        result = keyboard(duk_to_string(ctx, 0));
-    } else if (!duk_is_string(ctx, 2)) {
-        result = keyboard(duk_to_string(ctx, 0), duk_to_int(ctx, 1));
-    } else if (duk_is_number(ctx, 0) && duk_is_string(ctx, 1)) {
-        result = keyboard("", duk_to_int(ctx, 1), duk_to_string(ctx, 2));
+    } else if (JS_IsNumber(ctx, argv[0])) {
+        int m = 0;
+        if (JS_ToInt32(ctx, &m, argv[0])) return JS_EXCEPTION;
+        const char *init = "";
+        if (argc > 1 && JS_IsString(ctx, argv[1])) {
+            JSCStringBuf buf;
+            init = JS_ToCString(ctx, argv[1], &buf);
+        }
+        result = keyboard("", m, init);
+    } else if (JS_IsString(ctx, argv[0])) {
+        JSCStringBuf buf0;
+        const char *title = JS_ToCString(ctx, argv[0], &buf0);
+        if (argc == 1 || !JS_IsNumber(ctx, argv[1])) {
+            result = keyboard(title ? title : "");
+        } else {
+            int m = 0;
+            if (JS_ToInt32(ctx, &m, argv[1])) return JS_EXCEPTION;
+            if (argc < 3 || !JS_IsString(ctx, argv[2])) {
+                result = keyboard(title ? title : "", m);
+            } else {
+                JSCStringBuf buf2;
+                const char *init = JS_ToCString(ctx, argv[2], &buf2);
+                result = keyboard(title ? title : "", m, init ? init : "");
+            }
+        }
     } else {
-        result = keyboard(duk_to_string(ctx, 0), duk_to_int(ctx, 1), duk_to_string(ctx, 2));
+        result = keyboard("");
     }
-    duk_push_string(ctx, result.c_str());
-    return 1;
+
+    return JS_NewString(ctx, result.c_str());
 }
 
-duk_ret_t native_getPrevPress(duk_context *ctx) {
-    if ((!duk_get_boolean_default(ctx, 0, 0) && check(PrevPress)) || PrevPress) duk_push_boolean(ctx, true);
-    else duk_push_boolean(ctx, false);
-    return 1;
+JSValue native_getPrevPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(check(PrevPress));
 }
-duk_ret_t native_getSelPress(duk_context *ctx) {
-    if ((!duk_get_boolean_default(ctx, 0, 0) && check(SelPress)) || SelPress) duk_push_boolean(ctx, true);
-    else duk_push_boolean(ctx, false);
-    return 1;
+
+JSValue native_getSelPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(check(SelPress));
 }
-duk_ret_t native_getEscPress(duk_context *ctx) {
-    if ((!duk_get_boolean_default(ctx, 0, 0) && check(EscPress)) || EscPress) duk_push_boolean(ctx, true);
-    else duk_push_boolean(ctx, false);
-    return 1;
+
+JSValue native_getEscPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(check(EscPress));
 }
-duk_ret_t native_getNextPress(duk_context *ctx) {
-    if ((!duk_get_boolean_default(ctx, 0, 0) && check(NextPress)) || NextPress) duk_push_boolean(ctx, true);
-    else duk_push_boolean(ctx, false);
-    return 1;
+
+JSValue native_getNextPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(check(NextPress));
 }
-duk_ret_t native_getAnyPress(duk_context *ctx) {
-    if ((!duk_get_boolean_default(ctx, 0, 0) && check(AnyKeyPress)) || AnyKeyPress)
-        duk_push_boolean(ctx, true);
-    else duk_push_boolean(ctx, false);
-    return 1;
+
+JSValue native_getAnyPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewBool(check(AnyKeyPress));
 }
-duk_ret_t native_setLongPress(duk_context *ctx) {
-    LongPress = duk_get_boolean_default(ctx, 0, false);
-    return 1;
+
+JSValue native_setLongPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // TODO: if backgroud app implemented, store in ctx and set if on foreground/background
+    LongPress = (argc > 0) ? JS_ToBool(ctx, argv[0]) : false;
+    return JS_UNDEFINED;
 }
-duk_ret_t native_getKeysPressed(duk_context *ctx) {
-    duk_push_array(ctx);
+
+JSValue native_getKeysPressed(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSValue arr = JS_NewArray(ctx, 0);
 #ifdef HAS_KEYBOARD
-    // Create a new array on the stack
     keyStroke key = _getKeyPress();
-    if (!key.pressed) return 1; // if nothing has beed pressed, return 1
-    int arrayIndex = 0;
+    if (!key.pressed) return arr;
+    uint32_t arrayIndex = 0;
     for (auto i : key.word) {
-        char str[2] = {i, '\0'};
-        duk_push_string(ctx, str);
-        duk_put_prop_index(ctx, -2, arrayIndex);
-        arrayIndex++;
+        char str[2] = {(char)i, '\0'};
+        JSValue s = JS_NewString(ctx, str);
+        JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
     }
     if (key.del) {
-        duk_push_string(ctx, "Delete");
-        duk_put_prop_index(ctx, -2, arrayIndex);
-        arrayIndex++;
+        JSValue s = JS_NewString(ctx, "Delete");
+        JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
     }
     if (key.enter) {
-        duk_push_string(ctx, "Enter");
-        duk_put_prop_index(ctx, -2, arrayIndex);
-        arrayIndex++;
+        JSValue s = JS_NewString(ctx, "Enter");
+        JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
     }
     if (key.fn) {
-        duk_push_string(ctx, "Function");
-        duk_put_prop_index(ctx, -2, arrayIndex);
-        arrayIndex++;
+        JSValue s = JS_NewString(ctx, "Function");
+        JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
     }
     for (auto i : key.modifier_keys) {
         if (i == 0x82) {
-            duk_push_string(ctx, "Alt");
-            duk_put_prop_index(ctx, -2, arrayIndex);
-            arrayIndex++;
+            JSValue s = JS_NewString(ctx, "Alt");
+            JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
         } else if (i == 0x2B) {
-            duk_push_string(ctx, "Tab");
-            duk_put_prop_index(ctx, -2, arrayIndex);
-            arrayIndex++;
+            JSValue s = JS_NewString(ctx, "Tab");
+            JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
         } else if (i == 0x00) {
-            duk_push_string(ctx, "Option");
-            duk_put_prop_index(ctx, -2, arrayIndex);
-            arrayIndex++;
+            JSValue s = JS_NewString(ctx, "Option");
+            JS_SetPropertyUint32(ctx, arr, arrayIndex++, s);
         }
     }
 #endif
-    return 1;
+    return arr;
 }
+
 #endif

@@ -93,6 +93,11 @@ void IrRead::setup() {
              begin();
              return loop();
          }},
+        {"LED STRIP", [&]() {
+             quickButtons = quickButtonsLED;
+             begin();
+             return loop();
+         }},
     };
     options = {
         {"Custom Read",

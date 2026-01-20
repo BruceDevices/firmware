@@ -1,41 +1,32 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
+#include "core/utils.h"
 
-#include <duktape.h>
+static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
+
+extern "C" {
+#include "mqjs_stdlib.h"
+}
+
+#include "display_js.h"
+#include "globals_js.h"
 
 char *script = NULL;
 char *scriptDirpath = NULL;
 char *scriptName = NULL;
 
-// #define DUK_USE_DEBUG
-// #define DUK_USE_DEBUG_LEVEL 2
-// #define DUK_USE_DEBUG_WRITE
+TaskHandle_t interpreterTaskHandler = NULL;
 
-// Code interpreter, must be called in the loop() function to work
 void interpreterHandler(void *pvParameters) {
-    Serial.printf(
-        "init interpreter:\nPSRAM: [Free: %d, max alloc: %d],\nRAM: [Free: %d, "
-        "max alloc: %d]\n",
-        ESP.getFreePsram(),
-        ESP.getMaxAllocPsram(),
-        ESP.getFreeHeap(),
-        ESP.getMaxAllocHeap()
-    );
+    printMemoryUsage("init interpreter");
     if (script == NULL) { return; }
+
+    while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
+
     tft.fillScreen(TFT_BLACK);
     tft.setRotation(bruceConfigPins.rotation);
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
-    // Create context.
-    Serial.println("Create context");
-    auto alloc_function = &ps_alloc_function;
-    auto realloc_function = &ps_realloc_function;
-    auto free_function = &ps_free_function;
-    if (!psramFound()) {
-        alloc_function = NULL;
-        realloc_function = NULL;
-        free_function = NULL;
-    }
 
     /// TODO: Add DUK_USE_NATIVE_STACK_CHECK check with
     /// uxTaskGetStackHighWaterMark
@@ -83,90 +74,86 @@ void interpreterHandler(void *pvParameters) {
         ESP.getMaxAllocPsram(),
         ESP.getFreeHeap(),
         ESP.getMaxAllocHeap()
+    bool psramAvailable = psramFound();
+
+    size_t mem_size = psramAvailable ? 65536 : 32768;
+    uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
+    JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
+    JS_SetLogFunc(ctx, js_log_func);
+
+    js_timers_init(ctx);
+
+    // Set global variables
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_SetPropertyStr(
+        ctx, global, "__filepath", JS_NewString(ctx, (String(scriptDirpath) + String(scriptName)).c_str())
     );
+    JS_SetPropertyStr(ctx, global, "__dirpath", JS_NewString(ctx, scriptDirpath));
+    JS_SetPropertyStr(ctx, global, "BRUCE_VERSION", JS_NewString(ctx, BRUCE_VERSION));
+    JS_SetPropertyStr(ctx, global, "BRUCE_PRICOLOR", JS_NewInt32(ctx, bruceConfig.priColor));
+    JS_SetPropertyStr(ctx, global, "BRUCE_SECCOLOR", JS_NewInt32(ctx, bruceConfig.secColor));
+    JS_SetPropertyStr(ctx, global, "BRUCE_BGCOLOR", JS_NewInt32(ctx, bruceConfig.bgColor));
 
-    // TODO: match flipper syntax
-    // https://github.com/jamisonderek/flipper-zero-tutorials/wiki/JavaScript
-    // MEMO: API https://duktape.org/api.html
-    // https://github.com/joeqread/arduino-duktape/blob/main/src/duktape.h
+    JS_SetPropertyStr(ctx, global, "HIGH", JS_NewInt32(ctx, HIGH));
+    JS_SetPropertyStr(ctx, global, "LOW", JS_NewInt32(ctx, LOW));
+    JS_SetPropertyStr(ctx, global, "INPUT", JS_NewInt32(ctx, INPUT));
+    JS_SetPropertyStr(ctx, global, "OUTPUT", JS_NewInt32(ctx, OUTPUT));
+    JS_SetPropertyStr(ctx, global, "PULLUP", JS_NewInt32(ctx, PULLUP));
+    JS_SetPropertyStr(ctx, global, "INPUT_PULLUP", JS_NewInt32(ctx, INPUT_PULLUP));
+    JS_SetPropertyStr(ctx, global, "PULLDOWN", JS_NewInt32(ctx, PULLDOWN));
+    JS_SetPropertyStr(ctx, global, "INPUT_PULLDOWN", JS_NewInt32(ctx, INPUT_PULLDOWN));
 
-    Serial.printf("Script length: %d\n", strlen(script));
+    printMemoryUsage("context created");
 
-    if (duk_peval_string(ctx, script) != DUK_EXEC_SUCCESS) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.setTextSize(FM);
-        tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-        tft.drawCentreString("Error", tftWidth / 2, 10, 1);
-        tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-        tft.setTextSize(FP);
-        tft.setCursor(0, 33);
+    size_t scriptSize = strlen(script);
+    log_d("Script length: %zu\n", scriptSize);
 
-        String errorMessage = "";
-        if (duk_is_error(ctx, -1)) {
-            errorMessage = duk_safe_to_stacktrace(ctx, -1);
-        } else {
-            errorMessage = duk_safe_to_string(ctx, -1);
-        }
-        Serial.printf("eval failed: %s\n", errorMessage.c_str());
-        tft.printf("%s\n\n", errorMessage.c_str());
+    JSValue val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
 
-        int lineIndexOf = errorMessage.indexOf("line ");
-        int evalIndexOf = errorMessage.indexOf("(eval:");
-        Serial.printf("lineIndexOf: %d\n", lineIndexOf);
-        Serial.printf("evalIndexOf: %d\n", evalIndexOf);
-        String errorLine = "";
-        if (lineIndexOf != -1) {
-            lineIndexOf += 5;
-            errorLine = errorMessage.substring(lineIndexOf, errorMessage.indexOf("\n", lineIndexOf));
-        } else if (evalIndexOf != -1) {
-            evalIndexOf += 6;
-            errorLine = errorMessage.substring(evalIndexOf, errorMessage.indexOf(")", evalIndexOf));
-        }
-        Serial.printf("errorLine: [%s]\n", errorLine.c_str());
+    run_timers(ctx);
 
-        if (errorLine != "") {
-            uint8_t errorLineNumber = errorLine.toInt();
-            const char *errorScript = nth_strchr(script, '\n', errorLineNumber - 1);
-            Serial.printf("%.80s\n\n", errorScript);
-            tft.printf("%.80s\n\n", errorScript);
+    LongPress = false;
+    if (JS_IsException(val)) { js_fatal_error_handler(ctx); }
 
-            if (strstr(errorScript, "let ")) {
-                Serial.println("let is not supported, change it to var");
-                tft.println("let is not supported, change it to var");
-            }
-        }
-
-        delay(500);
-        while (!check(AnyKeyPress)) { vTaskDelay(50 / portTICK_PERIOD_MS); }
-    } else {
-        duk_uint_t resultType = duk_get_type_mask(ctx, -1);
-        if (resultType & (DUK_TYPE_MASK_STRING | DUK_TYPE_MASK_NUMBER)) {
-            printf("Script ran succesfully, result is: %s\n", duk_safe_to_string(ctx, -1));
-        } else {
-            printf("Script ran succesfully");
-        }
-    }
+    // Clean up.
     free((char *)script);
     script = NULL;
     free((char *)scriptDirpath);
     scriptDirpath = NULL;
     free((char *)scriptName);
     scriptName = NULL;
-    duk_pop(ctx);
 
-    // Clean up.
-    duk_destroy_heap(ctx);
+    js_timers_deinit(ctx);
+    JS_FreeContext(ctx);
+    free(mem_buf);
 
-    clearDisplayModuleData();
+    printMemoryUsage("deinit interpreter");
 
-    // delay(1000);
-    interpreter_start = false;
+    // TODO: if backgroud app implemented, store in ctx and set if on foreground/background
+
+    interpreter_state = -1;
     vTaskDelete(NULL);
     return;
 }
 
-// function to start the JS Interpreterm choosinng the file, processing and
-// start
+void startInterpreterTask() {
+    if (interpreterTaskHandler != NULL) {
+        log_w("Interpreter task already running");
+        interpreter_state = 1;
+        return;
+    }
+
+    xTaskCreateUniversal(
+        interpreterHandler,          // Task function
+        "interpreterHandler",        // Task Name
+        INTERPRETER_TASK_STACK_SIZE, // Stack size
+        NULL,                        // Task parameters
+        2,                           // Task priority (0 to 3), loopTask has priority 2.
+        &interpreterTaskHandler,     // Task handle
+        ARDUINO_RUNNING_CORE         // run on core the same core as loop task
+    );
+}
+
 void run_bjs_script() {
     String filename;
     FS *fs = &LittleFS;
@@ -179,86 +166,33 @@ void run_bjs_script() {
         loopOptions(options);
     }
     filename = loopSD(*fs, true, "BJS|JS");
-    script = readBigFile(*fs, filename);
+    script = readBigFile(fs, filename);
     if (script == NULL) { return; }
 
     returnToMenu = true;
-    interpreter_start = true;
-
-    // To stop the script, press Prev and Next together for a few seconds
+    interpreter_state = 1;
+    startInterpreterTask();
 }
 
 bool run_bjs_script_headless(char *code) {
     script = code;
     if (script == NULL) { return false; }
-    scriptDirpath = NULL;
-    scriptName = NULL;
+    scriptDirpath = strdup("/scripts");
+    scriptName = strdup("index.js");
+
     returnToMenu = true;
-    interpreter_start = true;
+    interpreter_state = 1;
+    startInterpreterTask();
     return true;
 }
 
 bool run_bjs_script_headless(FS fs, String filename) {
-    script = readBigFile(fs, filename);
+    script = readBigFile(&fs, filename);
     if (script == NULL) { return false; }
-    const char *sName = filename.substring(0, filename.lastIndexOf('/')).c_str();
-    const char *sDirpath = filename.substring(filename.lastIndexOf('/') + 1).c_str();
-    scriptDirpath = strdup(sDirpath);
-    scriptName = strdup(sName);
-    returnToMenu = true;
-    interpreter_start = true;
-    return true;
-}
 
-const char *nth_strchr(const char *s, char c, int8_t n) {
-    const char *nth = s;
-    if (c == '\0' || n < 1) return NULL;
-
-    for (int i = 0; i < n; i++) {
-        if ((nth = strchr(nth, c)) == 0) break;
-        nth++;
-    }
-
-    return nth;
-}
-
-void *ps_alloc_function(void *udata, duk_size_t size) {
-    void *res;
-    DUK_UNREF(udata);
-    res = ps_malloc(size);
-    return res;
-}
-
-void *ps_realloc_function(void *udata, void *ptr, duk_size_t newsize) {
-    void *res;
-    DUK_UNREF(udata);
-    res = ps_realloc(ptr, newsize);
-    return res;
-}
-
-void ps_free_function(void *udata, void *ptr) {
-    DUK_UNREF(udata);
-    DUK_ANSI_FREE(ptr);
-}
-
-void js_fatal_error_handler(void *udata, const char *msg) {
-    (void)udata;
-    tft.setTextSize(FM);
-    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.drawCentreString("Error", tftWidth / 2, 10, 1);
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.setCursor(0, 33);
-
-    tft.printf("JS FATAL ERROR: %s\n", (msg != NULL ? msg : "no message"));
-    Serial.printf("JS FATAL ERROR: %s\n", (msg != NULL ? msg : "no message"));
-    Serial.flush();
-
-    delay(500);
-    while (!check(AnyKeyPress)) vTaskDelay(50 / portTICK_PERIOD_MS);
-    // We need to restart esp32 after fatal error
-    abort();
-}
+    int slash = filename.lastIndexOf('/');
+    scriptName = strdup(filename.c_str() + slash + 1);
+    scriptDirpath = strndup(filename.c_str(), slash);
 
 /* 2FIX: not working
 // terminate the script
@@ -360,6 +294,10 @@ duk_ret_t native_load(duk_context *ctx) {
     scriptDirpath = NULL;
     scriptName = NULL;
     return 0;
+    returnToMenu = true;
+    interpreter_state = 1;
+    startInterpreterTask();
+    return true;
 }
 
 #endif

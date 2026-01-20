@@ -39,7 +39,7 @@
 
 #define IO_EXPANDER_PCA9555
 #define IO_EXP_GPS EXPANDS_GPS_EN
-// Main I2C Bus
+// Main SPI Bus
 #define SPI_SS_PIN 21
 #define SPI_MOSI_PIN 34
 #define SPI_MISO_PIN 33
@@ -167,6 +167,13 @@ static const uint8_t RX = SERIAL_RX;
 // TODO:
 // #define PN532_RF_REST 45
 // #define PN532_IRQ 17
+
+// RTC
+#define HAS_RTC
+#define RTC_SDA GROVE_SDA
+#define RTC_SCL GROVE_SCL
+#define RTC_INTERRUPT_PIN 1
+#define HAS_RTC_PCF85063A
 
 // BadUSB
 #define USB_as_HID 1

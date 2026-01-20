@@ -34,15 +34,7 @@ void OthersMenu::optionsMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Others");
 }
-void OthersMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.others),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void OthersMenu::drawIcon(float scale) {
     clearIconArea();
     int radius = scale * 7;

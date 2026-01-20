@@ -16,6 +16,8 @@ private:
     void display_banner();
     void run_full_jammer();
     void run_itmt_jammer();
+    void send_optimized_pulse(int width);
+    void send_random_pattern(int numPulses);
 };
 
 #endif

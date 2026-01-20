@@ -76,11 +76,7 @@ void RFIDMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "RFID Config");
 }
-void RFIDMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.rfid), 0, imgCenterY, true
-    );
-}
+
 void RFIDMenu::drawIcon(float scale) {
     clearIconArea();
     int iconSize = scale * 70;

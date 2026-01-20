@@ -161,7 +161,7 @@ void _setup_gpio() {
         PPM.getChargerConstantCurr();
         Serial.printf("getChargerConstantCurr: %d mA\n", PPM.getChargerConstantCurr());
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
+        PPM.enableOTG();
         PPM.enableCharge();
     }
 

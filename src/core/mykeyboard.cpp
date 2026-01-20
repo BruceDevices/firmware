@@ -438,11 +438,9 @@ String generalKeyboard(
 
     tft.fillScreen(bruceConfig.bgColor); // reset the screen
 
-#if defined(HAS_3_BUTTONS) // StickCs and Core for long press detection logic
     uint8_t longNextPress = 0;
     uint8_t longPrevPress = 0;
     unsigned long LongPressTmp = millis();
-#endif
 
     // main loop
     while (1) {
@@ -629,6 +627,40 @@ String generalKeyboard(
         } else {
             cursor_y = KBLH + LH + 6;
             cursor_x = 5 + current_text.length() * LW * FM;
+        }
+        // Prioritize Serial Input for navigation
+        if (SerialCmdPress) { // only for Remote Control, if no type of input was detected on device
+            if (check(SelPress)) {
+                selection_made = true;
+            }
+            /* Next-Prev Btns to move in X axis (right-left) */
+            else if (check(NextPress)) {
+                NextPress = false;
+                longNextPress = false;
+                x++;
+                if ((y < 0 && x >= buttons_number) || x >= KeyboardWidth) x = 0;
+                redraw = true;
+            }
+            /* Down-Up Btns to move in Y axis */
+            else if (check(PrevPress)) {
+                PrevPress = false;
+                longPrevPress = false;
+                x--;
+                if (y < 0 && x >= buttons_number) x = buttons_number - 1;
+                else if (x < 0) x = KeyboardWidth - 1;
+                redraw = true;
+            }
+            /* Down-Up Btns to move in Y axis */
+            else if (check(DownPress)) {
+                y++;
+                if (y >= KeyboardHeight) { y = -1; }
+                redraw = true;
+            } else if (check(UpPress)) {
+                y--;
+                if (y < -1) y = KeyboardHeight - 1;
+                redraw = true;
+            }
+            last_input_time = millis() + 100;
         }
 
         if (millis() - last_input_time > 250) { // INPUT DEBOUCING
@@ -838,9 +870,13 @@ String generalKeyboard(
 #endif
 
 #if defined(HAS_ENCODER) // T-Embed and T-LoRa-Pager and WaveSentry
-            // WaveSentry has Touchscreen and Encoder, but the touchscreen is prioritized
-            // if touchscreen is pressed, ignore the encoder input
+                         // WaveSentry has Touchscreen and Encoder, but the touchscreen is prioritized
+                         // if touchscreen is pressed, ignore the encoder input
+#if !defined(HAS_TOUCH)
+            LongPress = true;
+#endif
             if ((check(SelPress) || selection_made) && touchPoint.pressed == false) {
+                LongPress = false;
                 selection_made = true;
             } else {
                 /* NEXT "Btn" to move forward on th X axis (to the right) */
@@ -887,38 +923,6 @@ String generalKeyboard(
             }
 #endif
         } // end of physical input detection
-
-        if (SerialCmdPress) { // only for Remote Control, if no type of input was detected on device
-            if (check(SelPress)) {
-                selection_made = true;
-            } else {
-                /* Next-Prev Btns to move in X axis (right-left) */
-                if (check(NextPress)) {
-                    x++;
-                    if ((y < 0 && x >= buttons_number) || x >= KeyboardWidth) x = 0;
-                    redraw = true;
-                }
-                /* Down-Up Btns to move in Y axis */
-                if (check(PrevPress)) {
-                    x--;
-                    if (y < 0 && x >= buttons_number) x = buttons_number - 1;
-                    else if (x < 0) x = KeyboardWidth - 1;
-                    redraw = true;
-                }
-                /* Down-Up Btns to move in Y axis */
-                if (check(DownPress)) {
-                    y++;
-                    if (y >= KeyboardHeight) { y = -1; }
-                    redraw = true;
-                }
-                if (check(UpPress)) {
-                    y--;
-                    if (y < -1) y = KeyboardHeight - 1;
-                    redraw = true;
-                }
-            }
-        }
-
         if (selection_made) { // if something was selected then handle it
             selection_made = false;
 

@@ -99,7 +99,7 @@ def _merge_bins_callback(target, source, env):
             env.Exit(1)
 
     cmd = " ".join([
-        "pio pkg exec -p \"tool-esptoolpy\" -- esptool.py",
+        q(python_exe), "-m", "platformio", "pkg", "exec", "-p", q("tool-esptoolpy"), "--", "esptool.py",
         "--chip", chip_arg,
         "merge-bin",
         "--output", q(out_bin),

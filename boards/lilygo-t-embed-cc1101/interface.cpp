@@ -76,7 +76,7 @@ void _setup_gpio() {
         PPM.getChargerConstantCurr();
         Serial.printf("getChargerConstantCurr: %d mA\n", (int)PPM.getChargerConstantCurr());
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
+        PPM.enableOTG(); // Fixes Dead Display on some devices!
         PPM.enableCharge();
     }
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
@@ -145,12 +145,63 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
+    static unsigned long cycleInterval = millis();
     static unsigned long tm = millis();  // debauce for buttons
     static unsigned long tm2 = millis(); // delay between Select and encoder (avoid missclick)
     static int posDifference = 0;
     static int lastPos = 0;
     bool sel = !BTN_ACT;
     bool esc = !BTN_ACT;
+    // Get PPM interrupt status
+
+    /*
+     * Obtaining the battery voltage and battery charging status does not directly read the register,
+     * but determines whether the charging current register is normal.
+     * If read directly, the reading will be inaccurate.
+     * The premise for obtaining these two states is that the NTC temperature measurement circuit is normal.
+     * If the NTC detection is abnormal, it will return 0
+     * * */
+    int ffs = PPM.getFaultStatus();
+    if (ffs) Serial.printf("Fault Status: %d\n", ffs);
+    if (PPM.isWatchdogFault()) { Serial.println("Watchdog Fault"); }
+    if (PPM.isBoostFault()) { Serial.println("Boost Fault"); }
+    int chf = PPM.isChargeFault();
+    if (chf) { Serial.printf("Charge Fault: %d\n", chf); }
+    if (PPM.isBatteryFault()) { Serial.println("Batter Fault"); }
+    if (PPM.isNTCFault()) {
+
+        Serial.print("NTC Fault:");
+        Serial.print(PPM.getNTCStatusString());
+        Serial.print(" Percentage:");
+        Serial.print(PPM.getNTCPercentage());
+        Serial.println("%");
+    }
+    // if (millis() > cycleInterval) {
+    //     Serial.printf("Fault Status: %d\n", PPM.getFaultStatus());
+    //     Serial.printf(
+    //         "CHG TARGET VOLTAGE :%04dmV CURRENT:%04dmA PER_CHARGE_CUR %04dmA\n",
+    //         PPM.getChargeTargetVoltage(),
+    //         PPM.getChargerConstantCurr(),
+    //         PPM.getPrechargeCurr()
+    //     );
+    //     Serial.printf(
+    //         "VBUS:%s %04dmV VBAT:%04dmV VSYS:%04dmV\n",
+    //         PPM.isVbusIn() ? "Connected" : "Disconnect",
+    //         PPM.getVbusVoltage(),
+    //         PPM.getBattVoltage(),
+    //         PPM.getSystemVoltage()
+    //     );
+    //     Serial.printf("BUS STATE:%d STR:%s\n", PPM.getBusStatus(), PPM.getBusStatusString());
+    //     Serial.printf(
+    //         "CHG STATE:%d STR:%s CURRENT:%04dmA\n",
+    //         PPM.chargeStatus(),
+    //         PPM.getChargeStatusString(),
+    //         PPM.getChargeCurrent()
+    //     );
+    //     Serial.printf("[%lu]", millis() / 1000);
+    //     Serial.println("----------------------------------------------------------------------------------");
+    //     cycleInterval = millis() + 1000;
+    // }
 
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
@@ -193,7 +244,7 @@ void InputHandler(void) {
     if (esc == BTN_ACT) {
         AnyKeyPress = true;
         EscPress = true;
-        Serial.println("EscPressed");
+        // Serial.println("EscPressed");
         tm = millis();
     }
 }
@@ -223,20 +274,29 @@ void powerDownCC1101() {
     ELECHOUSE_cc1101.goSleep();
 }
 
+/*********************************************************************
+** Function: checkReboot
+** location: mykeyboard.cpp
+** Btn logic to tornoff the device (name is odd btw)
+**********************************************************************/
 void checkReboot() {
 #ifdef T_EMBED_1101
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (digitalRead(BK_BTN) == BTN_ACT) {
         uint32_t time_count = millis();
         while (digitalRead(BK_BTN) == BTN_ACT) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("DEEP SLEEP IN 3/3", 1);
+                    tft.fillRect(tftWidth / 2 - textWidth / 2, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 countDown = (millis() - time_count) / 1000 + 1;
                 if (countDown < 4)
-                    tft.drawCentreString("DeepSleep in " + String(countDown) + "/3", tftWidth / 2, 12, 1);
+                    tft.drawCentreString("DEEP SLEEP IN " + String(countDown) + "/3", tftWidth / 2, 12, 1);
                 else {
                     tft.fillScreen(bruceConfig.bgColor);
                     while (digitalRead(BK_BTN) == BTN_ACT);
@@ -254,11 +314,14 @@ void checkReboot() {
 
         // Clear text after releasing the button
         delay(30);
-        if (millis() - time_count > 500)
+        if (millis() - time_count > 500) {
             tft.fillRect(tftWidth / 2 - 9 * LW, 12, 18 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
     }
 #endif
 }
+
 /***************************************************************************************
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging

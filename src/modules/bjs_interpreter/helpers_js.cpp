@@ -3,64 +3,98 @@
 #include "core/sd_functions.h"
 #include <globals.h>
 
-// Commented because it is not used for now
-// void registerFunction(duk_context *ctx, const char *name, duk_c_function
-// func, duk_idx_t nargs) { 	duk_push_c_function(ctx, func, nargs);
-// 	duk_put_global_string(ctx, name);
-// }
+void js_fatal_error_handler(JSContext *ctx) {
+    JSValue obj;
+    JSCStringBuf sb;
+    obj = JS_GetException(ctx);
 
-void bduk_register_c_lightfunc(
-    duk_context *ctx, const char *name, duk_c_function func, duk_idx_t nargs, duk_idx_t magic
-) {
-    duk_push_c_lightfunc(ctx, func, nargs, nargs == DUK_VARARGS ? 15 : nargs, magic);
+    JSValue jsvMessage = JS_GetPropertyStr(ctx, obj, "message");
+    if (strcmp(JS_ToCString(ctx, jsvMessage, &sb), "Script exited") == 0) { return; }
 
-    duk_put_global_string(ctx, name);
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+    tft.drawCentreString("Error", tftWidth / 2, 10, 1);
+    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    tft.setCursor(0, 33);
+
+    JSValue jsvStack = JS_GetPropertyStr(ctx, obj, "stack");
+    const char *stackTrace = NULL;
+    if (!JS_IsUndefined(jsvStack) && JS_IsString(ctx, jsvStack)) {
+        stackTrace = JS_ToCString(ctx, jsvStack, &sb);
+    } else {
+        /* fallback to exception's string representation */
+        stackTrace = JS_ToCString(ctx, obj, &sb);
+    }
+
+    JS_PrintValueF(ctx, obj, JS_DUMP_LONG);
+    const char *msg = JS_ToCString(ctx, obj, &sb);
+
+    tft.printf("%s\n%s\n", (msg != NULL ? msg : "JS Error"), stackTrace);
+    Serial.printf("%s\n%s\n", (msg != NULL ? msg : "JS Error"), stackTrace);
+    Serial.flush();
+
+    delay(500);
+    while (!check(AnyKeyPress)) delay(50);
 }
 
-void bduk_register_int(duk_context *ctx, const char *name, duk_int_t val) {
-    duk_push_int(ctx, val);
-    duk_put_global_string(ctx, name);
+bool JS_IsTypedArray(JSContext *ctx, JSValue val) {
+    int classId = JS_GetClassID(ctx, val);
+    return (classId >= JS_CLASS_ARRAY_BUFFER && classId <= JS_CLASS_UINT32_ARRAY);
 }
 
-void bduk_register_string(duk_context *ctx, const char *name, const char *val) {
-    duk_push_string(ctx, val);
-    duk_put_global_string(ctx, name);
-}
-
-void bduk_put_prop_c_lightfunc(
-    duk_context *ctx, duk_idx_t obj_idx, const char *name, duk_c_function func, duk_idx_t nargs,
-    duk_idx_t magic
-) {
-    duk_push_c_lightfunc(ctx, func, nargs, nargs == DUK_VARARGS ? 15 : nargs, magic);
-
-    duk_put_prop_string(ctx, obj_idx, name);
-}
-
-FileParamsJS js_get_path_from_params(duk_context *ctx, bool checkIfexist, bool legacy) {
+FileParamsJS js_get_path_from_params(JSContext *ctx, JSValue *argv, bool checkIfexist, bool legacy) {
     FileParamsJS filePath;
-    String fsParam = legacy ? duk_to_string(ctx, 0) : "";
-    fsParam.toLowerCase();
-    filePath.paramOffset = 1;
+    filePath.fs = &LittleFS;
+    filePath.path = "";
     filePath.exist = false;
+    filePath.paramOffset = 1;
 
-    // if function(path: {fs: string, path: string})
-    if (duk_is_object(ctx, 0)) {
-        duk_get_prop_string(ctx, 0, "fs");
-        fsParam = duk_to_string(ctx, -1);
-        duk_get_prop_string(ctx, 0, "path");
-        filePath.path = duk_to_string(ctx, -1);
-        duk_pop_2(ctx);
+    String fsParam = "";
+
+    /* legacy: first arg is fs string */
+    if (legacy && !JS_IsUndefined(argv[0])) {
+        JSCStringBuf buf;
+        const char *s = JS_ToCString(ctx, argv[0], &buf);
+        if (s) { fsParam = s; }
+        fsParam.toLowerCase();
+    }
+
+    /* if function({ fs, path }) */
+    if (JS_IsObject(ctx, argv[0])) {
+        JSValue fsVal = JS_GetPropertyStr(ctx, argv[0], "fs");
+        JSValue pathVal = JS_GetPropertyStr(ctx, argv[0], "path");
+
+        if (!JS_IsUndefined(fsVal)) {
+            JSCStringBuf buf;
+            const char *s = JS_ToCString(ctx, fsVal, &buf);
+            if (s) { fsParam = s; }
+        }
+
+        if (!JS_IsUndefined(pathVal)) {
+            JSCStringBuf buf;
+            const char *s = JS_ToCString(ctx, pathVal, &buf);
+            if (s) { filePath.path = s; }
+        }
+
         filePath.paramOffset = 0;
     }
 
+    /* filesystem selection */
     if (fsParam == "sd") {
         filePath.fs = &SD;
     } else if (fsParam == "littlefs") {
         filePath.fs = &LittleFS;
     } else {
-        // if function(path: string)
+        /* function(path: string) */
         filePath.paramOffset = 0;
-        filePath.path = duk_to_string(ctx, 0);
+
+        if (!JS_IsUndefined(argv[0])) {
+            JSCStringBuf buf;
+            const char *s = JS_ToCString(ctx, argv[0], &buf);
+            if (s) { filePath.path = s; }
+        }
 
         if (sdcardMounted && checkIfexist && SD.exists(filePath.path)) {
             filePath.fs = &SD;
@@ -69,22 +103,69 @@ FileParamsJS js_get_path_from_params(duk_context *ctx, bool checkIfexist, bool l
         }
     }
 
-    if (filePath.paramOffset == 1) {
-        // if function(fs: string, path: string)
-        filePath.path = duk_to_string(ctx, 1);
+    /* function(fs: string, path: string) */
+    if (filePath.paramOffset == 1 && !JS_IsUndefined(argv[1])) {
+        JSCStringBuf buf;
+        const char *s = JS_ToCString(ctx, argv[1], &buf);
+        if (s) { filePath.path = s; }
     }
 
-    if (checkIfexist) {
-        if ((filePath.fs)->exists(filePath.path)) {
-            filePath.exist = true;
-        } else {
-            filePath.exist = false;
-        }
-    }
+    /* existence check */
+    if (checkIfexist) { filePath.exist = filePath.fs->exists(filePath.path); }
 
     return filePath;
 }
 
-duk_ret_t native_noop(duk_context *ctx) { return 0; }
+void internal_print(
+    JSContext *ctx, JSValue *this_val, int argc, JSValue *argv, uint8_t printTft, uint8_t newLine
+) {
+    int maxArgs = argc;
+    if (maxArgs > 20) maxArgs = 20;
+    for (int i = 0; i < maxArgs; ++i) {
+        JSValue jsvValue = argv[i];
+        if (JS_IsUndefined(jsvValue)) break;
+        if (i > 0) {
+            if (printTft) tft.print(" ");
+            Serial.print(" ");
+        }
+
+        if (JS_IsUndefined(jsvValue)) {
+            if (printTft) tft.print("undefined");
+            Serial.print("undefined");
+
+        } else if (JS_IsNull(jsvValue)) {
+            if (printTft) tft.print("null");
+            Serial.print("null");
+
+        } else if (JS_IsNumber(ctx, jsvValue)) {
+            double numberValue = 0.0;
+            JS_ToNumber(ctx, &numberValue, jsvValue);
+            if (printTft) tft.printf("%g", numberValue);
+            Serial.printf("%g", numberValue);
+
+        } else if (JS_IsBool(jsvValue)) {
+            bool b = JS_ToBool(ctx, jsvValue);
+            const char *boolValue = b ? "true" : "false";
+            if (printTft) tft.print(boolValue);
+            Serial.print(boolValue);
+
+        } else {
+            JSCStringBuf sb;
+            const char *s = JS_ToCString(ctx, jsvValue, &sb);
+            if (s) {
+                if (printTft) tft.print(s);
+                Serial.print(s);
+            } else {
+                /* fallback */
+                JS_PrintValueF(ctx, jsvValue, JS_DUMP_LONG);
+            }
+        }
+    }
+
+    if (newLine) {
+        if (printTft) tft.println();
+        Serial.println();
+    }
+}
 
 #endif

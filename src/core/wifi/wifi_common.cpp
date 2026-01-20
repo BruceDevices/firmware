@@ -134,7 +134,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             int nets;
             WiFi.mode(WIFI_MODE_STA);
 
-            //wifiMACMenu();
+            // wifiMACMenu();
             applyConfiguredMAC();
 
             bool refresh_scan = false;
@@ -195,9 +195,8 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             break;
     }
 
-    if (returnToMenu)
-    {
-        wifiDisconnect();   // Forced turning off the wifi module if exiting back to the menu
+    if (returnToMenu) {
+        wifiDisconnect(); // Forced turning off the wifi module if exiting back to the menu
         return false;
     }
     return wifiConnected;
@@ -228,6 +227,7 @@ void wifiConnectTask(void *pvParameters) {
             vTaskDelay(100 / portTICK_RATE_MS);
         }
     }
+    WiFi.scanDelete();
 
     vTaskDelete(NULL);
     return;

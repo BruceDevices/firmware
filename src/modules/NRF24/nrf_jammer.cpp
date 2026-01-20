@@ -65,7 +65,9 @@ void nrf_jammer() {
             NRFradio.startConstCarrier(RF24_PA_MAX, 50);
             NRFradio.setAddressWidth(5);
             NRFradio.setPayloadSize(2);
-            if (!NRFradio.setDataRate(RF24_2MBPS)) ;
+            if (!NRFradio.setDataRate(RF24_2MBPS)) {
+                // Optionally log error or handle failure
+            }
         }
 
         drawMainBorder();
@@ -158,7 +160,9 @@ void nrf_channel_jammer() {
             NRFradio.startConstCarrier(RF24_PA_MAX, channel);
             NRFradio.setAddressWidth(3);
             NRFradio.setPayloadSize(2);
-            if (!NRFradio.setDataRate(RF24_2MBPS)) ;
+            if (!NRFradio.setDataRate(RF24_2MBPS)) {
+                // Optionally log error or handle failure
+            }
             NRFSPI = 1;
         }
 
@@ -257,7 +261,9 @@ void nrf_channel_hopper() {
     if (CHECK_NRF_SPI(mode)) {
         NRFradio.setPALevel(RF24_PA_MAX);
         NRFradio.startConstCarrier(RF24_PA_MAX, 50);
-        if (!NRFradio.setDataRate(RF24_2MBPS)) ;
+        if (!NRFradio.setDataRate(RF24_2MBPS)) {
+            // Optionally log error or handle failure
+        }
         NRFSPI = 1;
     }
 

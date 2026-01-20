@@ -1,6 +1,7 @@
 #include "configPins.h"
 #include "esp_mac.h"
 #include "sd_functions.h"
+#include <globals.h>
 String getMacAddress() {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -271,6 +272,7 @@ void BruceConfigPins::fromFile(bool checkFS) {
     loadFile(jsonDoc, checkFS);
 
     if (!jsonDoc.isNull()) fromJson(jsonDoc.as<JsonObject>());
+    jsonDoc.clear();
 }
 
 void BruceConfigPins::createFile() {
@@ -292,8 +294,10 @@ void BruceConfigPins::createFile() {
     else log_i("config file written successfully");
 
     file.close();
+    jsonDoc.clear();
 
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfigPins::saveFile() {
@@ -318,15 +322,16 @@ void BruceConfigPins::saveFile() {
     else log_i("config file written successfully");
 
     file.close();
-
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    jsonDoc.clear();
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfigPins::factoryReset() {
     FS *fs = &LittleFS;
     fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
-    ESP.restart();
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
 }
 
 void BruceConfigPins::validateConfig() {

@@ -9,17 +9,19 @@
 #ifndef __WAR_DRIVING_H__
 #define __WAR_DRIVING_H__
 
+#include "modules/ble/ble_common.h"
 #include <TinyGPS++.h>
 #include <esp_wifi_types.h>
 #include <globals.h>
 #include <set>
+#include <vector>
 
 class Wardriving {
 public:
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
-    Wardriving();
+    Wardriving(bool scanWiFi = false, bool scanBLE = false);
     ~Wardriving();
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -38,7 +40,21 @@ private:
     TinyGPSPlus gps;
     HardwareSerial GPSserial = HardwareSerial(2); // Uses UART2 for GPS
     std::set<String> registeredMACs;              // Store and track registered MAC
+    std::set<String> alertMACs;                   // Store alert MAC addresses from file
+    bool scanWiFi = false;                        // Flag to scan WiFi networks
+    bool scanBLE = false;                         // Flag to scan Bluetooth devices
     int wifiNetworkCount = 0;                     // Counter fo wifi networks
+    int bluetoothDeviceCount = 0;                 // Counter for bluetooth devices
+    int foundMACAddressCount = 0;                 // Counter for found MAC addresses
+
+    // Structure to safely store BLE device data
+    struct BLEDeviceData {
+        String address;
+        String name;
+        int rssi;
+        uint16_t manufacturerId;
+    };
+    std::vector<BLEDeviceData> bleDevices; // Safe storage for BLE device data
     bool rxPinReleased = false;
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -60,9 +76,13 @@ private:
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
     void set_position(void);
-    void scan_networks(void);
+    void scanWiFiBLE(void);
+    int scanWiFiNetworks(void);
+    int scanBLEDevices(void);
+    void loadAlertMACs(void);
+    void checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName = "");
     String auth_mode_to_string(wifi_auth_mode_t authMode);
-    void append_to_file(int network_amount);
+    void append_to_file(int network_amount = 0, int bluetooth_amount = 0);
     void create_filename(void);
 };
 

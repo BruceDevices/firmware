@@ -1,4 +1,3 @@
-
 #include "ScriptsMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
@@ -68,6 +67,12 @@ std::vector<Option> getScriptsOptionsList() {
 
 void ScriptsMenu::optionsMenu() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    if (interpreter_state >= 0) {
+        interpreter_state = 1;
+        returnToMenu = true;
+        return;
+    }
+
     options = getScriptsOptionsList();
 
     options.push_back({"Load...", run_bjs_script});
@@ -76,15 +81,7 @@ void ScriptsMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "Scripts");
 #endif
 }
-void ScriptsMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.interpreter),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ScriptsMenu::drawIcon(float scale) {
     clearIconArea();
 

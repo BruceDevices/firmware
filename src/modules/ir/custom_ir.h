@@ -50,3 +50,4 @@ void sendKaseikyoCommand(String address, String command, bool hideDefaultUI = fa
 bool sendDecodedCommand(String protocol, String value, uint8_t bits = 32, bool hideDefaultUI = false);
 void otherIRcodes();
 bool txIrFile(FS *fs, String filepath, bool hideDefaultUI = false);
+bool chooseCmdIrFile(FS *fs, String filepath);
