@@ -198,7 +198,7 @@ int Wardriving::scanWiFiNetworks() {
 }
 
 int Wardriving::scanBLEDevices() {
-    tft.print("Scanning BLE....");
+    tft.print("Scanning BLE...");
     ble_scan_setup();
     BLEScanResults foundDevices;
 
