@@ -19,6 +19,8 @@ USBSerial USBserial;
 SerialDevice *serialDevice = &USBserial;
 
 StartupApp startupApp;
+String startupAppJSInterpreterFile = "";
+
 MainMenu mainMenu;
 SPIClass sdcardSPI;
 #ifdef USE_HSPI_PORT

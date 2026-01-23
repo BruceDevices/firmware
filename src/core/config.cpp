@@ -59,6 +59,7 @@ JsonDocument BruceConfig::toJson() const {
     for (const auto &pair : wifi) { _wifi[pair.first] = pair.second; }
 
     setting["startupApp"] = startupApp;
+    setting["startupAppJSInterpreterFile"] = startupAppJSInterpreterFile;
     setting["wigleBasicToken"] = wigleBasicToken;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
@@ -332,6 +333,13 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["startupAppJSInterpreterFile"].isNull()) {
+        startupAppJSInterpreterFile = setting["startupAppJSInterpreterFile"].as<String>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
     if (!setting["wigleBasicToken"].isNull()) {
         wigleBasicToken = setting["wigleBasicToken"].as<String>();
     } else {
@@ -688,6 +696,11 @@ void BruceConfig::validateEvilPasswordMode() {
 
 void BruceConfig::setStartupApp(String value) {
     startupApp = value;
+    saveFile();
+}
+
+void BruceConfig::setStartupAppJSInterpreterFile(String value) {
+    startupAppJSInterpreterFile = value;
     saveFile();
 }
 

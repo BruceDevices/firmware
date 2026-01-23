@@ -79,6 +79,7 @@ public:
 
     // Misc
     String startupApp = "";
+    String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
     int devMode = 0;
     int colorInverted = 1;
@@ -170,6 +171,7 @@ public:
 
     // Misc
     void setStartupApp(String value);
+    void setStartupAppJSInterpreterFile(String value);
     void setWigleBasicToken(String value);
     void setDevMode(int value);
     void validateDevModeValue();

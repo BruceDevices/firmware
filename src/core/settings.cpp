@@ -2,6 +2,7 @@
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
 #include "display.h"
+#include "modules/bjs_interpreter/interpreter.h"
 #include "modules/ble_api/ble_api.hpp"
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_utils.h" // for initRfModule
@@ -1178,11 +1179,13 @@ void setStartupApp() {
         index++;
         if (bruceConfig.startupApp == appName) idx = index;
 
-        options.push_back(
-            {appName.c_str(),
-             [=]() { bruceConfig.setStartupApp(appName); },
-             bruceConfig.startupApp == appName}
-        );
+        options.push_back({appName.c_str(), [=]() {
+                               bruceConfig.setStartupApp(appName);
+                               if (appName == "JS Interpreter") {
+                                   options = getScriptsOptionsList(true);
+                                   loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
+                               }
+                           }});
     }
 
     loopOptions(options, idx);
@@ -1323,7 +1326,6 @@ void setBadUSBBLEMenu() {
 **  Main Menu for setting Bad USB/BLE Keyboard Layout
 **********************************************************************/
 void setBadUSBBLEKeyboardLayoutMenu() {
-
     uint8_t opt = bruceConfig.badUSBBLEKeyboardLayout;
 
     options.clear();
@@ -1369,7 +1371,6 @@ void setBadUSBBLEKeyDelayMenu() {
 **  Handles Menu to configure WiFi MAC Address
 **********************************************************************/
 void setMacAddressMenu() {
-
     String currentMAC = bruceConfig.wifiMAC;
     if (currentMAC == "") currentMAC = WiFi.macAddress();
 

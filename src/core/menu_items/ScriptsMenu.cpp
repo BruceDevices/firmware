@@ -5,66 +5,6 @@
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
 #include <algorithm>                             // for std::sort
 
-String getScriptsFolder(FS *&fs) {
-    String folder;
-    String possibleFolders[] = {"/scripts", "/BruceScripts", "/BruceJS"};
-    int listSize = sizeof(possibleFolders) / sizeof(possibleFolders[0]);
-
-    for (int i = 0; i < listSize; i++) {
-        if (SD.exists(possibleFolders[i])) {
-            fs = &SD;
-            return possibleFolders[i];
-        }
-        if (LittleFS.exists(possibleFolders[i])) {
-            fs = &LittleFS;
-            return possibleFolders[i];
-        }
-    }
-    return "";
-}
-
-std::vector<Option> getScriptsOptionsList() {
-    std::vector<Option> opt = {};
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-    FS *fs;
-    String folder = getScriptsFolder(fs);
-    if (folder == "") return opt; // did not find
-
-    File root = fs->open(folder);
-    if (!root || !root.isDirectory()) return opt; // not a dir
-
-    while (true) {
-        bool isDir;
-        String fullPath = root.getNextFileName(&isDir);
-        String nameOnly = fullPath.substring(fullPath.lastIndexOf("/") + 1);
-        if (fullPath == "") { break; }
-        // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
-
-        if (isDir) continue;
-
-        int dotIndex = nameOnly.lastIndexOf(".");
-        String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
-        ext.toUpperCase();
-        if (ext != "JS" && ext != "BJS") continue;
-
-        String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
-        opt.push_back({entry_title.c_str(), [=]() { run_bjs_script_headless(*fs, fullPath); }});
-    }
-
-    root.close();
-
-    std::sort(opt.begin(), opt.end(), [](const Option &a, const Option &b) {
-        String fa = String(a.label);
-        fa.toUpperCase();
-        String fb = String(b.label);
-        fb.toUpperCase();
-        return fa < fb;
-    });
-
-#endif
-    return opt;
-}
-
 void ScriptsMenu::optionsMenu() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     if (interpreter_state >= 0) {
