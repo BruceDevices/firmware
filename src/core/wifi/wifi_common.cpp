@@ -37,7 +37,7 @@ void ensureWifiPlatform() {
 
 bool _wifiConnect(const String &ssid, int encryption) {
     String password = bruceConfig.getWifiPassword(ssid);
-    if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:"); }
+    if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
     bool connected = _connectToWifiNetwork(ssid, password);
     bool retry = false;
 
@@ -55,7 +55,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
             return false;
         }
 
-        password = keyboard(password, 63, "Network Password:");
+        password = keyboard(password, 63, "Network Password:", true);
         connected = _connectToWifiNetwork(ssid, password);
     }
 

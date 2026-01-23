@@ -70,7 +70,7 @@ void ssh_setup(String host) {
     ssh_user = keyboard("", 76, "SSH USER");
     // ssh_user=keyboard("ubuntu",76,"SSH USER");
 
-    ssh_password = keyboard("", 76, "SSH PASSWORD");
+    ssh_password = keyboard("", 76, "SSH PASSWORD", true);
     // ssh_password=keyboard("ubuntu",76,"SSH PASSWORD");
 
     IPAddress resolvedIp;
