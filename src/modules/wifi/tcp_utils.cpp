@@ -13,7 +13,7 @@ void listenTcpPort() {
     tft.setTextSize(1);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
-    String portNumber = keyboard("", 5, "TCP port to listen");
+    String portNumber = num_keyboard("", 5, "TCP port to listen");
     if (portNumber.length() == 0) {
         displayError("No port number given, exiting");
         return;
@@ -79,7 +79,7 @@ void clientTCP() {
     if (!wifiConnected) wifiConnectMenu();
 
     String serverIP = keyboard("", 15, "Enter server IP");
-    String portString = keyboard("", 5, "Enter server Port");
+    String portString = num_keyboard("", 5, "Enter server Port");
     int portNumber = atoi(portString.c_str());
 
     if (serverIP.length() == 0 || portNumber == 0) {

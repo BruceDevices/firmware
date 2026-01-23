@@ -16,7 +16,7 @@ unsigned long currMillisec = 0;
 int clickCount = 0, delayValueInt;
 
 void clicker_setup() {
-    String delayValue = keyboard("100", 4, "Delay between click(ms)");
+    String delayValue = num_keyboard("100", 4, "Delay between click(ms)");
     delayValueInt = atoi(delayValue.c_str());
 
     usbClickerSetup();
