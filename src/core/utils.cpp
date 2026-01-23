@@ -254,3 +254,9 @@ void printMemoryUsage(const char *msg) {
         ESP.getMaxAllocHeap()
     );
 }
+
+String repeatString(int length, String character) {
+    String result = "";
+    for (int i = 0; i < length; i++) { result += character; }
+    return result;
+}
