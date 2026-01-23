@@ -786,6 +786,22 @@ String generalKeyboard(
                     if (y < 0 && x >= buttons_number) x = 0;
                     if (x >= KeyboardWidth) x = 0;
                     else if (x < 0) x = KeyboardWidth - 1;
+
+                    // Skip over keys with '\0' value
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            x++;
+                            if (x >= KeyboardWidth) {
+                                x = 0;
+                                y++;
+                                if (y >= KeyboardHeight) {
+                                    y = -1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
                 /* UP Btn to move in Y axis (Downwards) */
@@ -814,6 +830,18 @@ String generalKeyboard(
                     if (y >= KeyboardHeight) {
                         y = -1;
                     } else if (y < -1) y = KeyboardHeight - 1;
+
+                    // Skip over keys with '\0' value
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            y++;
+                            if (y >= KeyboardHeight) {
+                                y = -1;
+                                break;
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
             }
@@ -825,23 +853,80 @@ String generalKeyboard(
                 if (check(NextPress)) {
                     x++;
                     if ((y < 0 && x >= buttons_number) || x >= KeyboardWidth) x = 0;
+
+                    // Skip over keys with '\0' value
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            x++;
+                            if (x >= KeyboardWidth) {
+                                x = 0;
+                                y++;
+                                if (y >= KeyboardHeight) {
+                                    y = -1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
                 if (check(PrevPress)) {
                     x--;
                     if (y < 0 && x >= buttons_number) x = buttons_number - 1;
                     else if (x < 0) x = KeyboardWidth - 1;
+
+                    // Skip over keys with '\0' value when moving backwards
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            x--;
+                            if (x < 0) {
+                                x = KeyboardWidth - 1;
+                                y--;
+                                if (y < 0) {
+                                    y = -1;
+                                    x = buttons_number - 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
                 /* UP Btn to move in Y axis (Downwards) */
                 if (check(DownPress)) {
                     y++;
                     if (y > KeyboardHeight - 1) { y = -1; }
+
+                    // Skip over keys with '\0' value
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            y++;
+                            if (y >= KeyboardHeight) {
+                                y = -1;
+                                break;
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
                 if (check(UpPress)) {
                     y--;
                     if (y < -1) y = KeyboardHeight - 1;
+
+                    // Skip over keys with '\0' value when moving upwards
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            y--;
+                            if (y < 0) {
+                                y = -1;
+                                break;
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
             }
@@ -924,6 +1009,21 @@ String generalKeyboard(
                     // the others have all the same number of keys
                     if (y == -1 && x >= buttons_number) x = 0;
 
+                    // Skip over keys with '\0' value
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            x++;
+                            if (x >= KeyboardWidth) {
+                                x = 0;
+                                y++;
+                                if (y >= KeyboardHeight) {
+                                    y = -1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     redraw = true;
                 }
                 /* PREV "Btn" to move backwards on th X axis (to the left) */
@@ -942,6 +1042,22 @@ String generalKeyboard(
                     }
                     // else if (y == -1 && x >= buttons_number) x = buttons_number - 1;
                     // else if (x < 0) x = KeyboardWidth - 1;
+
+                    // Skip over keys with '\0' value when moving backwards
+                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                        while (keys[y][x][caps] == '\0') {
+                            x--;
+                            if (x < 0) {
+                                x = KeyboardWidth - 1;
+                                y--;
+                                if (y < 0) {
+                                    y = -1;
+                                    x = buttons_number - 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
 
                     redraw = true;
                 }
