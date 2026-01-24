@@ -107,6 +107,7 @@ void _setup_gpio() {
         drv.setWaveform(1, 0);
         drv.run();
     }
+    bruceConfigPins.gpsBaudrate = 38400;
 }
 
 /***************************************************************************************

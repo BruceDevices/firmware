@@ -15,22 +15,6 @@ void LoRaMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
 
-void LoRaMenu::drawIconImg() {
-    // Load custom theme image if available, otherwise draw default icon
-    if (bruceConfig.theme.lora && bruceConfig.theme.paths.lora != "") {
-        drawImg(
-            *bruceConfig.themeFS(),
-            bruceConfig.getThemeItemImg(bruceConfig.theme.paths.lora),
-            0,
-            imgCenterY,
-            true
-        );
-    } else {
-        // Fallback to default drawn icon
-        drawIcon(1.0);
-    }
-}
-
 void LoRaMenu::drawIcon(float scale) {
     clearIconArea();
     scale *= 0.75;

@@ -8,9 +8,11 @@
 
 #include "startup_app.h"
 
+#include "core/menu_items/ScriptsMenu.h"
 #include "core/settings.h" // clock
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
+#include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/gps_tracker.h"
 #include "modules/gps/wardriving.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
@@ -38,6 +40,13 @@ StartupApp::StartupApp() {
 #ifndef LITE_VERSION
     _startupApps["PN532 BLE"] = []() { Pn532ble(); };
     _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
+#endif
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    _startupApps["JS Interpreter"] = []() {
+        FS *fs;
+        String folder = getScriptsFolder(fs);
+        run_bjs_script_headless(*fs, bruceConfig.startupAppJSInterpreterFile);
+    };
 #endif
 }
 

@@ -1,5 +1,3 @@
-
-
 #ifndef __Ethernet_MENU_H__
 #define __Ethernet_MENU_H__
 
@@ -16,8 +14,8 @@ public:
 
     void optionsMenu(void);
     void drawIcon(float scale);
-    void drawIconImg();
-    bool getTheme() { return bruceConfig.theme.ethernet; }
+    bool hasTheme() { return bruceConfig.theme.ethernet; }
+    String themePath() { return bruceConfig.theme.paths.ethernet; }
 };
 
 #endif

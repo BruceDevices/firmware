@@ -66,18 +66,11 @@ void _setup_gpio() {
     Wire.begin(GROVE_SDA, GROVE_SCL);
     pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", (int)PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
+        // https://github.com/Xinyuan-LilyGO/T-Embed-CC1101/blob/3e6df69af51befdbd5c96761aca28b9a784413eb/examples/factory_test/factory_test.ino#L399-L425
+
+        PPM.resetDefault();
         PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(832);
-        PPM.getChargerConstantCurr();
-        Serial.printf("getChargerConstantCurr: %d mA\n", (int)PPM.getChargerConstantCurr());
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
     }
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
     // Start with default IR, RF and RFID Configs, replace old
@@ -193,7 +186,7 @@ void InputHandler(void) {
     if (esc == BTN_ACT) {
         AnyKeyPress = true;
         EscPress = true;
-        Serial.println("EscPressed");
+        // Serial.println("EscPressed");
         tm = millis();
     }
 }
@@ -223,20 +216,29 @@ void powerDownCC1101() {
     ELECHOUSE_cc1101.goSleep();
 }
 
+/*********************************************************************
+** Function: checkReboot
+** location: mykeyboard.cpp
+** Btn logic to tornoff the device (name is odd btw)
+**********************************************************************/
 void checkReboot() {
 #ifdef T_EMBED_1101
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (digitalRead(BK_BTN) == BTN_ACT) {
         uint32_t time_count = millis();
         while (digitalRead(BK_BTN) == BTN_ACT) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("DEEP SLEEP IN 3/3", 1);
+                    tft.fillRect(tftWidth / 2 - textWidth / 2, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 countDown = (millis() - time_count) / 1000 + 1;
                 if (countDown < 4)
-                    tft.drawCentreString("DeepSleep in " + String(countDown) + "/3", tftWidth / 2, 12, 1);
+                    tft.drawCentreString("DEEP SLEEP IN " + String(countDown) + "/3", tftWidth / 2, 12, 1);
                 else {
                     tft.fillScreen(bruceConfig.bgColor);
                     while (digitalRead(BK_BTN) == BTN_ACT);
@@ -254,11 +256,14 @@ void checkReboot() {
 
         // Clear text after releasing the button
         delay(30);
-        if (millis() - time_count > 500)
+        if (millis() - time_count > 500) {
             tft.fillRect(tftWidth / 2 - 9 * LW, 12, 18 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
     }
 #endif
 }
+
 /***************************************************************************************
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging

@@ -2,19 +2,20 @@
 #ifndef __KEYBOARD_JS_H__
 #define __KEYBOARD_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropKeyboardFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerKeyboard(duk_context *ctx);
-
-duk_ret_t native_keyboard(duk_context *ctx);
-duk_ret_t native_getPrevPress(duk_context *ctx);
-duk_ret_t native_getSelPress(duk_context *ctx);
-duk_ret_t native_getEscPress(duk_context *ctx);
-duk_ret_t native_getNextPress(duk_context *ctx);
-duk_ret_t native_getAnyPress(duk_context *ctx);
-duk_ret_t native_getKeysPressed(duk_context *ctx);
-duk_ret_t native_setLongPress(duk_context *ctx);
+extern "C" {
+JSValue native_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_hex_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_num_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getPrevPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getSelPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getEscPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getNextPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getAnyPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_getKeysPressed(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_setLongPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

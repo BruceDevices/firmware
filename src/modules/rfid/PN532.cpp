@@ -521,9 +521,11 @@ int PN532::write_data_blocks() {
     bool blockWriteSuccess;
     int totalSize = strAllPages.length();
 
-    Serial.println(strAllPages);
     while (strAllPages.length() > 0) {
         lineBreakIndex = strAllPages.indexOf("\n");
+
+        if (lineBreakIndex < 0) { break; } // Added for .JS and BugFix
+
         pageLine = strAllPages.substring(0, lineBreakIndex);
         strAllPages = strAllPages.substring(lineBreakIndex + 1);
 
@@ -538,13 +540,12 @@ int PN532::write_data_blocks() {
                 case PICC_TYPE_MIFARE_MINI:
                 case PICC_TYPE_MIFARE_1K:
                 case PICC_TYPE_MIFARE_4K:
-                    if (pageIndex == 0 || (pageIndex + 1) % 4 == 0)
-                        continue; // Data blocks for MIFARE Classic
+                    if (pageIndex == 0 || (pageIndex + 1) % 4 == 0) continue;
                     blockWriteSuccess = write_mifare_classic_data_block(pageIndex, strBytes);
                     break;
 
                 case PICC_TYPE_MIFARE_UL:
-                    if (pageIndex < 4 || pageIndex >= dataPages - 5) continue; // Data blocks for NTAG21X
+                    if (pageIndex < 4 || pageIndex >= dataPages - 5) continue;
                     blockWriteSuccess = write_mifare_ultralight_data_block(pageIndex, strBytes);
                     break;
 

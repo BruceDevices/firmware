@@ -57,7 +57,7 @@ size_t BLESerialService::println(size_t n) {
 }
 
 void BLESerialService::vprintf(const char *fmt, va_list args) {
-    int size = sprintf(nullptr, fmt, args);
+    int size = vsnprintf(NULL, 0, fmt, args) + 1;
     char str[BUFFER_SIZE];
     sprintf(str, fmt, args);
 

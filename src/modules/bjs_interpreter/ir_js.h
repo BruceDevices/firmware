@@ -2,14 +2,14 @@
 #ifndef __IR_JS_H__
 #define __IR_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropIRFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerIR(duk_context *ctx);
-
-duk_ret_t native_irTransmitFile(duk_context *ctx);
-duk_ret_t native_irTransmit(duk_context *ctx);
-duk_ret_t native_irRead(duk_context *ctx);
+extern "C" {
+JSValue native_irTransmitFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_irTransmit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_irRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_irReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

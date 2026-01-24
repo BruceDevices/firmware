@@ -161,7 +161,7 @@ void ScrollableTextArea::draw(bool force) {
 
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, bruceConfig.bgColor);
     _scrollBuffer.setTextColor(bruceConfig.priColor);
-    uint8_t _fSize = tft.textsize;
+    uint8_t _fSize = tft.getTextSize();
     tft.setTextSize(FP);
 
     uint16_t yOffset = 0;

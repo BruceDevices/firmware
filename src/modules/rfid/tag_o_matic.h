@@ -33,13 +33,26 @@ public:
     TagOMatic();
     TagOMatic(RFID_State initial_state);
     ~TagOMatic();
-
+// Headless constructor
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    TagOMatic(bool headless_mode);
+#endif
     /////////////////////////////////////////////////////////////////////////////////////
     // Life Cycle and Setup
     /////////////////////////////////////////////////////////////////////////////////////
     void setup();
     void loop();
     void set_rfid_module();
+// JS Support
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+
+    String read_tag_headless(int timeout_seconds);
+    String read_uid_headless(int timeout_seconds);
+    int write_tag_headless(int timeout_seconds);
+    String save_file_headless(String filename);
+    int load_file_headless(String filename);
+    RFIDInterface *getRFIDInterface() { return _rfid; } // Controlled Access Getter
+#endif
 
 private:
     RFIDInterface *_rfid;

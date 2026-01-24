@@ -44,7 +44,11 @@ void displayScrollingText(const String &text, Opt_Coord &coord) {
         String scrollingPart =
             displayText.substring(i, i + (coord.size - 1)); // Display charLimit characters at a time
         tft.fillRect(
-            coord.x, coord.y, (coord.size - 1) * LW * tft.textsize, LH * tft.textsize, bruceConfig.bgColor
+            coord.x,
+            coord.y,
+            (coord.size - 1) * LW * tft.getTextSize(),
+            LH * tft.getTextSize(),
+            bruceConfig.bgColor
         ); // Clear display area
         tft.setCursor(coord.x, coord.y);
         tft.setCursor(coord.x, coord.y);
@@ -90,6 +94,7 @@ void resetTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg, uint16_t 
     tft.fillScreen(screen);
     tft.setTextSize(size);
     tft.setTextColor(fc, bg);
+    tft.setTextDatum(0);
 }
 
 /***************************************************************************************
@@ -598,7 +603,7 @@ int loopOptions(
         }
         // interpreter_start -> running the interpreter
         // interpreter -> loopOptions helper inside the Javascript
-        if (interpreter_start && !interpreter) { break; }
+        if (interpreter_state > 0 && !interpreter) { break; }
     }
     return index;
 }
@@ -791,15 +796,13 @@ void drawStatusBar() {
     if (clock_set) {
         int clock_fontsize = 1; // Font size of the clock / BRUCE + BRUCE_VERSION
         setTftDisplay(12, 12, bruceConfig.priColor, clock_fontsize, bruceConfig.bgColor);
+        tft.fillRect(12, 12, 100, clock_fontsize * LH, bruceConfig.bgColor);
 #if defined(HAS_RTC)
-        _rtc.GetTime(&_time);
-        snprintf(timeStr, sizeof(timeStr), "%02d:%02d", _time.Hours, _time.Minutes);
-        tft.print(timeStr);
+        updateTimeStr(_rtc.getTimeStruct());
 #else
         updateTimeStr(rtc.getTimeStruct());
-        tft.fillRect(12, 12, 100, clock_fontsize * LH, bruceConfig.bgColor);
-        tft.print(timeStr);
 #endif
+        tft.print(timeStr);
     } else {
         setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
         tft.print("BRUCE " + String(BRUCE_VERSION));
@@ -928,7 +931,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         start = index - MAX_ITEMS + 1;
         if (start < 0) start = 0;
     }
-    int nchars = (tftWidth - 20) / (6 * tft.textsize);
+    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
     String txt = ">";
     while (i < arraySize) {
         if (i >= start) {

@@ -1,6 +1,6 @@
 #include "config.h"
+#include "mifare_keys_manager.h"
 #include "sd_functions.h"
-#include <globals.h>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -14,7 +14,10 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["dimmerSet"] = dimmerSet;
     setting["bright"] = bright;
+    setting["automaticTimeUpdateViaNTP"] = automaticTimeUpdateViaNTP;
     setting["tmz"] = tmz;
+    setting["dst"] = dst;
+    setting["clock24hr"] = clock24hr;
     setting["soundEnabled"] = soundEnabled;
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
@@ -55,10 +58,8 @@ JsonDocument BruceConfig::toJson() const {
     JsonObject _wifi = setting["wifi"].to<JsonObject>();
     for (const auto &pair : wifi) { _wifi[pair.first] = pair.second; }
 
-    JsonArray _mifareKeys = setting["mifareKeys"].to<JsonArray>();
-    for (auto key : mifareKeys) _mifareKeys.add(key);
-
     setting["startupApp"] = startupApp;
+    setting["startupAppJSInterpreterFile"] = startupAppJSInterpreterFile;
     setting["wigleBasicToken"] = wigleBasicToken;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
@@ -159,8 +160,26 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["automaticTimeUpdateViaNTP"].isNull()) {
+        automaticTimeUpdateViaNTP = setting["automaticTimeUpdateViaNTP"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
     if (!setting["tmz"].isNull()) {
         tmz = setting["tmz"].as<float>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["dst"].isNull()) {
+        dst = setting["dst"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["clock24hr"].isNull()) {
+        clock24hr = setting["clock24hr"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -309,21 +328,19 @@ void BruceConfig::fromFile(bool checkFS) {
         log_e("Fail");
     }
 
-    if (!setting["mifareKeys"].isNull()) {
-        mifareKeys.clear();
-        JsonArray _mifareKeys = setting["mifareKeys"].as<JsonArray>();
-        for (JsonVariant key : _mifareKeys) mifareKeys.insert(key.as<String>());
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!setting["startupApp"].isNull()) {
         startupApp = setting["startupApp"].as<String>();
     } else {
         count++;
         log_e("Fail");
     }
+    if (!setting["startupAppJSInterpreterFile"].isNull()) {
+        startupAppJSInterpreterFile = setting["startupAppJSInterpreterFile"].as<String>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
     if (!setting["wigleBasicToken"].isNull()) {
         wigleBasicToken = setting["wigleBasicToken"].as<String>();
     } else {
@@ -389,8 +406,10 @@ void BruceConfig::fromFile(bool checkFS) {
     validateConfig();
     if (count > 0) saveFile();
 
+    // Load MIFARE keys (loading via manager)
+    MifareKeysManager::ensureLoaded(mifareKeys);
+
     log_i("Using config from file");
-    jsonDoc.clear();
 }
 
 void BruceConfig::saveFile() {
@@ -411,16 +430,14 @@ void BruceConfig::saveFile() {
     else log_i("config file written successfully");
 
     file.close();
-    jsonDoc.clear();
-    // don't try to mount SD Card if not previously mounted
-    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
+
+    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfig::factoryReset() {
     FS *fs = &LittleFS;
     fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    // don't try to mount SD Card if not previously mounted
-    if (sdcardMounted) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
+    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
     ESP.restart();
 }
 
@@ -475,6 +492,11 @@ void BruceConfig::validateBrightValue() {
     if (bright > 100) bright = 100;
 }
 
+void BruceConfig::setAutomaticTimeUpdateViaNTP(bool value) {
+    automaticTimeUpdateViaNTP = value;
+    saveFile();
+}
+
 void BruceConfig::setTmz(float value) {
     tmz = value;
     validateTmzValue();
@@ -483,6 +505,16 @@ void BruceConfig::setTmz(float value) {
 
 void BruceConfig::validateTmzValue() {
     if (tmz < -12 || tmz > 14) tmz = 0;
+}
+
+void BruceConfig::setDST(bool value) {
+    dst = value;
+    saveFile();
+}
+
+void BruceConfig::setClock24Hr(bool value) {
+    clock24hr = value;
+    saveFile();
 }
 
 void BruceConfig::setSoundEnabled(int value) {
@@ -670,22 +702,13 @@ void BruceConfig::validateEvilPasswordMode() {
     if (evilPortalPasswordMode < 0 || evilPortalPasswordMode > 2) evilPortalPasswordMode = FULL_PASSWORD;
 }
 
-void BruceConfig::addMifareKey(String value) {
-    if (value.length() != 12) return;
-    mifareKeys.insert(value);
-    validateMifareKeysItems();
+void BruceConfig::setStartupApp(String value) {
+    startupApp = value;
     saveFile();
 }
 
-void BruceConfig::validateMifareKeysItems() {
-    for (auto key = mifareKeys.begin(); key != mifareKeys.end();) {
-        if (key->length() != 12) key = mifareKeys.erase(key);
-        else ++key;
-    }
-}
-
-void BruceConfig::setStartupApp(String value) {
-    startupApp = value;
+void BruceConfig::setStartupAppJSInterpreterFile(String value) {
+    startupAppJSInterpreterFile = value;
     saveFile();
 }
 
@@ -739,6 +762,9 @@ void BruceConfig::setBadUSBBLEShowOutput(bool value) {
     badUSBBLEShowOutput = value;
     saveFile();
 }
+void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
+
+void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }
 
 void BruceConfig::addDisabledMenu(String value) {
     // TODO: check if duplicate

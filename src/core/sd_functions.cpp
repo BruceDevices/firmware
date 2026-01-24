@@ -379,8 +379,8 @@ String readSmallFile(FS &fs, String filepath) {
 ** Description:   read file and return its contents as a char*
 **                caller needs to call free()
 ***************************************************************************************/
-char *readBigFile(FS &fs, String filepath, bool binary, size_t *fileSize) {
-    File file = fs.open(filepath);
+char *readBigFile(FS *fs, String filepath, bool binary, size_t *fileSize) {
+    File file = fs->open(filepath);
     if (!file) {
         Serial.printf("Could not open file: %s\n", filepath.c_str());
         return NULL;

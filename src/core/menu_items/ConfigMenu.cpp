@@ -114,15 +114,7 @@ void ConfigMenu::devMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Dev Mode");
 }
-void ConfigMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.config),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ConfigMenu::drawIcon(float scale) {
     clearIconArea();
     int radius = scale * 9;

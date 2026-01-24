@@ -5,301 +5,248 @@
 
 #include "helpers_js.h"
 
-duk_ret_t putPropStorageFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "readdir", native_storageReaddir, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "read", native_storageRead, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "write", native_storageWrite, 4, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "rename", native_storageRename, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "remove", native_storageRemove, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "mkdir", native_storageMkdir, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "rmdir", native_storageRmdir, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "spaceLittleFS", native_storageSpaceLittleFS, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "spaceSDCard", native_storageSpaceSDCard, 0, magic);
-    return 0;
-}
+JSValue native_storageReaddir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    // usage: storageReaddir(path: string | Path, options?: { withFileTypes?: false }): string[]
 
-duk_ret_t registerStorage(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "storageReaddir", native_storageReaddir, 2);
-    bduk_register_c_lightfunc(ctx, "storageRead", native_storageRead, 2);
-    bduk_register_c_lightfunc(ctx, "storageWrite", native_storageWrite, 4);
-    bduk_register_c_lightfunc(ctx, "storageRename", native_storageRename, 2);
-    bduk_register_c_lightfunc(ctx, "storageRemove", native_storageRemove, 1);
-    bduk_register_c_lightfunc(ctx, "storageSpaceLittleFS", native_storageSpaceLittleFS, 0);
-    bduk_register_c_lightfunc(ctx, "storageSpaceSDCard", native_storageSpaceSDCard, 0);
-    return 0;
-}
-
-duk_ret_t native_storageReaddir(duk_context *ctx) {
-    // usage: storageReaddir(path: string | Path, options?: { withFileTypes?:
-    // false }): string[]
-    // usage: storageReaddir(path: string | Path, options: {
-    // withFileTypes: true }): { name: string, size: number, isDirectory: boolean
-    // }[]
-
-    // Extract path
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
     if (!fileParams.exist) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: Directory does not exist: %s", "storageReaddir", fileParams.path.c_str()
+        return JS_ThrowTypeError(
+            ctx, "%s: Directory does not exist: %s", "storageReaddir", fileParams.path.c_str()
         );
     }
 
-    // Extract options object (optional)
-    duk_get_prop_string(ctx, 1, "withFileTypes");
-    bool withFileTypes = duk_get_boolean_default(ctx, -1, false);
-    duk_pop(ctx);
+    bool withFileTypes = false;
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue v = JS_GetPropertyStr(ctx, argv[1], "withFileTypes");
+        if (!JS_IsUndefined(v)) withFileTypes = JS_ToBool(ctx, v);
+    }
 
-    // Open directory
     File root = (fileParams.fs)->open(fileParams.path);
     if (!root || !root.isDirectory()) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: Not a directory: %s", "storageReaddir", fileParams.path.c_str()
-        );
+        return JS_ThrowTypeError(ctx, "%s: Not a directory: %s", "storageReaddir", fileParams.path.c_str());
     }
 
-    // Create result array
-    duk_idx_t arr_idx = duk_push_array(ctx);
-    int index = 0;
+    JSValue arr = JS_NewArray(ctx, 0);
+    uint32_t index = 0;
 
     while (true) {
         bool isDir;
         String fullPath = root.getNextFileName(&isDir);
         String nameOnly = fullPath.substring(fullPath.lastIndexOf("/") + 1);
         if (fullPath == "") { break; }
-        // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
 
         if (withFileTypes) {
-            // Return objects with name, size, and isDirectory
-            duk_idx_t obj_idx = duk_push_object(ctx);
-            duk_push_string(ctx, nameOnly.c_str());
-            duk_put_prop_string(ctx, obj_idx, "name");
+            JSValue obj = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, obj, "name", JS_NewString(ctx, nameOnly.c_str()));
 
             if (isDir) {
-                duk_push_int(ctx, 0);
+                JS_SetPropertyStr(ctx, obj, "size", JS_NewInt32(ctx, 0));
             } else {
-                // Serial.printf("Opening file for size check: %s\n", fullPath.c_str());
                 File file = (fileParams.fs)->open(fullPath);
-                // Serial.printf("File size: %llu bytes\n", file.size());
-                duk_push_int(ctx, file.size());
+                JS_SetPropertyStr(ctx, obj, "size", JS_NewInt32(ctx, (int)file.size()));
                 file.close();
             }
-            duk_put_prop_string(ctx, obj_idx, "size");
 
-            duk_push_boolean(ctx, isDir);
-            duk_put_prop_string(ctx, obj_idx, "isDirectory");
-
-            duk_put_prop_index(ctx, arr_idx, index++);
+            JS_SetPropertyStr(ctx, obj, "isDirectory", JS_NewBool(isDir));
+            JS_SetPropertyUint32(ctx, arr, index++, obj);
         } else {
-            // Return an array of filenames
-            duk_push_string(ctx, nameOnly.c_str());
-            duk_put_prop_index(ctx, arr_idx, index++);
+            JS_SetPropertyUint32(ctx, arr, index++, JS_NewString(ctx, nameOnly.c_str()));
         }
     }
     root.close();
 
-    return 1; // Return array
+    return arr;
 }
 
-duk_ret_t native_storageRead(duk_context *ctx) {
-    // usage: storageRead(path: string | Path, binary: boolean): string |
-    // Uint8Array returns: file contents as a string. Empty string on any error.
-    bool binary = duk_get_boolean_default(ctx, 1, false);
+JSValue native_storageRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    bool binary = false;
+    if (argc > 1 && JS_IsBool(argv[1])) binary = JS_ToBool(ctx, argv[1]);
+
     size_t fileSize = 0;
     char *fileContent = NULL;
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
     if (!fileParams.exist) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: File: %s does not exist", "storageRead", fileParams.path.c_str()
-        );
+        return JS_ThrowTypeError(ctx, "%s: File: %s does not exist", "storageRead", fileParams.path.c_str());
     }
-    if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path; // add "/" if missing
+    if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
 
-    // TODO: Change to use duk_push_fixed_buffer
-    fileContent = readBigFile(*fileParams.fs, fileParams.path, binary, &fileSize);
-
+    fileContent = readBigFile(fileParams.fs, fileParams.path, binary, &fileSize);
     if (fileContent == NULL) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: Could not read file: %s", "storageRead", fileParams.path.c_str()
-        );
+        return JS_ThrowTypeError(ctx, "%s: Could not read file: %s", "storageRead", fileParams.path.c_str());
     }
 
+    JSValue ret;
     if (binary && fileSize != 0) {
-        void *buf = duk_push_fixed_buffer(ctx, fileSize);
-        memcpy(buf, fileContent, fileSize);
-        // Convert buffer to Uint8Array
-        duk_push_buffer_object(ctx, -1, 0, fileSize, DUK_BUFOBJ_UINT8ARRAY);
+        // For now return as a JS string containing raw bytes (typed-array creation
+        // APIs are not available in a simple way here). If typed arrays are required
+        // later, implement ArrayBuffer/Uint8Array creation.
+        ret = JS_NewStringLen(ctx, fileContent, fileSize);
     } else {
-        duk_push_string(ctx, fileContent);
+        ret = JS_NewString(ctx, fileContent);
     }
     free(fileContent);
-    return 1;
+    return ret;
 }
 
-duk_ret_t native_storageWrite(duk_context *ctx) {
-    // usage: storageWrite(path: string | Path, data: string | Uint8Array, mode:
-    // "write" | "append", position: number | string): boolean The write function
-    // writes a string to a file, returning true if successful. Overwrites
-    // existing file. The first parameter is the path of the file or object {fs:
-    // string, path: string}. The second parameter is the contents to write
+JSValue native_storageWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    // usage: storageWrite(path: string | Path, data: string, mode: "write" | "append", position: number |
+    // string)
 
-    duk_size_t dataSize;
-    void *data = duk_to_buffer(ctx, 1, &dataSize);
+    size_t dataSize = 0;
+    const char *dataPtr = NULL;
+    JSCStringBuf sb;
+    if (argc > 0 && JS_IsString(ctx, argv[1])) { dataPtr = JS_ToCStringLen(ctx, &dataSize, argv[1], &sb); }
 
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
-    if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path; // add "/" if missing
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
+    if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
 
     const char *mode = FILE_APPEND; // default append
-    const char *modeString = duk_get_string_default(ctx, 2, "a");
-    if (modeString[0] == 'w') mode = FILE_WRITE;
-
-    File file = (fileParams.fs)->open(fileParams.path, mode, true);
-    if (!file) {
-        duk_push_boolean(ctx, false);
-        return 1;
+    if (argc > 2 && JS_IsString(ctx, argv[2])) {
+        JSCStringBuf mb;
+        const char *modeString = JS_ToCString(ctx, argv[2], &mb);
+        if (modeString && modeString[0] == 'w') mode = FILE_WRITE;
     }
 
+    File file = (fileParams.fs)->open(fileParams.path, mode, true);
+    if (!file) { return JS_NewBool(false); }
+
     // Check if position is provided
-    if (duk_is_number(ctx, 3)) {
-        // Get position as number
-        int64_t pos = duk_get_int(ctx, 3);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) {
+        int64_t pos;
+        int tmp;
+        JS_ToInt32(ctx, &tmp, argv[3]);
+        pos = tmp;
         if (pos < 0) {
-            // Negative index: seek from end
             file.seek(file.size() + pos, SeekSet);
         } else {
             file.seek(pos, SeekSet);
         }
-    } else if (duk_is_string(ctx, 3)) {
-        // Get position as string
-        size_t fileSize = 0;
-        char *fileContent = readBigFile(*fileParams.fs, fileParams.path, false, &fileSize);
-
+    } else if (argc > 3 && JS_IsString(ctx, argv[3])) {
+        size_t tmpSize = 0;
+        char *fileContent = readBigFile(fileParams.fs, fileParams.path, false, &tmpSize);
         if (fileContent == NULL) {
-            return duk_error(
-                ctx, DUK_ERR_ERROR, "%s: Could not read file: %s", "storageWrite", fileParams.path.c_str()
+            file.close();
+            return JS_ThrowTypeError(
+                ctx, "%s: Could not read file: %s", "storageWrite", fileParams.path.c_str()
             );
         }
-
-        char *foundPos = strstr(fileContent, duk_get_string(ctx, 3));
-        free(fileContent); // Free fileContent after usage
-
+        JSCStringBuf sb2;
+        const char *needle = JS_ToCString(ctx, argv[3], &sb2);
+        char *foundPos = strstr(fileContent, needle);
         if (foundPos) {
             file.seek(foundPos - fileContent, SeekSet);
         } else {
-            file.seek(0, SeekEnd); // Append if string is not found
+            file.seek(0, SeekEnd);
         }
+        free(fileContent);
     }
 
-    // Write data
-    file.write((const uint8_t *)data, dataSize);
+    if (dataPtr != NULL && dataSize > 0) { file.write((const uint8_t *)dataPtr, dataSize); }
     file.close();
 
-    duk_push_boolean(ctx, true);
-
-    return 1;
+    return JS_NewBool(true);
 }
 
-duk_ret_t native_storageRename(duk_context *ctx) {
-    // usage: storageRename(oldPath: string | Path, newPath: string): boolean
-    FileParamsJS oldFileParams = js_get_path_from_params(ctx, true);
-    String newPath = duk_get_string_default(ctx, 1, "");
+JSValue native_storageRename(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    FileParamsJS oldFileParams = js_get_path_from_params(ctx, argv, true);
+    JSCStringBuf nb;
+    const char *newPath = JS_ToCString(ctx, argv[1], &nb);
 
     if (!oldFileParams.exist) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: File: %s does not exist", "storageRename", oldFileParams.path.c_str()
+        return JS_ThrowTypeError(
+            ctx, "%s: File: %s does not exist", "storageRename", oldFileParams.path.c_str()
         );
     }
 
-    if (!oldFileParams.path.startsWith("/")) oldFileParams.path = "/" + oldFileParams.path;
-    if (!newPath.startsWith("/")) newPath = "/" + newPath;
+    String oldPath = oldFileParams.path;
+    String nPath = newPath ? String(newPath) : String("");
 
-    bool success = (oldFileParams.fs)->rename(oldFileParams.path, newPath);
-    duk_push_boolean(ctx, success);
-    return 1;
+    if (!oldPath.startsWith("/")) oldPath = "/" + oldPath;
+    if (!nPath.startsWith("/")) nPath = "/" + nPath;
+
+    bool success = (oldFileParams.fs)->rename(oldPath, nPath);
+    return JS_NewBool(success);
 }
 
-duk_ret_t native_storageRemove(duk_context *ctx) {
-    // usage: storageRemove(path: string | Path): boolean
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
+JSValue native_storageRemove(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
     if (!fileParams.exist) {
-        return duk_error(
-            ctx, DUK_ERR_ERROR, "%s: File: %s does not exist", "storageRemove", fileParams.path.c_str()
+        return JS_ThrowTypeError(
+            ctx, "%s: File: %s does not exist", "storageRemove", fileParams.path.c_str()
         );
     }
 
     if (!fileParams.path.startsWith("/")) { fileParams.path = "/" + fileParams.path; }
 
     bool success = (fileParams.fs)->remove(fileParams.path);
-    duk_push_boolean(ctx, success);
-    return 1;
+    return JS_NewBool(success);
 }
 
-duk_ret_t native_storageMkdir(duk_context *ctx) {
-    // usage: storageMkdir(path: string | Path): boolean
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
+JSValue native_storageMkdir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
 
     if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
 
-    String tempPath;
     bool success = true;
-
-    // Create each part of the path
-    // for (size_t i = 1; i < fileParams.path.length(); i++) {
-    //   if (fileParams.path[i] == '/') {
-    //     tempPath = fileParams.path.substring(0, i);
-    //     if (!(fileParams.fs)->exists(tempPath)) {
-    //       success = (fileParams.fs)->mkdir(tempPath);
-    //       if (!success) break;
-    //     }
-    //   }
-    // }
-
-    // Create full directory if it does not exist
     if (success && !(fileParams.fs)->exists(fileParams.path)) {
         success = (fileParams.fs)->mkdir(fileParams.path);
     }
 
-    duk_push_boolean(ctx, success);
-    return 1;
+    return JS_NewBool(success);
 }
 
-duk_ret_t native_storageRmdir(duk_context *ctx) {
-    // usage: storageRmdir(path: string | Path): boolean
-    FileParamsJS fileParams = js_get_path_from_params(ctx, true);
+JSValue native_storageRmdir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    (void)argv;
+    FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
 
     if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
 
-    // Ensure the directory exists before attempting to remove it
-    if (!(fileParams.fs)->exists(fileParams.path)) {
-        duk_push_boolean(ctx, false);
-        return 1;
-    }
+    if (!(fileParams.fs)->exists(fileParams.path)) { return JS_NewBool(false); }
 
     bool success = (fileParams.fs)->rmdir(fileParams.path);
-    duk_push_boolean(ctx, success);
-    return 1;
+    return JS_NewBool(success);
 }
 
-duk_ret_t native_storageSpaceLittleFS(duk_context *ctx) {
+JSValue native_storageSpaceLittleFS(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    (void)argv;
     uint32_t totalKiloBytes = (uint32_t)(LittleFS.totalBytes() / 1024);
     uint32_t usedKiloBytes = (uint32_t)(LittleFS.usedBytes() / 1024);
 
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop(ctx, obj_idx, "total", duk_push_uint, totalKiloBytes);
-    bduk_put_prop(ctx, obj_idx, "used", duk_push_uint, usedKiloBytes);
-    bduk_put_prop(ctx, obj_idx, "free", duk_push_uint, (totalKiloBytes - usedKiloBytes));
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "total", JS_NewUint32(ctx, totalKiloBytes));
+    JS_SetPropertyStr(ctx, obj, "used", JS_NewUint32(ctx, usedKiloBytes));
+    JS_SetPropertyStr(ctx, obj, "free", JS_NewUint32(ctx, (totalKiloBytes - usedKiloBytes)));
 
-    return 1;
+    return obj;
 }
 
-duk_ret_t native_storageSpaceSDCard(duk_context *ctx) {
+JSValue native_storageSpaceSDCard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    (void)this_val;
+    (void)argc;
+    (void)argv;
     uint32_t totalKiloBytes = (uint32_t)(SD.totalBytes() / 1024);
     uint32_t usedKiloBytes = (uint32_t)(SD.usedBytes() / 1024);
 
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop(ctx, obj_idx, "total", duk_push_uint, totalKiloBytes);
-    bduk_put_prop(ctx, obj_idx, "used", duk_push_uint, usedKiloBytes);
-    bduk_put_prop(ctx, obj_idx, "free", duk_push_uint, (totalKiloBytes - usedKiloBytes));
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "total", JS_NewUint32(ctx, totalKiloBytes));
+    JS_SetPropertyStr(ctx, obj, "used", JS_NewUint32(ctx, usedKiloBytes));
+    JS_SetPropertyStr(ctx, obj, "free", JS_NewUint32(ctx, (totalKiloBytes - usedKiloBytes)));
 
-    return 1;
+    return obj;
 }
 #endif

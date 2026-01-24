@@ -137,7 +137,11 @@ void tft_logger::getTftInfo() {
     logWriteHeader(buffer, pos, SCREEN_INFO);
     writeUint16(buffer, pos, width());
     writeUint16(buffer, pos, height());
-    buffer[pos++] = rotation;
+    uint8_t rot = 0;
+#if defined(HAS_SCREEN)
+    rot = getRotation();
+#endif
+    buffer[pos++] = rot;
     buffer[1] = pos;
     tftLog l;
     memcpy(l.data, buffer, pos);
@@ -151,7 +155,11 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     logWriteHeader(buffer, pos, SCREEN_INFO);
     writeUint16(buffer, pos, width());
     writeUint16(buffer, pos, height());
-    buffer[pos++] = rotation;
+    uint8_t rot = 0;
+#if defined(HAS_SCREEN)
+    rot = getRotation();
+#endif
+    buffer[pos++] = rot;
     buffer[1] = pos;
 
     memcpy(outBuffer + outSize, buffer, pos);
@@ -437,7 +445,7 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
     if (!log) return;
-    if (removeLogEntriesInsideRect(x, y, s.length() * LW * textsize, s.length() * LH * textsize)) {
+    if (removeLogEntriesInsideRect(x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize())) {
         // debug purpose
         // Serial.printf("Something was removed while processing: %s\n", s.c_str());
     }
@@ -448,9 +456,9 @@ void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
 
     writeUint16(buffer, pos, x);
     writeUint16(buffer, pos, y);
-    writeUint16(buffer, pos, textsize);
-    writeUint16(buffer, pos, textcolor);
-    writeUint16(buffer, pos, textbgcolor);
+    writeUint16(buffer, pos, currentTextSize());
+    writeUint16(buffer, pos, currentTextColor());
+    writeUint16(buffer, pos, currentTextBgColor());
 
     size_t maxLen = MAX_LOG_SIZE - pos - 1;
     size_t len = s.length();
@@ -498,18 +506,19 @@ void tft_logger::log_print(String s) {
     if (!log) return;
 
     removeLogEntriesInsideRect(
-        cursor_x - 1, cursor_y - 1, s.length() * LW * textsize + 2, s.length() * LH * textsize + 2
+        getCursorX() - 1, getCursorY() - 1, s.length() * LW * currentTextSize() + 2,
+        s.length() * LH * currentTextSize() + 2
     );
 
     uint8_t buffer[MAX_LOG_SIZE];
     uint8_t pos = 0;
     logWriteHeader(buffer, pos, PRINT);
 
-    writeUint16(buffer, pos, cursor_x);
-    writeUint16(buffer, pos, cursor_y);
-    writeUint16(buffer, pos, textsize);
-    writeUint16(buffer, pos, textcolor);
-    writeUint16(buffer, pos, textbgcolor);
+    writeUint16(buffer, pos, getCursorX());
+    writeUint16(buffer, pos, getCursorY());
+    writeUint16(buffer, pos, currentTextSize());
+    writeUint16(buffer, pos, currentTextColor());
+    writeUint16(buffer, pos, currentTextBgColor());
 
     size_t maxLen = MAX_LOG_SIZE - pos - 1;
     size_t len = s.length();

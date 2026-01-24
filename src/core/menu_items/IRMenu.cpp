@@ -35,11 +35,7 @@ void IRMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "IR Config");
 }
-void IRMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.ir), 0, imgCenterY, true
-    );
-}
+
 void IRMenu::drawIcon(float scale) {
     clearIconArea();
     int iconSize = scale * 60;

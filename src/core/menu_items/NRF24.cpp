@@ -82,11 +82,7 @@ void NRF24Menu::configMenu() {
     }
 #endif
 }
-void NRF24Menu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.nrf), 0, imgCenterY, true
-    );
-}
+
 void NRF24Menu::drawIcon(float scale) {
     clearIconArea();
     int iconW = scale * 80;

@@ -2,6 +2,9 @@
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
 #include "display.h"
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+#include "modules/bjs_interpreter/interpreter.h"
+#endif
 #include "modules/ble_api/ble_api.hpp"
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_utils.h" // for initRfModule
@@ -690,7 +693,7 @@ void setRFModuleMenu() {
 **********************************************************************/
 void setRFFreqMenu() {
     float result = 433.92;
-    String freq_str = keyboard(String(bruceConfigPins.rfFreq), 10, "Default frequency:");
+    String freq_str = num_keyboard(String(bruceConfigPins.rfFreq), 10, "Default frequency:");
     if (freq_str.length() > 1) {
         result = freq_str.toFloat();          // returns 0 if not valid
         if (result >= 280 && result <= 928) { // TODO: check valid freq according to current module?
@@ -749,37 +752,47 @@ void addMifareKeyMenu() {
 **  Handles Menu to set timezone to NTP
 **********************************************************************/
 const char *ntpServer = "pool.ntp.org";
-long selectedTimezone;
-const int daylightOffset_sec = 0;
-int timeHour;
-
-TimeChangeRule BRST = {"BRST", Last, Sun, Oct, 0, timeHour};
-Timezone myTZ(BRST, BRST);
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, ntpServer, selectedTimezone, daylightOffset_sec);
+NTPClient timeClient(ntpUDP, ntpServer, 0, 0);
 
 void setClock() {
-    bool auto_mode = true;
-
 #if defined(HAS_RTC)
     RTC_TimeTypeDef TimeStruct;
+#if defined(HAS_RTC_BM8563)
     _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+    _rtc.GetPcf85063Time();
+#endif
 #endif
 
     options = {
-        {"NTP Timezone", [&]() { auto_mode = true; } },
-        {"Manually set", [&]() { auto_mode = false; }},
+        {"Via NTP Set Timezone",                                                 [&]() { bruceConfig.setAutomaticTimeUpdateViaNTP(true); } },
+        {"Set Time Manually",                                                    [&]() { bruceConfig.setAutomaticTimeUpdateViaNTP(false); }},
+        {("Daylight Savings " + String(bruceConfig.dst ? "On" : "Off")).c_str(),
+         [&]() {
+             bruceConfig.setDST(!bruceConfig.dst);
+             updateClockTimezone();
+             returnToMenu = true;
+         }                                                                                                                                 },
+        {(bruceConfig.clock24hr ? "24-Hour Format" : "12-Hour Format"),          [&]() {
+             bruceConfig.setClock24Hr(!bruceConfig.clock24hr);
+             returnToMenu = true;
+         }                                                          }
     };
+
     addOptionToMainMenu();
     loopOptions(options);
 
     if (returnToMenu) return;
 
-    if (auto_mode) {
+    if (bruceConfig.automaticTimeUpdateViaNTP) {
         if (!wifiConnected) wifiConnectMenu();
 
-        float selectedTimezone = bruceConfig.tmz; // Store current timezone as default
+        options.clear();
+
+#ifndef LITE_VERSION
 
         struct TimezoneMapping {
             const char *name;
@@ -827,8 +840,7 @@ void setClock() {
             {"UTC+14 (Kiritimati)",                       14   }
         };
 
-        options.clear();
-        int idx = sizeof(timezoneMappings) / sizeof(timezoneMappings[0]);
+        int idx = 0;
         int i = 0;
         for (const auto &mapping : timezoneMappings) {
             if (bruceConfig.tmz == mapping.offset) { idx = i; }
@@ -839,29 +851,33 @@ void setClock() {
             ++i;
         }
 
+#else
+        constexpr float timezoneOffsets[] = {-12, -11, -10,  -9.5, -9,  -8,    -7, -6, -5,   -4,
+                                             -3,  -2,  -1,   0,    0.5, 1,     2,  3,  3.5,  4,
+                                             4.5, 5,   5.5,  5.75, 6,   6.5,   7,  8,  8.75, 9,
+                                             9.5, 10,  10.5, 11,   12,  12.75, 13, 14};
+
+        int idx = 0;
+        int i = 0;
+        for (const auto &offset : timezoneOffsets) {
+            if (bruceConfig.tmz == offset) idx = i;
+
+            options.emplace_back(
+                ("UTC" + String(offset >= 0 ? "+" : "") + String(offset)).c_str(),
+                [=]() { bruceConfig.setTmz(offset); },
+                bruceConfig.tmz == offset
+            );
+            ++i;
+        }
+
+#endif
+
         addOptionToMainMenu();
 
         loopOptions(options, idx);
 
-        if (returnToMenu) return;
+        updateClockTimezone();
 
-        timeClient.setTimeOffset(bruceConfig.tmz * 3600);
-        timeClient.begin();
-        timeClient.update();
-        localTime = myTZ.toLocal(timeClient.getEpochTime());
-
-#if defined(HAS_RTC)
-        struct tm *timeinfo = localtime(&localTime);
-        TimeStruct.Hours = timeinfo->tm_hour;
-        TimeStruct.Minutes = timeinfo->tm_min;
-        TimeStruct.Seconds = timeinfo->tm_sec;
-        _rtc.SetTime(&TimeStruct);
-#else
-        rtc.setTime(timeClient.getEpochTime());
-#endif
-
-        clock_set = true;
-        runClockLoop();
     } else {
         int hr, mn, am;
         options = {};
@@ -897,7 +913,6 @@ void setClock() {
         rtc.setTime(0, mn, hr + am, 20, 06, 2024); // send me a gift, @Pirata!
 #endif
         clock_set = true;
-        runClockLoop();
     }
 }
 
@@ -905,7 +920,12 @@ void runClockLoop() {
     int tmp = 0;
 
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_BM8563)
     _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+    _rtc.GetPcf85063Time();
+#endif
     _rtc.GetTime(&_time);
 #endif
 
@@ -915,7 +935,9 @@ void runClockLoop() {
 
     for (;;) {
         if (millis() - tmp > 1000) {
-#if !defined(HAS_RTC)
+#if defined(HAS_RTC)
+            updateTimeStr(_rtc.getTimeStruct());
+#else
             updateTimeStr(rtc.getTimeStruct());
 #endif
             Serial.print("Current time: ");
@@ -938,7 +960,12 @@ void runClockLoop() {
             }
             tft.setTextSize(f_size);
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_BM8563)
             _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+            _rtc.GetPcf85063Time();
+#endif
             _rtc.GetTime(&_time);
             char timeString[9]; // Buffer para armazenar a string formatada "HH:MM:SS"
             snprintf(
@@ -1015,7 +1042,8 @@ void setIrTxRepeats() {
         {"10 (+ 1 initial)", [&]() { chRpts = 10; }},
         {"Custom",           [&]() {
              // up to 99 repeats
-             String rpt = keyboard(String(bruceConfigPins.irTxRepeats), 2, "Nbr of Repeats (+ 1 initial)");
+             String rpt =
+                 num_keyboard(String(bruceConfigPins.irTxRepeats), 2, "Nbr of Repeats (+ 1 initial)");
              chRpts = static_cast<uint8_t>(rpt.toInt());
          }                       },
     };
@@ -1149,15 +1177,20 @@ void setStartupApp() {
         {"None", [=]() { bruceConfig.setStartupApp(""); }, bruceConfig.startupApp == ""}
     };
 
-    int index = 1;
+    int index = 0;
     for (String appName : startupApp.getAppNames()) {
-        if (bruceConfig.startupApp == appName) idx = index++;
+        index++;
+        if (bruceConfig.startupApp == appName) idx = index;
 
-        options.push_back(
-            {appName.c_str(),
-             [=]() { bruceConfig.setStartupApp(appName); },
-             bruceConfig.startupApp == appName}
-        );
+        options.push_back({appName.c_str(), [=]() {
+                               bruceConfig.setStartupApp(appName);
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+                               if (appName == "JS Interpreter") {
+                                   options = getScriptsOptionsList(true);
+                                   loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
+                               }
+#endif
+                           }});
     }
 
     loopOptions(options, idx);
@@ -1241,7 +1274,7 @@ void setWifiApPasswordMenu() {
          isDefault                                                                             },
         {"Custom",
          [=]() {
-             String newPassword = keyboard(bruceConfig.wifiAp.pwd, 32, "WiFi AP Password:");
+             String newPassword = keyboard(bruceConfig.wifiAp.pwd, 32, "WiFi AP Password:", true);
              if (!newPassword.isEmpty()) bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, newPassword);
              else displayError("Password cannot be empty", true);
          },                                                                          !isDefault},
@@ -1299,7 +1332,6 @@ void setBadUSBBLEMenu() {
 **  Main Menu for setting Bad USB/BLE Keyboard Layout
 **********************************************************************/
 void setBadUSBBLEKeyboardLayoutMenu() {
-
     uint8_t opt = bruceConfig.badUSBBLEKeyboardLayout;
 
     options.clear();
@@ -1331,7 +1363,7 @@ void setBadUSBBLEKeyboardLayoutMenu() {
 **  Main Menu for setting Bad USB/BLE Keyboard Key Delay
 **********************************************************************/
 void setBadUSBBLEKeyDelayMenu() {
-    String delayStr = keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
+    String delayStr = num_keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
     uint8_t delayVal = static_cast<uint8_t>(delayStr.toInt());
     if (delayVal >= 0 && delayVal <= 500) {
         bruceConfig.setBadUSBBLEKeyDelay(delayVal);
@@ -1360,7 +1392,6 @@ void setBadUSBBLEShowOutputMenu() {
 **  Handles Menu to configure WiFi MAC Address
 **********************************************************************/
 void setMacAddressMenu() {
-
     String currentMAC = bruceConfig.wifiMAC;
     if (currentMAC == "") currentMAC = WiFi.macAddress();
 

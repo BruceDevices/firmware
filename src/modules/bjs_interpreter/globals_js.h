@@ -2,20 +2,43 @@
 #ifndef __GLOBALS_JS_H__
 #define __GLOBALS_JS_H__
 
-#include <chrono>
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropGlobalsFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerGlobals(duk_context *ctx);
+extern "C" {
 
-duk_ret_t native_now(duk_context *ctx);
-duk_ret_t native_delay(duk_context *ctx);
-duk_ret_t native_random(duk_context *ctx);
-duk_ret_t native_parse_int(duk_context *ctx);
-duk_ret_t native_to_string(duk_context *ctx);
-duk_ret_t native_to_hex_string(duk_context *ctx);
-duk_ret_t native_to_lower_case(duk_context *ctx);
-duk_ret_t native_to_upper_case(duk_context *ctx);
+JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_load(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
+JSValue js_setTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_setInterval(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_clearInterval(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+void run_timers(JSContext *ctx);
+
+int js_add_main_timer(JSContext *ctx, JSValue func);
+
+void native_timers_state_finalizer(JSContext *ctx, void *opaque);
+
+void js_timers_init(JSContext *ctx);
+void js_timers_deinit(JSContext *ctx);
+
+JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
+JSValue native_require(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
+JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_delay(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_random(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_parse_int(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_to_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_to_hex_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_to_lower_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_to_upper_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_exit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

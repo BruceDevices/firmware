@@ -9,8 +9,8 @@ public:
 
     void optionsMenu(void);
     void drawIcon(float scale);
-    void drawIconImg();
-    bool getTheme() { return bruceConfig.theme.config; }
+    bool hasTheme() { return bruceConfig.theme.config; }
+    String themePath() { return bruceConfig.theme.paths.config; }
 
 private:
     void devMenu(void);
