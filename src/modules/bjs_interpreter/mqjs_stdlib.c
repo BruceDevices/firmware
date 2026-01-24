@@ -474,11 +474,19 @@ static const JSPropDef js_gpio[] = {
     JS_CFUNC_DEF("analogRead", 1, native_analogRead),
     JS_CFUNC_DEF("touchRead", 1, native_touchRead),
     JS_CFUNC_DEF("digitalWrite", 2, native_digitalWrite),
-    JS_CFUNC_DEF("analogWrite", 2, native_analogWrite),
     JS_CFUNC_DEF("dacWrite", 2, native_dacWrite),
-    JS_CFUNC_DEF("ledcSetup", 3, native_ledcSetup),
-    JS_CFUNC_DEF("ledcAttachPin", 2, native_ledcAttachPin),
+
+    JS_CFUNC_DEF("analogWrite", 2, native_analogWrite),
+    JS_CFUNC_DEF("analogWriteResolution", 2, native_analogWriteResolution),
+    JS_CFUNC_DEF("analogWriteFrequency", 2, native_analogWriteFrequency),
+
+    JS_CFUNC_DEF("ledcAttach", 3, native_ledcAttach),
     JS_CFUNC_DEF("ledcWrite", 2, native_ledcWrite),
+    JS_CFUNC_DEF("ledcWriteTone", 3, native_ledcWriteTone),
+    JS_CFUNC_DEF("ledcFade", 3, native_ledcFade),
+    JS_CFUNC_DEF("ledcChangeFrequency", 3, native_ledcChangeFrequency),
+    JS_CFUNC_DEF("ledcDetach", 3, native_ledcDetach),
+
     JS_CFUNC_DEF("pins", 0, native_pins),
     JS_PROP_END,
 };
@@ -519,6 +527,28 @@ static const JSPropDef js_mic[] = {
 };
 
 const JSClassDef js_mic_obj = JS_OBJECT_DEF("Mic", js_mic);
+
+/* Rfid module */
+static const JSPropDef js_rfid[] = {
+    JS_CFUNC_DEF("read", 1, native_rfidRead),
+    JS_CFUNC_DEF("readUID", 1, native_rfidReadUID),
+    JS_CFUNC_DEF("write", 1, native_rfidWrite),
+    JS_CFUNC_DEF("save", 1, native_rfidSave),
+    JS_CFUNC_DEF("load", 1, native_rfidLoad),
+    JS_CFUNC_DEF("clear", 0, native_rfidClear),
+    JS_CFUNC_DEF("addMifareKey", 1, native_rfid_AddMifareKey),
+
+    // SRIX functions
+    JS_CFUNC_DEF("srixRead", 1, native_srixRead),
+    JS_CFUNC_DEF("srixWrite", 1, native_srixWrite),
+    JS_CFUNC_DEF("srixSave", 1, native_srixSave),
+    JS_CFUNC_DEF("srixLoad", 1, native_srixLoad),
+    JS_CFUNC_DEF("srixClear", 0, native_srixClear),
+    JS_CFUNC_DEF("srixWriteBlock", 2, native_srixWriteBlock),
+    JS_PROP_END,
+};
+
+const JSClassDef js_rfid_obj = JS_OBJECT_DEF("Rfid", js_rfid);
 
 /* Runtime module */
 static const JSPropDef js_runtime[] = {
@@ -737,6 +767,7 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("keyboard", &js_keyboard_obj),
     JS_PROP_CLASS_DEF("notification", &js_notification_obj),
     JS_PROP_CLASS_DEF("mic", &js_mic_obj),
+    JS_PROP_CLASS_DEF("rfid", &js_rfid_obj),
     JS_PROP_CLASS_DEF("runtime", &js_runtime_obj),
     JS_PROP_CLASS_DEF("serial", &js_serial_obj),
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),

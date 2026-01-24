@@ -3,6 +3,23 @@
 #include "core/sd_functions.h"
 #include <globals.h>
 
+void print_errorMessage(const char *msg, const char *stackTrace) {
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+    tft.drawCentreString("Error", tftWidth / 2, 10, 1);
+    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    tft.setCursor(0, 33);
+
+    tft.printf("%s\n%s\n", msg, stackTrace);
+    Serial.printf("%s\n%s\n", msg, stackTrace);
+    Serial.flush();
+
+    delay(500);
+    while (!check(AnyKeyPress)) delay(50);
+}
+
 void js_fatal_error_handler(JSContext *ctx) {
     JSValue obj;
     JSCStringBuf sb;
@@ -31,12 +48,7 @@ void js_fatal_error_handler(JSContext *ctx) {
     JS_PrintValueF(ctx, obj, JS_DUMP_LONG);
     const char *msg = JS_ToCString(ctx, obj, &sb);
 
-    tft.printf("%s\n%s\n", (msg != NULL ? msg : "JS Error"), stackTrace);
-    Serial.printf("%s\n%s\n", (msg != NULL ? msg : "JS Error"), stackTrace);
-    Serial.flush();
-
-    delay(500);
-    while (!check(AnyKeyPress)) delay(50);
+    print_errorMessage(msg != NULL ? msg : "JS Error", stackTrace);
 }
 
 bool JS_IsTypedArray(JSContext *ctx, JSValue val) {

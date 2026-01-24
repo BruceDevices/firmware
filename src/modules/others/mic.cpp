@@ -365,7 +365,9 @@ void CreateWavHeader(byte *header, int waveDataSize) {
     header[43] = (byte)((waveDataSize >> 24) & 0xFF);
 }
 
-bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes) {
+bool mic_record_wav_to_path(
+    FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes
+) {
     if (out_bytes) *out_bytes = 0;
     if (fs == nullptr) return false;
     if (path.length() == 0) return false;
@@ -468,7 +470,7 @@ void mic_record() {
     }
 
     // Generate unique filename
-    char filename[32];
+    char filename[40];
     int index = 0;
     do {
         snprintf(filename, sizeof(filename), "/BruceMIC/recording_%d.wav", index++);
@@ -528,7 +530,9 @@ void mic_record() {
 void mic_test() {}
 void mic_test_one_task() {}
 void mic_record() {}
-bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes) {
+bool mic_record_wav_to_path(
+    FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes
+) {
     (void)fs;
     (void)path;
     (void)max_ms;

@@ -43,6 +43,7 @@ INCLUDES = [
     'math_js',
     'mic_js',
     'notification_js',
+    'rfid_js',
     'runtime_js',
     'serial_js',
     'storage_js',
