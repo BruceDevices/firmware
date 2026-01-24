@@ -137,6 +137,7 @@ static const JSPropDef js_array_proto[] = {
     JS_CFUNC_DEF("shift", 0, js_array_shift ),
     JS_CFUNC_DEF("slice", 2, js_array_slice ),
     JS_CFUNC_DEF("splice", 2, js_array_splice ),
+    JS_CFUNC_DEF("fill", 3, js_fill ),
     JS_CFUNC_MAGIC_DEF("unshift", 1, js_array_push, 1 ),
     JS_CFUNC_MAGIC_DEF("indexOf", 1, js_array_indexOf, 0 ),
     JS_CFUNC_MAGIC_DEF("lastIndexOf", 1, js_array_indexOf, 1 ),
@@ -266,6 +267,7 @@ static const JSPropDef js_typed_array_base_proto[] = {
     JS_CFUNC_DEF("toString", 0, js_array_toString ),
     JS_CFUNC_DEF("subarray", 2, js_typed_array_subarray ),
     JS_CFUNC_DEF("set", 1, js_typed_array_set ),
+    JS_CFUNC_DEF("fill", 3, js_fill ),
     JS_PROP_END,
 };
 

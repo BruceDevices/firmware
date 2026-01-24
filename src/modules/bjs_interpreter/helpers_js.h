@@ -15,6 +15,7 @@ extern "C" {
 void print_errorMessage(const char *msg, const char *stackTrace = NULL);
 void js_fatal_error_handler(JSContext *ctx);
 bool JS_IsTypedArray(JSContext *ctx, JSValue val);
+JSValue js_fill(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 }
 
 struct FileParamsJS {

@@ -3,6 +3,8 @@
 #include "core/sd_functions.h"
 #include <globals.h>
 
+#include <math.h>
+
 void print_errorMessage(const char *msg, const char *stackTrace) {
     tft.fillScreen(bruceConfig.bgColor);
     tft.setTextSize(FM);
@@ -54,6 +56,51 @@ void js_fatal_error_handler(JSContext *ctx) {
 bool JS_IsTypedArray(JSContext *ctx, JSValue val) {
     int classId = JS_GetClassID(ctx, val);
     return (classId >= JS_CLASS_ARRAY_BUFFER && classId <= JS_CLASS_UINT32_ARRAY);
+}
+
+static int32_t js_to_integer_clamped(double v, int32_t min_value, int32_t max_value, int32_t default_value) {
+    if (isnan(v)) return default_value;
+    if (v < (double)min_value) return min_value;
+    if (v > (double)max_value) return max_value;
+    return (int32_t)v;
+}
+
+JSValue js_fill(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (!JS_IsObject(ctx, *this_val)) { return JS_ThrowTypeError(ctx, "fill() called on non-object"); }
+
+    int classId = JS_GetClassID(ctx, *this_val);
+    if (classId == JS_CLASS_ARRAY_BUFFER) { return JS_ThrowTypeError(ctx, "fill() called on ArrayBuffer"); }
+
+    double len_d = 0;
+    JSValue len_val = JS_GetPropertyStr(ctx, *this_val, "length");
+    if (!JS_IsUndefined(len_val)) { JS_ToNumber(ctx, &len_d, len_val); }
+
+    if (len_d < 0) len_d = 0;
+    if (len_d > 0x7fffffff) len_d = 0x7fffffff;
+    int32_t len = (int32_t)len_d;
+
+    double start_d = 0;
+    if (argc > 1 && !JS_IsUndefined(argv[1])) { JS_ToNumber(ctx, &start_d, argv[1]); }
+
+    double end_d = (double)len;
+    if (argc > 2 && !JS_IsUndefined(argv[2])) { JS_ToNumber(ctx, &end_d, argv[2]); }
+
+    int32_t start = js_to_integer_clamped(start_d, -len, len, 0);
+    int32_t end = js_to_integer_clamped(end_d, -len, len, len);
+
+    if (start < 0) start = len + start;
+    if (end < 0) end = len + end;
+    if (start < 0) start = 0;
+    if (end < 0) end = 0;
+    if (start > len) start = len;
+    if (end > len) end = len;
+
+    if (end <= start) { return *this_val; }
+
+    JSValue fill_value = (argc > 0) ? argv[0] : JS_UNDEFINED;
+    for (int32_t i = start; i < end; ++i) { JS_SetPropertyUint32(ctx, *this_val, (uint32_t)i, fill_value); }
+
+    return *this_val;
 }
 
 FileParamsJS js_get_path_from_params(JSContext *ctx, JSValue *argv, bool checkIfexist, bool legacy) {
