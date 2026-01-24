@@ -42,6 +42,7 @@ static const JSPropDef js_object[] = {
     JS_CFUNC_DEF("setPrototypeOf", 2, js_object_setPrototypeOf),
     JS_CFUNC_DEF("create", 2, js_object_create),
     JS_CFUNC_DEF("keys", 1, js_object_keys),
+    JS_CFUNC_DEF("getOwnPropertyNames", 1, js_object_keys),
     JS_PROP_END,
 };
 
@@ -97,6 +98,7 @@ static const JSPropDef js_string_proto[] = {
     JS_CFUNC_MAGIC_DEF("charCodeAt", 1, js_string_charAt, magic_charCodeAt ),
     JS_CFUNC_MAGIC_DEF("codePointAt", 1, js_string_charAt, magic_codePointAt ),
     JS_CFUNC_DEF("slice", 2, js_string_slice ),
+    JS_CFUNC_DEF("substr", 2, js_string_substring ),
     JS_CFUNC_DEF("substring", 2, js_string_substring ),
     JS_CFUNC_DEF("concat", 1, js_string_concat ),
     JS_CFUNC_MAGIC_DEF("indexOf", 1, js_string_indexOf, 0 ),

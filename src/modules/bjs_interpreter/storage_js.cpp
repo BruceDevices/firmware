@@ -79,13 +79,10 @@ JSValue native_storageRead(JSContext *ctx, JSValue *this_val, int argc, JSValue 
     }
 
     JSValue ret;
-    if (binary && fileSize != 0) {
-        // For now return as a JS string containing raw bytes (typed-array creation
-        // APIs are not available in a simple way here). If typed arrays are required
-        // later, implement ArrayBuffer/Uint8Array creation.
-        ret = JS_NewStringLen(ctx, fileContent, fileSize);
+    if (binary) {
+        ret = JS_NewUint8ArrayCopy(ctx, (const uint8_t *)fileContent, fileSize);
     } else {
-        ret = JS_NewString(ctx, fileContent);
+        ret = JS_NewStringLen(ctx, fileContent, fileSize);
     }
     free(fileContent);
     return ret;

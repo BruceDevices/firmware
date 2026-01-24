@@ -29,7 +29,7 @@ void interpreterHandler(void *pvParameters) {
     bool psramAvailable = psramFound();
 
     size_t max_alloc = psramAvailable ? ESP.getMaxAllocPsram() : ESP.getMaxAllocHeap();
-    size_t mem_size = max_alloc < 131072 ? max_alloc - 8192 : max_alloc;
+    size_t mem_size = max_alloc < 131072 ? max_alloc - 8192 : 131072;
     uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
     if (mem_buf == NULL) {
         print_errorMessage("Failed to allocate memory for JS engine");

@@ -1,7 +1,6 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "globals_js.h"
 #include "user_classes_js.h"
-#include <chrono>
 
 JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     JS_GC(ctx);
@@ -286,13 +285,11 @@ JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return JS_NewInt64(ctx, (int64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000));
+    return JS_NewInt64(ctx, (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL)));
 }
 
 JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return JS_NewInt64(ctx, (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL)));
+    return JS_NewInt64(ctx, (int64_t)millis());
 }
 
 // TODO: Implement user module
@@ -325,11 +322,7 @@ JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv
 }
 
 JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    using namespace std::chrono;
-    auto now = high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    auto millis = duration_cast<milliseconds>(duration).count();
-    return JS_NewInt64(ctx, (int64_t)millis);
+    return JS_NewInt64(ctx, (int64_t)millis());
 }
 
 JSValue native_delay(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
