@@ -51,4 +51,8 @@ void printDecimalTime(uint32_t milliseconds);
 
 bool waitForButtonPress();
 bool handlePauseResume();
+
+// Presenter mode - press button to advance slides
+void PresenterMode(HIDInterface *&hid, bool ble = true);
+
 #endif

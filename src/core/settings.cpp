@@ -954,33 +954,13 @@ void runClockLoop() {
             tft.setCursor(64, tftHeight / 3 + 5);
             uint8_t f_size = 4;
             for (uint8_t i = 4; i > 0; i--) {
-                if (i * LW * 8 < (tftWidth - BORDER_PAD_X * 2)) {
+                if (i * LW * strlen(timeStr) < (tftWidth - BORDER_PAD_X * 2)) {
                     f_size = i;
                     break;
                 }
             }
             tft.setTextSize(f_size);
-#if defined(HAS_RTC)
-#if defined(HAS_RTC_BM8563)
-            _rtc.GetBm8563Time();
-#endif
-#if defined(HAS_RTC_PCF85063A)
-            _rtc.GetPcf85063Time();
-#endif
-            _rtc.GetTime(&_time);
-            char timeString[9]; // Buffer para armazenar a string formatada "HH:MM:SS"
-            snprintf(
-                timeString,
-                sizeof(timeString),
-                "%02d:%02d:%02d",
-                _time.Hours % 100,
-                _time.Minutes % 100,
-                _time.Seconds % 100
-            );
-            tft.drawCentreString(timeString, tftWidth / 2, tftHeight / 2 - 13, 1);
-#else
             tft.drawCentreString(timeStr, tftWidth / 2, tftHeight / 2 - 13, 1);
-#endif
             tmp = millis();
         }
 
