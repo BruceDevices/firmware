@@ -1,311 +1,151 @@
-#ifndef LITE_VERSION
 #include "fm.h"
+#include "Tea5767.h" // Include the library for the TEA5767 module
 #include "core/utils.h"
+#include <Wire.h>
 
+// Create an instance of the TEA5767 radio
+TEA5767 radio;
+
+// Global variables definition
 bool auto_scan = false;
 bool is_running = false;
-uint16_t fm_station = 10230; // Default set to 102.30 MHz
-Adafruit_Si4713 radio = Adafruit_Si4713();
+uint16_t fm_station = 8950; // 89.50 MHz
 
-void set_auto_scan(bool new_value) { auto_scan = new_value; }
+// --- New functions implementations ---
 
-void set_frq(uint16_t frq) { fm_station = frq; }
+// Display a simple banner for FM mode
+void fm_banner() { displayTextLine("FM Radio"); }
 
-void fm_banner() {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setCursor(10, 10);
-    tft.drawCentreString("~== Bruce Radio ==~", tftWidth / 2, 10, SMOOTH_FONT);
-    delay(500);
-}
-
-uint16_t fm_scan() {
-    if (!fm_begin()) { return 0; }
-    char display_freq[16];
-    uint16_t f = 8750;
-    uint16_t min_noise;
-    uint16_t freq_candidate = f;
-
-    // Check for first noise level
-    radio.readTuneMeasure(f);
-    radio.readTuneStatus();
-    min_noise = radio.currNoiseLevel;
-
-    tft.fillScreen(bruceConfig.bgColor);
-    displayTextLine("Scanning...");
-    for (f = 8750; f < 10800; f += 10) {
-        Serial.print("Measuring ");
-        Serial.print(f);
-        Serial.print("...");
-        radio.readTuneMeasure(f);
-        radio.readTuneStatus();
-        Serial.println(radio.currNoiseLevel);
-
-        // Set best freq candidate
-        if (radio.currNoiseLevel < min_noise) {
-            min_noise = radio.currNoiseLevel;
-            freq_candidate = f;
-        }
-    }
-
-    sprintf(display_freq, "Found %d MHz", freq_candidate);
-    tft.fillScreen(bruceConfig.bgColor);
-    displayTextLine(display_freq);
-    while (!check(EscPress) && !check(SelPress)) { delay(100); }
-
-    return freq_candidate;
-}
-
-// Choose between 92.0 - 92.1 - 92.2 - 92.3 etc.
-void fm_options_frq(uint16_t f_min, bool reserved) {
-    char f_str[9];
-    uint16_t f_max;
-    // Choose between scan for best freq or select freq
-    displayTextLine("Choose frequency");
-    delay(1000);
-
-    // Handle min / max frequency
-    if (f_min == 87) {
-        f_min = 8750;
-        f_max = 9000;
-    } else {
-        f_max = (f_min + 1) * 100;
-        f_min = f_min * 100;
-    }
-
-    if (f_max > 10800) { f_max = 10800; }
-
-    options = {};
-    for (uint16_t f = f_min; f < f_max; f += 10) {
-        sprintf(f_str, "%d Hz", f);
-        options.push_back({f_str, [=]() { set_frq(f); }});
-    }
-    addOptionToMainMenu();
-
-    loopOptions(options);
-    options.clear();
-}
-
-// Choose between 91 - 92 - 93 etc.
-void fm_options_digit(uint16_t f_min, bool reserved) {
-    char f_str[10];
-    uint16_t f_max;
-    // Choose between scan for best freq or select freq
-    displayTextLine("Choose digit");
-    delay(1000);
-
-    // Handle min / max frequency
-    if (reserved and f_min < 80) {
-        f_min = 76;
-        f_max = 80;
-    } else if (reserved and f_min >= 80) {
-        f_min = 80;
-        f_max = 87;
-    } else if (f_min < 90) {
-        f_min = 87;
-        f_max = 90;
-    } else if (f_min >= 100) {
-        f_max = 108;
-    } else {
-        f_max = f_min + 10;
-    }
-
-    options = {};
-    for (uint16_t f = f_min; f < f_max; f += 1) {
-        sprintf(f_str, "%d MHz", f);
-        options.push_back({f_str, [=]() { fm_options_frq(f, reserved); }});
-    }
-    addOptionToMainMenu();
-
-    loopOptions(options);
-    options.clear();
-}
-
-// Choose between 80 - 90 - 100
+// Build frequency options menu
 void fm_options(uint16_t f_min, uint16_t f_max, bool reserved) {
-    char f_str[15];
-    // Choose between scan for best freq or select freq
-    displayTextLine("Choose tens");
-    delay(1000);
-
-    options = {};
-    if (!reserved) {
-        options.push_back({"Auto", [=]() { set_auto_scan(true); }});
-    }
-    for (uint16_t f = f_min; f < f_max; f += 10) {
-        sprintf(f_str, "%d MHz", f);
-        options.push_back({f_str, [=]() { fm_options_digit(f, reserved); }});
+    char f_str[12];
+    // Assume options is a globally available vector of menu options
+    options.clear();
+    // Convert frequency values: multiply by 100 to use integer arithmetic (e.g., 87 => 8700)
+    for (uint16_t f = f_min * 100; f < f_max * 100; f += 10) {
+        sprintf(f_str, "%d.%02d MHz", f / 100, f % 100);
+        options.push_back({f_str, [=]() {
+                               set_frq(f);
+                               tft.fillScreen(bruceConfig.bgColor);
+                               displayTextLine("Tuning...");
+                               fm_tune(false);
+                               delay(1000);
+                           }});
     }
     addOptionToMainMenu();
-
     loopOptions(options);
-    options.clear();
-
-    if (auto_scan == true) { fm_station = fm_scan(); }
 }
 
+// --- Updated function with timeout ---
 void fm_live_run(bool reserved) {
-    // Test if FM is attached, if not, close menu
-    if (!fm_begin()) { return; }
-    uint16_t f_min = 80;
-    uint16_t f_max = 110;
     fm_banner();
-
-    if (reserved) {
-        f_min = 70;
-        f_max = 90;
-    }
-
-    // Display choose frequency menu
-    fm_options(f_min, f_max, reserved);
-
-    // Run radio broadcast
-    if (!returnToMenu and fm_station != 0) {
-        fm_setup(false, true); // Don't know why but IT WORKS ONLY when launched 2 times...
-        while (!check(EscPress) && !check(SelPress)) { delay(100); }
+    fm_options(87, 108, reserved);
+    if (fm_station != 0) {
+        fm_tune(false);
+        unsigned long startTime = millis();
+        // Wait up to 5 seconds or until Esc or Sel is pressed
+        while (!check(EscPress) && !check(SelPress) && (millis() - startTime < 5000)) { delay(100); }
     }
 }
 
 void fm_ta_run() {
-    // Set Info Traffic
     fm_station = 10770;
-    // Run radio broadcast
-    fm_setup(true);
-    delay(10);
-    fm_setup(true); // Don't know why but IT WORKS ONLY when launched 2 times...
-    while (!check(EscPress) && !check(SelPress)) { delay(100); }
+    fm_tune(false);
+    while (!check(EscPress) && !check(SelPress)) delay(100);
 }
 
 void fm_spectrum() {
-    // Test if FM is attached, if not, close menu
-    if (!fm_begin()) { return; }
-    uint16_t f_min = 80;
-    uint16_t f_max = 110;
-    int noise_level = 0;
-    int SIGNAL_STRENGTH_THRESHOLD = 35;
-
     tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(1);
+    displayTextLine("Signal Spectrum");
+    fm_begin();
 
-    fm_options(f_min, f_max, false);
-    delay(10);
+    while (!check(EscPress)) {
+        for (uint16_t f = 8750; f < 10800; f += 10) {
+            set_frq(f);
+            fm_tune(true);
+            delay(20);
 
-    if (!returnToMenu) {
-        fm_begin();
-        fm_banner();
-        while (!check(EscPress) && !check(SelPress)) {
-            radio.readTuneMeasure(fm_station);
-            radio.readTuneStatus();
-            noise_level = radio.currNoiseLevel;
-            if (noise_level != 0) {
-                // Clear the display area
-                tft.fillRect(0, 40, tftWidth, tftHeight, bruceConfig.bgColor);
-                // Draw waveform based on signal strength
-                for (size_t i = 0; i < noise_level; i++) {
-                    int lineHeight = map(noise_level, 0, SIGNAL_STRENGTH_THRESHOLD, 0, tftHeight / 2);
-                    int lineX =
-                        map(i, 0, noise_level - 1, 0, tftWidth - 1); // Map i to within the display width
-                    // Ensure drawing coordinates stay within the box bounds
-                    int startY = constrain(20 + tftHeight / 2 - lineHeight / 2, 20, 20 + tftHeight);
-                    int endY = constrain(20 + tftHeight / 2 + lineHeight / 2, 20, 20 + tftHeight);
-                    tft.drawLine(lineX, startY, lineX, endY, bruceConfig.priColor);
-                }
+            Wire.requestFrom(0x60, 5);
+            if (Wire.available() >= 5) {
+                byte status[5];
+                for (int i = 0; i < 5; i++) status[i] = Wire.read();
+                int rssi = (status[3] >> 4) * 10;
+
+                int barHeight = map(rssi, 0, 150, 0, tftHeight - 40);
+                tft.drawFastVLine(map(f, 8750, 10800, 0, tftWidth), 40, tftHeight - 40, bruceConfig.bgColor);
+                tft.drawFastVLine(
+                    map(f, 8750, 10800, 0, tftWidth), tftHeight - barHeight, barHeight, bruceConfig.priColor
+                );
             }
         }
-        fm_stop();
-        delay(100);
     }
+    fm_stop();
 }
 
+// Extra frequency options function with fixed buffer size
+void fm_options_frq(uint16_t f_min, bool reserved) {
+    char f_str[12]; // Increased buffer size from 10 to 12
+    uint16_t f_max = (f_min + 1) * 100;
+    f_min *= 100;
+
+    options.clear();
+    for (uint16_t f = f_min; f < f_max; f += 10) {
+        sprintf(f_str, "%d.%02d MHz", f / 100, f % 100);
+        options.push_back({f_str, [=]() {
+                               set_frq(f);
+                               tft.fillScreen(bruceConfig.bgColor);
+                               displayTextLine("Tuning...");
+                               fm_tune(false);
+                               delay(1000);
+                           }});
+    }
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+// --- Updated FM Hardware Functions ---
+// These functions now use the TEA5767 library to control a real FM module.
+
+// Initialize the FM hardware and radio module
 bool fm_begin() {
-    if (!radio.begin()) { // begin with address 0x63 (CS high default)
-        tft.fillScreen(bruceConfig.bgColor);
-        Serial.println("Cannot find radio");
-        displayTextLine("Cannot find radio", true);
-        return false;
-    }
-
-    return true;
-}
-
-bool fm_setup(bool traffic_alert, bool silent) {
-    int tx_power = 115;
-
-    // Set module as running
+    Wire.begin();
+    // Initialize the radio (you might need to call radio.setFrequency() after init)
+    radio.init();
     is_running = true;
-
-    // Clear screen
-    if (!silent) {
-        fm_banner();
-        tft.setCursor(10, 30);
-        Serial.println("Setup Si4713");
-        tft.println(" Setup Si4713");
-        delay(1000);
-    }
-
-    if (!fm_begin()) { // begin with address 0x63 (CS high default)
-        return false;
-    }
-
-    if (!silent) {
-        Serial.print("\nTX power: ");
-        Serial.println(tx_power);
-        tft.print("\n TX power: ");
-        tft.println(tx_power);
-    }
-    radio.setTXpower(tx_power); // dBuV, 88-115 max
-
-    if (!silent) {
-        Serial.print("Tuning: ");
-        Serial.print(fm_station / 100);
-        Serial.print('.');
-        Serial.print(fm_station % 100);
-        Serial.println(" MHz");
-
-        tft.print(" Tuning: ");
-        tft.print(fm_station / 100);
-        tft.print('.');
-        tft.print(fm_station % 100);
-        tft.println(" MHz");
-    }
-
-    radio.tuneFM(fm_station); // Specified frequency
-
-    // Begin the RDS/RDBS transmission
-    radio.beginRDS();
-    if (traffic_alert) {
-        radio.setRDSstation("BruceTraffic");
-        radio.setRDSbuffer("Traffic Info");
-    } else {
-        radio.setRDSstation("BruceRadio");
-        radio.setRDSbuffer("Pwned by Bruce Radio!");
-    }
-
-    if (!silent) {
-        Serial.println("RDS on!");
-        tft.println(" RDS on!");
-    }
-    // Set traffic announcement
-    if (traffic_alert) {
-        if (!silent) {
-            Serial.println("TA on!");
-            tft.println(" TA on!");
-        }
-        radio.setProperty(SI4713_PROP_TX_RDS_PS_MISC, 0x1018);
-    } else {
-        // Default value
-        radio.setProperty(SI4713_PROP_TX_RDS_PS_MISC, 0x1008);
-    }
-
-    delay(1000);
+    displayTextLine("FM Initialized");
     return true;
 }
 
-void fm_stop() {
-    if (is_running) {
-        // Stop radio
-        radio.setTXpower(0); // dBuV
-        radio.reset();
-        is_running = false;
+// Tune the radio to the current fm_station frequency
+bool fm_tune(bool silent) {
+    float freq = fm_station / 100.0; // Convert from integer (e.g., 8950) to float (89.50)
+    radio.setFrequency(freq);
+    // Give the radio a moment to settle
+    delay(100);
+    if (!silent) {
+        char buf[30];
+        sprintf(buf, "Tuning to %.2f MHz", freq);
+        displayTextLine(buf);
     }
+    return true;
 }
-#endif
+
+// Stop FM radio operation
+void fm_stop() {
+    // Depending on your module, you might want to power it down
+    // For TEA5767, there is no explicit "power off" so we simply mark it as stopped.
+    is_running = false;
+    displayTextLine("FM Stopped");
+}
+
+// Dummy scanning: In a real implementation, you would search for stations
+uint16_t fm_scan() {
+    // For demonstration, simply return the current station.
+    return fm_station;
+}
+
+// Set the current frequency (in integer format, e.g., 8950 for 89.50 MHz)
+void set_frq(uint16_t frq) { fm_station = frq; }
+
+// Set auto scan mode (if implemented)
+void set_auto_scan(bool new_value) { auto_scan = new_value; }

@@ -4,9 +4,12 @@
 #include <MenuItemInterface.h>
 
 #include "menu_items/BleMenu.h"
+#include "menu_items/BuzzerMenu.h"
 #include "menu_items/ClockMenu.h"
 #include "menu_items/ConfigMenu.h"
 #include "menu_items/ConnectMenu.h"
+#include "menu_items/EXTLedControlMenu.h"
+// #include "menu_items/EspNowMenu.h"
 #include "menu_items/EthernetMenu.h"
 #include "menu_items/FMMenu.h"
 #include "menu_items/FileMenu.h"
@@ -18,6 +21,7 @@
 #include "menu_items/RFIDMenu.h"
 #include "menu_items/RFMenu.h"
 #include "menu_items/ScriptsMenu.h"
+#include "menu_items/TempHumidityMenu.h"
 #include "menu_items/WifiMenu.h"
 class MainMenu {
 public:
@@ -35,6 +39,10 @@ public:
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     WifiMenu wifiMenu;
+    // EspNowMenu espnowMenu;
+    EXTLedControlMenu ledMenu;
+    TempHumidityMenu TempHumMenu;
+    BuzzerMenu buzzerMenu;
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;
     EthernetMenu ethernetMenu;

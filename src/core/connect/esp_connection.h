@@ -20,7 +20,6 @@ public:
         ABORTED,
     };
 
-    // Struct has to be 250 B max
     struct Message {
         char filename[ESP_FILENAME_SIZE];
         char filepath[ESP_FILEPATH_SIZE];
@@ -33,7 +32,6 @@ public:
         bool ping;
         bool pong;
 
-        // Constructor to initialize defaults
         Message()
             : dataSize(0), totalBytes(0), bytesSent(0), isFile(false), done(false), ping(false), pong(false) {
         }
@@ -47,6 +45,9 @@ public:
     static void onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_status_t status);
     static void onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);
 
+    bool beginSend();                          // Initialize ESP-NOW and ping
+    bool sendMessage(const String &text);     
+
 protected:
     Status recvStatus;
     Status sendStatus;
@@ -54,7 +55,6 @@ protected:
     uint8_t broadcastAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     std::vector<Message> recvQueue;
 
-    bool beginSend();
     bool beginEspnow();
 
     Message createMessage(String text);
@@ -79,4 +79,5 @@ private:
     static EspConnection *instance;
 };
 
+void receiveTypedMessage();
 #endif
