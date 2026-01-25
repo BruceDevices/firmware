@@ -2,9 +2,6 @@
 #define __BJS_INTERPRETER_H__
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "core/display.h"
-#include "stdio.h"
-
-#include <string.h>
 
 extern TaskHandle_t interpreterTaskHandler;
 

@@ -586,6 +586,7 @@ static const JSPropDef js_display[] = {
     JS_CFUNC_DEF("drawFillRoundRect", 6, native_drawFillRoundRect),
     JS_CFUNC_DEF("drawCircle", 4, native_drawCircle),
     JS_CFUNC_DEF("drawFillCircle", 4, native_drawFillCircle),
+    JS_CFUNC_DEF("drawBitmap", 7, native_drawBitmap),
     JS_CFUNC_DEF("drawXBitmap", 7, native_drawXBitmap),
     JS_CFUNC_DEF("drawJpg", 4, native_drawJpg),
 #if !defined(LITE_VERSION)
@@ -639,6 +640,7 @@ static const JSPropDef js_sprite_proto[] = {
     JS_CFUNC_DEF("drawFillRoundRect", 6, native_drawFillRoundRect),
     JS_CFUNC_DEF("drawCircle", 4, native_drawCircle),
     JS_CFUNC_DEF("drawFillCircle", 4, native_drawFillCircle),
+    JS_CFUNC_DEF("drawBitmap", 7, native_drawBitmap),
     JS_CFUNC_DEF("drawXBitmap", 7, native_drawXBitmap),
     JS_CFUNC_DEF("drawJpg", 4, native_drawJpg),
     JS_CFUNC_DEF("width", 0, native_width),
@@ -681,6 +683,20 @@ static const JSClassDef js_gif_class =
 
 static const JSClassDef js_timers_state_class =
     JS_CLASS_DEF("TimersState", 0, NULL, JS_CLASS_TIMERS_STATE, NULL, NULL, NULL, native_timers_state_finalizer);
+
+/* Buffer */
+static const JSPropDef js_buffer_proto[] = {
+    JS_CFUNC_DEF("toString", 1, native_buffer_toString),
+    JS_PROP_END,
+};
+
+static const JSPropDef js_buffer[] = {
+    JS_CFUNC_DEF("from", 2, native_buffer_from),
+    JS_PROP_END,
+};
+
+static const JSClassDef js_buffer_class =
+    JS_CLASS_DEF("Buffer", 0, NULL, JS_CLASS_BUFFER, js_buffer, js_buffer_proto, NULL, NULL);
 
 static const JSPropDef js_internal_functions[] = {
     JS_PROP_CLASS_DEF("TimersState", &js_timers_state_class),
@@ -783,6 +799,7 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("Sprite", &js_sprite_class),
     JS_PROP_CLASS_DEF("TextViewer", &js_textviewer_class),
     JS_PROP_CLASS_DEF("Gif", &js_gif_class),
+    JS_PROP_CLASS_DEF("Buffer", &js_buffer_class),
 
     JS_PROP_CLASS_DEF("__internal_functions", &js_internal_functions_obj),
 
