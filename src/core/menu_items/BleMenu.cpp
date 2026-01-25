@@ -1,5 +1,6 @@
 #include "BleMenu.h"
 #include "core/display.h"
+#include "core/mykeyboard.h"
 #include "core/utils.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/ble/ble_common.h"
@@ -20,8 +21,7 @@ void BleMenu::optionsMenu() {
                                BLEConnected = false;
                                delete hid_ble;
                                hid_ble = nullptr;
-                               if (_Ask_for_restart == 1)
-                                   _Ask_for_restart = 2;
+                               if (_Ask_for_restart == 1) _Ask_for_restart = 2;
                            }});
     }
 
@@ -36,9 +36,19 @@ void BleMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
     options.push_back({"Ninebot", [=]() { BLENinebot(); }});
 #endif
+    options.push_back({"Config", [this]() { configMenu(); }});
     addOptionToMainMenu();
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Bluetooth");
+}
+
+void BleMenu::configMenu() {
+    options = {
+        {"BLE Name", [this]() { setBleNameMenu(); }},
+        {"Back",     [this]() { optionsMenu(); }   },
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "BLE Config");
 }
 
 void BleMenu::drawIcon(float scale) {
@@ -130,4 +140,29 @@ void BleMenu::drawIcon(float scale) {
         bruceConfig.priColor,
         bruceConfig.bgColor
     );
+}
+
+/*********************************************************************
+**  Function: setBleNameMenu
+**  Handles Menu to set BLE Gap Name
+**********************************************************************/
+void BleMenu::setBleNameMenu() {
+    const String defaultBleName = "Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX);
+
+    const bool isDefault = bruceConfigPins.bleName == defaultBleName;
+
+    options = {
+        {"Default", [=]() { bruceConfigPins.setBleName(defaultBleName); }, isDefault },
+        {"Custom",
+         [=]() {
+             String newBleName = keyboard(bruceConfigPins.bleName, 30, "BLE Device Name:");
+             if (newBleName != "\x1B") {
+                 if (!newBleName.isEmpty()) bruceConfigPins.setBleName(newBleName);
+                 else displayError("BLE Name cannot be empty", true);
+             }
+         },                                                                !isDefault},
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, isDefault ? 0 : 1);
 }

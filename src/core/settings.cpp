@@ -1216,29 +1216,6 @@ void setGpsBaudrateMenu() {
 }
 
 /*********************************************************************
-**  Function: setBleNameMenu
-**  Handles Menu to set BLE Gap Name
-**********************************************************************/
-void setBleNameMenu() {
-    const String defaultBleName = "Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX);
-
-    const bool isDefault = bruceConfigPins.bleName == defaultBleName;
-
-    options = {
-        {"Default", [=]() { bruceConfigPins.setBleName(defaultBleName); }, isDefault },
-        {"Custom",
-         [=]() {
-             String newBleName = keyboard(bruceConfigPins.bleName, 30, "BLE Device Name:");
-             if (!newBleName.isEmpty()) bruceConfigPins.setBleName(newBleName);
-             else displayError("BLE Name cannot be empty", true);
-         },                                                                !isDefault},
-    };
-    addOptionToMainMenu();
-
-    loopOptions(options, isDefault ? 0 : 1);
-}
-
-/*********************************************************************
 **  Function: setWifiApSsidMenu
 **  Handles Menu to set the WiFi AP SSID
 **********************************************************************/
@@ -1304,8 +1281,7 @@ void setWifiApCredsMenu() {
 **********************************************************************/
 void setNetworkCredsMenu() {
     options = {
-        {"WiFi AP Creds", setWifiApCredsMenu},
-        {"BLE Name",      setBleNameMenu    },
+        {"WiFi AP Creds", setWifiApCredsMenu}
     };
     addOptionToMainMenu();
 
