@@ -747,7 +747,7 @@ void BruceConfig::validateBadUSBBLEKeyboardLayout() {
     if (badUSBBLEKeyboardLayout < 0 || badUSBBLEKeyboardLayout > 13) badUSBBLEKeyboardLayout = 0;
 }
 
-void BruceConfig::setBadUSBBLEKeyDelay(int value) {
+void BruceConfig::setBadUSBBLEKeyDelay(uint16_t value) {
     badUSBBLEKeyDelay = value;
     validateBadUSBBLEKeyDelay();
     saveFile();
