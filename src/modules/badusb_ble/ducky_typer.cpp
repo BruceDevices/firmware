@@ -3,7 +3,9 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
+#if defined(USB_as_HID)
 #include "tusb.h"
+#endif
 
 #define DEF_DELAY 100
 
