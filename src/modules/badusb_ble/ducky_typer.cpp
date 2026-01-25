@@ -224,6 +224,11 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
 // Start badUSBBLE or badBLE ducky runner
 void ducky_setup(HIDInterface *&hid, bool ble) {
     Serial.println("Ducky typer begin");
+
+    if (ble && bruceConfig.badUSBBLEKeyDelay < 50) {
+        displayWarning("Key delay is below 50ms. You may experience issues with missing keys.", true);
+    }
+
     tft.fillScreen(bruceConfig.bgColor);
 
     if (ble && _Ask_for_restart == 2) {
