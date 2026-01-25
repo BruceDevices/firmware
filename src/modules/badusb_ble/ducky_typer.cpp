@@ -181,7 +181,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
         } else {
 #if defined(USB_as_HID)
-            // Initialize USB subsystem first
+            hid = new USBHIDKeyboard();
             USB.begin();
 
             // Wait for USB subsystem to be ready
@@ -190,8 +190,6 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 delay(500);
             }
 
-            // Now create HID object after USB is ready
-            hid = new USBHIDKeyboard();
             printStatusBadUSBBLE("USB Host Connected");
 #else
             mySerial.begin(CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, BAD_RX, BAD_TX);
