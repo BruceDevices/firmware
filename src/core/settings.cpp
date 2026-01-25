@@ -485,7 +485,7 @@ void setWifiStartupConfig() {
 **********************************************************************/
 void addEvilWifiMenu() {
     String apName = keyboard("", 30, "Evil Portal SSID");
-    bruceConfig.addEvilWifiName(apName);
+    if (apName != "\x1B") bruceConfig.addEvilWifiName(apName);
 }
 
 /*********************************************************************
@@ -510,7 +510,7 @@ void removeEvilWifiMenu() {
 **********************************************************************/
 void setEvilEndpointCreds() {
     String userInput = keyboard(bruceConfig.evilPortalEndpoints.getCredsEndpoint, 30, "Evil creds endpoint");
-    bruceConfig.setEvilEndpointCreds(userInput);
+    if (userInput != "\x1B") bruceConfig.setEvilEndpointCreds(userInput);
 }
 
 /*********************************************************************
@@ -519,7 +519,7 @@ void setEvilEndpointCreds() {
 **********************************************************************/
 void setEvilEndpointSsid() {
     String userInput = keyboard(bruceConfig.evilPortalEndpoints.setSsidEndpoint, 30, "Evil creds endpoint");
-    bruceConfig.setEvilEndpointSsid(userInput);
+    if (userInput != "\x1B") bruceConfig.setEvilEndpointSsid(userInput);
 }
 
 /*********************************************************************
@@ -694,6 +694,7 @@ void setRFModuleMenu() {
 void setRFFreqMenu() {
     float result = 433.92;
     String freq_str = num_keyboard(String(bruceConfigPins.rfFreq), 10, "Default frequency:");
+    if (freq_str == "\x1B") return;
     if (freq_str.length() > 1) {
         result = freq_str.toFloat();          // returns 0 if not valid
         if (result >= 280 && result <= 928) { // TODO: check valid freq according to current module?
@@ -744,7 +745,7 @@ void setRFIDModuleMenu() {
 **********************************************************************/
 void addMifareKeyMenu() {
     String key = keyboard("", 12, "MIFARE key");
-    bruceConfig.addMifareKey(key);
+    if (key != "\x1B") bruceConfig.addMifareKey(key);
 }
 
 /*********************************************************************
@@ -1229,8 +1230,10 @@ void setWifiApSsidMenu() {
         {"Custom",
          [=]() {
              String newSsid = keyboard(bruceConfig.wifiAp.ssid, 32, "WiFi AP SSID:");
-             if (!newSsid.isEmpty()) bruceConfig.setWifiApCreds(newSsid, bruceConfig.wifiAp.pwd);
-             else displayError("SSID cannot be empty", true);
+             if (newSsid != "\x1B") {
+                 if (!newSsid.isEmpty()) bruceConfig.setWifiApCreds(newSsid, bruceConfig.wifiAp.pwd);
+                 else displayError("SSID cannot be empty", true);
+             }
          },                                                                         !isDefault},
     };
     addOptionToMainMenu();
@@ -1252,8 +1255,10 @@ void setWifiApPasswordMenu() {
         {"Custom",
          [=]() {
              String newPassword = keyboard(bruceConfig.wifiAp.pwd, 32, "WiFi AP Password:", true);
-             if (!newPassword.isEmpty()) bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, newPassword);
-             else displayError("Password cannot be empty", true);
+             if (newPassword != "\x1B") {
+                 if (!newPassword.isEmpty()) bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, newPassword);
+                 else displayError("Password cannot be empty", true);
+             }
          },                                                                          !isDefault},
     };
     addOptionToMainMenu();
@@ -1381,6 +1386,7 @@ void setMacAddressMenu() {
         {"Set Custom MAC",
          [&]() {
              String newMAC = keyboard(bruceConfig.wifiMAC, 17, "XX:YY:ZZ:AA:BB:CC");
+             if (newMAC == "\x1B") return;
              if (newMAC.length() == 17) {
                  bruceConfig.setWifiMAC(newMAC);
              } else {
