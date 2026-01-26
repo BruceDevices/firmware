@@ -4,6 +4,7 @@
 #include <globals.h>
 
 #include <math.h>
+#include <string.h>
 
 void print_errorMessage(const char *msg, const char *stackTrace) {
     tft.fillScreen(bruceConfig.bgColor);
@@ -69,7 +70,170 @@ JSValue js_fill(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (!JS_IsObject(ctx, *this_val)) { return JS_ThrowTypeError(ctx, "fill() called on non-object"); }
 
     int classId = JS_GetClassID(ctx, *this_val);
-    if (classId == JS_CLASS_ARRAY_BUFFER) { return JS_ThrowTypeError(ctx, "fill() called on ArrayBuffer"); }
+    /* Non-standard but useful: ArrayBuffer.prototype.fill(value, start?, end?) as byte fill. */
+    if (classId == JS_CLASS_ARRAY_BUFFER) {
+        double len_d = 0;
+        JSValue len_val = JS_GetPropertyStr(ctx, *this_val, "byteLength");
+        if (!JS_IsUndefined(len_val)) { JS_ToNumber(ctx, &len_d, len_val); }
+        if (len_d < 0) len_d = 0;
+        if (len_d > 0x7fffffff) len_d = 0x7fffffff;
+        int32_t len = (int32_t)len_d;
+
+        double start_d = 0;
+        if (argc > 1 && !JS_IsUndefined(argv[1])) { JS_ToNumber(ctx, &start_d, argv[1]); }
+        double end_d = (double)len;
+        if (argc > 2 && !JS_IsUndefined(argv[2])) { JS_ToNumber(ctx, &end_d, argv[2]); }
+
+        int32_t start = js_to_integer_clamped(start_d, -len, len, 0);
+        int32_t end = js_to_integer_clamped(end_d, -len, len, len);
+        if (start < 0) start = len + start;
+        if (end < 0) end = len + end;
+        if (start < 0) start = 0;
+        if (end < 0) end = 0;
+        if (start > len) start = len;
+        if (end > len) end = len;
+        if (end <= start) return *this_val;
+
+        double v_d = 0;
+        JSValue fill_value = (argc > 0) ? argv[0] : JS_UNDEFINED;
+        if (!JS_IsUndefined(fill_value) && !JS_IsNull(fill_value) && JS_IsNumber(ctx, fill_value)) {
+            JS_ToNumber(ctx, &v_d, fill_value);
+        } else if (!JS_IsUndefined(fill_value) && !JS_IsNull(fill_value) && JS_IsBool(fill_value)) {
+            v_d = JS_ToBool(ctx, fill_value) ? 1.0 : 0.0;
+        } else if (JS_IsUndefined(fill_value) || JS_IsNull(fill_value)) {
+            v_d = 0;
+        } else {
+            JS_ToNumber(ctx, &v_d, fill_value);
+        }
+
+        int iv = 0;
+        if (v_d != v_d) iv = 0; /* NaN */
+        else iv = (int)v_d;
+        uint8_t b = (uint8_t)(iv & 0xff);
+
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
+        if (!JS_IsFunction(ctx, ctor)) {
+            return JS_ThrowTypeError(ctx, "ArrayBuffer.fill: Uint8Array not available");
+        }
+
+        if (JS_StackCheck(ctx, 3)) { return JS_ThrowOutOfMemory(ctx); }
+        JS_PushArg(ctx, *this_val); /* arg0: buffer */
+        JS_PushArg(ctx, ctor);      /* constructor */
+        JS_PushArg(ctx, JS_NULL);   /* this */
+        JSValue view = JS_Call(ctx, FRAME_CF_CTOR | 1);
+        if (JS_IsException(view)) { return view; }
+
+        size_t byte_len = 0;
+        char *raw = (char *)JS_GetTypedArrayBuffer(ctx, &byte_len, view);
+        if (!raw) return JS_ThrowTypeError(ctx, "ArrayBuffer.fill: invalid backing store");
+        if ((int32_t)byte_len < len) len = (int32_t)byte_len;
+        if (start > len) start = len;
+        if (end > len) end = len;
+
+        memset((uint8_t *)raw + (size_t)start, b, (size_t)(end - start));
+        return *this_val;
+    }
+
+    /* Fast path for TypedArray.fill(): operate on the backing store directly.
+       This avoids creating JS values per element (much faster on ESP32). */
+    if (JS_IsTypedArray(ctx, *this_val)) {
+        size_t byte_len = 0;
+        char *raw = (char *)JS_GetTypedArrayBuffer(ctx, &byte_len, *this_val);
+        if (!raw) return JS_ThrowTypeError(ctx, "fill() invalid TypedArray backing store");
+
+        /* length is in elements (not bytes) */
+        double len_d = 0;
+        JSValue len_val = JS_GetPropertyStr(ctx, *this_val, "length");
+        if (!JS_IsUndefined(len_val)) { JS_ToNumber(ctx, &len_d, len_val); }
+        if (len_d < 0) len_d = 0;
+        if (len_d > 0x7fffffff) len_d = 0x7fffffff;
+        int32_t len = (int32_t)len_d;
+
+        double start_d = 0;
+        if (argc > 1 && !JS_IsUndefined(argv[1])) { JS_ToNumber(ctx, &start_d, argv[1]); }
+        double end_d = (double)len;
+        if (argc > 2 && !JS_IsUndefined(argv[2])) { JS_ToNumber(ctx, &end_d, argv[2]); }
+
+        int32_t start = js_to_integer_clamped(start_d, -len, len, 0);
+        int32_t end = js_to_integer_clamped(end_d, -len, len, len);
+        if (start < 0) start = len + start;
+        if (end < 0) end = len + end;
+        if (start < 0) start = 0;
+        if (end < 0) end = 0;
+        if (start > len) start = len;
+        if (end > len) end = len;
+        if (end <= start) return *this_val;
+
+        double v_d = 0;
+        JSValue fill_value = (argc > 0) ? argv[0] : JS_UNDEFINED;
+        if (!JS_IsUndefined(fill_value) && !JS_IsNull(fill_value) && JS_IsNumber(ctx, fill_value)) {
+            JS_ToNumber(ctx, &v_d, fill_value);
+        } else if (!JS_IsUndefined(fill_value) && !JS_IsNull(fill_value) && JS_IsBool(fill_value)) {
+            v_d = JS_ToBool(ctx, fill_value) ? 1.0 : 0.0;
+        } else if (JS_IsUndefined(fill_value) || JS_IsNull(fill_value)) {
+            v_d = 0;
+        } else {
+            /* best effort numeric conversion */
+            JS_ToNumber(ctx, &v_d, fill_value);
+        }
+
+        uint32_t count = (uint32_t)(end - start);
+
+        switch (classId) {
+            case JS_CLASS_UINT8C_ARRAY:
+            case JS_CLASS_UINT8_ARRAY:
+            case JS_CLASS_INT8_ARRAY: {
+                int iv = 0;
+                if (v_d != v_d) iv = 0; /* NaN */
+                else iv = (int)v_d;
+                uint8_t b = (uint8_t)(iv & 0xff);
+                memset((uint8_t *)raw + (size_t)start, b, (size_t)count);
+                break;
+            }
+            case JS_CLASS_INT16_ARRAY:
+            case JS_CLASS_UINT16_ARRAY: {
+                int iv = 0;
+                if (v_d != v_d) iv = 0;
+                else iv = (int)v_d;
+                uint16_t x = (uint16_t)(iv & 0xffff);
+                uint16_t *p = (uint16_t *)raw + start;
+                for (uint32_t i = 0; i < count; ++i) p[i] = x;
+                break;
+            }
+            case JS_CLASS_INT32_ARRAY:
+            case JS_CLASS_UINT32_ARRAY: {
+                int64_t iv = 0;
+                if (v_d != v_d) iv = 0;
+                else iv = (int64_t)v_d;
+                uint32_t x = (uint32_t)iv;
+                uint32_t *p = (uint32_t *)raw + start;
+                for (uint32_t i = 0; i < count; ++i) p[i] = x;
+                break;
+            }
+            case JS_CLASS_FLOAT32_ARRAY: {
+                float x = (float)v_d;
+                float *p = (float *)raw + start;
+                for (uint32_t i = 0; i < count; ++i) p[i] = x;
+                break;
+            }
+            case JS_CLASS_FLOAT64_ARRAY: {
+                double x = v_d;
+                double *p = (double *)raw + start;
+                for (uint32_t i = 0; i < count; ++i) p[i] = x;
+                break;
+            }
+            default: {
+                /* Fallback: still faster than property ops because this only hits TypedArrays. */
+                for (int32_t i = start; i < end; ++i) {
+                    JS_SetPropertyUint32(ctx, *this_val, (uint32_t)i, fill_value);
+                }
+                break;
+            }
+        }
+
+        return *this_val;
+    }
 
     double len_d = 0;
     JSValue len_val = JS_GetPropertyStr(ctx, *this_val, "length");
