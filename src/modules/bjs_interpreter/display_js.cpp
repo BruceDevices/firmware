@@ -537,14 +537,35 @@ JSValue native_drawImage(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 }
 
 JSValue native_drawJpg(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
-    showJpeg(*file.fs, file.path, 0, 0, 0);
+    FileParamsJS file;
+    int x = 0, y = 0, center = 0;
+    int base = 0;
+
+    if (!JS_IsTypedArray(ctx, argv[0])) {
+        file = js_get_path_from_params(ctx, argv, true, true);
+        base = file.paramOffset;
+    }
+
+    if (argc > base && JS_IsNumber(ctx, argv[base])) JS_ToInt32(ctx, &x, argv[base]);
+    if (argc > base + 1 && JS_IsNumber(ctx, argv[base + 1])) JS_ToInt32(ctx, &y, argv[base + 1]);
+    if (argc > base + 2) {
+        if (JS_IsBool(argv[base + 2])) center = JS_ToBool(ctx, argv[base + 2]);
+        else if (JS_IsNumber(ctx, argv[base + 2])) JS_ToInt32(ctx, &center, argv[base + 2]);
+    }
+
+    if (!JS_IsTypedArray(ctx, argv[0])) {
+        showJpeg(*file.fs, file.path, x, y, center);
+    } else {
+        size_t jpgSize = 0;
+        const uint8_t *jpgData = (const uint8_t *)JS_GetTypedArrayBuffer(ctx, &jpgSize, argv[0]);
+        if (!jpgData) { return JS_ThrowTypeError(ctx, "drawJpg: Invalid Uint8Array data"); }
+        showJpeg(jpgData, jpgSize, x, y, center);
+    }
     return JS_UNDEFINED;
 }
 
 JSValue native_drawGif(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if !defined(LITE_VERSION)
-    (void)this_val;
     FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
 
     int x = 0, y = 0, center = 0, playDurationMs = 0;

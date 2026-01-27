@@ -1215,6 +1215,25 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     return true;
 }
 
+bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center) {
+    bool decoded = false;
+    if (data_array) {
+        decoded = JpegDec.decodeArray(data_array, data_size);
+    } else {
+        return false;
+    }
+
+    if (decoded) {
+        if (center) {
+            x = x + (tftWidth - JpegDec.width) / 2;
+            y = y + (tftHeight - JpegDec.height) / 2;
+        }
+        jpegRender(x, y);
+    }
+
+    return true;
+}
+
 #if !defined(LITE_VERSION)
 // ####################################################################################################
 //  Draw a GIF on the TFT

@@ -99,6 +99,7 @@ bool drawBmp(FS &fs, String filename, int x = 0, int y = 0, bool center = false)
 bool showGif(FS *fs, const char *filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0);
 #endif
 bool showJpeg(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
+bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center);
 
 uint16_t getComplementaryColor(uint16_t color);
 uint16_t getComplementaryColor2(uint16_t color);
