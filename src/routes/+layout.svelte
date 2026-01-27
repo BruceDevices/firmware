@@ -59,6 +59,7 @@
 				<NavLink href="{base}/build_theme.html">Theme Builder</NavLink>
 				<NavLink href="{base}/my_bruce" selected={$current_page == Page.MyBruce}>Bruce Lab</NavLink>
 				<NavLink href="{base}/boards">Boards</NavLink>
+				<NavLink href="{base}/pinouts" selected={$current_page == Page.Pinouts}>Pinouts</NavLink>
 				<!-- <Dropdown title="Bruce Lab" links={bruce_lab_links}></Dropdown> -->
 				<!-- <NavLink href="/boards">Boards</NavLink>
 				<NavLink href="/community">Community</NavLink> -->
@@ -77,6 +78,7 @@
 					<NavLink href="{base}/build_theme.html">Theme Builder</NavLink>
 					<NavLink href="{base}/my_bruce" selected={$current_page == Page.MyBruce}>Bruce Lab</NavLink>
 					<NavLink href="{base}/donate" selected={$current_page == Page.Donate}>Donate</NavLink>
+					<NavLink href="{base}/pinouts" selected={$current_page == Page.Pinouts}>Pinouts</NavLink>
 				</div>
 			{/if}
 		</nav>

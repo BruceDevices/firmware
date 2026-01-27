@@ -1,0 +1,72 @@
+{
+    "M5StickC-Plus2": {
+        "CC1101": {
+            "info": "Sub-GHz transceiver using shared SPI bus.",
+			"warning": "Add a 10uF capacitor between VCC and GND close to the module to ensure stable power supply.",
+            "connections": [
+                { "module": "VCC", "device": "3.3V" },
+                { "module": "GND", "device": "GND" },
+                { "module": "SCK", "device": "G0" },
+                { "module": "MISO", "device": "G33 (Grove SCL)" },
+                { "module": "MOSI", "device": "G32 (Grove SDA)" },
+                { "module": "CS", "device": "G26" },
+                { "module": "GDO0", "device": "G25" }
+            ]
+        },
+        "NRF24": {
+            "info": "2.4GHz transceiver for wireless communication.",
+			"warning": "Add a 10uF capacitor between VCC and GND close to the module to ensure stable power supply.",
+            "connections": [
+                { "module": "VCC", "device": "3.3V" },
+                { "module": "GND", "device": "GND" },
+                { "module": "CE", "device": "G25" },
+                { "module": "CSN", "device": "G26" },
+                { "module": "SCK", "device": "G0" },
+                { "module": "MOSI", "device": "G32 (Grove SDA)" },
+                { "module": "MISO", "device": "G33 (Grove SCL)" }
+            ]
+        },
+        "SD_Card": {
+            "info": "External storage via SPI.",
+            "connections": [
+                { "module": "VCC", "device": "3.3V" },
+                { "module": "GND", "device": "GND" },
+                { "module": "CS", "device": "G14" },
+                { "module": "SCK", "device": "G0" },
+                { "module": "MOSI", "device": "G26" },
+                { "module": "MISO", "device": "G25" }
+            ]
+        },
+        "BadUSB": {
+            "info": "BadUSB attacks via GROVE port.",
+            "connections": [
+                { "module": "TX", "device": "G32" },
+                { "module": "RX", "device": "G33" }
+            ]
+        },
+        "Ethernet_W5500": {
+            "info": "Wired networking via SPI.",
+            "connections": [
+                { "module": "VCC", "device": "3.3V" },
+                { "module": "GND", "device": "GND" },
+                { "module": "SCK", "device": "G0" },
+                { "module": "MOSI", "device": "G32 (Grove SDA)" },
+                { "module": "MISO", "device": "G33 (Grove SCL)" },
+                { "module": "CS", "device": "G26" },
+                { "module": "INT", "device": "G25" }
+            ]
+        },
+        "LoRa": {
+            "info": "Long-range radio module.",
+            "connections": [
+                { "module": "VCC", "device": "3.3V" },
+                { "module": "GND", "device": "GND" },
+                { "module": "SCK", "device": "G0" },
+                { "module": "MISO", "device": "G33 (Grove SCL)" },
+                { "module": "MOSI", "device": "G32 (Grove SDA)" },
+                { "module": "CS", "device": "G26" },
+                { "module": "DIO0", "device": "G25" }
+            ]
+        }
+    }
+}
