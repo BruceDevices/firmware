@@ -11,6 +11,7 @@
 
 #include "modules/ble/ble_common.h"
 #include <TinyGPS++.h>
+#include <cstdint>
 #include <esp_wifi_types.h>
 #include <globals.h>
 #include <set>
@@ -39,13 +40,16 @@ private:
     String filename = "";
     TinyGPSPlus gps;
     HardwareSerial GPSserial = HardwareSerial(2); // Uses UART2 for GPS
-    std::set<String> registeredMACs;              // Store and track registered MAC
+    std::set<uint64_t> registeredMACs;            // Store and track registered MAC (packed 48-bit)
     std::set<String> alertMACs;                   // Store alert MAC addresses from file
     bool scanWiFi = false;                        // Flag to scan WiFi networks
     bool scanBLE = false;                         // Flag to scan Bluetooth devices
+    bool bleInitialized = false;                  // Avoid repeated BLE init allocations
     int wifiNetworkCount = 0;                     // Counter fo wifi networks
     int bluetoothDeviceCount = 0;                 // Counter for bluetooth devices
     int foundMACAddressCount = 0;                 // Counter for found MAC addresses
+    uint32_t macCacheClears = 0;                  // Number of times MAC cache was cleared
+    static constexpr size_t MAX_REGISTERED_MACS = 250;
 
     // Structure to safely store BLE device data
     struct BLEDeviceData {
@@ -79,6 +83,7 @@ private:
     void scanWiFiBLE(void);
     int scanWiFiNetworks(void);
     int scanBLEDevices(void);
+    void enforceRegisteredMACLimit(void);
     void loadAlertMACs(void);
     void checkForAlert(const String &macAddress, const String &deviceType, const String &deviceName = "");
     String auth_mode_to_string(wifi_auth_mode_t authMode);

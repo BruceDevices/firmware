@@ -40,6 +40,8 @@ StartupApp::StartupApp() {
 #ifndef LITE_VERSION
     _startupApps["PN532 BLE"] = []() { Pn532ble(); };
     _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
+#endif
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs;
         String folder = getScriptsFolder(fs);

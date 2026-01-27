@@ -2,7 +2,9 @@
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
 #include "display.h"
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "modules/bjs_interpreter/interpreter.h"
+#endif
 #include "modules/ble_api/ble_api.hpp"
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_utils.h" // for initRfModule
@@ -951,33 +953,13 @@ void runClockLoop() {
             tft.setCursor(64, tftHeight / 3 + 5);
             uint8_t f_size = 4;
             for (uint8_t i = 4; i > 0; i--) {
-                if (i * LW * 8 < (tftWidth - BORDER_PAD_X * 2)) {
+                if (i * LW * strlen(timeStr) < (tftWidth - BORDER_PAD_X * 2)) {
                     f_size = i;
                     break;
                 }
             }
             tft.setTextSize(f_size);
-#if defined(HAS_RTC)
-#if defined(HAS_RTC_BM8563)
-            _rtc.GetBm8563Time();
-#endif
-#if defined(HAS_RTC_PCF85063A)
-            _rtc.GetPcf85063Time();
-#endif
-            _rtc.GetTime(&_time);
-            char timeString[9]; // Buffer para armazenar a string formatada "HH:MM:SS"
-            snprintf(
-                timeString,
-                sizeof(timeString),
-                "%02d:%02d:%02d",
-                _time.Hours % 100,
-                _time.Minutes % 100,
-                _time.Seconds % 100
-            );
-            tft.drawCentreString(timeString, tftWidth / 2, tftHeight / 2 - 13, 1);
-#else
             tft.drawCentreString(timeStr, tftWidth / 2, tftHeight / 2 - 13, 1);
-#endif
             tmp = millis();
         }
 
@@ -1182,10 +1164,12 @@ void setStartupApp() {
 
         options.push_back({appName.c_str(), [=]() {
                                bruceConfig.setStartupApp(appName);
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
                                if (appName == "JS Interpreter") {
                                    options = getScriptsOptionsList(true);
                                    loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
                                }
+#endif
                            }});
     }
 

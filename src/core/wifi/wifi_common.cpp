@@ -9,6 +9,8 @@
 #include <esp_netif.h>
 #include <globals.h>
 
+static TaskHandle_t timezoneTaskHandle = NULL;
+
 void ensureWifiPlatform() {
     static bool netifInitialized = false;
     static bool eventLoopCreated = false;
@@ -63,8 +65,11 @@ bool _wifiConnect(const String &ssid, int encryption) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
         bruceConfig.addWifiCredential(ssid, password);
-        vTaskDelay(5000 / portTICK_PERIOD_MS); // Wait 5 seconds for connection to stabilize
-        updateClockTimezone();
+
+        // Start timezone update in background if not already running
+        if (timezoneTaskHandle == NULL) {
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+        }
     }
 
     delay(200);
@@ -221,8 +226,11 @@ void wifiConnectTask(void *pvParameters) {
             if (WiFi.status() == WL_CONNECTED) {
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
-                vTaskDelay(5000 / portTICK_PERIOD_MS); // Wait 5 seconds for connection to stabilize
-                updateClockTimezone();
+
+                // Start timezone update in background if not already running
+                if (timezoneTaskHandle == NULL) {
+                    xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+                }
                 drawStatusBar();
                 break;
             }
@@ -264,8 +272,23 @@ bool wifiConnecttoKnownNet(void) {
     if (WiFi.status() == WL_CONNECTED) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
-        vTaskDelay(5000 / portTICK_PERIOD_MS); // Wait 5 seconds for connection to stabilize
-        updateClockTimezone();
+
+        // Start timezone update in background if not already running
+        if (timezoneTaskHandle == NULL) {
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+        }
     }
     return result;
+}
+
+void updateTimezoneTask(void *pvParameters) {
+    // Wait a bit for connection to stabilize before updating timezone
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    // Only update timezone if WiFi is still connected
+    if (WiFi.isConnected() && wifiConnected) { updateClockTimezone(); }
+
+    // Clear the task handle before deleting
+    timezoneTaskHandle = NULL;
+    vTaskDelete(NULL);
 }

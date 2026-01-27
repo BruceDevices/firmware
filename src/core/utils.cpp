@@ -103,16 +103,33 @@ void showDeviceInfo() {
 
     area.addLine("Bruce Version: " + String(BRUCE_VERSION));
     area.addLine("EEPROM size: " + String(EEPROMSIZE));
-    area.addLine("Total heap: " + String(ESP.getHeapSize()));
-    area.addLine("Free heap: " + String(ESP.getFreeHeap()));
+    area.addLine("");
+    area.addLine("[MEMORY]");
+    area.addLine("Total heap: " + formatBytes(ESP.getHeapSize()));
+    area.addLine("Free heap: " + formatBytes(ESP.getFreeHeap()));
     if (psramFound()) {
-        area.addLine("Total PSRAM: " + String(ESP.getPsramSize()));
-        area.addLine("Free PSRAM: " + String(ESP.getFreePsram()));
+        area.addLine("Total PSRAM: " + formatBytes(ESP.getPsramSize()));
+        area.addLine("Free PSRAM: " + formatBytes(ESP.getFreePsram()));
     }
-    area.addLine("LittleFS total: " + String(LittleFS.totalBytes()));
-    area.addLine("LittleFS used: " + String(LittleFS.usedBytes()));
-    area.addLine("LittleFS free: " + String(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    area.addLine("");
+    area.addLine("[NETWORK]");
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
+    String localIP = WiFi.localIP().toString();
+    String softAPIP = WiFi.softAPIP().toString();
+    String ipStatus = (WiFi.status() == WL_CONNECTED) ? (localIP != "0.0.0.0"    ? localIP
+                                                         : softAPIP != "0.0.0.0" ? softAPIP
+                                                                                 : "No valid IP")
+                                                      : "Not connected";
+    area.addLine("IP address: " + ipStatus);
+    area.addLine("");
+    area.addLine("[STORAGE]");
+    area.addLine("LittleFS total: " + formatBytes(LittleFS.totalBytes()));
+    area.addLine("LittleFS used: " + formatBytes(LittleFS.usedBytes()));
+    area.addLine("LittleFS free: " + formatBytes(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    area.addLine("");
+    area.addLine("SD Card total: " + formatBytes(SD.totalBytes()));
+    area.addLine("SD Card used: " + formatBytes(SD.usedBytes()));
+    area.addLine("SD Card free: " + formatBytes(SD.totalBytes() - SD.usedBytes()));
     area.addLine("");
 
 #ifdef HAS_SCREEN
@@ -259,4 +276,21 @@ String repeatString(int length, String character) {
     String result = "";
     for (int i = 0; i < length; i++) { result += character; }
     return result;
+}
+
+String formatBytes(uint64_t bytes) {
+    const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unitIndex = 0;
+    float size = bytes;
+
+    while (size >= 1024.0 && unitIndex < 4) {
+        size /= 1024.0;
+        unitIndex++;
+    }
+
+    if (unitIndex == 0) {
+        return String(bytes) + " " + units[unitIndex];
+    } else {
+        return String(size, 2) + " " + units[unitIndex];
+    }
 }

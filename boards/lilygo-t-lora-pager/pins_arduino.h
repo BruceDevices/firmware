@@ -38,8 +38,10 @@
 #define EXPANDS_SD_EN 12
 
 #define IO_EXPANDER_PCA9555
-#define IO_EXP_GPS EXPANDS_GPS_EN
-// Main SPI Bus
+// GPS stays turned on all the time..
+// makes Wardrive start way faster
+// #define IO_EXP_GPS EXPANDS_GPS_EN
+//  Main SPI Bus
 #define SPI_SS_PIN 21
 #define SPI_MOSI_PIN 34
 #define SPI_MISO_PIN 33
