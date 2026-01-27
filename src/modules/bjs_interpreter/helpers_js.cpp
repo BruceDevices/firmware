@@ -319,7 +319,7 @@ FileParamsJS js_get_path_from_params(JSContext *ctx, JSValue *argv, bool checkIf
             if (s) { filePath.path = s; }
         }
 
-        if (sdcardMounted && checkIfexist && SD.exists(filePath.path)) {
+        if (sdcardMounted && SD.exists(filePath.path)) {
             filePath.fs = &SD;
         } else {
             filePath.fs = &LittleFS;

@@ -491,14 +491,12 @@ void setup() {
 void loop() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     if (interpreter_state > 0) {
-        vTaskDelete(serialcmdsTaskHandle); // stop serial commands while in interpreter
         vTaskDelay(pdMS_TO_TICKS(10));
         interpreter_state = 2;
         Serial.println("Entering interpreter...");
         while (interpreter_state > 0) { vTaskDelay(pdMS_TO_TICKS(500)); }
         Serial.println("Exiting interpreter...");
         if (interpreter_state == -1) { interpreterTaskHandler = NULL; }
-        startSerialCommandsHandlerTask();
         previousMillis = millis(); // ensure that will not dim screen when get back to menu
     }
 #endif

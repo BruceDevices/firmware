@@ -210,7 +210,7 @@ void run_timers(JSContext *ctx) {
     JSTimerContextState *state = get_timer_state(ctx, false);
     if (!state) return;
 
-    while (true) {
+    while (interpreter_state >= 0) {
         min_delay = 1000;
         cur_time = millis();
         has_timer = false;
@@ -326,11 +326,13 @@ JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 }
 
 JSValue native_delay(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (interpreter_state < 0) { return JS_ThrowInternalError(ctx, "Script exited"); }
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int ms;
         JS_ToInt32(ctx, &ms, argv[0]);
         vTaskDelay(pdMS_TO_TICKS(ms));
     }
+    if (interpreter_state < 0) { return JS_ThrowInternalError(ctx, "Script exited"); }
     return JS_UNDEFINED;
 }
 
