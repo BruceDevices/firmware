@@ -7,7 +7,6 @@
 #include "modules/others/ibutton.h"
 #include "modules/others/mic.h"
 #include "modules/others/qrcode_menu.h"
-#include "modules/others/timer.h"
 #include "modules/others/tururururu.h"
 
 void OthersMenu::optionsMenu() {
@@ -27,7 +26,6 @@ void OthersMenu::optionsMenu() {
 #ifndef LITE_VERSION
         {"iButton",      setup_ibutton                            },
 #endif
-        {"Timer",        [=]() { Timer(); }                       },
     };
     addOptionToMainMenu();
 
