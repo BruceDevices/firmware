@@ -28,6 +28,7 @@
         },
         "SD_Card": {
             "info": "External storage via SPI.",
+			"warning": "Uses G25/G26 as data lines. May interfere.",
             "connections": [
                 { "module": "VCC", "device": "3.3V" },
                 { "module": "GND", "device": "GND" },
