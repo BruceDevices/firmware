@@ -33,5 +33,8 @@ void internal_print(
     JSContext *ctx, JSValue *this_val, int argc, JSValue *argv, uint8_t printTft, uint8_t newLine
 );
 
+JSValue buffer_latin1_to_string(JSContext *ctx, const uint8_t *buf, size_t len);
+bool buffer_latin1_string_to_bytes(const uint8_t *s, size_t len, uint8_t **out_bytes, size_t *out_len);
+
 #endif
 #endif

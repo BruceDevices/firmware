@@ -8,34 +8,6 @@
 
 #include "mbedtls/base64.h"
 
-static JSValue buffer_latin1_to_string(JSContext *ctx, const uint8_t *buf, size_t len) {
-    /* JS strings are UTF-8. For Node's 'binary'/'latin1', map each byte 0..255
-       to Unicode codepoint U+0000..U+00FF and UTF-8 encode it. */
-    if (!buf || len == 0) { return JS_NewStringLen(ctx, "", 0); }
-
-    size_t out_cap = len * 2;
-    uint8_t *out = (uint8_t *)malloc(out_cap);
-    if (!out) { return JS_ThrowOutOfMemory(ctx); }
-
-    size_t out_len = 0;
-    for (size_t i = 0; i < len; ++i) {
-        uint8_t b = buf[i];
-        if (b < 0x80) {
-            out[out_len++] = b;
-        } else if (b < 0xC0) {
-            out[out_len++] = 0xC2;
-            out[out_len++] = b;
-        } else {
-            out[out_len++] = 0xC3;
-            out[out_len++] = (uint8_t)(b - 0x40);
-        }
-    }
-
-    JSValue s = JS_NewStringLen(ctx, (const char *)out, out_len);
-    free(out);
-    return s;
-}
-
 static JSValue buffer_decode_base64(JSContext *ctx, const uint8_t *input, size_t input_len, size_t *out_len) {
     if (!input) { return JS_ThrowTypeError(ctx, "Buffer.from: invalid input"); }
 

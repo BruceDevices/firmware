@@ -546,11 +546,11 @@ JSValue native_drawJpg(JSContext *ctx, JSValue *this_val, int argc, JSValue *arg
         base = file.paramOffset;
     }
 
-    if (argc > base && JS_IsNumber(ctx, argv[base])) JS_ToInt32(ctx, &x, argv[base]);
-    if (argc > base + 1 && JS_IsNumber(ctx, argv[base + 1])) JS_ToInt32(ctx, &y, argv[base + 1]);
+    if (argc > base && JS_IsNumber(ctx, argv[base + 1])) JS_ToInt32(ctx, &x, argv[base + 1]);
+    if (argc > base + 1 && JS_IsNumber(ctx, argv[base + 2])) JS_ToInt32(ctx, &y, argv[base + 2]);
     if (argc > base + 2) {
-        if (JS_IsBool(argv[base + 2])) center = JS_ToBool(ctx, argv[base + 2]);
-        else if (JS_IsNumber(ctx, argv[base + 2])) JS_ToInt32(ctx, &center, argv[base + 2]);
+        if (JS_IsBool(argv[base + 3])) center = JS_ToBool(ctx, argv[base + 3]);
+        else if (JS_IsNumber(ctx, argv[base + 3])) JS_ToInt32(ctx, &center, argv[base + 3]);
     }
 
     if (!JS_IsTypedArray(ctx, argv[0])) {

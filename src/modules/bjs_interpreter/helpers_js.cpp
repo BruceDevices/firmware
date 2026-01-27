@@ -425,4 +425,92 @@ void internal_print(
     }
 }
 
+JSValue buffer_latin1_to_string(JSContext *ctx, const uint8_t *buf, size_t len) {
+    /* JS strings are UTF-8. For Node's 'binary'/'latin1', map each byte 0..255
+       to Unicode codepoint U+0000..U+00FF and UTF-8 encode it. */
+    if (!buf || len == 0) { return JS_NewStringLen(ctx, "", 0); }
+
+    size_t out_cap = len * 2;
+    uint8_t *out = (uint8_t *)malloc(out_cap);
+    if (!out) { return JS_ThrowOutOfMemory(ctx); }
+
+    size_t out_len = 0;
+    for (size_t i = 0; i < len; ++i) {
+        uint8_t b = buf[i];
+        if (b < 0x80) {
+            out[out_len++] = b;
+        } else if (b < 0xC0) {
+            out[out_len++] = 0xC2;
+            out[out_len++] = b;
+        } else {
+            out[out_len++] = 0xC3;
+            out[out_len++] = (uint8_t)(b - 0x40);
+        }
+    }
+
+    JSValue s = JS_NewStringLen(ctx, (const char *)out, out_len);
+    free(out);
+    return s;
+}
+
+bool buffer_latin1_string_to_bytes(const uint8_t *s, size_t len, uint8_t **out_bytes, size_t *out_len) {
+    if (!out_bytes || !out_len) return false;
+    *out_bytes = NULL;
+    *out_len = 0;
+
+    if (!s || len == 0) return true;
+
+    // Worst-case output is <= input length.
+    uint8_t *out = (uint8_t *)malloc(len);
+    if (!out) return false;
+
+    size_t oi = 0;
+    for (size_t i = 0; i < len;) {
+        uint8_t b = s[i];
+        if (b < 0x80) {
+            out[oi++] = b;
+            i += 1;
+            continue;
+        }
+
+        if (b == 0xC2) {
+            if (i + 1 >= len) {
+                free(out);
+                return false;
+            }
+            uint8_t b2 = s[i + 1];
+            if (b2 < 0x80 || b2 > 0xBF) {
+                free(out);
+                return false;
+            }
+            out[oi++] = b2;
+            i += 2;
+            continue;
+        }
+
+        if (b == 0xC3) {
+            if (i + 1 >= len) {
+                free(out);
+                return false;
+            }
+            uint8_t b2 = s[i + 1];
+            if (b2 < 0x80 || b2 > 0xBF) {
+                free(out);
+                return false;
+            }
+            out[oi++] = (uint8_t)(b2 + 0x40);
+            i += 2;
+            continue;
+        }
+
+        // Not latin1 (or invalid UTF-8 for the subset we support).
+        free(out);
+        return false;
+    }
+
+    *out_bytes = out;
+    *out_len = oi;
+    return true;
+}
+
 #endif

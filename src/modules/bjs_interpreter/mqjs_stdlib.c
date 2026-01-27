@@ -773,6 +773,10 @@ static const JSPropDef js_global_object[] = {
     JS_CFUNC_DEF("to_hex_string", 1, native_to_hex_string ),
     JS_CFUNC_DEF("to_lower_case", 1, native_to_lower_case ),
     JS_CFUNC_DEF("to_upper_case", 1, native_to_upper_case ),
+    JS_CFUNC_DEF("atob", 1, native_atob ),
+    JS_CFUNC_DEF("btoa", 1, native_btoa ),
+    JS_CFUNC_DEF("atob_bin", 1, native_atob_bin ),
+    JS_CFUNC_DEF("btoa_bin", 1, native_btoa_bin ),
     JS_CFUNC_DEF("exit", 0, native_exit ),
 
     /* Modules */
