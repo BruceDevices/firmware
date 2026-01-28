@@ -495,7 +495,11 @@ void loop() {
         interpreter_state = 2;
         Serial.println("Entering interpreter...");
         while (interpreter_state > 0) { vTaskDelay(pdMS_TO_TICKS(500)); }
-        Serial.println("Exiting interpreter...");
+        if (interpreter_state == 0) {
+            Serial.println("Interpreter put to background.");
+        } else {
+            Serial.println("Exiting interpreter...");
+        }
         if (interpreter_state == -1) { interpreterTaskHandler = NULL; }
         previousMillis = millis(); // ensure that will not dim screen when get back to menu
     }
