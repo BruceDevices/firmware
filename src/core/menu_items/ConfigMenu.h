@@ -13,7 +13,18 @@ public:
     String themePath() { return bruceConfig.theme.paths.config; }
 
 private:
+    // Submenus
+    void displayUIMenu(void);
+    void ledMenu(void);
+    void audioMenu(void);
+    void systemMenu(void);
+    void advancedMenu(void);
+    void powerMenu(void);
     void devMenu(void);
+
+    // Helper methods for complex operations
+    void switchToUSBSerial(void);
+    void switchToUARTSerial(void);
 };
 
 #endif
