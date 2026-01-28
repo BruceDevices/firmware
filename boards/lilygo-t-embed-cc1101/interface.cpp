@@ -305,7 +305,7 @@ void checkReboot() {
                     tft.fillScreen(bruceConfig.bgColor);
                     tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
                     tft.drawCentreString("RESTARTING...", tftWidth / 2, tftHeight / 2, 2);
-                    delay(500);
+                    delay(1000);
                     ESP.restart();
                 }
 
@@ -329,6 +329,7 @@ void checkReboot() {
                     powerDownNFC();
                     powerDownCC1101();
                     tft.sleep(true);
+                    delay(1000); // Delay for debouncing ;)
                     digitalWrite(PIN_POWER_ON, LOW);
                     esp_sleep_enable_ext0_wakeup(GPIO_NUM_6, LOW);
                     esp_deep_sleep_start();
