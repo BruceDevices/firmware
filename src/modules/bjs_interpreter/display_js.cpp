@@ -717,8 +717,13 @@ JSValue native_deleteSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue
 
 JSValue native_pushSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(HAS_SCREEN) && defined(BOARD_HAS_PSRAM)
+    int x = 0, y = 0, transparent = TFT_TRANSPARENT;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &transparent, argv[2]);
+
     DisplayTarget target = get_display_target(ctx, this_val);
-    if (target.isSprite && target.sprite) target.sprite->pushSprite(0, 0);
+    if (target.isSprite && target.sprite) target.sprite->pushSprite(x, y, transparent);
 #endif
     return JS_UNDEFINED;
 }
