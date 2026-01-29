@@ -19,9 +19,14 @@ USBSerial USBserial;
 SerialDevice *serialDevice = &USBserial;
 
 StartupApp startupApp;
+String startupAppJSInterpreterFile = "";
+
 MainMenu mainMenu;
 SPIClass sdcardSPI;
 #ifdef USE_HSPI_PORT
+#ifndef VSPI
+#define VSPI FSPI
+#endif
 SPIClass CC_NRF_SPI(VSPI);
 #else
 SPIClass CC_NRF_SPI(HSPI);
@@ -99,11 +104,15 @@ bool returnToMenu;
 bool isSleeping = false;
 bool isScreenOff = false;
 bool dimmer = false;
-char timeStr[10];
+char timeStr[12];
 time_t localTime;
 struct tm *timeInfo;
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_PCF85063A)
+pcf85063_RTC _rtc;
+#else
 cplus_RTC _rtc;
+#endif
 RTC_TimeTypeDef _time;
 RTC_DateTypeDef _date;
 bool clock_set = true;
@@ -116,8 +125,8 @@ std::vector<Option> options;
 // Protected global variables
 #if defined(HAS_SCREEN)
 tft_logger tft = tft_logger(); // Invoke custom library
-TFT_eSprite sprite = TFT_eSprite(&tft);
-TFT_eSprite draw = TFT_eSprite(&tft);
+tft_sprite sprite = tft_sprite(&tft);
+tft_sprite draw = tft_sprite(&tft);
 volatile int tftWidth = TFT_HEIGHT;
 #ifdef HAS_TOUCH
 volatile int tftHeight =
@@ -328,9 +337,13 @@ void boot_screen_anim() {
  *********************************************************************/
 void init_clock() {
 #if defined(HAS_RTC)
-
     _rtc.begin();
+#if defined(HAS_RTC_BM8563)
     _rtc.GetBm8563Time();
+#endif
+#if defined(HAS_RTC_PCF85063A)
+    _rtc.GetPcf85063Time();
+#endif
     _rtc.GetTime(&_time);
 #endif
 }
@@ -419,7 +432,9 @@ void setup() {
         .cc = "US",
         .schan = 1,
         .nchan = 14,
+#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
         .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
+#endif
         .policy = WIFI_COUNTRY_POLICY_MANUAL
     };
 

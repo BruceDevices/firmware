@@ -8,9 +8,9 @@
 
 void GpsMenu::optionsMenu() {
     options = {
-        {"Wardriving",  [=]() { Wardriving(); }   },
-        {"GPS Tracker", [=]() { GPSTracker(); }   },
-        {"Config",      [this]() { configMenu(); }},
+        {"Wardriving",  [this]() { wardrivingMenu(); }},
+        {"GPS Tracker", [=]() { GPSTracker(); }       },
+        {"Config",      [this]() { configMenu(); }    },
     };
     addOptionToMainMenu();
 
@@ -18,6 +18,16 @@ void GpsMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
 
+void GpsMenu::wardrivingMenu() {
+    options = {
+        {"Scan WiFi Networks", []() { Wardriving(true, false); }},
+        {"Scan BLE Devices",   []() { Wardriving(false, true); }},
+        {"Scan Both",          []() { Wardriving(true, true); } },
+        {"Back",               [this]() { optionsMenu(); }      },
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "Wardriving");
+}
 void GpsMenu::configMenu() {
     options = {
         {"Baudrate", setGpsBaudrateMenu                                 },

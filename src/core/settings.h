@@ -74,8 +74,6 @@ int gsetRfTxPin(bool set = false);
 
 int gsetRfRxPin(bool set = false);
 
-void runClockLoop();
-
 void setSoundConfig();
 
 void setSoundVolume();

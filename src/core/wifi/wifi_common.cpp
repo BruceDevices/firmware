@@ -9,6 +9,8 @@
 #include <esp_netif.h>
 #include <globals.h>
 
+static TaskHandle_t timezoneTaskHandle = NULL;
+
 void ensureWifiPlatform() {
     static bool netifInitialized = false;
     static bool eventLoopCreated = false;
@@ -37,7 +39,7 @@ void ensureWifiPlatform() {
 
 bool _wifiConnect(const String &ssid, int encryption) {
     String password = bruceConfig.getWifiPassword(ssid);
-    if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:"); }
+    if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
     bool connected = _connectToWifiNetwork(ssid, password);
     bool retry = false;
 
@@ -55,7 +57,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
             return false;
         }
 
-        password = keyboard(password, 63, "Network Password:");
+        password = keyboard(password, 63, "Network Password:", true);
         connected = _connectToWifiNetwork(ssid, password);
     }
 
@@ -63,7 +65,11 @@ bool _wifiConnect(const String &ssid, int encryption) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
         bruceConfig.addWifiCredential(ssid, password);
-        updateClockTimezone();
+
+        // Start timezone update in background if not already running
+        if (timezoneTaskHandle == NULL) {
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+        }
     }
 
     delay(200);
@@ -220,7 +226,11 @@ void wifiConnectTask(void *pvParameters) {
             if (WiFi.status() == WL_CONNECTED) {
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
-                updateClockTimezone();
+
+                // Start timezone update in background if not already running
+                if (timezoneTaskHandle == NULL) {
+                    xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+                }
                 drawStatusBar();
                 break;
             }
@@ -262,7 +272,23 @@ bool wifiConnecttoKnownNet(void) {
     if (WiFi.status() == WL_CONNECTED) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
-        updateClockTimezone();
+
+        // Start timezone update in background if not already running
+        if (timezoneTaskHandle == NULL) {
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+        }
     }
     return result;
+}
+
+void updateTimezoneTask(void *pvParameters) {
+    // Wait a bit for connection to stabilize before updating timezone
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    // Only update timezone if WiFi is still connected
+    if (WiFi.isConnected() && wifiConnected) { updateClockTimezone(); }
+
+    // Clear the task handle before deleting
+    timezoneTaskHandle = NULL;
+    vTaskDelete(NULL);
 }

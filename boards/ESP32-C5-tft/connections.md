@@ -1,12 +1,14 @@
 # Pinouts diagram to use Bruce
 
 ## USING CUSTOM BOARD, with SPI
-| Device  | SCK   | MISO  | MOSI  | CS    | GDO0/CE   |
-| ---     | :---: | :---: | :---: | :---: | :---:     |
-| Display | 6     | 2     | 7     | 23    |           |
-| SD Card | 6     | 2     | 7     | 10    | ---       |
-| CC1101  | 6     | 2     | 7     | 9*    | 8*        |
-| NRF24   | 6     | 2     | 7     | 9*    | 8*        |
+
+| Device  | SCK   | MISO  | MOSI  | CS    | GDO0/CE | TFT_DC | TFT_RST | TFT_BL |
+| ---     | :---: | :---: | :---: | :---: | :---:   | :---:  | :---:   | :---:  |
+| Display | 6     | 2     | 7     | 23    | ---     | 24     | C5 RST  | 25     |
+| SD Card | 6     | 2     | 7     | 10    | ---     | ---    |  ---    | ---    |
+| CC1101  | 6     | 2     | 7     | 9*    | 8*      | ---    |  ---    | ---    |
+| NRF24   | 6     | 2     | 7     | 9*    | 8*      | ---    |  ---    | ---    |
+
 (*) CC1101, NRF24, W5500 use the same pinouts, need to add a switch on CS and CE/GDO0 to choose which to use.
 
 If using Buttons, use thesee pinouts
@@ -20,7 +22,7 @@ If using ILI9341 with XPT2046 fo touchscreen, in this case you have 2 GPIO avail
 | Device  | SCK   | MISO  | MOSI  | CS    | IRQ   |
 | ---     | :---: | :---: | :---: | :---: | :---: |
 | Display | 6     | 2     | 7     | 23    | ---   |
-| XPT2046 | 6     | 2     | 7     | 1     | ---   |
+| Touch   | 6     | 2     | 7     | 1     | ---   |
 
 
 | Device  | RX    | TX    | GPIO  |

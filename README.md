@@ -2,7 +2,7 @@
 
 # :shark: Bruce
 
-Bruce is meant to be a versatile ESP32 firmware that supports a ton of offensive features focusing on facilitating Red Team operations.
+Bruce is a versatile ESP32 firmware that supports a ton of offensive features focusing on facilitating Red Team operations.
 It also supports M5stack and Lilygo products and works great with Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
 
 **Check our fully open-source hardware too:** https://bruce.computer/boards

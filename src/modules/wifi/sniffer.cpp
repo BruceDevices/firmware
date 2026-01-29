@@ -31,7 +31,6 @@
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
 #include <Arduino.h>
-#include <TimeLib.h>
 #include <globals.h>
 #if defined(ESP32)
 #include "FS.h"

@@ -2,6 +2,7 @@ Import("env")
 import os
 import subprocess
 import hashlib
+import shutil
 
 PIOENV = env.subst("$PIOENV")
 MQJS_PATH = os.path.join(".pio/libdeps", PIOENV, "mquickjs")
@@ -21,6 +22,7 @@ SRC = [
 CFLAGS = [
     "-Wall",
     "-O2",
+    "-m32",
     "-I" + MQJS_PATH,
 ]
 
@@ -55,7 +57,8 @@ def sha256_file(path):
             chunk = f.read(8192)
             if not chunk:
                 break
-            h.update(chunk)
+            # Normalize CRLF to LF so signatures are stable across OSes.
+            h.update(chunk.replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 def _project_option(name: str):
@@ -63,6 +66,32 @@ def _project_option(name: str):
         return env.GetProjectOption(name, default="")
     except Exception:
         return ""
+
+def _resolve_host_cc():
+    override = os.environ.get("MQJS_HOST_CC") or _project_option("mqjs_host_cc")
+    return override if override else HOST_CC
+
+def _has_define(name: str) -> bool:
+    try:
+        flags = env.ParseFlags(env['BUILD_FLAGS'])
+    except Exception:
+        return False
+    for define in flags.get('CPPDEFINES', []):
+        if define == name:
+            return True
+        if isinstance(define, list) and define and define[0] == name:
+            return True
+    return False
+
+def _gen_enabled() -> bool:
+    # Default to enabled for backward compatibility.
+    if _has_define("DISABLE_MQJS_HEADERS_GEN"):
+        return False
+    if _has_define("GEN_MQJS_HEADERS"):
+        value = get_build_flag_value("GEN_MQJS_HEADERS")
+        if value is not None and str(value).strip().lower() in ("0", "false", "no", "off"):
+            return False
+    return True
 
 def _normalize_option_value(value) -> str:
     if value is None:
@@ -76,7 +105,6 @@ def compute_signature():
     # Any change here should force a rebuild.
     parts = []
     parts.append("v=3")
-    parts.append(f"PIOENV={PIOENV}")
     parts.append(f"watch_sha256={sha256_file(WATCH_FILE)}")
 
     mqjs_build_c = os.path.join(MQJS_PATH, "mquickjs_build.c")
@@ -117,15 +145,49 @@ def generate_headers():
     if get_build_flag_value("LITE_VERSION") is not None or get_build_flag_value("DISABLE_INTERPRETER") is not None:
         return
 
+    if not _gen_enabled():
+        print("Skipped MQJS headers build.")
+        return
+
     os.makedirs(BUILD_DIR, exist_ok=True)
 
     if not needs_rebuild():
         return
 
     try:
+        host_cc = _resolve_host_cc()
+        if not shutil.which(host_cc):
+            if os.path.exists(os.path.join(BJS_INTERPRETER_PATH, "mqjs_stdlib.h")):
+                print("Host compiler not found; skipping mqjs_stdlib header generation.")
+                print("Set MQJS_HOST_CC or mqjs_host_cc to a GCC-compatible compiler, or use Docker.")
+                print("\nOn Windows:\n- install MSYS2 https://www.msys2.org/ at default path")
+                print("- open C:\\msys64\\ucrt64.exe")
+                print("- run on UCRT64 terminal: pacman -S --needed mingw-w64-i686-toolchain")
+                print("- add C:\\msys64\\mingw32\\bin to PATH, cmd: setx PATH \"%PATH%;C:\\msys64\\mingw32\\bin\\\"")
+                print("- close and open VSCode again")
+                print("\nOn Mac:\n- run on terminal: xcode-select --install")
+                print("\nOn Linux:\n- run on terminal: sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386\n\n")
+                return
+            raise RuntimeError("Host compiler not found and mqjs_stdlib.h is missing.")
+
         # Build the generator as a native host executable. The output headers are
         # still forced to 32-bit target format via the generator's `-m32` flag.
-        subprocess.check_call([HOST_CC, *CFLAGS, "-o", GEN, *SRC])
+        gcc_result = subprocess.run(
+            [host_cc, *CFLAGS, "-o", GEN, *SRC],
+            capture_output=True,
+            text=True,
+        )
+        if gcc_result.returncode != 0:
+            if gcc_result.stdout:
+                print("gcc stdout:\n" + gcc_result.stdout)
+            if gcc_result.stderr:
+                print("gcc stderr:\n" + gcc_result.stderr)
+            raise subprocess.CalledProcessError(
+                gcc_result.returncode,
+                gcc_result.args,
+                output=gcc_result.stdout,
+                stderr=gcc_result.stderr,
+            )
 
         print("gen_mqjs_headers.py Generating QuickJS headers for 32-bit targets")
 

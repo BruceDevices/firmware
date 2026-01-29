@@ -590,3 +590,186 @@ void MediaCommands(HIDInterface *hid, bool ble) {
     }
     returnToMenu = true;
 }
+
+// Presenter mode - simple button press to advance slides
+void PresenterMode(HIDInterface *&hid, bool ble) {
+    if (_Ask_for_restart == 2) {
+        displayError("Restart your Device");
+        delay(1000);
+        return;
+    }
+
+    ducky_startKb(hid, ble);
+
+    displayTextLine("Pairing...");
+
+    while (!hid->isConnected() && !check(EscPress));
+
+    if (!hid->isConnected()) {
+        displayWarning("Canceled", true);
+        returnToMenu = true;
+        return;
+    }
+
+    BLEConnected = true;
+
+    // Initialize presenter state
+    int currentSlide = 1;
+    int lastDisplayedSlide = 0;
+    unsigned long startTime = 0; // Will be set on first interaction
+    unsigned long lastDisplayedSeconds = 0;
+    bool timerStarted = false;
+    bool firstDraw = true;
+
+    // Helper function to draw static UI elements (only once)
+    auto drawStaticUI = [&]() {
+        tft.fillScreen(bruceConfig.bgColor);
+
+        // Draw title "PRESENTER" at the top
+        tft.setTextSize(FM);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("PRESENTER", tftWidth / 2, 10, 1);
+
+        // Draw a separator line
+        tft.drawFastHLine(10, 35, tftWidth - 20, bruceConfig.priColor);
+
+        // Draw time label
+        tft.setTextSize(FM);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("Time", tftWidth / 2, tftHeight / 2 + 15, 1);
+
+        // Draw controls hint at bottom
+        tft.setTextSize(1);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, tftHeight - 15, 1);
+    };
+
+    // Helper function to update slide number (only when changed)
+    auto updateSlideDisplay = [&]() {
+        // Clear previous slide area
+        tft.fillRect(0, tftHeight / 2 - 35, tftWidth, 40, bruceConfig.bgColor);
+
+        // Draw current slide number - large and centered
+        tft.setTextSize(4);
+        tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+        String slideStr = "Slide " + String(currentSlide);
+        tft.drawCentreString(slideStr, tftWidth / 2, tftHeight / 2 - 30, 1);
+        lastDisplayedSlide = currentSlide;
+    };
+
+    // Helper function to update timer (only when seconds change)
+    auto updateTimerDisplay = [&]() {
+        unsigned long elapsed = 0;
+        if (timerStarted) { elapsed = (millis() - startTime) / 1000; }
+
+        int hours = elapsed / 3600;
+        int minutes = (elapsed % 3600) / 60;
+        int seconds = elapsed % 60;
+
+        // Format time string
+        char timeBuffer[16];
+        if (hours > 0) {
+            snprintf(timeBuffer, sizeof(timeBuffer), "%d:%02d:%02d", hours, minutes, seconds);
+        } else {
+            snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", minutes, seconds);
+        }
+
+        // Clear timer area and redraw
+        tft.fillRect(0, tftHeight / 2 + 30, tftWidth, 30, bruceConfig.bgColor);
+        tft.setTextSize(3);
+        tft.setTextColor(timerStarted ? TFT_GREEN : TFT_DARKGREY, bruceConfig.bgColor);
+        tft.drawCentreString(timeBuffer, tftWidth / 2, tftHeight / 2 + 35, 1);
+
+        lastDisplayedSeconds = elapsed;
+    };
+
+    // Initial UI draw
+    drawStaticUI();
+    updateSlideDisplay();
+    updateTimerDisplay();
+
+    while (1) {
+        bool slideChanged = false;
+
+        // Middle button = Next slide (Right Arrow for presentations)
+        if (check(SelPress)) {
+            delay(50); // Allow system to stabilize after check()
+            // First press only starts timer, doesn't send key
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                // Prime the HID connection with an empty report
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_RIGHT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                currentSlide++;
+                slideChanged = true;
+            }
+            delay(150); // debounce
+        }
+        // Wheel right = Next slide (Right arrow)
+        else if (check(NextPress)) {
+            delay(50); // Allow system to stabilize after check()
+            // First press only starts timer, doesn't send key
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                // Prime the HID connection with an empty report
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_RIGHT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                currentSlide++;
+                slideChanged = true;
+            }
+            delay(150); // debounce
+        }
+        // Wheel left = Previous slide (Left arrow)
+        else if (check(PrevPress)) {
+            delay(50); // Allow system to stabilize after check()
+            // First press only starts timer, doesn't send key
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                // Prime the HID connection with an empty report
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_LEFT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                if (currentSlide > 1) currentSlide--;
+                slideChanged = true;
+            }
+            delay(150); // debounce
+        }
+
+        // Update slide display only if changed
+        if (slideChanged) {
+            updateSlideDisplay();
+            updateTimerDisplay();
+        }
+
+        // Update timer display every second (only if timer is running)
+        if (timerStarted) {
+            unsigned long currentSeconds = (millis() - startTime) / 1000;
+            if (currentSeconds != lastDisplayedSeconds) { updateTimerDisplay(); }
+        }
+
+        // Escape to exit
+        if (check(EscPress)) break;
+
+        delay(10);
+    }
+
+    hid->releaseAll();
+    returnToMenu = true;
+}

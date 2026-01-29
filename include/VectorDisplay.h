@@ -259,6 +259,11 @@ public:
     uint32_t textcolor = TFT_WHITE;
     uint32_t textbgcolor = TFT_BLACK;
 
+    uint32_t getTextColor() { return textcolor; };
+    uint32_t getTextBgColor() { return textbgcolor; };
+    uint8_t getTextSize() { return textsize; };
+    uint8_t getRotation() { return rotation; };
+
     void setWaitForAck(bool wait) { waitForAck = wait; }
 
     void setDelay(uint32_t delayMillis) {

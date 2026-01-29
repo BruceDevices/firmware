@@ -65,13 +65,13 @@ void ssh_setup(String host) {
         ssh_host = keyboard(my_net, 100, "SSH HOST (IP or Hostname)");
         // ssh_host=keyboard("192.168.3.60",15,"SSH HOST (IP)");
     }
-    ssh_port = keyboard("22", 5, "SSH PORT");
+    ssh_port = num_keyboard("22", 5, "SSH PORT");
 
     ssh_user = keyboard("", 76, "SSH USER");
     // ssh_user=keyboard("ubuntu",76,"SSH USER");
 
-    ssh_password = keyboard("", 76, "SSH PASSWORD");
-    // ssh_password=keyboard("ubuntu",76,"SSH PASSWORD");
+    ssh_password = keyboard("", 76, "SSH PASSWORD", true);
+    // ssh_password=keyboard("ubuntu",76,"SSH PASSWORD", true);
 
     IPAddress resolvedIp;
     if (WiFi.hostByName(ssh_host.c_str(), resolvedIp)) {
@@ -419,7 +419,7 @@ void telnet_setup() {
 
     // tft.print("TELNET Port: \n");
     // waitForInput(telnet_port_string);
-    telnet_port_string = keyboard("", 76, "TELNET PORT");
+    telnet_port_string = num_keyboard("", 76, "TELNET PORT");
     delay(300);
     char arr2[5];
     // telnet_server_port_char =

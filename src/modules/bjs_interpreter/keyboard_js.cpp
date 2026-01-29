@@ -5,40 +5,89 @@
 
 #include "helpers_js.h"
 
-JSValue native_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+// Enum for keyboard types
+enum KeyboardType { KEYBOARD_NORMAL, KEYBOARD_HEX, KEYBOARD_NUM };
+
+// Helper function that handles the common argument parsing logic for keyboard functions
+static JSValue keyboard_wrapper(JSContext *ctx, JSValue *argv, int argc, KeyboardType type) {
     String result = "";
+
     if (argc == 0) {
-        result = keyboard("");
+        switch (type) {
+            case KEYBOARD_NORMAL: result = keyboard(""); break;
+            case KEYBOARD_HEX: result = hex_keyboard(""); break;
+            case KEYBOARD_NUM: result = num_keyboard(""); break;
+        }
     } else if (JS_IsNumber(ctx, argv[0])) {
-        int m = 0;
-        if (JS_ToInt32(ctx, &m, argv[0])) return JS_EXCEPTION;
-        const char *init = "";
+        int max_size = 0;
+        if (JS_ToInt32(ctx, &max_size, argv[0])) return JS_EXCEPTION;
+        const char *msg = "";
         if (argc > 1 && JS_IsString(ctx, argv[1])) {
             JSCStringBuf buf;
-            init = JS_ToCString(ctx, argv[1], &buf);
+            msg = JS_ToCString(ctx, argv[1], &buf);
         }
-        result = keyboard("", m, init);
+        bool mask_input = JS_IsBool(argv[argc - 1]) ? JS_ToBool(ctx, argv[argc - 1]) : false;
+        switch (type) {
+            case KEYBOARD_NORMAL: result = keyboard("", max_size, msg, mask_input); break;
+            case KEYBOARD_HEX: result = hex_keyboard("", max_size, msg, mask_input); break;
+            case KEYBOARD_NUM: result = num_keyboard("", max_size, msg, mask_input); break;
+        }
     } else if (JS_IsString(ctx, argv[0])) {
         JSCStringBuf buf0;
         const char *title = JS_ToCString(ctx, argv[0], &buf0);
         if (argc == 1 || !JS_IsNumber(ctx, argv[1])) {
-            result = keyboard(title ? title : "");
+            switch (type) {
+                case KEYBOARD_NORMAL: result = keyboard(title ? title : ""); break;
+                case KEYBOARD_HEX: result = hex_keyboard(title ? title : ""); break;
+                case KEYBOARD_NUM: result = num_keyboard(title ? title : ""); break;
+            }
         } else {
-            int m = 0;
-            if (JS_ToInt32(ctx, &m, argv[1])) return JS_EXCEPTION;
+            int max_size = 0;
+            if (JS_ToInt32(ctx, &max_size, argv[1])) return JS_EXCEPTION;
             if (argc < 3 || !JS_IsString(ctx, argv[2])) {
-                result = keyboard(title ? title : "", m);
+                switch (type) {
+                    case KEYBOARD_NORMAL: result = keyboard(title ? title : "", max_size); break;
+                    case KEYBOARD_HEX: result = hex_keyboard(title ? title : "", max_size); break;
+                    case KEYBOARD_NUM: result = num_keyboard(title ? title : "", max_size); break;
+                }
             } else {
                 JSCStringBuf buf2;
-                const char *init = JS_ToCString(ctx, argv[2], &buf2);
-                result = keyboard(title ? title : "", m, init ? init : "");
+                const char *msg = JS_ToCString(ctx, argv[2], &buf2);
+                bool mask_input = JS_IsBool(argv[argc - 1]) ? JS_ToBool(ctx, argv[argc - 1]) : false;
+                switch (type) {
+                    case KEYBOARD_NORMAL:
+                        result = keyboard(title ? title : "", max_size, msg ? msg : "", mask_input);
+                        break;
+                    case KEYBOARD_HEX:
+                        result = hex_keyboard(title ? title : "", max_size, msg ? msg : "", mask_input);
+                        break;
+                    case KEYBOARD_NUM:
+                        result = num_keyboard(title ? title : "", max_size, msg ? msg : "", mask_input);
+                        break;
+                }
             }
         }
     } else {
-        result = keyboard("");
+        switch (type) {
+            case KEYBOARD_NORMAL: result = keyboard(""); break;
+            case KEYBOARD_HEX: result = hex_keyboard(""); break;
+            case KEYBOARD_NUM: result = num_keyboard(""); break;
+        }
     }
 
     return JS_NewString(ctx, result.c_str());
+}
+
+JSValue native_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return keyboard_wrapper(ctx, argv, argc, KEYBOARD_NORMAL);
+}
+
+JSValue native_hex_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return keyboard_wrapper(ctx, argv, argc, KEYBOARD_HEX);
+}
+
+JSValue native_num_keyboard(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return keyboard_wrapper(ctx, argv, argc, KEYBOARD_NUM);
 }
 
 JSValue native_getPrevPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {

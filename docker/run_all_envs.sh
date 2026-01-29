@@ -6,6 +6,7 @@ cd /work
 # Match .github/workflows/PR_All_envs.yml matrix envs
 DEFAULT_ENVS=(
   m5stack-cardputer
+  m5stack-sticks3
   m5stack-cplus2
   m5stack-cplus1_1
   LAUNCHER_m5stack-cplus1_1
