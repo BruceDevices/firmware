@@ -422,7 +422,8 @@ void setCustomUIColorSettingMenu(
 }
 
 /*********************************************************************
-**  Function: setSoundConfig
+**  Function: setSoundConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable sound
 **********************************************************************/
 void setSoundConfig() {
@@ -455,7 +456,8 @@ void setSoundVolume() {
 
 #ifdef HAS_RGB_LED
 /*********************************************************************
-**  Function: setLedBlinkConfig
+**  Function: setLedBlinkConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable led blink
 **********************************************************************/
 void setLedBlinkConfig() {
