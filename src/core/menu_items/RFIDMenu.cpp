@@ -19,8 +19,8 @@ void RFIDMenu::optionsMenu() {
         {"Read tag",    [=]() { TagOMatic(); }                          },
 #ifndef LITE_VERSION
         {"Read EMV",    [=]() { EMVReader(); }                          },
-#endif
         {"Read 125kHz", [=]() { RFID125(); }                            },
+#endif
         {"Scan tags",   [=]() { TagOMatic(TagOMatic::SCAN_MODE); }      },
         {"Load file",   [=]() { TagOMatic(TagOMatic::LOAD_MODE); }      },
         {"Erase data",  [=]() { TagOMatic(TagOMatic::ERASE_MODE); }     },

@@ -33,4 +33,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble = false);
 // Send media commands through BLE or USB HID
 void MediaCommands(HIDInterface *hid, bool ble = false);
 
+// Presenter mode - press button to advance slides
+void PresenterMode(HIDInterface *&hid, bool ble = true);
+
 #endif

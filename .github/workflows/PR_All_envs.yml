@@ -27,6 +27,7 @@ jobs:
           - { env: "m5stack-cores3",                  family: "ESP32-S3",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
+          - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
           - { env: "CYD-2432S028",                    family: "ESP32",}
           - { env: "CYD-2USB",                        family: "ESP32",}
           - { env: "CYD-2432W328C",                   family: "ESP32",}

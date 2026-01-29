@@ -116,6 +116,40 @@ FileParamsJS js_get_path_from_params(JSContext *ctx, JSValue *argv, bool checkIf
     return filePath;
 }
 
+JSValue js_value_from_json_variant(JSContext *ctx, JsonVariantConst value) {
+    if (value.isNull()) return JS_NULL;
+    if (value.is<bool>()) return JS_NewBool(value.as<bool>());
+    if (value.is<const char *>()) {
+        const char *s = value.as<const char *>();
+        return s ? JS_NewString(ctx, s) : JS_NULL;
+    }
+    if (value.is<JsonArrayConst>()) {
+        JsonArrayConst arr = value.as<JsonArrayConst>();
+        JSValue jsArr = JS_NewArray(ctx, arr.size());
+        uint32_t idx = 0;
+        for (JsonVariantConst item : arr) {
+            JS_SetPropertyUint32(ctx, jsArr, idx++, js_value_from_json_variant(ctx, item));
+        }
+        return jsArr;
+    }
+    if (value.is<JsonObjectConst>()) {
+        JsonObjectConst obj = value.as<JsonObjectConst>();
+        JSValue jsObj = JS_NewObject(ctx);
+        for (JsonPairConst kv : obj) {
+            const char *key = kv.key().c_str();
+            JS_SetPropertyStr(ctx, jsObj, key ? key : "", js_value_from_json_variant(ctx, kv.value()));
+        }
+        return jsObj;
+    }
+    if (value.is<int64_t>()) return JS_NewInt64(ctx, value.as<int64_t>());
+    if (value.is<uint64_t>()) {
+        uint64_t u = value.as<uint64_t>();
+        return (u <= UINT32_MAX) ? JS_NewUint32(ctx, (uint32_t)u) : JS_NewFloat64(ctx, (double)u);
+    }
+    if (value.is<double>()) return JS_NewFloat64(ctx, value.as<double>());
+    return JS_UNDEFINED;
+}
+
 void internal_print(
     JSContext *ctx, JSValue *this_val, int argc, JSValue *argv, uint8_t printTft, uint8_t newLine
 ) {

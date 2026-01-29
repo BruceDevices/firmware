@@ -17,11 +17,13 @@ void _setup_gpio() {
 ** Function name: getBattery()
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
+
 int getBattery() {
     int percent = 0;
+#ifndef LITE_VERSION
     float b = axp192.GetBatVoltage();
     percent = ((b - 3.0) / 1.2) * 100;
-
+#endif
     return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
@@ -58,7 +60,7 @@ void InputHandler(void) {
 }
 
 void powerOff() { axp192.PowerOff(); }
-
+#ifndef LITE_VERSION
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
@@ -101,3 +103,4 @@ void checkReboot() {
 bool isCharging() {
     return axp192.GetBatCurrent() > 20; // need testing
 }
+#endif

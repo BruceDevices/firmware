@@ -1,6 +1,5 @@
 #include "core/display.h"
 #include <NTPClient.h>
-#include <Timezone.h>
 #include <WiFi.h>
 
 #ifndef __WIFI_COMMON_H__
@@ -58,5 +57,7 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd);
  * @note wifi.mode should be set before calling the method
  */
 bool _setupAP();
+
+void updateTimezoneTask(void *pvParameters);
 
 #endif

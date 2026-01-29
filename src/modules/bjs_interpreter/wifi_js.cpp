@@ -3,6 +3,7 @@
 
 #include "core/wifi/wifi_common.h"
 #include "helpers_js.h"
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 
@@ -129,7 +130,7 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     const char *bodyRequest = NULL;
     size_t bodyRequestLength = 0U;
     const char *requestType = "GET";
-    uint8_t returnResponseType = 0; // 0 = string
+    uint8_t returnResponseType = 0; // 0 = string, 1 = arraybuffer, 2 = json
 
     if (argc > 1 && JS_IsObject(ctx, argv[1])) {
         JSValue jsvBody = JS_GetPropertyStr(ctx, argv[1], "body");
@@ -155,28 +156,32 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
             bodyRequestLength = bodyRequest == NULL ? 0U : strlen(bodyRequest);
         }
 
-        jsvBody = JS_GetPropertyStr(ctx, argv[1], "method");
-        if (!JS_IsUndefined(jsvBody) && JS_IsString(ctx, jsvBody)) {
-            requestType = JS_ToCString(ctx, jsvBody, &stringBuffer);
+        JSValue jsvMethod = JS_GetPropertyStr(ctx, argv[1], "method");
+        if (!JS_IsUndefined(jsvMethod) && JS_IsString(ctx, jsvMethod)) {
+            requestType = JS_ToCString(ctx, jsvMethod, &stringBuffer);
         }
 
-        jsvBody = JS_GetPropertyStr(ctx, argv[1], "responseType");
-        if (!JS_IsUndefined(jsvBody) && JS_IsString(ctx, jsvBody)) {
-            const char *rts = JS_ToCString(ctx, jsvBody, &stringBuffer);
-            returnResponseType = (strcmp(rts ? rts : "string", "string") == 0) ? 0 : 1;
+        JSValue jsvResponseType = JS_GetPropertyStr(ctx, argv[1], "responseType");
+        if (!JS_IsUndefined(jsvResponseType) && JS_IsString(ctx, jsvResponseType)) {
+            const char *responseType = JS_ToCString(ctx, jsvResponseType, &stringBuffer);
+            if (strcmp(responseType, "binary") == 0) {
+                returnResponseType = 1;
+            } else if (strcmp(responseType, "json") == 0) {
+                returnResponseType = 2;
+            }
         }
 
         // headers inside options
-        jsvBody = JS_GetPropertyStr(ctx, argv[1], "headers");
-        if (!JS_IsUndefined(jsvBody)) {
-            if (JS_GetClassID(ctx, jsvBody) == JS_CLASS_ARRAY) {
-                JSValue l = JS_GetPropertyStr(ctx, jsvBody, "length");
+        JSValue jsvHeaders = JS_GetPropertyStr(ctx, argv[1], "headers");
+        if (!JS_IsUndefined(jsvHeaders)) {
+            if (JS_GetClassID(ctx, jsvHeaders) == JS_CLASS_ARRAY) {
+                JSValue l = JS_GetPropertyStr(ctx, jsvHeaders, "length");
                 if (JS_IsNumber(ctx, l)) {
                     uint32_t len = 0;
                     JS_ToUint32(ctx, &len, l);
                     for (uint32_t i = 0; i + 1 < len; i += 2) {
-                        JSValue jsvKey = JS_GetPropertyUint32(ctx, jsvBody, i);
-                        JSValue jsvValue = JS_GetPropertyUint32(ctx, jsvBody, i + 1);
+                        JSValue jsvKey = JS_GetPropertyUint32(ctx, jsvHeaders, i);
+                        JSValue jsvValue = JS_GetPropertyUint32(ctx, jsvHeaders, i + 1);
                         if (JS_IsString(ctx, jsvKey) && JS_IsString(ctx, jsvValue)) {
                             const char *key = JS_ToCString(ctx, jsvKey, &stringBuffer);
                             const char *value = JS_ToCString(ctx, jsvValue, &stringBuffer);
@@ -184,12 +189,12 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
                         }
                     }
                 }
-            } else if (JS_IsObject(ctx, jsvBody)) {
+            } else if (JS_IsObject(ctx, jsvHeaders)) {
                 uint32_t prop_count = 0;
                 for (uint32_t index = 0;; ++index) {
-                    const char *key = JS_GetOwnPropertyByIndex(ctx, index, &prop_count, jsvBody);
+                    const char *key = JS_GetOwnPropertyByIndex(ctx, index, &prop_count, jsvHeaders);
                     if (key == NULL) break;
-                    JSValue hv = JS_GetPropertyStr(ctx, jsvBody, key);
+                    JSValue hv = JS_GetPropertyStr(ctx, jsvHeaders, key);
                     if (!JS_IsUndefined(hv) &&
                         (JS_IsString(ctx, hv) || JS_IsNumber(ctx, hv) || JS_IsBool(hv))) {
                         const char *val = JS_ToCString(ctx, hv, &stringBuffer);
@@ -200,19 +205,90 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
         }
     }
 
-    // send
+    http.collectAllHeaders(true);
+
+    // Send HTTP request
+    // MEMO: Docs is wrong: sendRequest returns httpResponseCode not
+    // Content-Length
     int httpResponseCode = http.sendRequest(requestType, (uint8_t *)bodyRequest, bodyRequestLength);
     if (httpResponseCode <= 0) {
-        return JS_ThrowTypeError(ctx, http.errorToString(httpResponseCode).c_str());
+        return JS_ThrowInternalError(ctx, http.errorToString(httpResponseCode).c_str());
     }
 
     WiFiClient *stream = http.getStreamPtr();
-    String payload = "";
+
+    int contentLength = http.getSize();
+    bool isChunked = false;
+    if (contentLength == -1) {
+        String transferEncoding = http.header("transfer-encoding");
+        isChunked = transferEncoding.equalsIgnoreCase("chunked");
+    }
+
+    bool psramFoundValue = psramFound();
+
+    size_t payloadCap = 1; // MEMO: 1 for null terminated string
+    char *payload = NULL;
+    if (!isChunked) {
+        payloadCap = contentLength < 1 ? (psramFoundValue ? 16384 : 4096) : (size_t)contentLength + 1;
+        payload = (char *)(psramFoundValue ? ps_malloc(payloadCap) : malloc(payloadCap));
+        if (payload == NULL) {
+            http.end();
+            return JS_ThrowInternalError(ctx, "httpFetch: Memory allocation failed!");
+        }
+    }
+
     unsigned long startMillis = millis();
     const unsigned long timeoutMillis = 30000;
+
+    size_t bytesRead = 0;
     while (http.connected()) {
-        if (millis() - startMillis > timeoutMillis) break;
-        while (stream->available()) { payload += (char)stream->read(); }
+        if (millis() - startMillis > timeoutMillis) {
+            Serial.println("Timeout while reading response!");
+            break;
+        }
+
+        if (isChunked) { // if header Transfer-Encoding: chunked
+            // Read chunk size
+            String chunkSizeStr = stream->readStringUntil('\r');
+            stream->read();                                         // Consume '\n'
+            int chunkSize = strtol(chunkSizeStr.c_str(), NULL, 16); // Convert hex to int
+            if (chunkSize == 0) break;                              // Last chunk
+            contentLength += chunkSize;
+            if (payload == NULL) {
+                payloadCap = (size_t)contentLength + 1;
+                payload = (char *)(psramFoundValue ? ps_malloc(payloadCap) : malloc(payloadCap));
+            } else {
+                payloadCap = (size_t)contentLength + 1;
+                payload = (char *)(psramFoundValue ? ps_realloc(payload, payloadCap)
+                                                   : realloc(payload, payloadCap));
+            }
+            if (payload == NULL) {
+                http.end();
+                return JS_ThrowInternalError(ctx, "httpFetch: Memory allocation failed!");
+            }
+            // Read chunk data
+            int toRead = chunkSize;
+            while (toRead > 0) {
+                int readNow = stream->readBytes(payload + bytesRead, toRead);
+                if (readNow <= 0) break;
+                bytesRead += readNow;
+                toRead -= readNow;
+            }
+            // Consume trailing "\r\n" after chunk
+            stream->read();
+            stream->read();
+        } else {
+            int streamSize = stream->available();
+            if (streamSize > 0) {
+                size_t toRead = (streamSize > 512) ? 512 : streamSize;
+                if ((bytesRead + toRead + 1) > payloadCap) break;
+                int bytesReceived = stream->readBytes(payload + bytesRead, toRead);
+                bytesRead += bytesReceived;
+            } else {
+                delay(1);
+            }
+            if ((bytesRead + 1) >= payloadCap) break;
+        }
         delay(1);
     }
 
@@ -225,10 +301,21 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 
     JSValue obj = JS_NewObject(ctx);
     if (returnResponseType == 0) {
-        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, payload.c_str(), payload.length()));
+        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, (const char *)payload, bytesRead));
+    } else if (returnResponseType == 1) {
+        JS_SetPropertyStr(ctx, obj, "body", JS_NewUint8ArrayCopy(ctx, (const uint8_t *)payload, bytesRead));
     } else {
-        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, payload.c_str(), payload.length()));
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, payload, bytesRead);
+        if (error) {
+            free(payload);
+            http.end();
+            return JS_ThrowInternalError(ctx, "deserializeJson failed: %s", error.c_str());
+        }
+        JS_SetPropertyStr(ctx, obj, "body", js_value_from_json_variant(ctx, doc.as<JsonVariantConst>()));
     }
+    free(payload);
+    JS_SetPropertyStr(ctx, obj, "length", JS_NewInt32(ctx, contentLength));
     JS_SetPropertyStr(ctx, obj, "headers", headersObj);
     JS_SetPropertyStr(ctx, obj, "response", JS_NewInt32(ctx, httpResponseCode));
     JS_SetPropertyStr(ctx, obj, "status", JS_NewInt32(ctx, httpResponseCode));

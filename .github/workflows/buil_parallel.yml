@@ -18,6 +18,7 @@ jobs:
       matrix:
         board:
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
+          - { env: "m5stack-sticks3",                 family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
           - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
@@ -51,6 +52,7 @@ jobs:
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
+          - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
           - { env: "Marauder-Mini",                   family: "ESP32",}

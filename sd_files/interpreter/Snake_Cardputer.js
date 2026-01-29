@@ -6,10 +6,6 @@ var keyboard = require('keyboard');
 var width = display.width;
 var height = display.height;
 var color = display.color;
-var drawFillRect = display.drawFillRect;
-var drawRect = display.drawRect;
-var drawString = display.drawString;
-var fillScreen = display.fill;
 
 var screenWidth = width();
 var screenHeight = height();
@@ -29,27 +25,47 @@ var canMove = true;
 var time = now();
 var prevTime = now();
 tails.push([headX, headY]);
+var exitApp = false;
 
-setTextSize(2);
-drawFillRect(headX * gridSize, headY * gridSize, gridSize, gridSize, cSnake);
-drawFillRect(appleX * gridSize, appleY * gridSize, gridSize, gridSize, cApple);
+function init() {
+    headX = 4;
+    headY = 4;
+    appleX = 8;
+    appleY = 4;
+    headDir = 3; // 0 = up, 1 = down, 2 = left, 3 = right
+    totalDelay = 400;
+    delayTime = totalDelay;
+    tails = [];
+    canMove = true;
+    time = now();
+    prevTime = now();
+    tails.push([headX, headY]);
+
+    display.fill(cBG);
+    display.setTextSize(2);
+    display.drawFillRect(headX * gridSize, headY * gridSize, gridSize, gridSize, cSnake);
+    display.drawFillRect(appleX * gridSize, appleY * gridSize, gridSize, gridSize, cApple);
+}
+
+init();
 
 function gameOver() {
-    drawFillRect(0, 0, screenWidth, screenHeight, color(255, 0, 0));
-    setTextColor(cBG);
-    drawString("Game Over", screenWidth / 2 - 60, screenHeight / 2 - 10);
+    display.setTextSize(2);
+    display.drawFillRect(0, 0, screenWidth, screenHeight, color(255, 0, 0));
+    display.setTextColor(cBG);
+    display.drawString("Game Over", screenWidth / 2 - 60, screenHeight / 2 - 10);
     delay(3000);
-    throw new Error("Game Over");
+    init();
 };
 
 function updateTails() {
     if (tails.length > 0) {
         var lastTail = tails.pop();
-        drawFillRect(lastTail[0] * gridSize, lastTail[1] * gridSize, gridSize, gridSize, cBG);
+        display.drawFillRect(lastTail[0] * gridSize, lastTail[1] * gridSize, gridSize, gridSize, cBG);
         tails.unshift([headX, headY]);
 
         for (var i = 0; i < tails.length; i++) {
-            drawRect(tails[i][0] * gridSize + 1, tails[i][1] * gridSize + 1, gridSize - 2, gridSize - 2, cSnake);
+            display.drawRect(tails[i][0] * gridSize + 1, tails[i][1] * gridSize + 1, gridSize - 2, gridSize - 2, cSnake);
         }
     }
 };
@@ -128,8 +144,8 @@ function updateSnake() {
         }
 
         if (headX !== prevX || headY !== prevY) {
-            drawFillRect(prevX * gridSize, prevY * gridSize, gridSize, gridSize, cBG);
-            drawFillRect(headX * gridSize, headY * gridSize, gridSize, gridSize, cSnake);
+            display.drawFillRect(prevX * gridSize, prevY * gridSize, gridSize, gridSize, cBG);
+            display.drawFillRect(headX * gridSize, headY * gridSize, gridSize, gridSize, cSnake);
         }
 
         if (headX === appleX && headY === appleY) {
@@ -137,7 +153,7 @@ function updateSnake() {
                 appleX = Math.floor(Math.random() * (screenWidth / gridSize));
                 appleY = Math.floor(Math.random() * (screenHeight / gridSize));
             } while (isOnSnake(appleX, appleY));
-            drawFillRect(appleX * gridSize, appleY * gridSize, gridSize, gridSize, cApple);
+            display.drawFillRect(appleX * gridSize, appleY * gridSize, gridSize, gridSize, cApple);
             tails.push([prevX, prevY]);
             totalDelay -= 10;
         }
@@ -158,8 +174,10 @@ function updateSnake() {
     }
 }
 
-
-while (true) {
+while (!exitApp) {
     updateDelayTime();
     updateSnake();
+    if (keyboard.getEscPress()) {
+        exitApp = true;
+    }
 }

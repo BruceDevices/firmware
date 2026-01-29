@@ -347,7 +347,9 @@ const JSPropDef js_audio[] = {
 const JSClassDef js_audio_obj = JS_OBJECT_DEF("Audio", js_audio);
 
 const JSPropDef js_keyboard[] = {
-    JS_CFUNC_DEF("keyboard", 3, native_keyboard),
+    JS_CFUNC_DEF("keyboard", 4, native_keyboard),
+    JS_CFUNC_DEF("numKeyboard", 4, native_num_keyboard),
+    JS_CFUNC_DEF("hexKeyboard", 4, native_hex_keyboard),
     JS_CFUNC_DEF("getKeysPressed", 0, native_getKeysPressed),
     JS_CFUNC_DEF("getPrevPress", 1, native_getPrevPress),
     JS_CFUNC_DEF("getSelPress", 1, native_getSelPress),

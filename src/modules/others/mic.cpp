@@ -34,7 +34,7 @@ static uint16_t posData = 0;
 #ifdef PIN_BCLK
 gpio_num_t mic_bclk_pin = (gpio_num_t)PIN_BCLK;
 #else
-gpio_num_t mic_bclk_pin = I2S_PIN_NO_CHANGE;
+gpio_num_t mic_bclk_pin = (gpio_num_t)I2S_PIN_NO_CHANGE;
 #endif
 
 void _setup_codec_mic(bool enable) __attribute__((weak));

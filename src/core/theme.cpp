@@ -80,6 +80,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
 
     if (!_th["border"].isNull()) { theme.border = _th["border"].as<int>(); }
     if (!_th["label"].isNull()) { theme.label = _th["label"].as<int>(); }
+    if (!_th["gifDuration"].isNull()) { theme.gifDuration = _th["gifDuration"].as<int>(); }
 
     if (overwriteConfigSettings) {
         uint16_t _priColor = bruceConfig.priColor;
