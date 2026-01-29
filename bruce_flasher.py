@@ -107,6 +107,7 @@ DEVICES = [
     ("esp32-s3-devkitc-1-psram", "ESP32-S3 DevKitC-1 (PSRAM)", "ESP32 Generic"),
     ("esp32-c5", "ESP32-C5", "ESP32 Generic"),
     ("esp32-c5-tft", "ESP32-C5 TFT", "ESP32 Generic"),
+    ("ESP-WROOM-32-UFL", "ESP-WROOM-32 U.FL (External Antenna)", "ESP32 Generic"),
     
     # Other/Community Boards
     ("smoochiee-board", "Smoochiee Board", "Community"),

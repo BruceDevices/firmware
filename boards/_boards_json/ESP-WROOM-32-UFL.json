@@ -16,17 +16,11 @@
     "mcu": "esp32",
     "variant": "pinouts"
   },
-  "connectivity": [
-    "wifi",
-    "bluetooth"
-  ],
+  "connectivity": ["wifi", "bluetooth"],
   "debug": {
     "openocd_board": "esp-wroom-32.cfg"
   },
-  "frameworks": [
-    "arduino",
-    "espidf"
-  ],
+  "frameworks": ["arduino", "espidf"],
   "name": "ESP-WROOM-32 U.FL (External Antenna)",
   "upload": {
     "flash_size": "4MB",

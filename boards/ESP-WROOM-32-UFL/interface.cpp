@@ -3,10 +3,10 @@
 
 /*
  * ESP-WROOM-32 U.FL Board Interface Implementation
- * 
+ *
  * This board is a generic ESP-WROOM-32 dev board with external U.FL antenna.
  * It has no built-in display, so it defaults to WebUI mode for interaction.
- * 
+ *
  * Features:
  * - No built-in screen (uses WebUI)
  * - No built-in battery
@@ -22,17 +22,17 @@
 void _setup_gpio() {
     // Start WebUI by default since this board has no display
     bruceConfig.startupApp = "WebUI";
-    
+
     // Configure boot button as input
     pinMode(BTN_PIN, INPUT_PULLUP);
-    
+
     // Configure onboard LED
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LED_OFF);
-    
+
     // Initialize Serial for debugging
     Serial.begin(115200);
-    
+
     // Set default modules configuration
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
@@ -54,7 +54,7 @@ void _post_setup_gpio() {
 ** Location: display.cpp
 ** Description:   Returns battery level 0-100. This board has no battery monitoring.
 ***************************************************************************************/
-int getBattery() { 
+int getBattery() {
     return 0; // No battery monitoring available
 }
 
@@ -62,9 +62,7 @@ int getBattery() {
 ** Function name: isCharging()
 ** Description:   Returns charging status. This board has no battery.
 ***************************************************************************************/
-bool isCharging() { 
-    return false; 
-}
+bool isCharging() { return false; }
 
 /*********************************************************************
 ** Function: setBrightness
@@ -81,18 +79,18 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     checkPowerSaveTime();
-    
+
     // Reset all button states
     PrevPress = false;
     NextPress = false;
     SelPress = false;
     AnyKeyPress = false;
     EscPress = false;
-    
+
     // Check boot button (GPIO0)
     static unsigned long lastPress = 0;
     static bool buttonDown = false;
-    
+
     if (digitalRead(BTN_PIN) == BTN_ACT) {
         if (!buttonDown) {
             buttonDown = true;
