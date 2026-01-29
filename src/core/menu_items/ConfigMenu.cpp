@@ -15,6 +15,12 @@
 **********************************************************************/
 void ConfigMenu::optionsMenu() {
     while (true) {
+        // Check if we need to exit to Main Menu (e.g., DevMode disabled)
+        if (returnToMenu) {
+            returnToMenu = false; // Reset flag
+            return;
+        }
+
         std::vector<Option> localOptions = {
             {"Display & UI",  [this]() { displayUIMenu(); }},
 #ifdef HAS_RGB_LED
@@ -253,7 +259,13 @@ void ConfigMenu::devMenu() {
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Dev Mode");
 
-        // Exit to Config menu
+        // Check if "Disable DevMode" was pressed (second-to-last option)
+        if (selected == localOptions.size() - 2) {
+            returnToMenu = true; // Signal to exit all Config menus
+            return;
+        }
+
+        // Exit to Config menu on Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
         // Menu rebuilds after each action
     }
