@@ -6,11 +6,13 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-static SemaphoreHandle_t tftMutex;
-#define RUN_ON_MUTEX(fn)                                                                                     \
-    xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY);                                                        \
-    fn;                                                                                                      \
-    xSemaphoreGiveRecursive(tftMutex);
+// static SemaphoreHandle_t tftMutex;
+ // #define RUN_ON_MUTEX(fn) \
+//     xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY); \
+//     fn; \
+ xSemaphoreGiveRecursive(tftMutex);
+
+#define RUN_ON_MUTEX(fn) fn;
 
 tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {}
 

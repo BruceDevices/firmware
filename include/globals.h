@@ -219,14 +219,16 @@ extern volatile int EncoderLedChange;
 #endif
 
 extern TaskHandle_t xHandle;
-extern inline bool check(volatile bool &btn) {
+extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
 #ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
     vTaskSuspend(xHandle);
-    btn = false;
-    AnyKeyPress = false;
-    SerialCmdPress = false;
+    if (resetButtonStatus) {
+        btn = false;
+        AnyKeyPress = false;
+        SerialCmdPress = false;
+    }
     delay(10);
     vTaskResume(xHandle);
     return true;

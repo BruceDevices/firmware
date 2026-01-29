@@ -676,7 +676,7 @@ void target_atk(String tssid, String mac, uint8_t channel) {
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
-    setCpuFrequencyMhz(240);
+    setCpuFrequencyMhz(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
     while (1) {
         if (redraw) {
             // desenhar a tela
@@ -700,16 +700,19 @@ void target_atk(String tssid, String mac, uint8_t channel) {
             tmp = millis();
         }
         // Pause attack
-        if (check(SelPress)) {
+        // Makes one check() per loop to see if we need to pause
+        // It speeds up the fps for devices that share tft and touch SPI
+        // such as ESP32-C5
+        if (check(SelPress) || EscPress) {
+            EscPress = false;
             displayTextLine("Deauth Paused");
             // wait to restart or kick out of the function
             while (!check(SelPress)) {
+                vTaskDelay(10 / portTICK_PERIOD_MS); // avoid MCU starvation
                 if (check(EscPress)) break;
             }
             redraw = true;
         }
-        // Checks para sair do while
-        if (check(EscPress)) break;
     }
     wifi_atk_unsetWifi();
     returnToMenu = true;
