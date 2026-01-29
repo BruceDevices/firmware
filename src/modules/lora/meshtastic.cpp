@@ -14,12 +14,12 @@
 // Forward declarations of protobuf structs if headers are not yet in include path
 // You will need to add the nanopb library and the generated mesh.pb.h/cpp to your project
 // For now, we assume standard Meshtastic Protobuf definitions are available or mocked
-// #include "meshtastic/mesh.pb.h" 
+// #include "meshtastic/mesh.pb.h"
 // #include "meshtastic/portnums.pb.h"
 
-// Meshtastic Frequency Plans (US) - Channel 20 (LongFast default slot? No, typically 906.875 or similar for US)
-// Default LongFast for US is usually 906.875 MHz, EU 869.525, etc.
-// We will use a default, but allow user to change it.
+// Meshtastic Frequency Plans (US) - Channel 20 (LongFast default slot? No, typically 906.875 or similar for
+// US) Default LongFast for US is usually 906.875 MHz, EU 869.525, etc. We will use a default, but allow user
+// to change it.
 #define MESHTASTIC_FREQ_US 906.875
 #define MESHTASTIC_FREQ_EU 869.525
 
@@ -85,46 +85,46 @@ void initMeshtasticRadio(float freq) {
     int state = RADIOLIB_ERR_NONE;
     int busy = getLoraBusyPin(); // Make sure this is defined/externed correctly
     // Re-check loraRadioVariant from config if needed, but we'll assume global or auto-detect
-    
+
     // Default to SX1276 for this example if null
     loraModule = new Module(getLoraCsPin(), getLoraIrqPin(), getLoraResetPin(), busy, *loraSpi);
-    
+
     // We try to init as SX1276 first (common) or check config
     // For simplicity, using the globals from LoRaRF.cpp
     // NOTE: This logic mimics startLoraRadio but applies MESH settings
-    
+
     // Try to detect or use config? We'll assume the pointers are managed by clearLoraRadio
     // Let's re-instantiate based on a simplistic check or config
     // ideally we read `loraRadioVariant` from LoRaRF.cpp
-    
+
     // Force SX1276 for demo validity unless 1262 is required
     lora1276 = new SX1276(loraModule);
     state = lora1276->begin(freq);
     if (state == RADIOLIB_ERR_CHIP_NOT_FOUND) {
-         delete lora1276; 
-         lora1276 = nullptr;
-         lora1262 = new SX1262(loraModule);
-         state = lora1262->begin(freq);
+        delete lora1276;
+        lora1276 = nullptr;
+        lora1262 = new SX1262(loraModule);
+        state = lora1262->begin(freq);
     }
 
     if (state == RADIOLIB_ERR_NONE) {
         // Apply Meshtastic Settings
         if (lora1276) {
-             lora1276->setSpreadingFactor(MESH_SF);
-             lora1276->setBandwidth(MESH_BW);
-             lora1276->setCodingRate(MESH_CR);
-             lora1276->setSyncWord(MESH_SYNC);
-             lora1276->setPreambleLength(MESH_PREAMBLE);
-             lora1276->setDio0Action(onLoraPacket, CHANGE);
-             lora1276->startReceive();
+            lora1276->setSpreadingFactor(MESH_SF);
+            lora1276->setBandwidth(MESH_BW);
+            lora1276->setCodingRate(MESH_CR);
+            lora1276->setSyncWord(MESH_SYNC);
+            lora1276->setPreambleLength(MESH_PREAMBLE);
+            lora1276->setDio0Action(onLoraPacket, CHANGE);
+            lora1276->startReceive();
         } else if (lora1262) {
-             lora1262->setSpreadingFactor(MESH_SF);
-             lora1262->setBandwidth(MESH_BW);
-             lora1262->setCodingRate(MESH_CR);
-             lora1262->setSyncWord(MESH_SYNC);
-             lora1262->setPreambleLength(MESH_PREAMBLE);
-             lora1262->setDio1Action(onLoraPacket);
-             lora1262->startReceive();
+            lora1262->setSpreadingFactor(MESH_SF);
+            lora1262->setBandwidth(MESH_BW);
+            lora1262->setCodingRate(MESH_CR);
+            lora1262->setSyncWord(MESH_SYNC);
+            lora1262->setPreambleLength(MESH_PREAMBLE);
+            lora1262->setDio1Action(onLoraPacket);
+            lora1262->startReceive();
         }
         intlora = true;
         Serial.println("Meshtastic Radio Started on " + String(freq) + " MHz");
@@ -139,27 +139,27 @@ void renderMeshChat() {
     tft.fillScreen(TFT_BLACK);
     tft.setTextSize(1);
     tft.setTextColor(TFT_GREEN);
-    
+
     tft.drawString("Meshtastic: " + meshName, 5, 5);
     tft.drawLine(0, 20, tftWidth, 20, TFT_WHITE);
 
     int y = 25;
     int h = 10;
-    
+
     int start = meshScrollOffset;
     if (start < 0) start = 0;
-    
+
     for (size_t i = start; i < meshMessages.size(); i++) {
         if (y > tftHeight - 20) break;
         tft.drawString(meshMessages[i], 5, y);
         y += h;
     }
-    
+
     // Status Bar
     tft.fillRect(0, tftHeight - 15, tftWidth, 15, 0x2124); // Dark Grey
     if (intlora) tft.drawString("LR: ON", 5, tftHeight - 12);
     else tft.drawString("LR: OFF", 5, tftHeight - 12);
-    
+
     meshUpdate = false;
 }
 
@@ -190,24 +190,24 @@ void processMeshPacket() {
         // Decode Logic goes here
         // Note: Real implementation needs Nanopb to decode packetData bytes
         // For now we just dump raw hex or ASCII
-        
+
         Serial.println("Mesh Packet Rx: " + String(packetData.length()) + " bytes");
-        
+
         // Pseudo-decoding for visualization
         String displayMsg = "Rx(" + String((int)rssi) + "): ";
-        
+
         // Heuristic: Check if it looks like a text message (portnum is encrypted usually)
         // Without AES, we can only see unencrypted headers.
         // If we assumed user sends raw text (not standard Meshtastic):
         displayMsg += packetData;
-        
+
         meshMessages.push_back(displayMsg);
         if (meshMessages.size() > meshMaxMessages) {
-             meshScrollOffset = meshMessages.size() - meshMaxMessages;
+            meshScrollOffset = meshMessages.size() - meshMaxMessages;
         }
         meshUpdate = true;
     }
-    
+
     loraInterruptEnabled = true;
 }
 
@@ -220,12 +220,12 @@ void sendMessageMesh() {
     // meshtastic_MeshPacket p = ...
     // p.payload = text...
     // pb_encode(...)
-    
+
     // For this example, sending RAW text so other BRUCE devices on same settings can read it
     // Real Meshtastic nodes will ignore this as "Unknown/Garbage" if not protobuf
-    
-    String payload = text; 
-    
+
+    String payload = text;
+
     // 3. Transmit
     int state = RADIOLIB_ERR_NONE;
     if (lora1276) {
@@ -238,8 +238,8 @@ void sendMessageMesh() {
 
     if (state == RADIOLIB_ERR_NONE) {
         meshMessages.push_back("Me: " + text);
-         if (meshMessages.size() > meshMaxMessages) {
-             meshScrollOffset = meshMessages.size() - meshMaxMessages;
+        if (meshMessages.size() > meshMaxMessages) {
+            meshScrollOffset = meshMessages.size() - meshMaxMessages;
         }
         meshUpdate = true;
     } else {
@@ -251,28 +251,28 @@ void meshtastic_app() {
     // Setup
     tft.fillScreen(TFT_BLACK);
     displayRedStripe("Starting Meshtastic...");
-    
+
     // Frequency selection
     // Simple verification - usually prompted or config
     initMeshtasticRadio(MESHTASTIC_FREQ_US); // Defaulting to US for demo
-    
+
     meshUpdate = true;
-    
+
     while (true) {
         renderMeshChat();
         processMeshPacket();
-        
+
         // Input Handling
         if (check(SelPress)) {
             sendMessageMesh();
             meshUpdate = true;
         }
-        
+
         if (check(EscPress)) {
             // Exit
             break;
         }
-        
+
         if (check(NextPress)) {
             if (meshScrollOffset < (int)meshMessages.size() - 5) {
                 meshScrollOffset++;
@@ -285,10 +285,10 @@ void meshtastic_app() {
                 meshUpdate = true;
             }
         }
-        
+
         delay(10);
     }
-    
+
     // Cleanup / Restore default radio state if needed
     intlora = false;
     clearLoraRadio();
