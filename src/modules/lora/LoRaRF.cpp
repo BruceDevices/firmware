@@ -9,6 +9,7 @@
 #include <RadioLib.h>
 #include <core/display.h>
 #include <core/mykeyboard.h>
+#include <core/sd_functions.h>
 #include <core/utils.h>
 #include <globals.h>
 #include <vector>
@@ -259,6 +260,92 @@ void loadMessages() {
     }
 }
 
+void sndfile() {
+    // Select source filesystem
+    std::vector<Option> fsOptions = {
+        {"SD Card",  []() {}},
+        {"LittleFS", []() {}}
+    };
+
+    int selectedObj = loopOptions(fsOptions, MENU_TYPE_SUBMENU, "Select Source");
+    if (selectedObj == -1) return; // User pressed Back
+
+    fs::FS *filesystem = nullptr;
+    String filePath = "";
+
+    if (selectedObj == 0) {
+        // SD Card
+        if (!setupSdCard()) {
+            displayError("SD Init Failed");
+            return;
+        }
+        filesystem = &SD;
+        filePath = loopSD(SD, true);
+    } else {
+        // LittleFS
+        filesystem = &LittleFS;
+        filePath = loopSD(LittleFS, true);
+    }
+
+    if (filePath == "") {
+        Serial.println("No file selected");
+        displayError("No file selected");
+        return;
+    } else {
+        if (filesystem->exists(filePath)) {
+            File file = filesystem->open(filePath, "r");
+            size_t totalSize = file.size();
+            size_t bytesSent = 0;
+
+            tft.fillScreen(TFT_BLACK);
+            tft.setCursor(0, 0);
+            tft.setTextColor(TFT_WHITE);
+            tft.println("Sending file:");
+            tft.println(filePath);
+
+            // Progress Bar Dimensions
+            int barX = 10;
+            int barY = tftHeight / 2;
+            int barWidth = tftWidth - 20;
+            int barHeight = 20;
+
+            // Draw Bar container
+            tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+
+            delay(1000);
+            while (file.available()) {
+                String chunk = "";
+                for (int i = 0; i < 250 && file.available(); i++) { chunk += (char)file.read(); }
+                String payload = String(displayName) + " [FILE]: " + chunk;
+                if (!sendLoraMessage(payload)) {
+                    displayError("Failed to send chunk!");
+                    Serial.println("Failed to send chunk!");
+                    break;
+                }
+
+                // Update Progress
+                bytesSent += chunk.length();
+                float progress = (float)bytesSent / totalSize;
+                int fillWidth = (int)(progress * (barWidth - 2));
+                if (fillWidth > barWidth - 2) fillWidth = barWidth - 2;
+
+                tft.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, bruceConfig.priColor);
+
+                delay(10); // small delay between chunks
+            }
+            file.close();
+            tft.setCursor(10, barY + barHeight + 5);
+            tft.setTextColor(TFT_GREEN);
+            tft.println("File send complete!");
+            delay(2000);
+            tft.fillScreen(TFT_BLACK);
+        } else {
+            Serial.println("File does not exist");
+            displayError("File does not exist");
+        }
+    }
+}
+
 // optional call funcs
 void sendmsg() {
     Serial.println("C bttn");
@@ -316,7 +403,8 @@ void selectRadioVariant(JsonDocument &doc) {
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
-        {"SX1262", []() {}}
+        {"SX1262", []() {}},
+        {"CC1101", []() {}}
     };
     int selected = loopOptions(
         radioOptions, MENU_TYPE_SUBMENU, "LoRa Radio", (loraRadioVariant == LoRaRadioVariant::SX1262) ? 1 : 0
@@ -490,4 +578,5 @@ void chfreq() {
     serializeJson(doc, file);
     file.close();
 }
+
 #endif

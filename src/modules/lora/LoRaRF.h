@@ -7,5 +7,7 @@
 #include "HWCDC.h"
 void lorachat();
 void loraconf();
+void sndfile();
+void meshtastic_app();
 #endif
 #endif

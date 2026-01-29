@@ -6,6 +6,7 @@
 void lorachat();
 void changeusername();
 void chfreq();
+void sndfile();
 
 class LoRaMenu : public MenuItemInterface {
 public:
