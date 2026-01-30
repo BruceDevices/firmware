@@ -28,7 +28,9 @@
 		{ "id": "CYD-2432W328C", "name": "CYD-2432W328C", "family": "ESP32" },
 		{ "id": "CYD-2432W328C_2", "name": "CYD-2432W328C (inv colors) and CYD-2432S024C", "family": "ESP32" },
 		{ "id": "CYD-2432W328R-or-S024R", "name": "CYD-2432W328R or 2432S024R", "family": "ESP32" },
-		{ "id": "CYD-2USB", "name": "CYD-2432S028 (2USB or inverted Colors)", "family": "ESP32" }
+		{ "id": "CYD-2USB", "name": "CYD-2432S028 (2USB or inverted Colors)", "family": "ESP32" },
+		{ "id": "CYD-3248S035R", "name": "CYD-3248S035R", "family": "ESP32" },
+		{ "id": "CYD-3248S035C", "name": "CYD-3248S035C", "family": "ESP32" }
 	],
 	"ESP32": [
     { "id": "esp32-s3-devkitc-1", "name": "ESP32-S3", "family": "ESP32-S3" },
@@ -52,6 +54,8 @@
 		{ "id": "LAUNCHER_CYD-2432W328C", "name": "CYD-2432W328C", "family": "ESP32" },
 		{ "id": "LAUNCHER_CYD-2432W328R-or-S024R", "name": "CYD-2432W328R or 2432S024R", "family": "ESP32" },
 		{ "id": "LAUNCHER_CYD-2USB", "name": "CYD-2432S028 (2USB or Inverted Colors)", "family": "ESP32" },
+		{ "id": "LAUNCHER_CYD-3248S035R", "name": "LAUNCHER_CYD-3248S035R", "family": "ESP32" },
+		{ "id": "LAUNCHER_CYD-3248S035C", "name": "LAUNCHER_CYD-3248S035C", "family": "ESP32" },
 		{ "id": "LAUNCHER_Marauder-Mini", "name": "Marauder Mini (Launcher)", "family": "ESP32" },
 		{ "id": "LAUNCHER_Marauder-V4-V6", "name": "Marauder V4 or V6 (Launcher)", "family": "ESP32" },
 		{ "id": "LAUNCHER_Marauder-v61", "name": "Marauder V6.x (Launcher)", "family": "ESP32" },

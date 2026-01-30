@@ -128,6 +128,22 @@
 		"PSRAM": "None"
 	},
 	{
+		"device": "CYD-3248S035",
+		"CC1101": "Module Required",
+		"NRF24": "Module Required",
+		"FMRadio": "Module Required",
+		"NFC": "Module Required",
+		"Mic": false,
+		"BadUSB": false,
+		"RGB_Led": false,
+		"Audio": false,
+		"Screen": "480x320",
+		"ESP": "ESP32-WROOM-32",
+		"Battery": "None",
+		"Flash": "4MB",
+		"PSRAM": "None"
+	},
+	{
 		"device": "Lilygo T-Embed CC1101",
 		"CC1101": true,
 		"NRF24": "Module Required",
