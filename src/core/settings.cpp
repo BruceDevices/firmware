@@ -422,7 +422,8 @@ void setCustomUIColorSettingMenu(
 }
 
 /*********************************************************************
-**  Function: setSoundConfig
+**  Function: setSoundConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable sound
 **********************************************************************/
 void setSoundConfig() {
@@ -455,7 +456,8 @@ void setSoundVolume() {
 
 #ifdef HAS_RGB_LED
 /*********************************************************************
-**  Function: setLedBlinkConfig
+**  Function: setLedBlinkConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable led blink
 **********************************************************************/
 void setLedBlinkConfig() {
@@ -916,8 +918,10 @@ void setClock() {
     }
 }
 
-void runClockLoop() {
+void runClockLoop(bool showMenuHint) {
     int tmp = 0;
+    unsigned long hintStartTime = millis();
+    bool hintVisible = showMenuHint;
 
 #if defined(HAS_RTC)
 #if defined(HAS_RTC_BM8563)
@@ -950,7 +954,6 @@ void runClockLoop() {
                 tftHeight - 2 * BORDER_PAD_X,
                 bruceConfig.priColor
             );
-            tft.setCursor(64, tftHeight / 3 + 5);
             uint8_t f_size = 4;
             for (uint8_t i = 4; i > 0; i--) {
                 if (i * LW * strlen(timeStr) < (tftWidth - BORDER_PAD_X * 2)) {
@@ -960,16 +963,44 @@ void runClockLoop() {
             }
             tft.setTextSize(f_size);
             tft.drawCentreString(timeStr, tftWidth / 2, tftHeight / 2 - 13, 1);
+
+            // "OK to show menu" hint management
+            if (hintVisible && (millis() - hintStartTime < 5000)) {
+                tft.setTextSize(1);
+                tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
+            } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
+                // Clear hint after 5 seconds
+                tft.fillRect(
+                    BORDER_PAD_X + 1,
+                    tftHeight / 2 + 20,
+                    tftWidth - 2 * BORDER_PAD_X - 2,
+                    20,
+                    bruceConfig.bgColor
+                );
+                hintVisible = false;
+            }
             tmp = millis();
         }
 
-        // Checks para sair do loop
-        if (check(SelPress) or check(EscPress)) { // Apertar o botão power dos sticks
+        // Checks to exit the loop
+        if (check(SelPress)) {
+            tft.fillScreen(bruceConfig.bgColor);
+            if (showMenuHint) {
+                // Exits the loop to return to the caller (ClockMenu)
+                break;
+            } else {
+                // Original behavior
+                returnToMenu = true;
+                break;
+            }
+        }
+
+        if (check(EscPress)) {
             tft.fillScreen(bruceConfig.bgColor);
             returnToMenu = true;
             break;
-            // goto Exit;
         }
+
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
