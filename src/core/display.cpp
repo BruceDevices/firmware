@@ -1386,7 +1386,9 @@ int Gif::getLastError() { return gif->getLastError(); }
  * >0  : Play the GIF for the specified duration in milliseconds
  *       (e.g., 1000 = play for 1 second)
  */
-bool showGif(FS *fs, const char *filename, int x, int y, bool center, int playDurationMs) {
+bool showGif(
+    FS *fs, const char *filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus
+) {
     if (!fs->exists(filename)) return false;
 
     Gif gif;
@@ -1404,7 +1406,7 @@ bool showGif(FS *fs, const char *filename, int x, int y, bool center, int playDu
         result = gif.playFrame(x, y);
         if (result == -1) log_e("GIF playFrame error: %d\n", gif.getLastError());
 
-        if (check(AnyKeyPress)) break;
+        if (check(AnyKeyPress, resetButtonStatus)) break;
 
         if (playDurationMs > 0 && (millis() - timeStart) > playDurationMs) break;
         if (playDurationMs == 0 && result == 0) break;
@@ -1605,7 +1607,7 @@ bool drawBmp(FS &fs, String filename, int x, int y, bool center) {
     return true;
 }
 
-bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDurationMs) {
+bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus) {
     String ext = filename.substring(filename.lastIndexOf('.'));
     ext.toLowerCase();
     uint8_t fls = 2;         // 2 for Little FS
@@ -1617,7 +1619,8 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 
 #if !defined(LITE_VERSION)
 
-    else if (ext.endsWith("gif")) return showGif(&fs, filename.c_str(), x, y, center, playDurationMs);
+    else if (ext.endsWith("gif"))
+        return showGif(&fs, filename.c_str(), x, y, center, playDurationMs, resetButtonStatus);
 #endif
     else log_e("Image not supported");
 

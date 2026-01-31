@@ -77,6 +77,9 @@ void updateClockTimezone() {
     updateTimeStr(rtc.getTimeStruct());
     clock_set = true;
 #endif
+    // Update Internal clock to system time
+    struct timeval tv = {.tv_sec = localTime};
+    settimeofday(&tv, nullptr);
 }
 
 void updateTimeStr(struct tm timeInfo) {

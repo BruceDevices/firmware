@@ -7,6 +7,7 @@
       "core": "esp32",
       "extra_flags": [
         "-DESP32S3",
+        "-DARDUINO_M5STICK_S3",
         "-DARDUINO_USB_CDC_ON_BOOT",
         "-DARDUINO_USB_MODE=1",
         "-DARDUINO_RUNNING_CORE=1",

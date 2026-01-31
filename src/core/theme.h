@@ -51,6 +51,8 @@ struct themeInfo {
     bool boot_img = false;
     bool boot_sound = false;
     bool lora = false;
+    int gifDuration = 0;
+
     // Theme file paths, colors and border
     themeFiles paths;
 };

@@ -1,8 +1,10 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "wifi_js.h"
 
+#include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
 #include "helpers_js.h"
+#include "storage_js.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -300,20 +302,79 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     }
 
     JSValue obj = JS_NewObject(ctx);
-    if (returnResponseType == 0) {
-        JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, (const char *)payload, bytesRead));
-    } else if (returnResponseType == 1) {
-        JS_SetPropertyStr(ctx, obj, "body", JS_NewUint8ArrayCopy(ctx, (const uint8_t *)payload, bytesRead));
-    } else {
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload, bytesRead);
-        if (error) {
-            free(payload);
-            http.end();
-            return JS_ThrowInternalError(ctx, "deserializeJson failed: %s", error.c_str());
-        }
-        JS_SetPropertyStr(ctx, obj, "body", js_value_from_json_variant(ctx, doc.as<JsonVariantConst>()));
+
+    // Check if save option is present
+    bool hasSave = false;
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue jsvSave = JS_GetPropertyStr(ctx, argv[1], "save");
+        hasSave = !JS_IsUndefined(jsvSave);
     }
+
+    // Only set body property if save is not specified
+    if (!hasSave) {
+        if (returnResponseType == 0) {
+            JS_SetPropertyStr(ctx, obj, "body", JS_NewStringLen(ctx, (const char *)payload, bytesRead));
+        } else if (returnResponseType == 1) {
+            JS_SetPropertyStr(
+                ctx, obj, "body", JS_NewUint8ArrayCopy(ctx, (const uint8_t *)payload, bytesRead)
+            );
+        } else {
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, payload, bytesRead);
+            if (error) {
+                free(payload);
+                http.end();
+                return JS_ThrowInternalError(ctx, "deserializeJson failed: %s", error.c_str());
+            }
+            JS_SetPropertyStr(ctx, obj, "body", js_value_from_json_variant(ctx, doc.as<JsonVariantConst>()));
+        }
+    }
+
+    // Handle save option
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue jsvSave = JS_GetPropertyStr(ctx, argv[1], "save");
+        if (!JS_IsUndefined(jsvSave)) {
+            // Prepare arguments for native_storageWrite
+            JSValue storageWriteArgs[4];
+            int storageArgc = 2; // path and data are required
+
+            // Set path argument
+            storageWriteArgs[0] = jsvSave; // This handles both string and object forms
+
+            // Set data argument - create JSValue from payload
+            storageWriteArgs[1] = JS_NewStringLen(ctx, (const char *)payload, bytesRead);
+
+            // Handle optional mode and position from save object
+            if (JS_IsObject(ctx, jsvSave)) {
+                JSValue jsvMode = JS_GetPropertyStr(ctx, jsvSave, "mode");
+                if (!JS_IsUndefined(jsvMode) && JS_IsString(ctx, jsvMode)) {
+                    storageWriteArgs[2] = jsvMode;
+                    storageArgc = 3;
+
+                    JSValue jsvPosition = JS_GetPropertyStr(ctx, jsvSave, "position");
+                    if (!JS_IsUndefined(jsvPosition) &&
+                        (JS_IsNumber(ctx, jsvPosition) || JS_IsString(ctx, jsvPosition))) {
+                        storageWriteArgs[3] = jsvPosition;
+                        storageArgc = 4;
+                    }
+                }
+            }
+
+            // Call native_storageWrite
+            JSValue writeResult = native_storageWrite(ctx, this_val, storageArgc, storageWriteArgs);
+            bool saveSuccess = JS_ToBool(ctx, writeResult);
+
+            // Get the actual saved path for response
+            FileParamsJS fileParams;
+            JSValue tempArgv[1] = {jsvSave};
+            fileParams = js_get_path_from_params(ctx, tempArgv, true);
+            if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
+
+            JS_SetPropertyStr(ctx, obj, "saved", JS_NewBool(saveSuccess));
+            JS_SetPropertyStr(ctx, obj, "savedPath", JS_NewString(ctx, fileParams.path.c_str()));
+        }
+    }
+
     free(payload);
     JS_SetPropertyStr(ctx, obj, "length", JS_NewInt32(ctx, contentLength));
     JS_SetPropertyStr(ctx, obj, "headers", headersObj);

@@ -62,7 +62,7 @@ void setDimmerTimeMenu();
 
 void setClock();
 
-void runClockLoop();
+void runClockLoop(bool showMenuHint = false);
 
 int gsetIrTxPin(bool set = false);
 
@@ -104,6 +104,12 @@ void setTheme();
 
 void setMacAddressMenu();
 
+#if !defined(LITE_VERSION)
 void enableBLEAPI();
+
+bool appStoreInstalled();
+
+void installAppStoreJS();
+#endif
 
 #endif

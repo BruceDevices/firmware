@@ -170,12 +170,23 @@ String getScriptsFolder(FS *&fs) {
     return "";
 }
 
-std::vector<Option> getScriptsOptionsList(bool saveStartupScript) {
+std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupScript, int rememberedIndex) {
     std::vector<Option> opt = {};
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     FS *fs;
-    String folder = getScriptsFolder(fs);
-    if (folder == "") return opt; // did not find
+    String folder;
+
+    if (currentPath == "") {
+        folder = getScriptsFolder(fs);
+        if (folder == "") return opt; // did not find
+    } else {
+        folder = currentPath;
+        // Determine filesystem based on path
+        if (currentPath.startsWith("/")) {
+            fs = &LittleFS;
+            if (SD.exists(currentPath)) { fs = &SD; }
+        }
+    }
 
     File root = fs->open(folder);
     if (!root || !root.isDirectory()) return opt; // not a dir
@@ -187,33 +198,99 @@ std::vector<Option> getScriptsOptionsList(bool saveStartupScript) {
         if (fullPath == "") { break; }
         // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
 
-        if (isDir) continue;
+        if (isDir) {
+            // Skip hidden folders (starting with .)
+            if (nameOnly.startsWith(".")) continue;
 
-        int dotIndex = nameOnly.lastIndexOf(".");
-        String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
-        ext.toUpperCase();
-        if (ext != "JS" && ext != "BJS") continue;
+            // Add folder option
+            String folderTitle = "[ " + nameOnly + " ]";
+            opt.push_back({folderTitle.c_str(), [=]() {
+                               auto subOptions = getScriptsOptionsList(fullPath, saveStartupScript);
+                               if (subOptions.size() > 0) {
+                                   String displayPath = fullPath;
+                                   int secondSlash = displayPath.indexOf('/', 1);
+                                   if (secondSlash >= 0) {
+                                       displayPath = displayPath.substring(secondSlash + 1);
+                                   }
+                                   loopOptions(subOptions, MENU_TYPE_SUBMENU, displayPath.c_str());
+                               }
+                           }});
+        } else {
+            // Handle files
+            int dotIndex = nameOnly.lastIndexOf(".");
+            String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
+            ext.toUpperCase();
+            if (ext != "JS" && ext != "BJS") continue;
 
-        String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
-        opt.push_back({entry_title.c_str(), [=]() {
-                           if (saveStartupScript) {
-                               bruceConfig.startupAppJSInterpreterFile = fullPath;
-                               bruceConfig.saveFile();
-                           } else {
-                               run_bjs_script_headless(*fs, fullPath);
-                           }
-                       }});
+            String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
+            opt.push_back({entry_title.c_str(), [=]() {
+                               if (saveStartupScript) {
+                                   bruceConfig.startupAppJSInterpreterFile = fullPath;
+                                   bruceConfig.saveFile();
+                               } else {
+                                   Serial.printf("Running script: %s\n", fullPath.c_str());
+                                   run_bjs_script_headless(*fs, fullPath);
+                               }
+                           }});
+        }
     }
 
     root.close();
 
-    std::sort(opt.begin(), opt.end(), [](const Option &a, const Option &b) {
-        String fa = String(a.label);
-        fa.toUpperCase();
-        String fb = String(b.label);
-        fb.toUpperCase();
-        return fa < fb;
+    // Sort options
+    auto sortStart = opt.begin();
+    std::sort(sortStart, opt.end(), [](const Option &a, const Option &b) {
+        // Check if items start with '[' (folders)
+        bool aIsFolder = a.label[0] == '[';
+        bool bIsFolder = b.label[0] == '[';
+
+        // If one is a folder and the other isn't, folder comes first
+        if (aIsFolder != bIsFolder) {
+            return aIsFolder; // true if a is folder, false if b is folder
+        }
+
+        // If both are the same type, sort alphabetically
+        return strcasecmp(a.label.c_str(), b.label.c_str()) < 0;
     });
+
+    // Add back navigation if we're in a subdirectory
+    if (currentPath != "" && currentPath != getScriptsFolder(fs)) {
+        opt.push_back(
+            {"< Back", [=]() {
+                 // Calculate parent directory
+                 String parentPath = currentPath;
+                 int lastSlash = parentPath.lastIndexOf('/');
+                 if (lastSlash > 0) {
+                     parentPath = parentPath.substring(0, lastSlash);
+                 } else {
+                     // If we can't go up, go to scripts root
+                     FS *parentFs;
+                     parentPath = getScriptsFolder(parentFs);
+                 }
+
+                 auto parentOptions = getScriptsOptionsList(parentPath, saveStartupScript);
+                 if (parentOptions.size() > 0) {
+                     String displayPath = parentPath;
+                     int secondSlash = displayPath.indexOf('/', 1);
+                     if (secondSlash >= 0) { displayPath = displayPath.substring(secondSlash + 1); }
+
+                     // Find the folder we just came from to restore selection
+                     int restoreIndex = 0;
+                     String currentFolderName = currentPath.substring(currentPath.lastIndexOf('/') + 1);
+                     String searchTitle = "[ " + currentFolderName + " ]";
+
+                     for (int i = 0; i < parentOptions.size(); i++) {
+                         if (parentOptions[i].label == searchTitle) {
+                             restoreIndex = i;
+                             break;
+                         }
+                     }
+
+                     loopOptions(parentOptions, MENU_TYPE_SUBMENU, displayPath.c_str(), restoreIndex);
+                 }
+             }}
+        );
+    }
 
 #endif
     return opt;
