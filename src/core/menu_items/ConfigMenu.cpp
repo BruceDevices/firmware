@@ -30,10 +30,10 @@ void ConfigMenu::optionsMenu() {
             {"System Config", [this]() { systemMenu(); }   },
             {"Power Menu",    [this]() { powerMenu(); }    },
         };
-#if !defined(LITE_VERSION) // UNCOMMENT WHEN APP STORE IMPLEMENTED and DELETE PLACEHOLDER
-        // if (!appStoreInstalled()) {
-        //     localOptions.push_back({"Install App Store", []() { installAppStoreJS(); }});
-        localOptions.push_back({"Install App Store (X)", []() {}}); //  <--- PLACEHOLDER
+#if !defined(LITE_VERSION)
+        if (!appStoreInstalled()) {
+            localOptions.push_back({"Install App Store", []() { installAppStoreJS(); }});
+        }
 #endif
 
         if (bruceConfig.devMode) {
