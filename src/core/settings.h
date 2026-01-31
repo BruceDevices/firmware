@@ -104,6 +104,12 @@ void setTheme();
 
 void setMacAddressMenu();
 
+#if !defined(LITE_VERSION)
 void enableBLEAPI();
+
+bool appStoreInstalled();
+
+void installAppStoreJS();
+#endif
 
 #endif

@@ -18,9 +18,15 @@ JSValue native_drawFillRect(JSContext *ctx, JSValue *this_val, int argc, JSValue
 JSValue native_drawFillRectGradient(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawRoundRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawFillRoundRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawTriangle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawFillTriangle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawCircle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawFillCircle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawArc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawWideLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawFastVLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawFastHLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawPixel(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawXBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawString(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);

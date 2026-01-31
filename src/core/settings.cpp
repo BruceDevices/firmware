@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
+#include "current_year.h"
 #include "display.h"
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "modules/bjs_interpreter/interpreter.h"
@@ -911,8 +912,25 @@ void setClock() {
         TimeStruct.Minutes = mn;
         TimeStruct.Seconds = 0;
         _rtc.SetTime(&TimeStruct);
+        _rtc.GetTime(&_time);
+        _rtc.GetDate(&_date);
+
+        struct tm timeinfo = {};
+        timeinfo.tm_sec = _time.Seconds;
+        timeinfo.tm_min = _time.Minutes;
+        timeinfo.tm_hour = _time.Hours;
+        timeinfo.tm_mday = _date.Date;
+        timeinfo.tm_mon = _date.Month > 0 ? _date.Month - 1 : 0;
+        timeinfo.tm_year = _date.Year >= 1900 ? _date.Year - 1900 : 0;
+        time_t epoch = mktime(&timeinfo);
+        struct timeval tv = {.tv_sec = epoch};
+        settimeofday(&tv, nullptr);
 #else
-        rtc.setTime(0, mn, hr + am, 20, 06, 2024); // send me a gift, @Pirata!
+        rtc.setTime(0, mn, hr + am, 20, 06, CURRENT_YEAR); // send me a gift, @Pirata!
+        struct tm t = rtc.getTimeStruct();
+        time_t epoch = mktime(&t);
+        struct timeval tv = {.tv_sec = epoch};
+        settimeofday(&tv, nullptr);
 #endif
         clock_set = true;
     }
@@ -1197,7 +1215,7 @@ void setStartupApp() {
                                bruceConfig.setStartupApp(appName);
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
                                if (appName == "JS Interpreter") {
-                                   options = getScriptsOptionsList(true);
+                                   options = getScriptsOptionsList("", true);
                                    loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
                                }
 #endif
@@ -1628,5 +1646,66 @@ void enableBLEAPI() {
     }
 
     ble_api_enabled = !ble_api_enabled;
+}
+
+bool appStoreInstalled() {
+    FS *fs;
+    if (!getFsStorage(fs)) {
+        log_i("Fail getting filesystem");
+        return false;
+    }
+
+    return fs->exists("/BruceJS/Tools/App Store.js");
+}
+
+#include <HTTPClient.h>
+void installAppStoreJS() {
+
+    if (WiFi.status() != WL_CONNECTED) { wifiConnectMenu(WIFI_STA); }
+    if (WiFi.status() != WL_CONNECTED) {
+        displayWarning("WiFi not connected", true);
+        return;
+    }
+
+    FS *fs;
+    if (!getFsStorage(fs)) {
+        log_i("Fail getting filesystem");
+        return;
+    }
+
+    if (!fs->exists("/BruceJS")) {
+        if (!fs->mkdir("/BruceJS")) {
+            displayWarning("Failed to create /BruceJS directory", true);
+            return;
+        }
+    }
+
+    if (!fs->exists("/BruceJS/Tools")) {
+        if (!fs->mkdir("/BruceJS/Tools")) {
+            displayWarning("Failed to create /BruceJS/Tools directory", true);
+            return;
+        }
+    }
+
+    HTTPClient http;
+    http.begin("https://raw.githubusercontent.com/BruceDevices/App-Store/refs/heads/main/App%20Store.js");
+    int httpCode = http.GET();
+    if (httpCode != 200) {
+        http.end();
+        displayWarning("Failed to download App Store", true);
+        return;
+    }
+
+    File file = fs->open("/BruceJS/Tools/App Store.js", FILE_WRITE);
+    if (!file) {
+        displayWarning("Failed to save App Store", true);
+        return;
+    }
+    file.print(http.getString());
+    http.end();
+    file.close();
+
+    displaySuccess("App Store installed", true);
+    displaySuccess("Goto JS Interpreter -> Tools -> App Store", true);
 }
 #endif
