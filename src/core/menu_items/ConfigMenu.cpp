@@ -28,7 +28,7 @@ void ConfigMenu::optionsMenu() {
 #endif
             {"Audio Config",  [this]() { audioMenu(); }    },
             {"System Config", [this]() { systemMenu(); }   },
-            {"Power Menu",    [this]() { powerMenu(); }    },
+            {"Power",         [this]() { powerMenu(); }    },
         };
 #if !defined(LITE_VERSION)
         if (!appStoreInstalled()) {
@@ -188,10 +188,16 @@ void ConfigMenu::advancedMenu() {
             {"Network Creds",  [this]() { setNetworkCredsMenu(); }},
             {"BadUSB/BLE",     [this]() { setBadUSBBLEMenu(); }   },
             {"Factory Reset",
-                                      [this]() {
+                                      []() {
                  // Confirmation dialog for destructive action
-                 int8_t choice =
-                     displayMessage("All data will be lost!", "Cancel", nullptr, "Reset", TFT_RED);
+                 drawMainBorder(true);
+                 int8_t choice = displayMessage(
+                     "Are you sure you want\nto Factory Reset?\nAll data will be lost!",
+                     "No",
+                     nullptr,
+                     "Yes",
+                     TFT_RED
+                 );
 
                  if (choice == 1) {
                      // User confirmed - perform factory reset
@@ -220,10 +226,11 @@ void ConfigMenu::powerMenu() {
             {"Deep Sleep", goToDeepSleep          },
             {"Sleep",      setSleepMode           },
             {"Restart",    []() { ESP.restart(); }},
-            {"Turn-off",
+            {"Power Off",
              []() {
                  // Confirmation dialog for power off
-                 int8_t choice = displayMessage("Power Off Device?", "Cancel", nullptr, "Pwr Off", TFT_RED);
+                 drawMainBorder(true);
+                 int8_t choice = displayMessage("Power Off Device?", "No", nullptr, "Yes", TFT_RED);
 
                  if (choice == 1) { powerOff(); }
              }                                    },
