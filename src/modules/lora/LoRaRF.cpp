@@ -12,10 +12,13 @@
 #include <core/sd_functions.h>
 #include <core/utils.h>
 #include <globals.h>
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include <vector>
 
 extern BruceConfigPins bruceConfigPins;
-
+bool loadonlyradio = false;
+bool jam = false;
 bool update = false;
 String msg;
 String rcvmsg;
@@ -26,10 +29,10 @@ std::vector<String> messages;
 int scrollOffset = 0;
 const int maxMessages = 19;
 
-#define spreadingFactor 9
-#define SignalBandwidth 31.25E3
-#define codingRateDenominator 8
-#define preambleLength 8
+int spreadingFactor = 9;
+float signalBandwidth = 31.25E3;
+int codingRateDenominator = 8;
+int preambleLength = 8;
 
 int contentWidth = tftWidth - 20;
 int yStart = 35;
@@ -39,11 +42,12 @@ int rightColumnX = tftWidth / 2 + 10;
 SPIClass *loraSpi = nullptr;
 Module *loraModule = nullptr;
 SX1276 *lora1276 = nullptr;
+SX1278 *lora1278 = nullptr;
 SX1262 *lora1262 = nullptr;
 volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
-enum class LoRaRadioVariant { SX1276, SX1262 };
-LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+
+LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1278;
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -68,6 +72,10 @@ void clearLoraRadio() {
     if (lora1276) {
         delete lora1276;
         lora1276 = nullptr;
+    }
+    if (lora1278) {
+        delete lora1278;
+        lora1278 = nullptr;
     }
     if (lora1262) {
         delete lora1262;
@@ -141,12 +149,21 @@ bool startLoraRadio(float bandMHz) {
     loraModule = new Module(getLoraCsPin(), irqPin, getLoraResetPin(), busyPin, *loraSpi);
 
     int state = RADIOLIB_ERR_NONE;
-    if (loraRadioVariant == LoRaRadioVariant::SX1276) {
+    if (loraRadioVariant == LoRaRadioVariant::SX1278) {
+        lora1278 = new SX1278(loraModule);
+        state = lora1278->begin(bandMHz);
+        if (state == RADIOLIB_ERR_NONE) { lora1278->setDio0Action(onLoraPacket, CHANGE); }
+        if (state == RADIOLIB_ERR_NONE) state = lora1278->setSpreadingFactor(spreadingFactor);
+        if (state == RADIOLIB_ERR_NONE) state = lora1278->setBandwidth(signalBandwidth / 1000.0);
+        if (state == RADIOLIB_ERR_NONE) state = lora1278->setCodingRate(codingRateDenominator);
+        if (state == RADIOLIB_ERR_NONE) state = lora1278->setPreambleLength(preambleLength);
+        if (state == RADIOLIB_ERR_NONE) state = lora1278->startReceive();
+    } else if (loraRadioVariant == LoRaRadioVariant::SX1276) {
         lora1276 = new SX1276(loraModule);
         state = lora1276->begin(bandMHz);
         if (state == RADIOLIB_ERR_NONE) { lora1276->setDio0Action(onLoraPacket, CHANGE); }
         if (state == RADIOLIB_ERR_NONE) state = lora1276->setSpreadingFactor(spreadingFactor);
-        if (state == RADIOLIB_ERR_NONE) state = lora1276->setBandwidth(SignalBandwidth / 1000.0);
+        if (state == RADIOLIB_ERR_NONE) state = lora1276->setBandwidth(signalBandwidth / 1000.0);
         if (state == RADIOLIB_ERR_NONE) state = lora1276->setCodingRate(codingRateDenominator);
         if (state == RADIOLIB_ERR_NONE) state = lora1276->setPreambleLength(preambleLength);
         if (state == RADIOLIB_ERR_NONE) state = lora1276->startReceive();
@@ -155,7 +172,7 @@ bool startLoraRadio(float bandMHz) {
         state = lora1262->begin(bandMHz);
         if (state == RADIOLIB_ERR_NONE) { lora1262->setDio1Action(onLoraPacket); }
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setSpreadingFactor(spreadingFactor);
-        if (state == RADIOLIB_ERR_NONE) state = lora1262->setBandwidth(SignalBandwidth / 1000.0);
+        if (state == RADIOLIB_ERR_NONE) state = lora1262->setBandwidth(signalBandwidth / 1000.0);
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setCodingRate(codingRateDenominator);
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setPreambleLength(preambleLength);
         if (state == RADIOLIB_ERR_NONE) state = lora1262->startReceive();
@@ -176,7 +193,10 @@ bool sendLoraMessage(String &payload) {
     if (!intlora) return false;
     loraInterruptEnabled = false;
     int state = RADIOLIB_ERR_NONE;
-    if (loraRadioVariant == LoRaRadioVariant::SX1276 && lora1276) {
+    if (loraRadioVariant == LoRaRadioVariant::SX1278 && lora1278) {
+        state = lora1278->transmit(payload);
+        lora1278->startReceive();
+    } else if (loraRadioVariant == LoRaRadioVariant::SX1276 && lora1276) {
         state = lora1276->transmit(payload);
         lora1276->startReceive();
     } else if (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) {
@@ -200,8 +220,9 @@ void reciveMessage() {
     loraInterruptEnabled = false;
     loraPacketReceived = false;
     String incoming;
-    int state = (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262)
-                    ? lora1262->readData(incoming)
+    int state = (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) ? lora1262->readData(incoming)
+                : (loraRadioVariant == LoRaRadioVariant::SX1278 && lora1278)
+                    ? lora1278->readData(incoming)
                     : (lora1276 ? lora1276->readData(incoming) : -1);
     if (state == RADIOLIB_ERR_NONE) {
         rcvmsg = incoming;
@@ -217,6 +238,8 @@ void reciveMessage() {
     }
     if (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) {
         lora1262->startReceive();
+    } else if (loraRadioVariant == LoRaRadioVariant::SX1278 && lora1278) {
+        lora1278->startReceive();
     } else if (lora1276) {
         lora1276->startReceive();
     }
@@ -257,92 +280,6 @@ void loadMessages() {
         scrollOffset = messages.size() - maxMessages;
     } else {
         scrollOffset = 0;
-    }
-}
-
-void sndfile() {
-    // Select source filesystem
-    std::vector<Option> fsOptions = {
-        {"SD Card",  []() {}},
-        {"LittleFS", []() {}}
-    };
-
-    int selectedObj = loopOptions(fsOptions, MENU_TYPE_SUBMENU, "Select Source");
-    if (selectedObj == -1) return; // User pressed Back
-
-    fs::FS *filesystem = nullptr;
-    String filePath = "";
-
-    if (selectedObj == 0) {
-        // SD Card
-        if (!setupSdCard()) {
-            displayError("SD Init Failed");
-            return;
-        }
-        filesystem = &SD;
-        filePath = loopSD(SD, true);
-    } else {
-        // LittleFS
-        filesystem = &LittleFS;
-        filePath = loopSD(LittleFS, true);
-    }
-
-    if (filePath == "") {
-        Serial.println("No file selected");
-        displayError("No file selected");
-        return;
-    } else {
-        if (filesystem->exists(filePath)) {
-            File file = filesystem->open(filePath, "r");
-            size_t totalSize = file.size();
-            size_t bytesSent = 0;
-
-            tft.fillScreen(TFT_BLACK);
-            tft.setCursor(0, 0);
-            tft.setTextColor(TFT_WHITE);
-            tft.println("Sending file:");
-            tft.println(filePath);
-
-            // Progress Bar Dimensions
-            int barX = 10;
-            int barY = tftHeight / 2;
-            int barWidth = tftWidth - 20;
-            int barHeight = 20;
-
-            // Draw Bar container
-            tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
-
-            delay(1000);
-            while (file.available()) {
-                String chunk = "";
-                for (int i = 0; i < 250 && file.available(); i++) { chunk += (char)file.read(); }
-                String payload = String(displayName) + " [FILE]: " + chunk;
-                if (!sendLoraMessage(payload)) {
-                    displayError("Failed to send chunk!");
-                    Serial.println("Failed to send chunk!");
-                    break;
-                }
-
-                // Update Progress
-                bytesSent += chunk.length();
-                float progress = (float)bytesSent / totalSize;
-                int fillWidth = (int)(progress * (barWidth - 2));
-                if (fillWidth > barWidth - 2) fillWidth = barWidth - 2;
-
-                tft.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, bruceConfig.priColor);
-
-                delay(10); // small delay between chunks
-            }
-            file.close();
-            tft.setCursor(10, barY + barHeight + 5);
-            tft.setTextColor(TFT_GREEN);
-            tft.println("File send complete!");
-            delay(2000);
-            tft.fillScreen(TFT_BLACK);
-        } else {
-            Serial.println("File does not exist");
-            displayError("File does not exist");
-        }
     }
 }
 
@@ -399,19 +336,30 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
-    String stored = doc["LoRa_Radio"] | "SX1276";
-    if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
+    String stored = doc["LoRa_Radio"] | "SX1278";
+    if (stored.equalsIgnoreCase("SX1262")) {
+        loraRadioVariant = LoRaRadioVariant::SX1262;
+    } else if (stored.equalsIgnoreCase("SX1276")) {
+        loraRadioVariant = LoRaRadioVariant::SX1276;
+    } else {
+        loraRadioVariant = LoRaRadioVariant::SX1278;
+    }
     std::vector<Option> radioOptions = {
+        {"SX1278", []() {}},
         {"SX1276", []() {}},
-        {"SX1262", []() {}},
-        {"CC1101", []() {}}
+        {"SX1262", []() {}}
     };
-    int selected = loopOptions(
-        radioOptions, MENU_TYPE_SUBMENU, "LoRa Radio", (loraRadioVariant == LoRaRadioVariant::SX1262) ? 1 : 0
-    );
+    int defaultIndex = 0;
+    if (loraRadioVariant == LoRaRadioVariant::SX1276) defaultIndex = 1;
+    if (loraRadioVariant == LoRaRadioVariant::SX1262) defaultIndex = 2;
+    int selected = loopOptions(radioOptions, MENU_TYPE_SUBMENU, "LoRa Radio", defaultIndex);
     if (selected >= 0) {
-        loraRadioVariant = (selected == 1) ? LoRaRadioVariant::SX1262 : LoRaRadioVariant::SX1276;
-        doc["LoRa_Radio"] = (loraRadioVariant == LoRaRadioVariant::SX1262) ? "SX1262" : "SX1276";
+        if (selected == 2) loraRadioVariant = LoRaRadioVariant::SX1262;
+        else if (selected == 1) loraRadioVariant = LoRaRadioVariant::SX1276;
+        else loraRadioVariant = LoRaRadioVariant::SX1278;
+        doc["LoRa_Radio"] = (loraRadioVariant == LoRaRadioVariant::SX1262)   ? "SX1262"
+                            : (loraRadioVariant == LoRaRadioVariant::SX1276) ? "SX1276"
+                                                                             : "SX1278";
         File cfg = LittleFS.open("/lora_settings.json", "w");
         serializeJson(doc, cfg);
         cfg.close();
@@ -484,6 +432,12 @@ void mainloop() {
 }
 
 void lorachat() {
+    // Set Default LoRa params (Legacy)
+    spreadingFactor = 9;
+    signalBandwidth = 31.25E3;
+    codingRateDenominator = 8;
+    preambleLength = 8;
+
     // set filesystem thing
     if (!LittleFS.exists("/chats.txt")) {
         File file = LittleFS.open("/chats.txt", "w");
@@ -496,7 +450,7 @@ void lorachat() {
         File file = LittleFS.open("/lora_settings.json", "w");
         doc["LoRa_Frequency"] = "434500000.00";
         doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] = "SX1278";
         serializeJson(doc, file);
         file.close();
     }
@@ -519,8 +473,10 @@ void lorachat() {
         "Pins: SCK:" + String(bruceConfigPins.LoRa_bus.sck) +
         " MISO:" + String(bruceConfigPins.LoRa_bus.miso) + " MOSI:" + String(bruceConfigPins.LoRa_bus.mosi) +
         " CS:" + String(bruceConfigPins.LoRa_bus.cs) + " RST:" + String(getLoraResetPin()) +
-        " IRQ:" + String(getLoraIrqPin()) + "BAND: " + String(bandMHz) +
-        "MHz Radio: " + ((loraRadioVariant == LoRaRadioVariant::SX1262) ? "SX1262" : "SX1276") +
+        " IRQ:" + String(getLoraIrqPin()) + "BAND: " + String(bandMHz) + "MHz Radio: " +
+        ((loraRadioVariant == LoRaRadioVariant::SX1262)   ? "SX1262"
+         : (loraRadioVariant == LoRaRadioVariant::SX1276) ? "SX1276"
+                                                          : "SX1278") +
         " DisplayName:  " + displayName
     );
 
@@ -530,8 +486,11 @@ void lorachat() {
     }
     tft.setTextWrap(true, true);
     tft.setTextDatum(TL_DATUM);
-    loadMessages();
-    mainloop();
+
+    if (!loadonlyradio) {
+        loadMessages();
+        mainloop();
+    }
 }
 
 // settings
@@ -579,4 +538,161 @@ void chfreq() {
     file.close();
 }
 
+// jammer thingy
+
+String generateRandomString(int length) {
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    String result = "";
+    result.reserve(length);
+
+    for (int i = 0; i < length; i++) {
+        uint32_t randomNum = esp_random();
+        result += charset[randomNum % (sizeof(charset) - 1)];
+    }
+    return result;
+}
+
+String jammyjelly = generateRandomString(250);
+
+void jammyjammer() {
+    loadonlyradio = true;
+    lorachat();
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_RED);
+    tft.setTextSize(2);
+    tft.setCursor(10, tftHeight / 2 - 10);
+    tft.print("Jamming...");
+    if (!intlora) {
+        tft.setTextColor(TFT_RED);
+        tft.setTextSize(2);
+        tft.setCursor(10, tftHeight / 2 - 10);
+        tft.print("LoRa not init!");
+        delay(1500);
+        update = true;
+        loadonlyradio = false;
+        return;
+    }
+    while (true) {
+        sendLoraMessage(jammyjelly);
+        delay(10);
+        if (check(EscPress)) {
+            long _tmp = millis();
+            while (EscPress) {
+                if (millis() - _tmp > 200) {
+                    // start drawing arc after short delay; animate over 500ms
+                    int sweep = 0;
+                    long elapsed = millis() - (_tmp + 200);
+                    if (elapsed > 0) sweep = 360 * elapsed / 500;
+                    if (sweep > 360) sweep = 360;
+                    tft.drawArc(
+                        tftWidth / 2,
+                        tftHeight / 2,
+                        25,
+                        15,
+                        0,
+                        sweep,
+                        getColorVariation(bruceConfig.priColor),
+                        bruceConfig.bgColor
+                    );
+                }
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            // clear arc
+            tft.drawArc(
+                tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
+            );
+            LongPress = false;
+            loadonlyradio = false;
+            break;
+        }
+    }
+}
 #endif
+
+void sndfile() {
+    // Select source filesystem
+    std::vector<Option> fsOptions = {
+        {"SD Card",  []() {}},
+        {"LittleFS", []() {}}
+    };
+
+    int selectedObj = loopOptions(fsOptions, MENU_TYPE_SUBMENU, "Select Source");
+    if (selectedObj == -1) return; // User pressed Back
+
+    fs::FS *filesystem = nullptr;
+    String filePath = "";
+
+    if (selectedObj == 0) {
+        // SD Card
+        if (!setupSdCard()) {
+            displayError("SD Init Failed");
+            return;
+        }
+        filesystem = &SD;
+        filePath = loopSD(SD, true);
+    } else {
+        // LittleFS
+        filesystem = &LittleFS;
+        filePath = loopSD(LittleFS, true);
+    }
+
+    if (filePath == "") {
+        Serial.println("No file selected");
+        displayError("No file selected");
+        return;
+    } else {
+        if (filesystem->exists(filePath)) {
+            File file = filesystem->open(filePath, "r");
+            size_t totalSize = file.size();
+            size_t bytesSent = 0;
+            loadonlyradio = true;
+            lorachat();
+            tft.fillScreen(TFT_BLACK);
+            tft.setCursor(0, 0);
+            tft.setTextColor(TFT_WHITE);
+            tft.println("Sending file:");
+            tft.println(filePath);
+
+            int barX = 10;
+            int barY = tftHeight / 2;
+            int barWidth = tftWidth - 20;
+            int barHeight = 20;
+
+            tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+
+            delay(1000);
+            while (file.available()) {
+                String chunk = "";
+                for (int i = 0; i < 250 && file.available(); i++) { chunk += (char)file.read(); }
+                String payload = chunk;
+                if (!sendLoraMessage(payload)) {
+                    displayError("Failed to send chunk!");
+                    Serial.println("Failed to send chunk!");
+                    loadonlyradio = false;
+                    break;
+                }
+
+                // Update Progress
+                bytesSent += chunk.length();
+                float progress = (float)bytesSent / totalSize;
+                int fillWidth = (int)(progress * (barWidth - 2));
+                if (fillWidth > barWidth - 2) fillWidth = barWidth - 2;
+
+                tft.fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, bruceConfig.priColor);
+
+                delay(10);
+            }
+            file.close();
+            tft.setCursor(10, barY + barHeight + 5);
+            tft.setTextColor(TFT_GREEN);
+            tft.println("File send complete!");
+            delay(2000);
+            tft.fillScreen(TFT_BLACK);
+            loadonlyradio = false;
+        } else {
+            Serial.println("File does not exist");
+            displayError("File does not exist");
+            loadonlyradio = false;
+        }
+    }
+}
