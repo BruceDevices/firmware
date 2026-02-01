@@ -7,6 +7,7 @@
 #include "esp_netif_net_stack.h"
 #include "modules/wifi/tcp_utils.h"
 #include "modules/wifi/sniffer.h"
+#include "modules/wifi/evil_portal.h"
 //#include "modules/wifi/responder.h"
 
 uint32_t wifiCallback(cmd *c) {
@@ -83,6 +84,40 @@ uint32_t snifferCallback(cmd *c) {
     return true;
 }
 
+uint32_t evilportalCallback(cmd *c) {
+    Command cmd(c);
+    
+    Argument ssidArg = cmd.getArgument("ssid");
+    String ssid = ssidArg.getValue();
+    ssid.trim();
+    
+    Argument channelArg = cmd.getArgument("channel");
+    String channelStr = channelArg.getValue();
+    uint8_t channel = channelStr.toInt();
+    if (channel < 1 || channel > 13) channel = 6;
+    
+    Argument deauthArg = cmd.getArgument("deauth");
+    bool deauth = deauthArg.isSet();
+    
+    Argument verifyArg = cmd.getArgument("verify");
+    bool verify = verifyArg.isSet();
+    
+    if (ssid == "") {
+        ssid = "Free WiFi";
+    }
+    
+    serialDevice->println("Starting Evil Portal...");
+    serialDevice->println("SSID: " + ssid);
+    serialDevice->println("Channel: " + String(channel));
+    serialDevice->println("Deauth: " + String(deauth ? "enabled" : "disabled"));
+    serialDevice->println("Verify Password: " + String(verify ? "enabled" : "disabled"));
+    serialDevice->println("Press ESC or send 'stop' to quit");
+    
+    EvilPortal(ssid, channel, deauth, verify);
+    
+    return true;
+}
+
 uint32_t listenTCPCallback(cmd *c) {
     if (!wifiConnected) Serial.println("Connect to a WiFi first."); return false;
 
@@ -117,6 +152,13 @@ void createWifiCommands(SimpleCLI *cli) {
     Command listenTCPCmd = cli->addCommand("listen", listenTCPCallback); //TODO: make possible to select port to open via Serial
     
     Command snifferCmd = cli->addCommand("sniffer", snifferCallback); //TODO: be able to exit from it from Serial
+    
+    // Evil Portal command: evilportal [ssid] [-c channel] [-d] [-v]
+    Command evilportalCmd = cli->addCommand("evilportal", evilportalCallback);
+    evilportalCmd.addPosArg("ssid", "Free WiFi");
+    evilportalCmd.addArg("c/hannel", "6");
+    evilportalCmd.addFlagArg("d/eauth");
+    evilportalCmd.addFlagArg("v/erify");
     
     #endif
     //Command responderCmd = cli->addCommand("responder", responderCallback); TODO
