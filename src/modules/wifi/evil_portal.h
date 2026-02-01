@@ -30,9 +30,14 @@ public:
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
     bool setup(void);
+    bool setupHeadless(void);  // Headless setup for serial control
     void beginAP(void);
     void setupRoutes(void);
     void loop(void);
+    void loopHeadless(void);   // Headless loop for serial control
+    
+    // Static factory for headless operation
+    static void startHeadless(String ssid, uint8_t channel = 6, bool deauth = false);
 
 private:
     String apName = "Free Wifi";

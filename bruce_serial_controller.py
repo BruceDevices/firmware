@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 """
-Bruce Serial Controller
-A Python CLI tool to control Bruce firmware via serial commands.
+Bruce Serial Controller - Simple Edition
+Just pick a number, get clean output.
 
-Usage:
-    python bruce_serial_controller.py [port]
-    
-Examples:
-    python bruce_serial_controller.py COM6
-    python bruce_serial_controller.py /dev/ttyUSB0
-
-Requirements:
-    pip install pyserial
+Requirements: pip install pyserial
 """
 
 import serial
@@ -20,396 +12,382 @@ import sys
 import time
 import threading
 import os
-from typing import Optional
 
-# ANSI color codes
-class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-
-def color(text: str, c: str) -> str:
-    """Apply color to text."""
-    if sys.platform == 'win32':
-        os.system('')  # Enable ANSI on Windows
-    return f"{c}{text}{Colors.ENDC}"
-
+# ============================================================================
+# Controller
+# ============================================================================
 
 class BruceController:
-    """Serial controller for Bruce firmware."""
-    
-    def __init__(self, port: str, baudrate: int = 115200):
+    def __init__(self, port: str):
         self.port = port
-        self.baudrate = baudrate
-        self.serial: Optional[serial.Serial] = None
+        self.serial = None
         self.running = False
-        self.reader_thread: Optional[threading.Thread] = None
+        self.capturing = False
         
     def connect(self) -> bool:
-        """Connect to the Bruce device."""
         try:
-            self.serial = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=0.1,
-                write_timeout=2
-            )
-            time.sleep(0.5)  # Wait for connection to stabilize
+            self.serial = serial.Serial(self.port, 115200, timeout=0.5)
+            time.sleep(0.3)
             self.running = True
-            self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
-            self.reader_thread.start()
+            # Start reader thread
+            self.reader = threading.Thread(target=self._read_loop, daemon=True)
+            self.reader.start()
             return True
-        except serial.SerialException as e:
-            print(color(f"Failed to connect: {e}", Colors.RED))
+        except Exception as e:
+            print(f"  Error: {e}")
             return False
     
     def disconnect(self):
-        """Disconnect from the device."""
         self.running = False
-        if self.serial and self.serial.is_open:
+        if self.serial:
             self.serial.close()
-        print(color("Disconnected.", Colors.YELLOW))
     
     def _read_loop(self):
-        """Background thread to read serial output."""
-        while self.running and self.serial and self.serial.is_open:
+        """Background reader - only prints when capturing"""
+        while self.running:
             try:
-                if self.serial.in_waiting:
-                    data = self.serial.readline()
-                    if data:
-                        try:
-                            text = data.decode('utf-8', errors='replace').strip()
-                            if text:
-                                print(color(f"[Bruce] {text}", Colors.CYAN))
-                        except:
-                            pass
-            except serial.SerialException:
-                break
-            except Exception:
+                if self.serial and self.serial.in_waiting:
+                    line = self.serial.readline().decode('utf-8', errors='ignore').strip()
+                    if line and self.capturing:
+                        # Filter and print important lines
+                        if any(x in line.lower() for x in ['captured', 'found', 'connected', 'started', 'stopped', 'error', 'ssid', 'mac', 'ip:', '===']):
+                            print(f"  {line}")
+                        elif line.startswith('[') or line.startswith('─'):
+                            print(f"  {line}")
+            except:
                 pass
             time.sleep(0.01)
     
-    def send_command(self, cmd: str, wait_response: float = 0.5) -> bool:
-        """Send a command to Bruce."""
-        if not self.serial or not self.serial.is_open:
-            print(color("Not connected!", Colors.RED))
-            return False
+    def send(self, cmd: str, capture_time: float = 2.0):
+        """Send command and capture output for a bit"""
+        if not self.serial:
+            print("  Not connected!")
+            return
         
-        try:
-            # Add newline if not present
-            if not cmd.endswith('\n'):
-                cmd += '\n'
-            
-            self.serial.write(cmd.encode('utf-8'))
-            self.serial.flush()
-            print(color(f"[Sent] {cmd.strip()}", Colors.GREEN))
-            time.sleep(wait_response)
-            return True
-        except serial.SerialException as e:
-            print(color(f"Send failed: {e}", Colors.RED))
-            return False
-    
-    # =========================================================================
-    # High-level commands
-    # =========================================================================
-    
-    def wifi_on(self):
-        """Turn WiFi on (connect to known network or start AP)."""
-        return self.send_command("wifi on")
-    
-    def wifi_off(self):
-        """Turn WiFi off."""
-        return self.send_command("wifi off")
-    
-    def wifi_add(self, ssid: str, password: str):
-        """Add a WiFi network."""
-        return self.send_command(f'wifi add "{ssid}" "{password}"')
-    
-    def webui(self, ap_mode: bool = True):
-        """Start WebUI."""
-        if ap_mode:
-            return self.send_command("webui")
-        else:
-            return self.send_command("webui -noAp")
-    
-    def evil_portal(self, ssid: str = "Free WiFi", channel: int = 6, 
-                    deauth: bool = False, verify: bool = False):
-        """
-        Start Evil Portal attack.
+        self.serial.write((cmd + '\n').encode())
+        self.serial.flush()
         
-        Args:
-            ssid: The fake AP name to broadcast
-            channel: WiFi channel (1-13)
-            deauth: Enable deauth attack on nearby networks
-            verify: Verify captured passwords against real network
-        """
-        cmd = f'evilportal "{ssid}" -c {channel}'
-        if deauth:
-            cmd += " -d"
-        if verify:
-            cmd += " -v"
-        return self.send_command(cmd, wait_response=1.0)
-    
-    def sniffer(self):
-        """Start WiFi sniffer."""
-        return self.send_command("sniffer")
-    
-    def arp_scan(self):
-        """Scan for hosts on the network."""
-        return self.send_command("arp")
-    
-    def ir_send(self, protocol: str, address: str, command: str):
-        """Send an IR command."""
-        return self.send_command(f'irsend -p {protocol} -a {address} -c {command}')
-    
-    def rf_send(self, frequency: int, data: str):
-        """Send RF signal."""
-        return self.send_command(f'rfsend -f {frequency} -d {data}')
-    
-    def set_brightness(self, level: int):
-        """Set screen brightness (0-100)."""
-        return self.send_command(f'brightness {level}')
-    
-    def reboot(self):
-        """Reboot the device."""
-        return self.send_command("reboot")
-    
-    def get_info(self):
-        """Get device info."""
-        return self.send_command("info")
+        # Capture output briefly
+        self.capturing = True
+        time.sleep(capture_time)
+        self.capturing = False
 
+# ============================================================================
+# Menus
+# ============================================================================
 
-def list_ports() -> list:
-    """List available serial ports."""
-    ports = serial.tools.list_ports.comports()
-    return [(p.device, p.description) for p in ports]
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
+def print_header():
+    print()
+    print("  ╔═══════════════════════════════════════╗")
+    print("  ║     🦈 BRUCE SERIAL CONTROLLER        ║")
+    print("  ╚═══════════════════════════════════════╝")
+    print()
 
-def print_banner():
-    """Print the banner."""
-    banner = """
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║    ██████╗ ██████╗ ██╗   ██╗ ██████╗███████╗                 ║
-║    ██╔══██╗██╔══██╗██║   ██║██╔════╝██╔════╝                 ║
-║    ██████╔╝██████╔╝██║   ██║██║     █████╗                   ║
-║    ██╔══██╗██╔══██╗██║   ██║██║     ██╔══╝                   ║
-║    ██████╔╝██║  ██║╚██████╔╝╚██████╗███████╗                 ║
-║    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝                 ║
-║                                                              ║
-║              Serial Controller v1.0                          ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-"""
-    print(color(banner, Colors.CYAN))
-
-
-def print_help():
-    """Print available commands."""
-    help_text = """
-╔══════════════════════════════════════════════════════════════╗
-║                     Available Commands                        ║
-╠══════════════════════════════════════════════════════════════╣
-║  WiFi Commands:                                               ║
-║    wifi on              - Connect to WiFi / Start AP          ║
-║    wifi off             - Disconnect WiFi                     ║
-║    wifi add <ssid> <pw> - Add WiFi credentials                ║
-║    webui                - Start WebUI in AP mode              ║
-║    webui sta            - Start WebUI in station mode         ║
-║                                                               ║
-║  Attack Commands:                                             ║
-║    evilportal [ssid]    - Start Evil Portal                   ║
-║    evilportal [ssid] -d - Evil Portal with deauth             ║
-║    sniffer              - Start WiFi sniffer                  ║
-║    arp                  - Scan network for hosts              ║
-║                                                               ║
-║  IR Commands:                                                 ║
-║    irsend <proto> <addr> <cmd> - Send IR command              ║
-║                                                               ║
-║  RF Commands:                                                 ║
-║    rfsend <freq> <data> - Send RF signal                      ║
-║                                                               ║
-║  System Commands:                                             ║
-║    info                 - Get device info                     ║
-║    reboot               - Reboot device                       ║
-║    brightness <0-100>   - Set brightness                      ║
-║                                                               ║
-║  Controller Commands:                                         ║
-║    help                 - Show this help                      ║
-║    exit / quit          - Exit controller                     ║
-║    raw <command>        - Send raw serial command             ║
-╚══════════════════════════════════════════════════════════════╝
-"""
-    print(color(help_text, Colors.YELLOW))
-
-
-def interactive_mode(controller: BruceController):
-    """Run interactive command mode."""
-    print_help()
-    print(color("\nType 'help' for commands, 'exit' to quit.\n", Colors.GREEN))
-    
-    while True:
-        try:
-            cmd = input(color("bruce> ", Colors.BOLD)).strip()
-            
-            if not cmd:
-                continue
-            
-            # Parse command
-            parts = cmd.split(maxsplit=1)
-            command = parts[0].lower()
-            args = parts[1] if len(parts) > 1 else ""
-            
-            if command in ('exit', 'quit', 'q'):
-                break
-            elif command == 'help':
-                print_help()
-            elif command == 'raw':
-                controller.send_command(args)
-            elif command == 'wifi':
-                if args.startswith('on'):
-                    controller.wifi_on()
-                elif args.startswith('off'):
-                    controller.wifi_off()
-                elif args.startswith('add'):
-                    # Parse: wifi add ssid password
-                    add_parts = args.split()[1:]
-                    if len(add_parts) >= 2:
-                        controller.wifi_add(add_parts[0], add_parts[1])
-                    else:
-                        print(color("Usage: wifi add <ssid> <password>", Colors.RED))
-                else:
-                    controller.send_command(f"wifi {args}")
-            elif command == 'webui':
-                if args == 'sta':
-                    controller.webui(ap_mode=False)
-                else:
-                    controller.webui(ap_mode=True)
-            elif command == 'evilportal':
-                # Parse optional arguments
-                ssid = "Free WiFi"
-                channel = 6
-                deauth = '-d' in args
-                verify = '-v' in args
-                
-                # Extract SSID (everything before flags)
-                arg_parts = args.replace('-d', '').replace('-v', '').strip()
-                if arg_parts:
-                    # Check for channel flag
-                    if '-c' in arg_parts:
-                        idx = arg_parts.index('-c')
-                        ssid_part = arg_parts[:idx].strip()
-                        channel_part = arg_parts[idx+2:].strip().split()[0]
-                        if ssid_part:
-                            ssid = ssid_part.strip('"\'')
-                        channel = int(channel_part)
-                    else:
-                        ssid = arg_parts.strip('"\'')
-                
-                controller.evil_portal(ssid, channel, deauth, verify)
-            elif command == 'sniffer':
-                controller.sniffer()
-            elif command == 'arp':
-                controller.arp_scan()
-            elif command == 'info':
-                controller.get_info()
-            elif command == 'reboot':
-                controller.reboot()
-            elif command == 'brightness':
-                try:
-                    level = int(args)
-                    controller.set_brightness(level)
-                except ValueError:
-                    print(color("Usage: brightness <0-100>", Colors.RED))
-            elif command == 'irsend':
-                controller.send_command(f"irsend {args}")
-            elif command == 'rfsend':
-                controller.send_command(f"rfsend {args}")
-            else:
-                # Send as raw command
-                controller.send_command(cmd)
-                
-        except KeyboardInterrupt:
-            print("\n")
-            break
-        except EOFError:
-            break
-
-
-def select_port() -> Optional[str]:
-    """Interactive port selection."""
-    ports = list_ports()
+def select_port() -> str:
+    """Select serial port"""
+    ports = list(serial.tools.list_ports.comports())
     
     if not ports:
-        print(color("No serial ports found!", Colors.RED))
+        print("  No serial ports found!")
         return None
     
-    print(color("\nAvailable ports:", Colors.YELLOW))
-    for i, (port, desc) in enumerate(ports, 1):
-        print(f"  {color(str(i), Colors.CYAN)}. {port} - {desc}")
-    
+    print("  Available Ports:")
+    print("  ─────────────────")
+    for i, p in enumerate(ports, 1):
+        print(f"  {i}. {p.device} - {p.description[:40]}")
     print()
+    
     while True:
         try:
-            choice = input(color("Select port (number or name): ", Colors.BOLD)).strip()
-            
-            if choice.isdigit():
-                idx = int(choice) - 1
-                if 0 <= idx < len(ports):
-                    return ports[idx][0]
-            else:
-                # Check if it's a valid port name
-                for port, _ in ports:
-                    if port.upper() == choice.upper():
-                        return port
-                # Maybe they typed the full path
-                if choice.startswith('/dev/') or choice.upper().startswith('COM'):
-                    return choice
-            
-            print(color("Invalid selection. Try again.", Colors.RED))
-        except KeyboardInterrupt:
+            choice = input("  Select port [1-{}]: ".format(len(ports))).strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(ports):
+                return ports[idx].device
+        except (ValueError, KeyboardInterrupt):
             return None
+        print("  Invalid choice.")
 
+def main_menu(ctrl: BruceController):
+    """Main menu"""
+    while True:
+        clear()
+        print_header()
+        print(f"  Connected: {ctrl.port}")
+        print()
+        print("  ┌─────────────────────────────────────┐")
+        print("  │  MAIN MENU                          │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  1. WiFi Control                    │")
+        print("  │  2. WiFi Attacks                    │")
+        print("  │  3. Bluetooth                       │")
+        print("  │  4. System                          │")
+        print("  │  0. Exit                            │")
+        print("  └─────────────────────────────────────┘")
+        print()
+        
+        choice = input("  Select [0-4]: ").strip()
+        
+        if choice == "1":
+            wifi_menu(ctrl)
+        elif choice == "2":
+            attacks_menu(ctrl)
+        elif choice == "3":
+            bluetooth_menu(ctrl)
+        elif choice == "4":
+            system_menu(ctrl)
+        elif choice == "0":
+            break
+
+def wifi_menu(ctrl: BruceController):
+    """WiFi control menu"""
+    while True:
+        clear()
+        print_header()
+        print("  ┌─────────────────────────────────────┐")
+        print("  │  WIFI CONTROL                       │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  1. Start WebUI                     │")
+        print("  │  2. Scan Networks                   │")
+        print("  │  3. WiFi Info                       │")
+        print("  │  4. Connect WiFi                    │")
+        print("  │  5. Disconnect                      │")
+        print("  │  6. Start AP Mode                   │")
+        print("  │  0. Back                            │")
+        print("  └─────────────────────────────────────┘")
+        print()
+        
+        choice = input("  Select [0-6]: ").strip()
+        
+        if choice == "1":
+            print("\n  Starting WebUI...")
+            print("  URL: http://192.168.4.1")
+            print("  Login: admin / bruce")
+            ctrl.send("webui", 3)
+            input("\n  Press Enter to continue...")
+        elif choice == "2":
+            print("\n  Scanning networks...")
+            ctrl.send("wifi scan", 5)
+            input("\n  Press Enter to continue...")
+        elif choice == "3":
+            print("\n  Getting WiFi info...")
+            ctrl.send("wifi info", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "4":
+            print("\n  Connecting to known network...")
+            ctrl.send("wifi on", 5)
+            input("\n  Press Enter to continue...")
+        elif choice == "5":
+            print("\n  Disconnecting...")
+            ctrl.send("wifi off", 1)
+            print("  Done.")
+            input("\n  Press Enter to continue...")
+        elif choice == "6":
+            print("\n  Starting AP mode...")
+            ctrl.send("wifi ap", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "0":
+            break
+
+def attacks_menu(ctrl: BruceController):
+    """WiFi attacks menu"""
+    while True:
+        clear()
+        print_header()
+        print("  ┌─────────────────────────────────────┐")
+        print("  │  WIFI ATTACKS                       │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  1. Evil Portal (Start)             │")
+        print("  │  2. Evil Portal (Stop)              │")
+        print("  │  3. Deauth Flood                    │")
+        print("  │  4. Deauth Scan                     │")
+        print("  │  5. Beacon Spam                     │")
+        print("  │  6. Packet Sniffer                  │")
+        print("  │  7. ARP Scan                        │")
+        print("  │  0. Back                            │")
+        print("  └─────────────────────────────────────┘")
+        print()
+        
+        choice = input("  Select [0-7]: ").strip()
+        
+        if choice == "1":
+            ssid = input("\n  Enter SSID [Free WiFi]: ").strip()
+            if not ssid:
+                ssid = "Free WiFi"
+            print(f"\n  Starting Evil Portal with SSID: {ssid}")
+            ctrl.send(f'evilportal "{ssid}"', 3)
+            print("\n  Portal is running!")
+            print("  Victims connecting will appear below.")
+            print("  Press Enter to return (portal keeps running)")
+            
+            # Keep capturing
+            ctrl.capturing = True
+            input()
+            ctrl.capturing = False
+            
+        elif choice == "2":
+            print("\n  Stopping Evil Portal...")
+            ctrl.send("portalstop", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "3":
+            print("\n  Starting Deauth Flood...")
+            print("  This will deauth all clients from all networks.")
+            ctrl.send("deauth flood", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "4":
+            print("\n  Scanning for deauth targets...")
+            ctrl.send("deauth scan", 5)
+            input("\n  Press Enter to continue...")
+        elif choice == "5":
+            print("\n  Starting Beacon Spam...")
+            ctrl.send("beacon", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "6":
+            print("\n  Starting Packet Sniffer...")
+            ctrl.send("sniffer", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "7":
+            print("\n  Scanning network for hosts...")
+            ctrl.send("arp", 5)
+            input("\n  Press Enter to continue...")
+        elif choice == "0":
+            break
+
+def bluetooth_menu(ctrl: BruceController):
+    """Bluetooth menu"""
+    while True:
+        clear()
+        print_header()
+        print("  ┌─────────────────────────────────────┐")
+        print("  │  BLUETOOTH                          │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  1. BLE Scan                        │")
+        print("  │  2. Apple Spam                      │")
+        print("  │  3. Android Spam                    │")
+        print("  │  4. Samsung Spam                    │")
+        print("  │  5. Windows Spam                    │")
+        print("  │  6. All Random Spam                 │")
+        print("  │  7. iBeacon                         │")
+        print("  │  8. BLE Info                        │")
+        print("  │  0. Back                            │")
+        print("  └─────────────────────────────────────┘")
+        print()
+        
+        choice = input("  Select [0-8]: ").strip()
+        
+        if choice == "1":
+            print("\n  Scanning for BLE devices...")
+            ctrl.send("blescan", 5)
+            input("\n  Press Enter to continue...")
+        elif choice == "2":
+            print("\n  Starting Apple popup spam...")
+            ctrl.send("blespam apple", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "3":
+            print("\n  Starting Android popup spam...")
+            ctrl.send("blespam android", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "4":
+            print("\n  Starting Samsung popup spam...")
+            ctrl.send("blespam samsung", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "5":
+            print("\n  Starting Windows popup spam...")
+            ctrl.send("blespam windows", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "6":
+            print("\n  Starting random BLE spam (all types)...")
+            ctrl.send("blespam all", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "7":
+            name = input("\n  iBeacon name [Bruce iBeacon]: ").strip()
+            if not name:
+                name = "Bruce iBeacon"
+            print(f"\n  Broadcasting iBeacon: {name}")
+            ctrl.send(f'ibeacon "{name}"', 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "8":
+            print("\n  Getting BLE info...")
+            ctrl.send("bleinfo", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "0":
+            break
+
+def system_menu(ctrl: BruceController):
+    """System menu"""
+    while True:
+        clear()
+        print_header()
+        print("  ┌─────────────────────────────────────┐")
+        print("  │  SYSTEM                             │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  1. Device Info                     │")
+        print("  │  2. Help                            │")
+        print("  │  3. Reboot                          │")
+        print("  │  4. Raw Command                     │")
+        print("  │  0. Back                            │")
+        print("  └─────────────────────────────────────┘")
+        print()
+        
+        choice = input("  Select [0-4]: ").strip()
+        
+        if choice == "1":
+            print("\n  Getting device info...")
+            ctrl.send("info", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "2":
+            print("\n  Available commands:")
+            ctrl.send("wifihelp", 2)
+            input("\n  Press Enter to continue...")
+        elif choice == "3":
+            confirm = input("\n  Reboot device? [y/N]: ").strip().lower()
+            if confirm == 'y':
+                print("  Rebooting...")
+                ctrl.send("reboot", 1)
+        elif choice == "4":
+            cmd = input("\n  Enter command: ").strip()
+            if cmd:
+                print(f"  Sending: {cmd}")
+                ctrl.send(cmd, 3)
+            input("\n  Press Enter to continue...")
+        elif choice == "0":
+            break
+
+# ============================================================================
+# Main
+# ============================================================================
 
 def main():
-    """Main entry point."""
-    # Enable ANSI colors on Windows
-    if sys.platform == 'win32':
-        os.system('')
+    clear()
+    print_header()
     
-    print_banner()
-    
-    # Get port from argument or prompt
-    if len(sys.argv) > 1:
-        port = sys.argv[1]
-    else:
-        port = select_port()
-        if not port:
-            print(color("No port selected. Exiting.", Colors.RED))
-            return
-    
-    print(color(f"\nConnecting to {port}...", Colors.YELLOW))
-    
-    controller = BruceController(port)
-    if not controller.connect():
+    # Select port
+    port = select_port()
+    if not port:
+        print("\n  No port selected. Exiting.")
         return
     
-    print(color(f"Connected to Bruce on {port}!", Colors.GREEN))
-    print(color("Device output will appear with [Bruce] prefix.\n", Colors.DIM))
+    print(f"\n  Connecting to {port}...")
+    
+    ctrl = BruceController(port)
+    if not ctrl.connect():
+        print("  Failed to connect!")
+        return
+    
+    print("  Connected!")
+    time.sleep(1)
     
     try:
-        interactive_mode(controller)
+        main_menu(ctrl)
+    except KeyboardInterrupt:
+        pass
     finally:
-        controller.disconnect()
+        ctrl.disconnect()
     
-    print(color("\nGoodbye! 👋", Colors.CYAN))
-
+    clear()
+    print("\n  Goodbye! 👋\n")
 
 if __name__ == "__main__":
     main()
