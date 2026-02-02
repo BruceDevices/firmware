@@ -515,6 +515,7 @@ const JSClassDef js_wifi_obj = JS_OBJECT_DEF("WiFi", js_wifi);
 /* Mic module */
 static const JSPropDef js_mic[] = {
     JS_CFUNC_DEF("recordWav", 2, native_micRecordWav),
+    JS_CFUNC_DEF("captureSamples", 1, native_micCaptureSamples),
     JS_PROP_END,
 };
 

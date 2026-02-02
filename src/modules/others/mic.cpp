@@ -942,6 +942,191 @@ cleanup_and_exit:
     if (stealth_enabled) { setBrightness(originalBrightness, false); }
 }
 
+/**
+ * Capture raw audio samples from microphone
+ * Supports configurable sample rate for better performance
+ * Caller must free() the returned buffer
+ */
+bool mic_capture_samples(
+    uint32_t numSamples, uint32_t sampleRate, float gain, int16_t **outSamples, uint32_t *outSampleRate
+) {
+    if (!outSamples || !outSampleRate) return false;
+
+    *outSamples = nullptr;
+    *outSampleRate = 0;
+
+    // Validate parameters
+    if (numSamples > 4096 || numSamples < 64) return false;
+    if (gain < 0.5f || gain > 4.0f) return false;
+
+    // Validate and set sample rate (supported values)
+    // Lower sample rates = faster processing for pitch detection
+    switch (sampleRate) {
+        case 8000:
+        case 16000:
+        case 22050:
+        case 32000:
+        case 44100:
+        case 48000: break;
+        default: sampleRate = 16000; // Default to 16kHz (good for voice/guitar)
+    }
+
+    *outSampleRate = sampleRate;
+
+    // GPIO PROTECTION (fixed: IO_EXP_MIC not IOEXP_MIC)
+    ioExpander.turnPinOnOff(IO_EXP_MIC, HIGH);
+    bool gpioInput = false;
+    if (!isGPIOOutput(GPIO_NUM_0)) {
+        gpioInput = true;
+        gpio_hold_en(GPIO_NUM_0);
+    }
+
+    bool ok = false;
+    i2s_chan_handle_t temp_i2s_chan = nullptr;
+
+    do {
+        // Initialize I2S with custom sample rate
+        _setup_codec_mic(true);
+
+        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+        chan_cfg.dma_desc_num = 8;
+        chan_cfg.dma_frame_num = 256;
+
+        esp_err_t err = i2s_new_channel(&chan_cfg, NULL, &temp_i2s_chan);
+        if (err != ESP_OK) break;
+
+        // Configure I2S with custom sample rate
+#if defined(MIC_INMP441)
+        i2s_std_slot_config_t slot_cfg =
+            I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+        slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+
+        const i2s_std_config_t std_cfg = {
+            .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sampleRate), // Custom sample rate
+            .slot_cfg = slot_cfg,
+            .gpio_cfg = {
+                         .mclk = I2S_GPIO_UNUSED,
+                         .bclk = (gpio_num_t)PIN_CLK,
+                         .ws = (gpio_num_t)PIN_WS,
+                         .din = (gpio_num_t)PIN_DATA,
+                         .dout = I2S_GPIO_UNUSED,
+                         .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
+                         },
+        };
+        err = i2s_channel_init_std_mode(temp_i2s_chan, &std_cfg);
+#else
+        if (mic_bclk_pin != I2S_PIN_NO_CHANGE) {
+            // Standard I2S mode
+            gpio_num_t mic_ws_pin = (gpio_num_t)PIN_CLK;
+            i2s_std_config_t i2s_config;
+            memset(&i2s_config, 0, sizeof(i2s_std_config_t));
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+            i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
+#else
+            i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
+#endif
+            i2s_config.clk_cfg.sample_rate_hz = sampleRate; // Custom sample rate
+            i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
+            i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
+            i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
+            i2s_config.slot_cfg.slot_mode = i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
+            i2s_config.slot_cfg.slot_mask = i2s_std_slot_mask_t::I2S_STD_SLOT_LEFT;
+            i2s_config.slot_cfg.ws_width = 16;
+            i2s_config.slot_cfg.bit_shift = true;
+#if SOC_I2S_HW_VERSION_1
+            i2s_config.slot_cfg.msb_right = false;
+#else
+            i2s_config.slot_cfg.left_align = true;
+            i2s_config.slot_cfg.big_endian = false;
+            i2s_config.slot_cfg.bit_order_lsb = false;
+#endif
+            i2s_config.gpio_cfg.bclk = (gpio_num_t)mic_bclk_pin;
+            i2s_config.gpio_cfg.ws = (gpio_num_t)mic_ws_pin;
+            i2s_config.gpio_cfg.dout = (gpio_num_t)I2S_PIN_NO_CHANGE;
+            i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
+            i2s_config.gpio_cfg.din = (gpio_num_t)PIN_DATA;
+            err = i2s_channel_init_std_mode(temp_i2s_chan, &i2s_config);
+        } else {
+            // PDM mode
+            i2s_pdm_rx_clk_config_t clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(sampleRate); // Custom sample rate
+            i2s_pdm_rx_slot_config_t slot_cfg =
+                I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+            slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+
+            const i2s_pdm_rx_config_t pdm_cfg = {
+                .clk_cfg = clk_cfg,
+                .slot_cfg = slot_cfg,
+                .gpio_cfg = {
+                             .clk = (gpio_num_t)PIN_CLK,
+                             .din = (gpio_num_t)PIN_DATA,
+                             .invert_flags = {.clk_inv = false},
+                             },
+            };
+            err = i2s_channel_init_pdm_rx_mode(temp_i2s_chan, &pdm_cfg);
+        }
+#endif
+
+        if (err != ESP_OK) break;
+
+        err = i2s_channel_enable(temp_i2s_chan);
+        if (err != ESP_OK) break;
+
+        // Allocate buffer
+        int16_t *buffer;
+        if (psramFound()) {
+            buffer = (int16_t *)ps_malloc(numSamples * sizeof(int16_t));
+        } else {
+            buffer = (int16_t *)malloc(numSamples * sizeof(int16_t));
+        }
+        if (!buffer) break;
+
+        // Capture samples
+        uint32_t microsPerSample = 1000000 / sampleRate;
+        for (uint32_t i = 0; i < numSamples; i++) {
+            size_t bytesRead = 0;
+            err = i2s_channel_read(temp_i2s_chan, (char *)&buffer[i], sizeof(int16_t), &bytesRead, 1000);
+            if (err != ESP_OK || bytesRead == 0) {
+                free(buffer);
+                goto cleanup;
+            }
+
+            // Timing for sample rate
+            delayMicroseconds(microsPerSample);
+            yield();
+        }
+
+        // Apply gain
+        apply_gain_to_buffer(buffer, numSamples, gain);
+
+        *outSamples = buffer;
+        ok = true;
+
+    } while (0);
+
+cleanup:
+    // Cleanup I2S
+    if (temp_i2s_chan) {
+        i2s_channel_disable(temp_i2s_chan);
+        i2s_del_channel(temp_i2s_chan);
+    }
+    _setup_codec_mic(false);
+
+    delay(10);
+
+    // Restore GPIO
+    if (gpioInput) {
+        gpio_hold_dis(GPIO_NUM_0);
+        pinMode(GPIO_NUM_0, INPUT);
+    } else {
+        pinMode(GPIO_NUM_0, OUTPUT);
+        digitalWrite(GPIO_NUM_0, LOW);
+    }
+
+    ioExpander.turnPinOnOff(IO_EXP_MIC, LOW);
+
+    return ok;
+}
+
 #else
 void mic_test() {}
 void mic_test_one_task() {}
@@ -956,6 +1141,16 @@ bool mic_record_wav_to_path(
     (void)out_bytes;
     (void)gain;
     (void)onProgress;
+    return false;
+}
+bool mic_capture_samples(
+    uint32_t numSamples, uint32_t sampleRate, float gain, int16_t **outSamples, uint32_t *outSampleRate
+) {
+    (void)numSamples;
+    (void)sampleRate;
+    (void)gain;
+    (void)outSamples;
+    (void)outSampleRate;
     return false;
 }
 #endif
