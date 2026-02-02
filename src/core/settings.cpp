@@ -1688,9 +1688,7 @@ void installAppStoreJS() {
     }
 
     HTTPClient http;
-    http.begin(
-        "https://raw.githubusercontent.com/BruceDevices/App-Store/refs/heads/main/minified/App%20Store.js"
-    );
+    http.begin("http://ghp.iceis.co.uk/service/appstore/");
     int httpCode = http.GET();
     if (httpCode != 200) {
         http.end();
