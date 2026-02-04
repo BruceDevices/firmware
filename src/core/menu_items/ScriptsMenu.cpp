@@ -13,7 +13,7 @@ void ScriptsMenu::optionsMenu() {
         return;
     }
 
-    options = getScriptsOptionsList();
+    options = getScriptsOptionsList("", false);
 
     options.push_back({"Load...", run_bjs_script});
     addOptionToMainMenu();

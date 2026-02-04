@@ -182,7 +182,20 @@ int8_t displayMessage(
     tft.setTextColor(color);
     tft.setTextSize(FM);
     tft.setTextDatum(TC_DATUM);
-    tft.drawString(message, tftWidth / 2, tftHeight / 2 - 20);
+
+    // Handle newline characters in message
+    String msg = String(message);
+    int y = tftHeight / 2 - 20;
+    int start = 0;
+    int end = msg.indexOf('\n');
+
+    while (end != -1) {
+        tft.drawString(msg.substring(start, end), tftWidth / 2, y);
+        y += FM * 8;
+        start = end + 1;
+        end = msg.indexOf('\n', start);
+    }
+    tft.drawString(msg.substring(start), tftWidth / 2, y);
 
     tft.setTextDatum(BC_DATUM);
     int16_t buttonHeight = 20;

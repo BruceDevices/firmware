@@ -661,59 +661,85 @@ AGAIN:
 ** @brief: Deploy Target deauth
 ***************************************************************************************/
 void target_atk(String tssid, String mac, uint8_t channel) {
+    // Initialize WiFi attack mode
+    if (!wifi_atk_setWifi()) return; // Error messages handled internally
 
-    if (!wifi_atk_setWifi()) return; // error messages inside the function
-
+    // Prepare deauth frame
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
     wsl_bypasser_send_raw_frame(&ap_record, channel);
 
-    // loop com o ataque mostrando o numero de frames por segundo
-    uint32_t tmp = 0;
-    uint16_t count = 0;
-    tmp = millis();
-    bool redraw = true;
-    check(SelPress);
+    // Attack loop variables
+    const uint16_t UPDATE_INTERVAL_MS = 2000;
+    const uint8_t FRAMES_PER_SEND = 3;
 
+    uint32_t lastUpdateTime = millis();
+    uint32_t frameCount = 0;
+    bool needsRedraw = true;
+    bool attackActive = true;
+
+    check(SelPress);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
     setCpuFrequencyMhz(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
-    while (1) {
-        if (redraw) {
-            // desenhar a tela
+
+    while (attackActive) {
+        // Render UI if needed
+        if (needsRedraw) {
             drawMainBorderWithTitle("Target Deauth");
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+
+            // Dynamic vertical spacing based on screen height
+            uint16_t lineHeight = tftHeight / 20;
+            uint16_t startY = lineHeight * 3;
+
             padprintln("");
             padprintln("AP: " + tssid);
             padprintln("Channel: " + String(channel));
             padprintln(mac);
             vTaskDelay(50 / portTICK_PERIOD_MS);
-            redraw = false;
+            needsRedraw = false;
         }
-        // Send frame
+
+        // Send deauth frame
         send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
-        count += 3; // the function above sends 3 frames each time
-        // atualize counter
-        if (millis() - tmp > 2000) {
-            tft.setCursor(15, tftHeight - 23);
-            tft.print("Frames: " + String(count / 2) + "/s");
-            count = 0;
-            tmp = millis();
+        frameCount += FRAMES_PER_SEND;
+
+        // Update FPS counter periodically
+        uint32_t currentTime = millis();
+        if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
+            // Calculate dynamic position for status text
+            uint16_t statusX = tftWidth * 0.05;                // 5% from left
+            uint16_t statusY = tftHeight - (tftHeight * 0.08); // 8% from bottom
+
+            tft.setCursor(statusX, statusY);
+
+            // Calculate frames per second correctly
+            float fps = (frameCount * 1000.0) / (currentTime - lastUpdateTime);
+            tft.print("Frames: " + String((int)fps) + "/s   "); // Spaces to clear old text
+
+            frameCount = 0;
+            lastUpdateTime = currentTime;
         }
-        // Pause attack
-        // Makes one check() per loop to see if we need to pause
-        // It speeds up the fps for devices that share tft and touch SPI
-        // such as ESP32-C5
+
+        // Handle pause/resume
         if (check(SelPress) || EscPress) {
             EscPress = false;
             displayTextLine("Deauth Paused");
-            // wait to restart or kick out of the function
+            delay(500); // Debouncing
+
+            // Wait for user input
             while (!check(SelPress)) {
-                vTaskDelay(10 / portTICK_PERIOD_MS); // avoid MCU starvation
-                if (check(EscPress)) break;
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+                if (check(EscPress)) {
+                    attackActive = false; // Exit main loop
+                    break;
+                }
             }
-            redraw = true;
+            needsRedraw = true;
         }
     }
+
+    // Cleanup
     wifi_atk_unsetWifi();
     returnToMenu = true;
 }
@@ -892,6 +918,7 @@ void beaconAttack() {
              BeaconMode = 2;
              txt = "Spamming Random";
          }                        },
+#if !defined(LITE_VERSION)
         {"Single SSID",
          [&]() {
              BeaconMode = 4;
@@ -901,6 +928,7 @@ void beaconAttack() {
              BeaconMode = 3;
              txt = "Spamming Custom";
          }},
+#endif
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -909,7 +937,7 @@ void beaconAttack() {
     String beaconFile = "";
     File file;
     FS *fs;
-
+#if !defined(LITE_VERSION)
     // Get user input for single SSID mode
     if (BeaconMode == 4) {
         singleSSID = keyboard("BruceBeacon", 26, "Base SSID:");
@@ -917,7 +945,7 @@ void beaconAttack() {
             return; // User cancelled
         }
     }
-
+#endif
     if (BeaconMode != 3) {
         drawMainBorderWithTitle("WiFi: Beacon SPAM");
         displayTextLine(txt);
@@ -931,7 +959,9 @@ void beaconAttack() {
         } else if (BeaconMode == 2) {
             char *randoms = randomSSID();
             beaconSpamList(randoms);
-        } else if (BeaconMode == 4) {
+        }
+#if !defined(LITE_VERSION)
+        else if (BeaconMode == 4) {
             beaconSpamSingle(singleSSID);
         } else if (BeaconMode == 3) {
             if (!file) {
@@ -958,6 +988,7 @@ void beaconAttack() {
             const char *randoms = beaconFile.c_str();
             beaconSpamList(randoms);
         }
+#endif
         if (check(EscPress) || returnToMenu) {
             if (BeaconMode == 3) file.close();
             break;

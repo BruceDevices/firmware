@@ -7,6 +7,8 @@
 #include <LittleFS.h>
 #include <SD.h>
 #include <globals.h>
+#define STATUS_BAR_HEIGHT 30
+#define BORDER_OFFSET_FROM_SCREEN_EDGE 5
 #define BORDER_PAD_X 10
 #define BORDER_PAD_Y 28
 #define MENU_TYPE_MAIN 0

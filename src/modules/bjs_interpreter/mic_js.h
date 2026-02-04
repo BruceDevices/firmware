@@ -1,4 +1,5 @@
 // Mic bindings for the JS interpreter
+// More info: https://github.com/Senape3000/firmware/blob/main/docs_custom/MIC/MIC_API_README.md
 
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #ifndef __MIC_JS_H__

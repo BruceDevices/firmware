@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
+#include "current_year.h"
 #include "display.h"
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "modules/bjs_interpreter/interpreter.h"
@@ -422,7 +423,8 @@ void setCustomUIColorSettingMenu(
 }
 
 /*********************************************************************
-**  Function: setSoundConfig
+**  Function: setSoundConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable sound
 **********************************************************************/
 void setSoundConfig() {
@@ -455,7 +457,8 @@ void setSoundVolume() {
 
 #ifdef HAS_RGB_LED
 /*********************************************************************
-**  Function: setLedBlinkConfig
+**  Function: setLedBlinkConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
+* retrocompatibility)
 **  Enable or disable led blink
 **********************************************************************/
 void setLedBlinkConfig() {
@@ -485,7 +488,7 @@ void setWifiStartupConfig() {
 **********************************************************************/
 void addEvilWifiMenu() {
     String apName = keyboard("", 30, "Evil Portal SSID");
-    bruceConfig.addEvilWifiName(apName);
+    if (apName != "\x1B") bruceConfig.addEvilWifiName(apName);
 }
 
 /*********************************************************************
@@ -510,7 +513,7 @@ void removeEvilWifiMenu() {
 **********************************************************************/
 void setEvilEndpointCreds() {
     String userInput = keyboard(bruceConfig.evilPortalEndpoints.getCredsEndpoint, 30, "Evil creds endpoint");
-    bruceConfig.setEvilEndpointCreds(userInput);
+    if (userInput != "\x1B") bruceConfig.setEvilEndpointCreds(userInput);
 }
 
 /*********************************************************************
@@ -519,7 +522,7 @@ void setEvilEndpointCreds() {
 **********************************************************************/
 void setEvilEndpointSsid() {
     String userInput = keyboard(bruceConfig.evilPortalEndpoints.setSsidEndpoint, 30, "Evil creds endpoint");
-    bruceConfig.setEvilEndpointSsid(userInput);
+    if (userInput != "\x1B") bruceConfig.setEvilEndpointSsid(userInput);
 }
 
 /*********************************************************************
@@ -694,6 +697,7 @@ void setRFModuleMenu() {
 void setRFFreqMenu() {
     float result = 433.92;
     String freq_str = num_keyboard(String(bruceConfigPins.rfFreq), 10, "Default frequency:");
+    if (freq_str == "\x1B") return;
     if (freq_str.length() > 1) {
         result = freq_str.toFloat();          // returns 0 if not valid
         if (result >= 280 && result <= 928) { // TODO: check valid freq according to current module?
@@ -744,7 +748,7 @@ void setRFIDModuleMenu() {
 **********************************************************************/
 void addMifareKeyMenu() {
     String key = keyboard("", 12, "MIFARE key");
-    bruceConfig.addMifareKey(key);
+    if (key != "\x1B") bruceConfig.addMifareKey(key);
 }
 
 /*********************************************************************
@@ -909,15 +913,34 @@ void setClock() {
         TimeStruct.Minutes = mn;
         TimeStruct.Seconds = 0;
         _rtc.SetTime(&TimeStruct);
+        _rtc.GetTime(&_time);
+        _rtc.GetDate(&_date);
+
+        struct tm timeinfo = {};
+        timeinfo.tm_sec = _time.Seconds;
+        timeinfo.tm_min = _time.Minutes;
+        timeinfo.tm_hour = _time.Hours;
+        timeinfo.tm_mday = _date.Date;
+        timeinfo.tm_mon = _date.Month > 0 ? _date.Month - 1 : 0;
+        timeinfo.tm_year = _date.Year >= 1900 ? _date.Year - 1900 : 0;
+        time_t epoch = mktime(&timeinfo);
+        struct timeval tv = {.tv_sec = epoch};
+        settimeofday(&tv, nullptr);
 #else
-        rtc.setTime(0, mn, hr + am, 20, 06, 2024); // send me a gift, @Pirata!
+        rtc.setTime(0, mn, hr + am, 20, 06, CURRENT_YEAR); // send me a gift, @Pirata!
+        struct tm t = rtc.getTimeStruct();
+        time_t epoch = mktime(&t);
+        struct timeval tv = {.tv_sec = epoch};
+        settimeofday(&tv, nullptr);
 #endif
         clock_set = true;
     }
 }
 
-void runClockLoop() {
+void runClockLoop(bool showMenuHint) {
     int tmp = 0;
+    unsigned long hintStartTime = millis();
+    bool hintVisible = showMenuHint;
 
 #if defined(HAS_RTC)
 #if defined(HAS_RTC_BM8563)
@@ -950,7 +973,6 @@ void runClockLoop() {
                 tftHeight - 2 * BORDER_PAD_X,
                 bruceConfig.priColor
             );
-            tft.setCursor(64, tftHeight / 3 + 5);
             uint8_t f_size = 4;
             for (uint8_t i = 4; i > 0; i--) {
                 if (i * LW * strlen(timeStr) < (tftWidth - BORDER_PAD_X * 2)) {
@@ -960,16 +982,44 @@ void runClockLoop() {
             }
             tft.setTextSize(f_size);
             tft.drawCentreString(timeStr, tftWidth / 2, tftHeight / 2 - 13, 1);
+
+            // "OK to show menu" hint management
+            if (hintVisible && (millis() - hintStartTime < 5000)) {
+                tft.setTextSize(1);
+                tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
+            } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
+                // Clear hint after 5 seconds
+                tft.fillRect(
+                    BORDER_PAD_X + 1,
+                    tftHeight / 2 + 20,
+                    tftWidth - 2 * BORDER_PAD_X - 2,
+                    20,
+                    bruceConfig.bgColor
+                );
+                hintVisible = false;
+            }
             tmp = millis();
         }
 
-        // Checks para sair do loop
-        if (check(SelPress) or check(EscPress)) { // Apertar o botão power dos sticks
+        // Checks to exit the loop
+        if (check(SelPress)) {
+            tft.fillScreen(bruceConfig.bgColor);
+            if (showMenuHint) {
+                // Exits the loop to return to the caller (ClockMenu)
+                break;
+            } else {
+                // Original behavior
+                returnToMenu = true;
+                break;
+            }
+        }
+
+        if (check(EscPress)) {
             tft.fillScreen(bruceConfig.bgColor);
             returnToMenu = true;
             break;
-            // goto Exit;
         }
+
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
@@ -1166,7 +1216,7 @@ void setStartupApp() {
                                bruceConfig.setStartupApp(appName);
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
                                if (appName == "JS Interpreter") {
-                                   options = getScriptsOptionsList(true);
+                                   options = getScriptsOptionsList("", true);
                                    loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
                                }
 #endif
@@ -1196,29 +1246,6 @@ void setGpsBaudrateMenu() {
 }
 
 /*********************************************************************
-**  Function: setBleNameMenu
-**  Handles Menu to set BLE Gap Name
-**********************************************************************/
-void setBleNameMenu() {
-    const String defaultBleName = "Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX);
-
-    const bool isDefault = bruceConfigPins.bleName == defaultBleName;
-
-    options = {
-        {"Default", [=]() { bruceConfigPins.setBleName(defaultBleName); }, isDefault },
-        {"Custom",
-         [=]() {
-             String newBleName = keyboard(bruceConfigPins.bleName, 30, "BLE Device Name:");
-             if (!newBleName.isEmpty()) bruceConfigPins.setBleName(newBleName);
-             else displayError("BLE Name cannot be empty", true);
-         },                                                                !isDefault},
-    };
-    addOptionToMainMenu();
-
-    loopOptions(options, isDefault ? 0 : 1);
-}
-
-/*********************************************************************
 **  Function: setWifiApSsidMenu
 **  Handles Menu to set the WiFi AP SSID
 **********************************************************************/
@@ -1232,8 +1259,10 @@ void setWifiApSsidMenu() {
         {"Custom",
          [=]() {
              String newSsid = keyboard(bruceConfig.wifiAp.ssid, 32, "WiFi AP SSID:");
-             if (!newSsid.isEmpty()) bruceConfig.setWifiApCreds(newSsid, bruceConfig.wifiAp.pwd);
-             else displayError("SSID cannot be empty", true);
+             if (newSsid != "\x1B") {
+                 if (!newSsid.isEmpty()) bruceConfig.setWifiApCreds(newSsid, bruceConfig.wifiAp.pwd);
+                 else displayError("SSID cannot be empty", true);
+             }
          },                                                                         !isDefault},
     };
     addOptionToMainMenu();
@@ -1255,8 +1284,10 @@ void setWifiApPasswordMenu() {
         {"Custom",
          [=]() {
              String newPassword = keyboard(bruceConfig.wifiAp.pwd, 32, "WiFi AP Password:", true);
-             if (!newPassword.isEmpty()) bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, newPassword);
-             else displayError("Password cannot be empty", true);
+             if (newPassword != "\x1B") {
+                 if (!newPassword.isEmpty()) bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, newPassword);
+                 else displayError("Password cannot be empty", true);
+             }
          },                                                                          !isDefault},
     };
     addOptionToMainMenu();
@@ -1284,8 +1315,7 @@ void setWifiApCredsMenu() {
 **********************************************************************/
 void setNetworkCredsMenu() {
     options = {
-        {"WiFi AP Creds", setWifiApCredsMenu},
-        {"BLE Name",      setBleNameMenu    },
+        {"WiFi AP Creds", setWifiApCredsMenu}
     };
     addOptionToMainMenu();
 
@@ -1300,6 +1330,7 @@ void setBadUSBBLEMenu() {
     options = {
         {"Keyboard Layout", setBadUSBBLEKeyboardLayoutMenu},
         {"Key Delay",       setBadUSBBLEKeyDelayMenu      },
+        {"Show Output",     setBadUSBBLEShowOutputMenu    },
     };
     addOptionToMainMenu();
 
@@ -1343,12 +1374,29 @@ void setBadUSBBLEKeyboardLayoutMenu() {
 **********************************************************************/
 void setBadUSBBLEKeyDelayMenu() {
     String delayStr = num_keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
-    uint16_t delayVal = static_cast<uint16_t>(delayStr.toInt());
-    if (delayVal >= 25 && delayVal <= 500) {
-        bruceConfig.setBadUSBBLEKeyDelay(delayVal);
-    } else if (delayVal != 0) {
-        displayError("Invalid key delay value (25 to 500)", true);
+    if (delayStr != "\x1B") {
+        uint16_t delayVal = static_cast<uint16_t>(delayStr.toInt());
+        if (delayVal >= 0 && delayVal <= 500) {
+            bruceConfig.setBadUSBBLEKeyDelay(delayVal);
+        } else if (delayVal != 0) {
+            displayError("Invalid key delay value (0 to 500)", true);
+        }
     }
+}
+
+/*********************************************************************
+**  Function: setBadUSBBLEShowOutputMenu
+**  Main Menu for setting Bad USB/BLE Show Output
+**********************************************************************/
+void setBadUSBBLEShowOutputMenu() {
+    options.clear();
+    options = {
+        {"Enable",  [&]() { bruceConfig.setBadUSBBLEShowOutput(true); } },
+        {"Disable", [&]() { bruceConfig.setBadUSBBLEShowOutput(false); }},
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, bruceConfig.badUSBBLEShowOutput ? 0 : 1);
 }
 
 /*********************************************************************
@@ -1367,6 +1415,7 @@ void setMacAddressMenu() {
         {"Set Custom MAC",
          [&]() {
              String newMAC = keyboard(bruceConfig.wifiMAC, 17, "XX:YY:ZZ:AA:BB:CC");
+             if (newMAC == "\x1B") return;
              if (newMAC.length() == 17) {
                  bruceConfig.setWifiMAC(newMAC);
              } else {
@@ -1597,5 +1646,68 @@ void enableBLEAPI() {
     }
 
     ble_api_enabled = !ble_api_enabled;
+}
+
+bool appStoreInstalled() {
+    FS *fs;
+    if (!getFsStorage(fs)) {
+        log_i("Fail getting filesystem");
+        return false;
+    }
+
+    return fs->exists("/BruceJS/Tools/App Store.js");
+}
+
+#include <HTTPClient.h>
+void installAppStoreJS() {
+
+    if (WiFi.status() != WL_CONNECTED) { wifiConnectMenu(WIFI_STA); }
+    if (WiFi.status() != WL_CONNECTED) {
+        displayWarning("WiFi not connected", true);
+        return;
+    }
+
+    FS *fs;
+    if (!getFsStorage(fs)) {
+        log_i("Fail getting filesystem");
+        return;
+    }
+
+    if (!fs->exists("/BruceJS")) {
+        if (!fs->mkdir("/BruceJS")) {
+            displayWarning("Failed to create /BruceJS directory", true);
+            return;
+        }
+    }
+
+    if (!fs->exists("/BruceJS/Tools")) {
+        if (!fs->mkdir("/BruceJS/Tools")) {
+            displayWarning("Failed to create /BruceJS/Tools directory", true);
+            return;
+        }
+    }
+
+    HTTPClient http;
+    http.begin(
+        "https://raw.githubusercontent.com/BruceDevices/App-Store/refs/heads/main/minified/App%20Store.js"
+    );
+    int httpCode = http.GET();
+    if (httpCode != 200) {
+        http.end();
+        displayWarning("Failed to download App Store", true);
+        return;
+    }
+
+    File file = fs->open("/BruceJS/Tools/App Store.js", FILE_WRITE);
+    if (!file) {
+        displayWarning("Failed to save App Store", true);
+        return;
+    }
+    file.print(http.getString());
+    http.end();
+    file.close();
+
+    displaySuccess("App Store installed", true);
+    displaySuccess("Goto JS Interpreter -> Tools -> App Store", true);
 }
 #endif

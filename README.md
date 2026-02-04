@@ -230,6 +230,7 @@ Also, [read our FAQ](https://github.com/pr3y/Bruce/wiki/FAQ)
 | [Lilygo T-LoRa Pager](https://lilygo.cc/products/t-lora-pager) | :x:       | :x:      | :x:       | :x:       | :x:   | :ok:      | :x:     | :x:       | :x:        | :x:       |
 | [Smoochiee V2](https://www.pcbway.com/project/shareproject/Bruce_PCB_Smoochiee_d6a0284b.html) | :ok:       | :ok:      | :x:       | :ok:       | :x:   | :ok:      | :x:     | :x:       | :x:        | :x:       |
 | [ESP32-C5](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c5/esp32-c5-devkitc-1/user_guide.html) | :ok:       | :ok:      | :x:       | :ok:       | :x:   | :x:      | :x:     | :x:       | :x:        | :x:       |
+| [Bruce RF Reaper](https://www.elecrow.com/bruce-pcb-rf-reaper.html) | :ok:       | :ok:      | :x:       | :x: but w/ ST25R3916 | :x:   | :ok:      | :ok:     | :x:       | :ok:        | :x:       |
 
 ² CYD have a LITE_VERSION version for Launcher Compatibility
 ¹ Core, CYD and StickCs Bad-USB: [here](https://github.com/pr3y/Bruce/wiki/Others#badusb)

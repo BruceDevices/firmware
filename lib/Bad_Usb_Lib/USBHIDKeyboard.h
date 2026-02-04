@@ -54,7 +54,10 @@ private:
     KeyReport _keyReport;
     const uint8_t *_asciimap;
     bool shiftKeyReports;
-    uint32_t _delay_ms = 25;
+    uint32_t _delay_ms = 10; // Default delay between keystrokes - actual value loaded from config
+    uint8_t _keySlotMap[6];
+    uint8_t _shiftCache[128];
+    bool _cacheValid;
 
 public:
     USBHIDKeyboard();
@@ -65,7 +68,11 @@ public:
     size_t press(uint8_t k);
     size_t release(uint8_t k);
     void releaseAll(void);
-    void setLayout(const uint8_t *layout) override { _asciimap = layout; };
+    void setLayout(const uint8_t *layout) override {
+        _asciimap = layout;
+        _cacheValid = false;
+        _buildShiftCache();
+    };
     void sendReport(KeyReport *keys);
     void setShiftKeyReports(bool set);
 
@@ -79,6 +86,7 @@ public:
     // internal use
     uint16_t _onGetDescriptor(uint8_t *buffer);
     void _onOutput(uint8_t report_id, const uint8_t *buffer, uint16_t len);
+    void _buildShiftCache();
 
     void setDelay(uint32_t ms);
 };

@@ -79,9 +79,14 @@ void SRIXTool::setup() {
         padprintln("Chip: PN5" + String(chip, HEX));
         padprintln("FW: " + String(fw_major) + "." + String(fw_minor));
     }
-    delay(2000);
+    delay(1000);
+#ifdef T_EMBED_1101
+    displayError("T-Embed detected!", false);
+    delay(1000);
+    displayError("Read Menu INFO!", true);
+#endif
     displaySuccess("PN532-SRIX ready!");
-    delay(2500);
+    delay(1000);
 
     set_state(IDLE_MODE);
     return loop();
@@ -172,9 +177,13 @@ void SRIXTool::show_main_menu() {
 
     padprintln("SRIX Tool for SRIX4K/512 v1.3");
     padprintln("");
+#ifdef T_EMBED_1101
+    padprintln("- !!! - T-Embed CC1101 detected - !!!");
+    padprintln("- !!! - Antenna too Weak for SRIX - !!!");
+    padprintln("");
+#endif
     padprintln("Features:");
     padprintln("- Read/Clone complete tag (512B)");
-    padprintln("- Write tag from memory");
     padprintln("- Save/Load .srix dumps");
     padprintln("- Read 8-byte UID");
     padprintln("- PN532 module info");
@@ -553,7 +562,7 @@ void SRIXTool::save_file() {
         // User cancelled the operation
         padprintln("Operation cancelled.");
         delay(2000);
-        set_state(IDLE_MODE); // O torna allo stato precedente
+        set_state(IDLE_MODE); // Back to IDLE
         return;
     }
 

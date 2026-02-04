@@ -34,10 +34,14 @@ jobs:
           - { env: "CYD-2432W328C",                   family: "ESP32",}
           - { env: "CYD-2432W328C_2",                 family: "ESP32",}
           - { env: "CYD-2432W328R-or-S024R",          family: "ESP32",}
+          - { env: "CYD-3248S035R",                   family: "ESP32",}
+          - { env: "CYD-3248S035C",                   family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328R-or-S024R", family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432S028",           family: "ESP32",}
           - { env: "LAUNCHER_CYD-2USB",               family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328C",          family: "ESP32",}
+          - { env: "LAUNCHER_CYD-3248S035R",          family: "ESP32",}
+          # - { env: "LAUNCHER_CYD-3248S035C",          family: "ESP32",}
           - { env: "lilygo-t-embed-cc1101",           family: "ESP32-S3",}
           - { env: "lilygo-t-embed",                  family: "ESP32-S3",}
           - { env: "lilygo-t-deck",                   family: "ESP32-S3",}
