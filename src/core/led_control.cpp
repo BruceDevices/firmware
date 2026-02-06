@@ -633,17 +633,6 @@ void setLedEffectConfig() {
     }
 }
 
-addOptionToMainMenu();
-
-int selectedOption = loopOptions(options, bruceConfig.ledEffect);
-if (selectedOption == -1 || selectedOption == options.size() - 1) {
-    ledPreviewMode(false);
-    ledSetup();
-    return;
-}
-}
-}
-
 void setLedEffectSpeedConfig() {
     options.clear();
 
