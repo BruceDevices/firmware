@@ -249,35 +249,6 @@ void ledEffectTask(void *pvParameters) {
             }
 #endif
 
-        } else if (ledEffect == LED_EFFECT_PULSE) {
-            float phase;
-#ifdef HAS_ENCODER_LED
-            if ((ledEffectSpeed == 11 && EncoderLedChange != 0) || (ledEffectSpeed < 11)) {
-                if ((ledEffectSpeed == 11 && EncoderLedChange != 0)) {
-                    phase = sinf(frame / 20.0f * PI);
-                    frame += EncoderLedChange;
-                    EncoderLedChange = 0;
-                } else {
-                    float time = millis() / 1000.0f;
-                    float speed = 0.2f * ledEffectSpeed;
-                    phase = sinf(time * speed * PI);
-                }
-#else
-            float time = millis() / 1000.0f;
-            float speed = 0.2f * ledEffectSpeed;
-            phase = sinf(time * speed * PI);
-#endif
-                uint8_t value = (uint8_t)((phase + 1.0f) * 127.5f);
-
-                for (int i = 0; i < LED_COUNT; i++) {
-                    leds[i] = CRGB(
-                        (baseColor.r * value) / 255, (baseColor.g * value) / 255, (baseColor.b * value) / 255
-                    );
-                }
-#ifdef HAS_ENCODER_LED
-            }
-#endif
-
         } else if (ledEffect == LED_EFFECT_FIRE) {
             for (int i = 0; i < LED_COUNT; i++) {
                 uint8_t flicker = random(150, 255);
@@ -561,112 +532,108 @@ void setLedEffectConfig() {
     ledPreviewMode(true);
 
     while (1) {
-        options = {
-            {"Solid Color",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_SOLID); },
-             bruceConfig.ledEffect == LED_EFFECT_SOLID,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_SOLID);
-                 setLedColor(bruceConfig.ledColor);
-                 return false;
-             }                                                                        },
-            {"Breathe",
-             [=]() { bruceConfig.setLedEffect(LED_COLOR_BREATHE); },
-             bruceConfig.ledEffect == LED_COLOR_BREATHE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_COLOR_BREATHE);
-                 return false;
-             }                                                                        },
-            {"Color Cycle",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_COLOR_CYCLE); },
-             bruceConfig.ledEffect == LED_EFFECT_COLOR_CYCLE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_COLOR_CYCLE);
-                 return false;
-             }                                                                        },
+        options =
+            {
+                {"Solid Color",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_SOLID); },
+                 bruceConfig.ledEffect == LED_EFFECT_SOLID,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_SOLID);
+                     setLedColor(bruceConfig.ledColor);
+                     return false;
+                 }},
+                {"Breathe",
+                 [=]() { bruceConfig.setLedEffect(LED_COLOR_BREATHE); },
+                 bruceConfig.ledEffect == LED_COLOR_BREATHE,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_COLOR_BREATHE);
+                     return false;
+                 }},
+                {"Color Cycle",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_COLOR_CYCLE); },
+                 bruceConfig.ledEffect == LED_EFFECT_COLOR_CYCLE,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_COLOR_CYCLE);
+                     return false;
+                 }},
 #if LED_COUNT > 1
-            {"Color Wheel",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_COLOR_WHEEL); },
-             bruceConfig.ledEffect == LED_EFFECT_COLOR_WHEEL,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_COLOR_WHEEL);
-                 return false;
-             }                                                                        },
-            {"Chase",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_CHASE); },
-             bruceConfig.ledEffect == LED_EFFECT_CHASE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_CHASE);
-                 return false;
-             }                                                                        },
-            {"Chase Tail",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_CHASE_TAIL); },
-             bruceConfig.ledEffect == LED_EFFECT_CHASE_TAIL,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_CHASE_TAIL);
-                 return false;
-             }                                                                        },
-            {"Rainbow Chase",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_RAINBOW_CHASE); },
-             bruceConfig.ledEffect == LED_EFFECT_RAINBOW_CHASE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_RAINBOW_CHASE);
-                 return false;
-             }                                                                        },
-            {"Rainbow Breathe",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_RAINBOW_BREATHE); },
-             bruceConfig.ledEffect == LED_EFFECT_RAINBOW_BREATHE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_RAINBOW_BREATHE);
-                 return false;
-             }                                                                        },
-            {"Pulse",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_PULSE); },
-             bruceConfig.ledEffect == LED_EFFECT_PULSE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_PULSE);
-                 return false;
-             }                                                                        },
-            {"Disco",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_DISCO); },
-             bruceConfig.ledEffect == LED_EFFECT_DISCO,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_DISCO);
-                 return false;
-             }                                                                        },
-            {"Fire",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_FIRE); },
-             bruceConfig.ledEffect == LED_EFFECT_FIRE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_FIRE);
-                 return false;
-             }                                                                        },
+                {"Color Wheel",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_COLOR_WHEEL); },
+                 bruceConfig.ledEffect == LED_EFFECT_COLOR_WHEEL,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_COLOR_WHEEL);
+                     return false;
+                 }},
+                {"Chase",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_CHASE); },
+                 bruceConfig.ledEffect == LED_EFFECT_CHASE,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_CHASE);
+                     return false;
+                 }},
+                {"Chase Tail",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_CHASE_TAIL); },
+                 bruceConfig.ledEffect == LED_EFFECT_CHASE_TAIL,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_CHASE_TAIL);
+                     return false;
+                 }},
+                {"Rainbow Chase",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_RAINBOW_CHASE); },
+                 bruceConfig.ledEffect == LED_EFFECT_RAINBOW_CHASE,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_RAINBOW_CHASE);
+                     return false;
+                 }},
+                {"Rainbow Breathe",
+                 [=]() { bruceConfig.setLedEffect(LED_EFFECT_RAINBOW_BREATHE); },
+                 bruceConfig.ledEffect == LED_EFFECT_RAINBOW_BREATHE,
+                 [](void *pointer, bool shouldRender) {
+                     setLedEffect(LED_EFFECT_RAINBOW_BREATHE);
+                     return false;
+                 }},
+        },
+        {"Disco",
+         [=]() { bruceConfig.setLedEffect(LED_EFFECT_DISCO); },
+         bruceConfig.ledEffect == LED_EFFECT_DISCO,
+         [](void *pointer, bool shouldRender) {
+             setLedEffect(LED_EFFECT_DISCO);
+             return false;
+         }},
+        {"Fire",
+         [=]() { bruceConfig.setLedEffect(LED_EFFECT_FIRE); },
+         bruceConfig.ledEffect == LED_EFFECT_FIRE,
+         [](void *pointer, bool shouldRender) {
+             setLedEffect(LED_EFFECT_FIRE);
+             return false;
+         }},
 #endif
-            {"Config - Speed",
-             setLedEffectSpeedConfig,                                         false,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 previewLedEffect = bruceConfig.ledEffect;
-                 previewLedEffectSpeed = bruceConfig.ledEffectSpeed;
-                 previewLedEffectDirection = bruceConfig.ledEffectDirection;
-                 return false;
-             }                                                                        },
-            {"Config - Direction", setLedEffectDirectionConfig,               false, [](void *pointer, bool shouldRender) {
-                 previewLedEffect = bruceConfig.ledEffect;
-                 previewLedEffectSpeed = bruceConfig.ledEffectSpeed;
-                 previewLedEffectDirection = bruceConfig.ledEffectDirection;
-                 return false;
-             }},
-        };
+        {"Config - Speed",
+         setLedEffectSpeedConfig,
+         false,
+         [](void *pointer, bool shouldRender) {
+             previewLedEffect = bruceConfig.ledEffect;
+             previewLedEffectSpeed = bruceConfig.ledEffectSpeed;
+             previewLedEffectDirection = bruceConfig.ledEffectDirection;
+             return false;
+         }},
+        {"Config - Direction", setLedEffectDirectionConfig, false, [](void *pointer, bool shouldRender) {
+             previewLedEffect = bruceConfig.ledEffect;
+             previewLedEffectSpeed = bruceConfig.ledEffectSpeed;
+             previewLedEffectDirection = bruceConfig.ledEffectDirection;
+             return false;
+         }},
+    };
 
-        addOptionToMainMenu();
+    addOptionToMainMenu();
 
-        int selectedOption = loopOptions(options, bruceConfig.ledEffect);
-        if (selectedOption == -1 || selectedOption == options.size() - 1) {
-            ledPreviewMode(false);
-            ledSetup();
-            return;
-        }
+    int selectedOption = loopOptions(options, bruceConfig.ledEffect);
+    if (selectedOption == -1 || selectedOption == options.size() - 1) {
+        ledPreviewMode(false);
+        ledSetup();
+        return;
     }
+}
 }
 
 void setLedEffectSpeedConfig() {
