@@ -62,18 +62,43 @@ void updateClockTimezone() {
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
-    localTime = myTZ.toLocal(timeClient.getEpochTime());
+    localTime = timeClient.getEpochTime() + (bruceConfig.dst ? 3600 : 0);
 
-#if !defined(HAS_RTC)
-    rtc.setTime(timeClient.getEpochTime());
+#if defined(HAS_RTC)
+    struct tm *timeinfo = localtime(&localTime);
+    RTC_TimeTypeDef TimeStruct;
+    TimeStruct.Hours = timeinfo->tm_hour;
+    TimeStruct.Minutes = timeinfo->tm_min;
+    TimeStruct.Seconds = timeinfo->tm_sec;
+    _rtc.SetTime(&TimeStruct);
+    updateTimeStr(_rtc.getTimeStruct());
+#else
+    rtc.setTime(localTime);
     updateTimeStr(rtc.getTimeStruct());
     clock_set = true;
 #endif
+    // Update Internal clock to system time
+    struct timeval tv = {.tv_sec = localTime};
+    settimeofday(&tv, nullptr);
 }
 
 void updateTimeStr(struct tm timeInfo) {
-    // Atualiza timeStr com a hora e minuto
-    snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+    if (bruceConfig.clock24hr) {
+        // Use 24 hour format
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec
+        );
+    } else {
+        // Use 12 hour format with AM/PM
+        int hour12 = (timeInfo.tm_hour == 0)   ? 12
+                     : (timeInfo.tm_hour > 12) ? timeInfo.tm_hour - 12
+                                               : timeInfo.tm_hour;
+        const char *ampm = (timeInfo.tm_hour < 12) ? "AM" : "PM";
+
+        snprintf(
+            timeStr, sizeof(timeStr), "%02d:%02d:%02d %s", hour12, timeInfo.tm_min, timeInfo.tm_sec, ampm
+        );
+    }
 }
 
 void showDeviceInfo() {
@@ -81,16 +106,33 @@ void showDeviceInfo() {
 
     area.addLine("Bruce Version: " + String(BRUCE_VERSION));
     area.addLine("EEPROM size: " + String(EEPROMSIZE));
-    area.addLine("Total heap: " + String(ESP.getHeapSize()));
-    area.addLine("Free heap: " + String(ESP.getFreeHeap()));
+    area.addLine("");
+    area.addLine("[MEMORY]");
+    area.addLine("Total heap: " + formatBytes(ESP.getHeapSize()));
+    area.addLine("Free heap: " + formatBytes(ESP.getFreeHeap()));
     if (psramFound()) {
-        area.addLine("Total PSRAM: " + String(ESP.getPsramSize()));
-        area.addLine("Free PSRAM: " + String(ESP.getFreePsram()));
+        area.addLine("Total PSRAM: " + formatBytes(ESP.getPsramSize()));
+        area.addLine("Free PSRAM: " + formatBytes(ESP.getFreePsram()));
     }
-    area.addLine("LittleFS total: " + String(LittleFS.totalBytes()));
-    area.addLine("LittleFS used: " + String(LittleFS.usedBytes()));
-    area.addLine("LittleFS free: " + String(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    area.addLine("");
+    area.addLine("[NETWORK]");
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
+    String localIP = WiFi.localIP().toString();
+    String softAPIP = WiFi.softAPIP().toString();
+    String ipStatus = (WiFi.status() == WL_CONNECTED) ? (localIP != "0.0.0.0"    ? localIP
+                                                         : softAPIP != "0.0.0.0" ? softAPIP
+                                                                                 : "No valid IP")
+                                                      : "Not connected";
+    area.addLine("IP address: " + ipStatus);
+    area.addLine("");
+    area.addLine("[STORAGE]");
+    area.addLine("LittleFS total: " + formatBytes(LittleFS.totalBytes()));
+    area.addLine("LittleFS used: " + formatBytes(LittleFS.usedBytes()));
+    area.addLine("LittleFS free: " + formatBytes(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    area.addLine("");
+    area.addLine("SD Card total: " + formatBytes(SD.totalBytes()));
+    area.addLine("SD Card used: " + formatBytes(SD.usedBytes()));
+    area.addLine("SD Card free: " + formatBytes(SD.totalBytes() - SD.usedBytes()));
     area.addLine("");
 
 #ifdef HAS_SCREEN
@@ -218,5 +260,49 @@ void i2c_bulk_write(TwoWire *wire, uint8_t addr, const uint8_t *bulk_data) {
         uint8_t error = wire->endTransmission();
         if (error != 0) { log_e("I2C Write error %d", error); }
         delay(1);
+    }
+}
+
+String formatTimeDecimal(uint32_t totalMillis) {
+    uint16_t minutes = totalMillis / 60000;
+    float seconds = (totalMillis % 60000) / 1000.0;
+
+    char buffer[10];
+    sprintf(buffer, "%02d:%06.3f", minutes, seconds);
+    return String(buffer);
+}
+
+void printMemoryUsage(const char *msg) {
+    Serial.printf(
+        "%s:\nPSRAM: [Free: %lu, max alloc: %lu],\nRAM: [Free: %lu, "
+        "max alloc: %lu]\n\n",
+        msg,
+        ESP.getFreePsram(),
+        ESP.getMaxAllocPsram(),
+        ESP.getFreeHeap(),
+        ESP.getMaxAllocHeap()
+    );
+}
+
+String repeatString(int length, String character) {
+    String result = "";
+    for (int i = 0; i < length; i++) { result += character; }
+    return result;
+}
+
+String formatBytes(uint64_t bytes) {
+    const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unitIndex = 0;
+    float size = bytes;
+
+    while (size >= 1024.0 && unitIndex < 4) {
+        size /= 1024.0;
+        unitIndex++;
+    }
+
+    if (unitIndex == 0) {
+        return String(bytes) + " " + units[unitIndex];
+    } else {
+        return String(size, 2) + " " + units[unitIndex];
     }
 }

@@ -58,15 +58,6 @@ void EthernetMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "Ethernet");
 }
 
-void EthernetMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.ethernet),
-        0,
-        imgCenterY,
-        true
-    );
-}
 void EthernetMenu::drawIcon(float scale) {
     clearIconArea();
 

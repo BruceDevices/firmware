@@ -6,6 +6,9 @@
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
+#if defined(HAS_NS4168_SPKR)
+#include "modules/others/audio_player.h"
+#endif
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_send.h"
 #include "mykeyboard.h" // using keyboard when calling rename
@@ -74,7 +77,14 @@ bool setupSdCard() {
             (int8_t)bruceConfigPins.SDCARD_bus.cs
         ); // start SPI communications
         delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+            result = false;
+#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
+            // If using Shared SPI, do not stop the bus if SDCard is not present
+            // If using Legacy, release the pins from this SPI Bus
+            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
+#endif
+        }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
 #endif
@@ -372,8 +382,8 @@ String readSmallFile(FS &fs, String filepath) {
 ** Description:   read file and return its contents as a char*
 **                caller needs to call free()
 ***************************************************************************************/
-char *readBigFile(FS &fs, String filepath, bool binary, size_t *fileSize) {
-    File file = fs.open(filepath);
+char *readBigFile(FS *fs, String filepath, bool binary, size_t *fileSize) {
+    File file = fs->open(filepath);
     if (!file) {
         Serial.printf("Could not open file: %s\n", filepath.c_str());
         return NULL;
@@ -597,9 +607,14 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
         }
         displayScrollingText(fileList[index].filename, coord);
 
+        // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
+        // This condition is important for StickCPlus, Core and other 3 Btn devices
+        if (EscPress && PrevPress) EscPress = false;
+        char pressed_letter;
+        if (check(EscPress)) goto BACK_FOLDER;
+
 #ifdef HAS_KEYBOARD
-        char pressed_letter = checkLetterShortcutPress();
-        if (check(EscPress)) goto BACK_FOLDER; // quit
+        pressed_letter = checkLetterShortcutPress();
 
         // check letter shortcuts
         if (pressed_letter > 0) {
@@ -622,8 +637,6 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                 }
             }
         }
-#elif defined(T_EMBED) || defined(HAS_TOUCH) || !defined(HAS_SCREEN)
-        if (check(EscPress)) goto BACK_FOLDER;
 #endif
 
         if (check(PrevPress) || check(UpPress)) {
@@ -727,11 +740,16 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
                                                          }});
-                    if (filepath.endsWith(".ir"))
+                    if (filepath.endsWith(".ir")) {
+                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
+                                                             delay(200);
+                                                             chooseCmdIrFile(&fs, filepath);
+                                                         }});
                         options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
                                                          }});
+                    }
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
@@ -808,7 +826,8 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         options.insert(options.begin(), {"Play Audio", [&]() {
                                                              delay(200);
                                                              check(AnyKeyPress);
-                                                             playAudioFile(&fs, filepath);
+                                                             // playAudioFile(&fs, filepath);
+                                                             musicPlayerUI(&fs, filepath);
                                                          }});
 #endif
                     // generate qr codes from small files (<3K)
@@ -896,7 +915,8 @@ bool checkLittleFsSizeNM() { return (LittleFS.totalBytes() - LittleFS.usedBytes(
 **  and LittleFS otherwise. If LittleFS is full it wil return false.
 **********************************************************************/
 bool getFsStorage(FS *&fs) {
-    if (setupSdCard()) fs = &SD;
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) fs = &SD;
     else if (checkLittleFsSize()) fs = &LittleFS;
     else return false;
 

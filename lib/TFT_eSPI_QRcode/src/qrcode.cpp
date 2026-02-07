@@ -8,7 +8,7 @@ int screenwidth;
 int screenheight;
 int multiply = 2;
 
-QRcode::QRcode(TFT_eSPI *tft)
+QRcode::QRcode(tft_display *tft)
 {
   this->tft = tft;
 }

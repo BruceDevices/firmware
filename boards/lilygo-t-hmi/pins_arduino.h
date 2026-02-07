@@ -49,7 +49,8 @@ static const uint8_t SCL = GROVE_SCL;
 // Serial
 #define SERIAL_TX 44
 #define SERIAL_RX 43
-
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 #define TXLED 17
 #define RXLED 18
 

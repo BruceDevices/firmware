@@ -19,8 +19,8 @@ void RFIDMenu::optionsMenu() {
         {"Read tag",    [=]() { TagOMatic(); }                          },
 #ifndef LITE_VERSION
         {"Read EMV",    [=]() { EMVReader(); }                          },
-#endif
         {"Read 125kHz", [=]() { RFID125(); }                            },
+#endif
         {"Scan tags",   [=]() { TagOMatic(TagOMatic::SCAN_MODE); }      },
         {"Load file",   [=]() { TagOMatic(TagOMatic::LOAD_MODE); }      },
         {"Erase data",  [=]() { TagOMatic(TagOMatic::ERASE_MODE); }     },
@@ -76,11 +76,7 @@ void RFIDMenu::configMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "RFID Config");
 }
-void RFIDMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.rfid), 0, imgCenterY, true
-    );
-}
+
 void RFIDMenu::drawIcon(float scale) {
     clearIconArea();
     int iconSize = scale * 70;

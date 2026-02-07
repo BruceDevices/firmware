@@ -10,7 +10,7 @@ QueueHandle_t rspQueue = nullptr;
 TaskHandle_t serialcmdsTaskHandle;
 
 struct CmdPacket {
-    char text[SAFE_STACK_BUFFER_SIZE];
+    char text[512]; // command size
 };
 bool parseSerialCommand(const String &command, bool waitForResponse) {
     if (!cmdQueue || !rspQueue) {
@@ -61,9 +61,11 @@ void _serialCmdsTaskLoop(void *pvParameters) {
     }
 }
 
-void startSerialCommandsHandlerTask() {
-    cmdQueue = xQueueCreate(2, sizeof(CmdPacket));
-    rspQueue = xQueueCreate(2, sizeof(bool));
+void startSerialCommandsHandlerTask(bool initQueues) {
+    if (initQueues) {
+        cmdQueue = xQueueCreate(2, sizeof(CmdPacket));
+        rspQueue = xQueueCreate(2, sizeof(bool));
+    }
 
     xTaskCreatePinnedToCore(
         _serialCmdsTaskLoop,         // Function to implement the task

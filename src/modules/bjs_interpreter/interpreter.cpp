@@ -1,172 +1,112 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
+#include "core/utils.h"
 
-#include <duktape.h>
+static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
+
+extern "C" {
+#include "mqjs_stdlib.h"
+}
+
+#include "display_js.h"
+#include "globals_js.h"
 
 char *script = NULL;
 char *scriptDirpath = NULL;
 char *scriptName = NULL;
 
-// #define DUK_USE_DEBUG
-// #define DUK_USE_DEBUG_LEVEL 2
-// #define DUK_USE_DEBUG_WRITE
+TaskHandle_t interpreterTaskHandler = NULL;
 
-// Code interpreter, must be called in the loop() function to work
 void interpreterHandler(void *pvParameters) {
-    Serial.printf(
-        "init interpreter:\nPSRAM: [Free: %d, max alloc: %d],\nRAM: [Free: %d, "
-        "max alloc: %d]\n",
-        ESP.getFreePsram(),
-        ESP.getMaxAllocPsram(),
-        ESP.getFreeHeap(),
-        ESP.getMaxAllocHeap()
-    );
+    printMemoryUsage("init interpreter");
     if (script == NULL) { return; }
+
+    while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
+
     tft.fillScreen(TFT_BLACK);
     tft.setRotation(bruceConfigPins.rotation);
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
-    // Create context.
-    Serial.println("Create context");
-    auto alloc_function = &ps_alloc_function;
-    auto realloc_function = &ps_realloc_function;
-    auto free_function = &ps_free_function;
-    if (!psramFound()) {
-        alloc_function = NULL;
-        realloc_function = NULL;
-        free_function = NULL;
-    }
+    bool psramAvailable = psramFound();
 
-    /// TODO: Add DUK_USE_NATIVE_STACK_CHECK check with
-    /// uxTaskGetStackHighWaterMark
-    duk_context *ctx =
-        duk_create_heap(alloc_function, realloc_function, free_function, NULL, js_fatal_error_handler);
+    size_t mem_size = psramAvailable ? 65536 : 32768;
+    uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
+    JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
+    JS_SetLogFunc(ctx, js_log_func);
 
-    // Init containers
-    clearDisplayModuleData();
+    js_timers_init(ctx);
 
-    registerConsole(ctx);
-
-    // Typescript emits: Object.defineProperty(exports, "__esModule", { value:
-    // true }); In every file, this is polyfill so typescript project can run on
-    // Bruce
-    duk_push_object(ctx);
-    duk_put_global_string(ctx, "exports");
-
-    bduk_register_c_lightfunc(ctx, "require", native_require, 1);
-    bduk_register_c_lightfunc(ctx, "assert", native_assert, 2);
-    // Deprecated
-    bduk_register_c_lightfunc(ctx, "load", native_load, 1);
-    registerGlobals(ctx);
-    registerMath(ctx);
-
-    // registerAudio(ctx);
-    // registerBadUSB(ctx);
-    // TODO: BLE UART API js wrapper https://github.com/pr3y/Bruce/pull/1133
-    // registerDevice(ctx);
-    // registerDialog(ctx);
-    // registerDisplay(ctx);
-    // registerGPIO(ctx);
-    // registerI2C(ctx);
-    // registerIR(ctx);
-    // registerKeyboard(ctx);
-    // registerNotification(ctx);
-    // registerSerial(ctx);
-    // registerStorage(ctx);
-    // registerSubGHz(ctx);
-    // registerWiFi(ctx);
-
-    Serial.printf(
-        "global populated:\nPSRAM: [Free: %d, max alloc: %d],\nRAM: [Free: %d, "
-        "max alloc: %d]\n",
-        ESP.getFreePsram(),
-        ESP.getMaxAllocPsram(),
-        ESP.getFreeHeap(),
-        ESP.getMaxAllocHeap()
+    // Set global variables
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_SetPropertyStr(
+        ctx, global, "__filepath", JS_NewString(ctx, (String(scriptDirpath) + String(scriptName)).c_str())
     );
+    JS_SetPropertyStr(ctx, global, "__dirpath", JS_NewString(ctx, scriptDirpath));
+    JS_SetPropertyStr(ctx, global, "BRUCE_VERSION", JS_NewString(ctx, BRUCE_VERSION));
+    JS_SetPropertyStr(ctx, global, "BRUCE_PRICOLOR", JS_NewInt32(ctx, bruceConfig.priColor));
+    JS_SetPropertyStr(ctx, global, "BRUCE_SECCOLOR", JS_NewInt32(ctx, bruceConfig.secColor));
+    JS_SetPropertyStr(ctx, global, "BRUCE_BGCOLOR", JS_NewInt32(ctx, bruceConfig.bgColor));
 
-    // TODO: match flipper syntax
-    // https://github.com/jamisonderek/flipper-zero-tutorials/wiki/JavaScript
-    // MEMO: API https://duktape.org/api.html
-    // https://github.com/joeqread/arduino-duktape/blob/main/src/duktape.h
+    JS_SetPropertyStr(ctx, global, "HIGH", JS_NewInt32(ctx, HIGH));
+    JS_SetPropertyStr(ctx, global, "LOW", JS_NewInt32(ctx, LOW));
+    JS_SetPropertyStr(ctx, global, "INPUT", JS_NewInt32(ctx, INPUT));
+    JS_SetPropertyStr(ctx, global, "OUTPUT", JS_NewInt32(ctx, OUTPUT));
+    JS_SetPropertyStr(ctx, global, "PULLUP", JS_NewInt32(ctx, PULLUP));
+    JS_SetPropertyStr(ctx, global, "INPUT_PULLUP", JS_NewInt32(ctx, INPUT_PULLUP));
+    JS_SetPropertyStr(ctx, global, "PULLDOWN", JS_NewInt32(ctx, PULLDOWN));
+    JS_SetPropertyStr(ctx, global, "INPUT_PULLDOWN", JS_NewInt32(ctx, INPUT_PULLDOWN));
 
-    Serial.printf("Script length: %d\n", strlen(script));
+    printMemoryUsage("context created");
 
-    if (duk_peval_string(ctx, script) != DUK_EXEC_SUCCESS) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.setTextSize(FM);
-        tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-        tft.drawCentreString("Error", tftWidth / 2, 10, 1);
-        tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-        tft.setTextSize(FP);
-        tft.setCursor(0, 33);
+    size_t scriptSize = strlen(script);
+    log_d("Script length: %zu\n", scriptSize);
 
-        String errorMessage = "";
-        if (duk_is_error(ctx, -1)) {
-            errorMessage = duk_safe_to_stacktrace(ctx, -1);
-        } else {
-            errorMessage = duk_safe_to_string(ctx, -1);
-        }
-        Serial.printf("eval failed: %s\n", errorMessage.c_str());
-        tft.printf("%s\n\n", errorMessage.c_str());
+    JSValue val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
 
-        int lineIndexOf = errorMessage.indexOf("line ");
-        int evalIndexOf = errorMessage.indexOf("(eval:");
-        Serial.printf("lineIndexOf: %d\n", lineIndexOf);
-        Serial.printf("evalIndexOf: %d\n", evalIndexOf);
-        String errorLine = "";
-        if (lineIndexOf != -1) {
-            lineIndexOf += 5;
-            errorLine = errorMessage.substring(lineIndexOf, errorMessage.indexOf("\n", lineIndexOf));
-        } else if (evalIndexOf != -1) {
-            evalIndexOf += 6;
-            errorLine = errorMessage.substring(evalIndexOf, errorMessage.indexOf(")", evalIndexOf));
-        }
-        Serial.printf("errorLine: [%s]\n", errorLine.c_str());
+    run_timers(ctx);
 
-        if (errorLine != "") {
-            uint8_t errorLineNumber = errorLine.toInt();
-            const char *errorScript = nth_strchr(script, '\n', errorLineNumber - 1);
-            Serial.printf("%.80s\n\n", errorScript);
-            tft.printf("%.80s\n\n", errorScript);
+    LongPress = false;
+    if (JS_IsException(val)) { js_fatal_error_handler(ctx); }
 
-            if (strstr(errorScript, "let ")) {
-                Serial.println("let is not supported, change it to var");
-                tft.println("let is not supported, change it to var");
-            }
-        }
-
-        delay(500);
-        while (!check(AnyKeyPress)) { vTaskDelay(50 / portTICK_PERIOD_MS); }
-    } else {
-        duk_uint_t resultType = duk_get_type_mask(ctx, -1);
-        if (resultType & (DUK_TYPE_MASK_STRING | DUK_TYPE_MASK_NUMBER)) {
-            printf("Script ran succesfully, result is: %s\n", duk_safe_to_string(ctx, -1));
-        } else {
-            printf("Script ran succesfully");
-        }
-    }
+    // Clean up.
     free((char *)script);
     script = NULL;
     free((char *)scriptDirpath);
     scriptDirpath = NULL;
     free((char *)scriptName);
     scriptName = NULL;
-    duk_pop(ctx);
 
-    // Clean up.
-    duk_destroy_heap(ctx);
+    js_timers_deinit(ctx);
+    JS_FreeContext(ctx);
+    free(mem_buf);
 
-    clearDisplayModuleData();
+    printMemoryUsage("deinit interpreter");
 
-    // delay(1000);
-    interpreter_start = false;
+    // TODO: if backgroud app implemented, store in ctx and set if on foreground/background
+
+    interpreter_state = -1;
     vTaskDelete(NULL);
     return;
 }
 
-// function to start the JS Interpreterm choosinng the file, processing and
-// start
+void startInterpreterTask() {
+    if (interpreterTaskHandler != NULL) {
+        log_w("Interpreter task already running");
+        interpreter_state = 1;
+        return;
+    }
+
+    xTaskCreateUniversal(
+        interpreterHandler,          // Task function
+        "interpreterHandler",        // Task Name
+        INTERPRETER_TASK_STACK_SIZE, // Stack size
+        NULL,                        // Task parameters
+        2,                           // Task priority (0 to 3), loopTask has priority 2.
+        &interpreterTaskHandler,     // Task handle
+        ARDUINO_RUNNING_CORE         // run on core the same core as loop task
+    );
+}
+
 void run_bjs_script() {
     String filename;
     FS *fs = &LittleFS;
@@ -179,185 +119,178 @@ void run_bjs_script() {
         loopOptions(options);
     }
     filename = loopSD(*fs, true, "BJS|JS");
-    script = readBigFile(*fs, filename);
-    if (script == NULL) { return; }
-
-    returnToMenu = true;
-    interpreter_start = true;
-
-    // To stop the script, press Prev and Next together for a few seconds
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (filename == "") { return; }
+    run_bjs_script_headless(*fs, filename);
 }
 
 bool run_bjs_script_headless(char *code) {
     script = code;
     if (script == NULL) { return false; }
-    scriptDirpath = NULL;
-    scriptName = NULL;
+    scriptDirpath = strdup("/scripts");
+    scriptName = strdup("index.js");
+
     returnToMenu = true;
-    interpreter_start = true;
+    interpreter_state = 1;
+    startInterpreterTask();
     return true;
 }
 
 bool run_bjs_script_headless(FS fs, String filename) {
-    script = readBigFile(fs, filename);
+    script = readBigFile(&fs, filename);
     if (script == NULL) { return false; }
-    const char *sName = filename.substring(0, filename.lastIndexOf('/')).c_str();
-    const char *sDirpath = filename.substring(filename.lastIndexOf('/') + 1).c_str();
-    scriptDirpath = strdup(sDirpath);
-    scriptName = strdup(sName);
+
+    int slash = filename.lastIndexOf('/');
+    scriptName = strdup(filename.c_str() + slash + 1);
+    scriptDirpath = strndup(filename.c_str(), slash);
     returnToMenu = true;
-    interpreter_start = true;
+    interpreter_state = 1;
+    startInterpreterTask();
     return true;
 }
 
-const char *nth_strchr(const char *s, char c, int8_t n) {
-    const char *nth = s;
-    if (c == '\0' || n < 1) return NULL;
+String getScriptsFolder(FS *&fs) {
+    String folder;
+    String possibleFolders[] = {"/scripts", "/BruceScripts", "/BruceJS"};
+    int listSize = sizeof(possibleFolders) / sizeof(possibleFolders[0]);
 
-    for (int i = 0; i < n; i++) {
-        if ((nth = strchr(nth, c)) == 0) break;
-        nth++;
+    for (int i = 0; i < listSize; i++) {
+        if (SD.exists(possibleFolders[i])) {
+            fs = &SD;
+            return possibleFolders[i];
+        }
+        if (LittleFS.exists(possibleFolders[i])) {
+            fs = &LittleFS;
+            return possibleFolders[i];
+        }
     }
-
-    return nth;
+    return "";
 }
 
-void *ps_alloc_function(void *udata, duk_size_t size) {
-    void *res;
-    DUK_UNREF(udata);
-    res = ps_malloc(size);
-    return res;
-}
+std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupScript, int rememberedIndex) {
+    std::vector<Option> opt = {};
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    FS *fs;
+    String folder;
 
-void *ps_realloc_function(void *udata, void *ptr, duk_size_t newsize) {
-    void *res;
-    DUK_UNREF(udata);
-    res = ps_realloc(ptr, newsize);
-    return res;
-}
-
-void ps_free_function(void *udata, void *ptr) {
-    DUK_UNREF(udata);
-    DUK_ANSI_FREE(ptr);
-}
-
-void js_fatal_error_handler(void *udata, const char *msg) {
-    (void)udata;
-    tft.setTextSize(FM);
-    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.drawCentreString("Error", tftWidth / 2, 10, 1);
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.setCursor(0, 33);
-
-    tft.printf("JS FATAL ERROR: %s\n", (msg != NULL ? msg : "no message"));
-    Serial.printf("JS FATAL ERROR: %s\n", (msg != NULL ? msg : "no message"));
-    Serial.flush();
-
-    delay(500);
-    while (!check(AnyKeyPress)) vTaskDelay(50 / portTICK_PERIOD_MS);
-    // We need to restart esp32 after fatal error
-    abort();
-}
-
-/* 2FIX: not working
-// terminate the script
-duk_ret_t native_exit(duk_context *ctx) {
-  duk_error(ctx, DUK_ERR_ERROR, "Script exited");
-  interpreter_start=false;
-  return 0;
-}
-*/
-
-duk_ret_t native_require(duk_context *ctx) {
-    duk_idx_t obj_idx = duk_push_object(ctx);
-
-    if (!duk_is_string(ctx, 0)) { return 1; }
-    String filepath = duk_to_string(ctx, 0);
-
-    if (filepath == "audio") {
-        putPropAudioFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "badusb") {
-        putPropBadUSBFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "blebeacon") {
-
-    } else if (filepath == "dialog" || filepath == "gui") {
-        putPropDialogFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "display") {
-        putPropDisplayFunctions(ctx, obj_idx, 0);
-
-    } else if (filepath == "device" || filepath == "flipper") {
-        putPropDeviceFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "gpio") {
-        putPropGPIOFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "i2c") {
-        putPropI2CFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "http") {
-        // TODO: Make the WebServer API compatible with the Node.js API
-        // The more compatible we are, the more Node.js scripts can run on Bruce
-        // MEMO: We need to implement an event loop so the WebServer can run:
-        // https://github.com/svaarala/duktape/tree/master/examples/eventloop
-
-    } else if (filepath == "ir") {
-        putPropIRFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "keyboard" || filepath == "input") {
-        putPropKeyboardFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "math") {
-        putPropMathFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "notification") {
-        putPropNotificationFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "serial") {
-        putPropSerialFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "storage") {
-        putPropStorageFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "subghz") {
-        putPropSubGHzFunctions(ctx, obj_idx, 0);
-    } else if (filepath == "wifi") {
-        putPropWiFiFunctions(ctx, obj_idx, 0);
+    if (currentPath == "") {
+        folder = getScriptsFolder(fs);
+        if (folder == "") return opt; // did not find
     } else {
-        FS *fs = NULL;
-        if (SD.exists(filepath)) fs = &SD;
-        else if (LittleFS.exists(filepath)) fs = &LittleFS;
-        if (fs == NULL) { return 1; }
-
-        const char *requiredScript = readBigFile(*fs, filepath);
-        if (requiredScript == NULL) { return 1; }
-
-        duk_push_string(ctx, "(function(){exports={};module={exports:exports};\n");
-        duk_push_string(ctx, requiredScript);
-        duk_push_string(ctx, "\n})");
-        duk_concat(ctx, 3);
-
-        duk_int_t pcall_rc = duk_pcompile(ctx, DUK_COMPILE_EVAL);
-        if (pcall_rc != DUK_EXEC_SUCCESS) { return 1; }
-
-        pcall_rc = duk_pcall(ctx, 1);
-        if (pcall_rc == DUK_EXEC_SUCCESS) {
-            duk_get_prop_string(ctx, -1, "exports");
-            duk_compact(ctx, -1);
+        folder = currentPath;
+        // Determine filesystem based on path
+        if (currentPath.startsWith("/")) {
+            fs = &LittleFS;
+            if (SD.exists(currentPath)) { fs = &SD; }
         }
     }
 
-    return 1;
-}
+    File root = fs->open(folder);
+    if (!root || !root.isDirectory()) return opt; // not a dir
 
-duk_ret_t native_assert(duk_context *ctx) {
-    if (duk_get_boolean_default(ctx, 0, false)) {
-        duk_push_boolean(ctx, true);
-        return 1;
+    while (true) {
+        bool isDir;
+        String fullPath = root.getNextFileName(&isDir);
+        String nameOnly = fullPath.substring(fullPath.lastIndexOf("/") + 1);
+        if (fullPath == "") { break; }
+        // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
+
+        if (isDir) {
+            // Skip hidden folders (starting with .)
+            if (nameOnly.startsWith(".")) continue;
+
+            // Add folder option
+            String folderTitle = "[ " + nameOnly + " ]";
+            opt.push_back({folderTitle.c_str(), [=]() {
+                               auto subOptions = getScriptsOptionsList(fullPath, saveStartupScript);
+                               if (subOptions.size() > 0) {
+                                   String displayPath = fullPath;
+                                   int secondSlash = displayPath.indexOf('/', 1);
+                                   if (secondSlash >= 0) {
+                                       displayPath = displayPath.substring(secondSlash + 1);
+                                   }
+                                   loopOptions(subOptions, MENU_TYPE_SUBMENU, displayPath.c_str());
+                               }
+                           }});
+        } else {
+            // Handle files
+            int dotIndex = nameOnly.lastIndexOf(".");
+            String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
+            ext.toUpperCase();
+            if (ext != "JS" && ext != "BJS") continue;
+
+            String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
+            opt.push_back({entry_title.c_str(), [=]() {
+                               if (saveStartupScript) {
+                                   bruceConfig.startupAppJSInterpreterFile = fullPath;
+                                   bruceConfig.saveFile();
+                               } else {
+                                   Serial.printf("Running script: %s\n", fullPath.c_str());
+                                   run_bjs_script_headless(*fs, fullPath);
+                               }
+                           }});
+        }
     }
-    return duk_error(ctx, DUK_ERR_ERROR, "Assertion failed: %s", duk_get_string_default(ctx, 1, "assert"));
-}
 
-// Deprecated
-duk_ret_t native_load(duk_context *ctx) {
-    free((char *)script);
-    free((char *)scriptDirpath);
-    free((char *)scriptName);
-    script = strdup(duk_to_string(ctx, 0));
-    scriptDirpath = NULL;
-    scriptName = NULL;
-    return 0;
+    root.close();
+
+    // Sort options
+    auto sortStart = opt.begin();
+    std::sort(sortStart, opt.end(), [](const Option &a, const Option &b) {
+        // Check if items start with '[' (folders)
+        bool aIsFolder = a.label[0] == '[';
+        bool bIsFolder = b.label[0] == '[';
+
+        // If one is a folder and the other isn't, folder comes first
+        if (aIsFolder != bIsFolder) {
+            return aIsFolder; // true if a is folder, false if b is folder
+        }
+
+        // If both are the same type, sort alphabetically
+        return strcasecmp(a.label.c_str(), b.label.c_str()) < 0;
+    });
+
+    // Add back navigation if we're in a subdirectory
+    if (currentPath != "" && currentPath != getScriptsFolder(fs)) {
+        opt.push_back(
+            {"< Back", [=]() {
+                 // Calculate parent directory
+                 String parentPath = currentPath;
+                 int lastSlash = parentPath.lastIndexOf('/');
+                 if (lastSlash > 0) {
+                     parentPath = parentPath.substring(0, lastSlash);
+                 } else {
+                     // If we can't go up, go to scripts root
+                     FS *parentFs;
+                     parentPath = getScriptsFolder(parentFs);
+                 }
+
+                 auto parentOptions = getScriptsOptionsList(parentPath, saveStartupScript);
+                 if (parentOptions.size() > 0) {
+                     String displayPath = parentPath;
+                     int secondSlash = displayPath.indexOf('/', 1);
+                     if (secondSlash >= 0) { displayPath = displayPath.substring(secondSlash + 1); }
+
+                     // Find the folder we just came from to restore selection
+                     int restoreIndex = 0;
+                     String currentFolderName = currentPath.substring(currentPath.lastIndexOf('/') + 1);
+                     String searchTitle = "[ " + currentFolderName + " ]";
+
+                     for (int i = 0; i < parentOptions.size(); i++) {
+                         if (parentOptions[i].label == searchTitle) {
+                             restoreIndex = i;
+                             break;
+                         }
+                     }
+
+                     loopOptions(parentOptions, MENU_TYPE_SUBMENU, displayPath.c_str(), restoreIndex);
+                 }
+             }}
+        );
+    }
+
+#endif
+    return opt;
 }
 
 #endif

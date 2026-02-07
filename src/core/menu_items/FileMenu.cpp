@@ -18,15 +18,6 @@ void FileMenu::optionsMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Files");
 }
-void FileMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.files),
-        0,
-        imgCenterY,
-        true
-    );
-}
 void FileMenu::drawIcon(float scale) {
     clearIconArea();
     int iconW = scale * 32;

@@ -18,6 +18,7 @@ jobs:
       matrix:
         board:
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
+          - { env: "m5stack-sticks3",                 family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
           - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
@@ -33,10 +34,14 @@ jobs:
           - { env: "CYD-2432W328C",                   family: "ESP32",}
           - { env: "CYD-2432W328C_2",                 family: "ESP32",}
           - { env: "CYD-2432W328R-or-S024R",          family: "ESP32",}
+          - { env: "CYD-3248S035R",                   family: "ESP32",}
+          - { env: "CYD-3248S035C",                   family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328R-or-S024R", family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432S028",           family: "ESP32",}
           - { env: "LAUNCHER_CYD-2USB",               family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328C",          family: "ESP32",}
+          - { env: "LAUNCHER_CYD-3248S035R",          family: "ESP32",}
+          # - { env: "LAUNCHER_CYD-3248S035C",          family: "ESP32",}
           - { env: "lilygo-t-embed-cc1101",           family: "ESP32-S3",}
           - { env: "lilygo-t-embed",                  family: "ESP32-S3",}
           - { env: "lilygo-t-deck",                   family: "ESP32-S3",}
@@ -51,6 +56,7 @@ jobs:
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
+          - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
           - { env: "Marauder-Mini",                   family: "ESP32",}
@@ -74,6 +80,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Install build deps (multilib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
 
       - name: Cache pip
         uses: actions/cache@v4

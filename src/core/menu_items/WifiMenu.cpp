@@ -16,7 +16,10 @@
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/wifi_atks.h"
 
+
+
 #ifndef LITE_VERSION
+#include "modules/wifi/wifi_recover.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
 #endif
 
@@ -74,9 +77,9 @@ void WifiMenu::optionsMenu() {
                            EvilPortal();
                        }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
+#ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
-#ifndef LITE_VERSION
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffers", [this]() {
@@ -104,7 +107,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
+    options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
+    
     options.push_back({"Config", [this]() { configMenu(); }});
 
     addOptionToMainMenu();
@@ -152,11 +157,6 @@ void WifiMenu::configMenu() {
     loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Config");
 }
 
-void WifiMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.wifi), 0, imgCenterY, true
-    );
-}
 void WifiMenu::drawIcon(float scale) {
     clearIconArea();
     int deltaY = scale * 20;

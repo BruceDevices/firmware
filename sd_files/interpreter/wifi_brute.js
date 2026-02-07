@@ -44,12 +44,12 @@ var passwords_to_try_arr = [];
 
 while(true)
 {
+  var menu_options = {};
+  menu_options["Select AP"] = "scan";
+  menu_options["Load dict"] = "load";
+  menu_options["Start attack"] = "attack";
 
-  var choice = dialogChoice({
-    ["Select AP"]: "scan",
-    ["Load dict"]: "load",
-    ["Start attack"]: "attack"
-  });
+  var choice = dialogChoice(menu_options);
 
   if(choice=="") {
     break;  // quit

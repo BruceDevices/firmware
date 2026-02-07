@@ -35,10 +35,13 @@ public:
 
     const char *filepath = "/bruce.conf";
 
-    // Settings
+    //  Settings
     int dimmerSet = 10;
     int bright = 100;
+    bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;
+    bool dst = false;
+    bool clock24hr = true;
     int soundEnabled = 1;
     int soundVolume = 100;
     int wifiAtStartup = 0;
@@ -76,11 +79,13 @@ public:
 
     // Misc
     String startupApp = "";
+    String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
     int devMode = 0;
     int colorInverted = 1;
     int badUSBBLEKeyboardLayout = 0;
-    int badUSBBLEKeyDelay = 50;
+    uint16_t badUSBBLEKeyDelay = 10;
+    bool badUSBBLEShowOutput = true;
 
     std::vector<String> disabledMenus = {};
 
@@ -114,8 +119,11 @@ public:
     void validateDimmerValue();
     void setBright(uint8_t value);
     void validateBrightValue();
+    void setAutomaticTimeUpdateViaNTP(bool value);
     void setTmz(float value);
     void validateTmzValue();
+    void setDST(bool value);
+    void setClock24Hr(bool value);
     void setSoundEnabled(int value);
     void setSoundVolume(int value);
     void validateSoundEnabledValue();
@@ -164,6 +172,7 @@ public:
 
     // Misc
     void setStartupApp(String value);
+    void setStartupAppJSInterpreterFile(String value);
     void setWigleBasicToken(String value);
     void setDevMode(int value);
     void validateDevModeValue();
@@ -171,8 +180,9 @@ public:
     void validateColorInverted();
     void setBadUSBBLEKeyboardLayout(int value);
     void validateBadUSBBLEKeyboardLayout();
-    void setBadUSBBLEKeyDelay(int value);
+    void setBadUSBBLEKeyDelay(uint16_t value);
     void validateBadUSBBLEKeyDelay();
+    void setBadUSBBLEShowOutput(bool value);
     void addDisabledMenu(String value);
     // TODO: removeDisabledMenu(String value);
 

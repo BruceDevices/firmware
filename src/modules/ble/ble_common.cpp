@@ -6,14 +6,12 @@
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_TX_UUID "1bc68efe-f3e3-11e9-81b4-2a2ae2dbcce4"
 
+BLEScan *pBLEScan = nullptr;
+int scanTime = SCANTIME; // In seconds
+
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
 #endif
-
-#define SCANTIME 5
-#define SCANTYPE ACTIVE
-#define SCAN_INT 100
-#define SCAN_WINDOW 99
 
 #define ENDIAN_CHANGE_U16(x) ((((x) & 0xFF00) >> 8) + (((x) & 0xFF) << 8))
 
@@ -36,9 +34,6 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     NimBLEAttValue data;
     void onWrite(NimBLECharacteristic *pCharacteristic) { data = pCharacteristic->getValue(); }
 };
-
-int scanTime = SCANTIME; // In seconds
-BLEScan *pBLEScan;
 
 uint8_t sta_mac[6];
 char strID[18];

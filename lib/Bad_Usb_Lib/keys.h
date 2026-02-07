@@ -32,8 +32,8 @@ extern const uint8_t KeyboardLayout_si_SI[];
 #define KEY_RIGHT_ARROW 0xD7
 #define KEY_MENU 0xED //  "Keyboard Application" in USB standard
 #define KEY_SPACE 0x20
-#define KEYBACKSPACE 0xB2 // changed from KEY_BACKSPACE due to compatibility to cardputer keyboard
-#define KEYTAB 0xB3       // changed from KEY_BACKSPACE due to compatibility to cardputer keyboard
+#define KEYBACKSPACE 0xB2 // changed from KEY_BACKSPACE due to compatibility with Cardputer keyboard
+#define KEYTAB 0xB3       // changed from KEY_TAB due to compatibility with Cardputer keyboard
 #define KEY_RETURN 0xB0
 #define KEY_ESC 0xB1
 #define KEY_INSERT 0xD1
@@ -71,6 +71,7 @@ extern const uint8_t KeyboardLayout_si_SI[];
 #define KEY_PRINT_SCREEN 0xCE
 #define KEY_SCROLL_LOCK 0xCF
 #define KEY_PAUSE 0xD0
+#define KEYFN 0xFE // Changed from KEY_FN to KEYFN due to compatibility with T-LoRa Pager keyboard
 
 #define LED_NUMLOCK 0x01
 #define LED_CAPSLOCK 0x02

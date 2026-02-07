@@ -4,10 +4,19 @@
 #include <interface.h>
 
 #if defined(HAS_CAPACITIVE_TOUCH)
+#if defined(TOUCH_GT911_I2C)
+#include "TouchDrvGT911.hpp"
+TouchDrvGT911 touch;
+struct TouchPointPro {
+    int16_t x = 0;
+    int16_t y = 0;
+};
+#else
 #include "CYD28_TouchscreenC.h"
 #define CYD28_DISPLAY_HOR_RES_MAX 240
 #define CYD28_DISPLAY_VER_RES_MAX 320
 CYD28_TouchC touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
+#endif
 #elif defined(USE_TFT_eSPI_TOUCH)
 #define XPT2046_CS TOUCH_CS
 #else
@@ -34,11 +43,19 @@ void _setup_gpio() {
     digitalWrite(XPT2046_CS, HIGH);
 #endif
 
+#if defined(TOUCH_GT911_I2C)
+    pinMode(BOARD_TOUCH_INT, INPUT);
+    touch.setPins(-1, BOARD_TOUCH_INT);
+    if (!touch.begin(Wire, GT911_SLAVE_ADDRESS_L, GT911_I2C_CONFIG_SDA_IO_NUM, GT911_I2C_CONFIG_SCL_IO_NUM)) {
+        Serial.println("Failed to find GT911 - check your wiring!");
+    }
+#else
 #if !defined(USE_TFT_eSPI_TOUCH) // Use libraries
     if (!touch.begin()) {
         Serial.println("Touch IC not Started");
         log_i("Touch IC not Started");
     } else log_i("Touch IC Started");
+#endif
 #endif
 
     bruceConfig.colorInverted = 0;
@@ -128,10 +145,58 @@ void InputHandler(void) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             _IH_touched = false;
+#elif defined(TOUCH_GT911_I2C)
+        static unsigned long tm = millis();
+        TouchPointPro t;
+        uint8_t touched = 0;
+        uint8_t rot = 5;
+
+        if (rot != bruceConfigPins.rotation) {
+            if (bruceConfigPins.rotation == 1) {
+                touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
+                touch.setSwapXY(true);
+                touch.setMirrorXY(false, true);
+            }
+            if (bruceConfigPins.rotation == 3) {
+                touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
+                touch.setSwapXY(true);
+                touch.setMirrorXY(true, false);
+            }
+            if (bruceConfigPins.rotation == 0) {
+                touch.setMaxCoordinates(TFT_WIDTH, TFT_HEIGHT);
+                touch.setSwapXY(false);
+                touch.setMirrorXY(false, false);
+            }
+            if (bruceConfigPins.rotation == 2) {
+                touch.setMaxCoordinates(TFT_WIDTH, TFT_HEIGHT);
+                touch.setSwapXY(false);
+                touch.setMirrorXY(true, true);
+            }
+            rot = bruceConfigPins.rotation;
+        }
+        // Track touch state to prevent double events on press/release
+        static bool lastTouchState = false;
+        static unsigned long lastTouchTime = 0;
+
+        touched = touch.getPoint(&t.x, &t.y);
+        bool currentTouchState = touched > 0;
+
+        // Only process new touch presses with debouncing
+        if (currentTouchState && !lastTouchState && (millis() - lastTouchTime) > 100) {
+            // This is a genuine new touch press
+            lastTouchTime = millis();
+        } else if (!currentTouchState || lastTouchState) {
+            // Touch release or continuing touch - ignore
+            touched = 0;
+        }
+        lastTouchState = currentTouchState;
+        if (((millis() - tm) > 190 || LongPress) && touched) {
+            tm = millis();
 #else
         if (touch.touched()) {
             auto t = touch.getPointScaled();
 #endif
+#if !defined(TOUCH_GT911_I2C)
             // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d",t.x, t.y);
             if (bruceConfigPins.rotation == 3) {
                 t.y = (tftHeight + 20) - t.y;
@@ -147,7 +212,8 @@ void InputHandler(void) {
                 t.x = t.y;
                 t.y = (tftHeight + 20) - tmp;
             }
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n",t.x, t.y);
+#endif
+            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n", t.x, t.y);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else goto END;
@@ -176,6 +242,6 @@ void powerOff() {
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

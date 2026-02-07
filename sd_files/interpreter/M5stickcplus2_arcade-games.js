@@ -12,7 +12,7 @@ var getPrevPress = keyboardApi.getPrevPress;
 var getSelPress = keyboardApi.getSelPress;
 var getNextPress = keyboardApi.getNextPress;
 
-var WIDTH  = 240
+var WIDTH = 240
 var HEIGHT = 135;
 var BLACK = 0;
 var WHITE = 16777215;
@@ -55,6 +55,7 @@ var menuLastSelState = false;
 var mainMenuScroll = 0;
 var MENU_VISIBLE_ITEMS = 5;
 var menuOptions = ["BREAKOUT", "SNAKE", "SPACE SHOOTER", "SLOTS", "FLAPPY BIRD", "BLACKJACK", "QUIT"];
+var menuLastSelection;
 function drawMainMenu() {
     if (!mainMenuStaticDrawn || menuSelection !== menuLastSelection) {
         fillScreen(BLACK);
@@ -276,8 +277,8 @@ function breakoutNextLevel() {
     breakoutState = BREAKOUT_STATE_NEXT_LEVEL;
     breakoutStaticDrawn = false;
     breakoutLastStaticDrawnState = -1;
-    tone(700, 200);
-    tone(900, 200);
+    audio.tone(700, 200);
+    audio.tone(900, 200);
 }
 function drawBreakout() {
     switch (breakoutState) {
@@ -372,8 +373,8 @@ function drawBreakoutGameOverScreen() {
         drawString("PREV to Menu", 84, 115);
         breakoutStaticDrawn = true;
         breakoutLastStaticDrawnState = breakoutState;
-        tone(400, 300);
-        tone(300, 300);
+        audio.tone(400, 300);
+        audio.tone(300, 300);
     }
 }
 function drawBreakoutWinScreen() {
@@ -390,8 +391,8 @@ function drawBreakoutWinScreen() {
         drawString("PREV to Menu", WIDTH / 2 - 30, 115);
         breakoutStaticDrawn = true;
         breakoutLastStaticDrawnState = breakoutState;
-        tone(800, 200);
-        tone(1000, 200);
+        audio.tone(800, 200);
+        audio.tone(1000, 200);
     }
 }
 function drawBreakoutNextLevelScreen() {
@@ -424,20 +425,20 @@ function updateBreakout() {
     ball.y += ball.speedY;
     if (ball.x - ball.size / 2 < 0 || ball.x + ball.size / 2 > WIDTH) {
         ball.speedX = -ball.speedX;
-        tone(500, 100);
+        audio.tone(500, 100);
     }
     if (ball.y - ball.size / 2 < 0) {
         ball.speedY = -ball.speedY;
-        tone(500, 100);
+        audio.tone(500, 100);
     }
     if (ball.y - ball.size / 2 < 20) {
         ball.y = 20 + ball.size / 2;
         ball.speedY = Math.abs(ball.speedY);
-        tone(500, 100);
+        audio.tone(500, 100);
     }
     if (ball.y + ball.size / 2 > HEIGHT) {
         breakoutLives--;
-        tone(200, 300);
+        audio.tone(200, 300);
         if (breakoutLives <= 0) breakoutState = BREAKOUT_STATE_GAME_OVER;
         else ball.stuck = true;
         return;
@@ -446,7 +447,7 @@ function updateBreakout() {
         var hitPos = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
         ball.speedX = hitPos * 4;
         ball.speedY = -Math.abs(ball.speedY) * 1.05;
-        tone(600, 150);
+        audio.tone(600, 150);
     }
     for (var i = 0; i < bricks.length; i++) {
         if (!bricks[i].hit && ball.x + ball.size / 2 > bricks[i].x && ball.x - ball.size / 2 < bricks[i].x + bricks[i].width && ball.y + ball.size / 2 > bricks[i].y && ball.y - ball.size / 2 < bricks[i].y + bricks[i].height) {
@@ -455,10 +456,10 @@ function updateBreakout() {
             if (bricks[i].strength <= 0) {
                 bricks[i].hit = true;
                 breakoutScore += 10 * breakoutLevel;
-                tone(700, 100);
+                audio.tone(700, 100);
             } else {
                 breakoutScore += 5;
-                tone(650, 100);
+                audio.tone(650, 100);
             }
             var overlapLeft = ball.x + ball.size / 2 - bricks[i].x;
             var overlapRight = bricks[i].x + bricks[i].width - (ball.x - ball.size / 2);
@@ -677,7 +678,7 @@ function updateSnake() {
 
             placeFood();
 
-            tone(600, 150);
+            audio.tone(600, 150);
         } else {
             var tail = snake.pop();
             snakeErasePos = { x: tail.x, y: tail.y };
@@ -830,7 +831,7 @@ function drawSpaceGameplay() {
     drawExplosions();
     drawPowerups();
     if (player.x !== player.lastX || player.y !== player.lastY) {
-        drawFillRect(player.lastX - player.width/2 - 6, player.lastY - 5, player.width + 12, player.height + 15, BLACK);
+        drawFillRect(player.lastX - player.width / 2 - 6, player.lastY - 5, player.width + 12, player.height + 15, BLACK);
         player.lastX = player.x;
         player.lastY = player.y;
     }
@@ -838,8 +839,8 @@ function drawSpaceGameplay() {
     drawSpaceHUD();
 }
 function drawPlayer(x, y, weaponLevel) {
-    drawFillRect(x - player.width/2, y, player.width, player.height, BLUE);
-    drawFillRect(x - player.width/2 + 3, y + 3, player.width - 6, player.height - 8, CYAN);
+    drawFillRect(x - player.width / 2, y, player.width, player.height, BLUE);
+    drawFillRect(x - player.width / 2 + 3, y + 3, player.width - 6, player.height - 8, CYAN);
     drawFillRect(x - 4, y - 5, 8, 5, WHITE);
     if (spaceFrameCounter % 6 < 3) {
         drawFillRect(x - 6, y + player.height, 12, 4, YELLOW);
@@ -849,16 +850,16 @@ function drawPlayer(x, y, weaponLevel) {
         drawFillRect(x - 3, y + player.height + 3, 6, 2, YELLOW);
     }
     if (weaponLevel > 1) {
-        drawFillRect(x - player.width/2 - 4, y + 3, 4, 4, YELLOW);
-        drawFillRect(x + player.width/2, y + 3, 4, 4, YELLOW);
-        drawFillRect(x - player.width/2 - 2, y + 5, 2, 6, YELLOW);
-        drawFillRect(x + player.width/2 + 1, y + 5, 2, 6, YELLOW);
+        drawFillRect(x - player.width / 2 - 4, y + 3, 4, 4, YELLOW);
+        drawFillRect(x + player.width / 2, y + 3, 4, 4, YELLOW);
+        drawFillRect(x - player.width / 2 - 2, y + 5, 2, 6, YELLOW);
+        drawFillRect(x + player.width / 2 + 1, y + 5, 2, 6, YELLOW);
     }
     if (weaponLevel > 2) {
-        drawFillRect(x - player.width/2 - 4, y + 10, 4, 4, YELLOW);
-        drawFillRect(x + player.width/2, y + 10, 4, 4, YELLOW);
+        drawFillRect(x - player.width / 2 - 4, y + 10, 4, 4, YELLOW);
+        drawFillRect(x + player.width / 2, y + 10, 4, 4, YELLOW);
     }
-    if (player.invincible && spaceFrameCounter % 6 < 3) drawRect(x - player.width/2 - 2, y - 2, player.width + 4, player.height + 4, WHITE);
+    if (player.invincible && spaceFrameCounter % 6 < 3) drawRect(x - player.width / 2 - 2, y - 2, player.width + 4, player.height + 4, WHITE);
 }
 function drawEnemies() {
     for (var i = 0; i < enemies.length; i++) {
@@ -955,7 +956,10 @@ function updateBullets() {
     for (var i = 0; i < bullets.length; i++) {
         if (bullets[i] && bullets[i].active) {
             bullets[i].y -= bullets[i].speed;
-            if (bullets[i].y + bullets[i].height < 0) bullets[i].active = false;
+            if (bullets[i].y + bullets[i].height < 0) {
+                bullets.splice(i, 1);
+                return;
+            }
         }
     }
 }
@@ -966,7 +970,8 @@ function updateEnemies() {
             enemies[i].y += enemies[i].type.speed;
             if (enemies[i].y > HEIGHT) {
                 drawFillRect(enemies[i].lastX - 5, enemies[i].lastY - 5, enemies[i].width + 10, enemies[i].height + 10, BLACK);
-                enemies[i].active = false;
+                enemies.splice(i, 1);
+                return;
             }
             if (enemies[i].type.shootRate > 0 && spaceFrameCounter % enemies[i].type.shootRate === 0) spawnEnemyBullet(enemies[i].x + enemies[i].width / 2, enemies[i].y + enemies[i].height);
         }
@@ -987,7 +992,10 @@ function updateEnemyBullets() {
     for (var i = 0; i < enemyBullets.length; i++) {
         if (enemyBullets[i] && enemyBullets[i].active) {
             enemyBullets[i].y += enemyBullets[i].speed;
-            if (enemyBullets[i].y > HEIGHT) enemyBullets[i].active = false;
+            if (enemyBullets[i].y > HEIGHT) {
+                enemyBullets.splice(i, 1);
+                return;
+            }
         }
     }
 }
@@ -996,8 +1004,9 @@ function updateExplosions() {
         if (explosions[i] && explosions[i].active && explosions[i].life > 0) {
             explosions[i].life--;
             if (explosions[i].life <= 0) {
-                explosions[i].active = false;
                 drawFillRect(explosions[i].x - explosions[i].size / 2, explosions[i].y - explosions[i].size / 2, explosions[i].size, explosions[i].size, BLACK);
+                explosions.splice(i, 1);
+                return;
             }
         }
     }
@@ -1006,7 +1015,10 @@ function updatePowerups() {
     for (var i = 0; i < powerups.length; i++) {
         if (powerups[i] && powerups[i].active) {
             powerups[i].y += 1;
-            if (powerups[i].y > HEIGHT) powerups[i].active = false;
+            if (powerups[i].y > HEIGHT) {
+                powerups.splice(i, 1);
+                return;
+            }
         }
     }
 }
@@ -1040,6 +1052,7 @@ function spawnPowerup(x, y) {
     }
 }
 function fireBullet() {
+    if (bullets.length >= 10) return;
     bullets.push({ x: player.x, y: player.y - player.height / 2, width: BULLET_SIZE, height: BULLET_SIZE, speed: 5, active: true, lastX: player.x, lastY: player.y - player.height / 2 });
 }
 function checkCollisions() {
@@ -1049,18 +1062,21 @@ function checkCollisions() {
         for (var j = 0; j < enemies.length; j++) {
             if (!enemies[j] || !enemies[j].active) continue;
             var enemy = enemies[j];
-            if (checkCollision(bullet.x - bullet.width/2, bullet.y - bullet.height/2, bullet.width, bullet.height, enemy.x, enemy.y, enemy.width, enemy.height)) {
+            if (checkCollision(bullet.x - bullet.width / 2, bullet.y - bullet.height / 2, bullet.width, bullet.height, enemy.x, enemy.y, enemy.width, enemy.height)) {
                 bullet.active = false;
                 drawFillRect(bullet.lastX - bullet.width / 2, bullet.lastY, bullet.width, bullet.height + 2, BLACK);
                 enemy.active = false;
                 drawFillRect(enemy.lastX - 5, enemy.lastY - 5, enemy.width + 10, enemy.height + 10, BLACK);
                 spaceScore += enemy.type.points;
                 killCount++;
-                createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
                 spawnPowerup(enemy.x, enemy.y);
+                enemies.splice(j, 1);
+                bullets.splice(i, 1);
+                return;
             }
         }
-        if (bossActive && boss && checkCollision(bullet.x - bullet.width/2, bullet.y - bullet.height/2, bullet.width, bullet.height, boss.x, boss.y, boss.width, boss.height)) {
+        if (bossActive && boss && checkCollision(bullet.x - bullet.width / 2, bullet.y - bullet.height / 2, bullet.width, bullet.height, boss.x, boss.y, boss.width, boss.height)) {
             bullet.active = false;
             drawFillRect(bullet.lastX - bullet.width / 2, bullet.lastY, bullet.width, bullet.height + 2, BLACK);
             boss.health--;
@@ -1068,23 +1084,25 @@ function checkCollisions() {
                 bossActive = false;
                 spaceScore += 500;
                 killCount += 5;
-                createExplosion(boss.x + boss.width/2, boss.y + boss.height/2);
+                createExplosion(boss.x + boss.width / 2, boss.y + boss.height / 2);
                 spaceLevelUp();
             }
+            bullets.splice(i, 1);
+            return;
         }
     }
     if (!player.invincible) {
         for (var j = 0; j < enemies.length; j++) {
             if (!enemies[j] || !enemies[j].active) continue;
             var enemy = enemies[j];
-            if (checkCollision(player.x - player.width/2, player.y, player.width, player.height, enemy.x, enemy.y, enemy.width, enemy.height)) {
+            if (checkCollision(player.x - player.width / 2, player.y, player.width, player.height, enemy.x, enemy.y, enemy.width, enemy.height)) {
                 enemy.active = false;
                 drawFillRect(enemy.lastX - 5, enemy.lastY - 5, enemy.width + 10, enemy.height + 10, BLACK);
                 player.lives--;
                 createExplosion(player.x, player.y + player.height, true);
                 player.invincible = true;
                 player.invincibleTime = 60;
-                tone(500, 200);
+                audio.tone(500, 200);
                 if (player.lives <= 0) {
                     spaceState = SPACE_STATE_GAME_OVER;
                     gameState = STATE_GAME_OVER;
@@ -1093,19 +1111,20 @@ function checkCollisions() {
                     if (spaceScore > spaceHighScore) spaceHighScore = spaceScore;
                     spaceStaticDrawn = false;
                 }
-                break;
+                enemies.splice(j, 1);
+                return;
             }
         }
         for (var j = 0; j < enemyBullets.length; j++) {
             if (!enemyBullets[j] || !enemyBullets[j].active) continue;
             var bullet = enemyBullets[j];
-            if (checkCollision(player.x - player.width/2, player.y, player.width, player.height, bullet.x - bullet.width/2, bullet.y, bullet.width, bullet.height)) {
+            if (checkCollision(player.x - player.width / 2, player.y, player.width, player.height, bullet.x - bullet.width / 2, bullet.y, bullet.width, bullet.height)) {
                 bullet.active = false;
                 player.lives--;
                 createExplosion(player.x, player.y + player.height, true);
                 player.invincible = true;
                 player.invincibleTime = 60;
-                tone(500, 200);
+                audio.tone(500, 200);
                 if (player.lives <= 0) {
                     spaceState = SPACE_STATE_GAME_OVER;
                     gameState = STATE_GAME_OVER;
@@ -1114,15 +1133,16 @@ function checkCollisions() {
                     if (spaceScore > spaceHighScore) spaceHighScore = spaceScore;
                     spaceStaticDrawn = false;
                 }
+                bullets.splice(i, 1);
                 break;
             }
         }
-        if (bossActive && boss && checkCollision(player.x - player.width/2, player.y, player.width, player.height, boss.x, boss.y, boss.width, boss.height)) {
+        if (bossActive && boss && checkCollision(player.x - player.width / 2, player.y, player.width, player.height, boss.x, boss.y, boss.width, boss.height)) {
             player.lives--;
             createExplosion(player.x, player.y + player.height, true);
             player.invincible = true;
             player.invincibleTime = 60;
-            tone(500, 200);
+            audio.tone(500, 200);
             if (player.lives <= 0) {
                 spaceState = SPACE_STATE_GAME_OVER;
                 gameState = STATE_GAME_OVER;
@@ -1136,7 +1156,7 @@ function checkCollisions() {
     for (var i = 0; i < powerups.length; i++) {
         if (!powerups[i] || !powerups[i].active) continue;
         var powerup = powerups[i];
-        if (checkCollision(player.x - player.width/2, player.y, player.width, player.height, powerup.x - powerup.width/2, powerup.y, powerup.width, powerup.height)) {
+        if (checkCollision(player.x - player.width / 2, player.y, player.width, player.height, powerup.x - powerup.width / 2, powerup.y, powerup.width, powerup.height)) {
             powerup.active = false;
             drawFillRect(powerup.lastX - powerup.width / 2 - 2, powerup.lastY - 2, powerup.width + 4, powerup.height + 4, BLACK);
             if (powerup.type.type === "health" && player.lives < 3) player.lives++;
@@ -1144,6 +1164,8 @@ function checkCollisions() {
                 player.weaponLevel++;
                 player.weaponTime = 300;
             }
+            powerups.splice(i, 1);
+            return;
         }
     }
     if (player.invincible) {
@@ -1173,7 +1195,7 @@ function createExplosion(x, y, isPlayerExplosion) {
         var explosion = { x: x, y: y, size: EXPLOSION_MAX_SIZE, active: true, life: 10 };
         if (isPlayerExplosion) explosion.size = 16;
         explosions.push(explosion);
-        tone(600, 150);
+        audio.tone(600, 150);
     }
 }
 function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
@@ -1286,7 +1308,7 @@ function drawSlotsPausedMenu() {
     }
 }
 function getWeightedRandom(weights) {
-    var totalWeight = weights.reduce(function(sum, w) { return sum + w; }, 0);
+    var totalWeight = weights.reduce(function (sum, w) { return sum + w; }, 0);
     var roll = Math.random() * totalWeight;
     var cumulative = 0;
     for (var i = 0; i < weights.length; i++) {
@@ -1311,7 +1333,7 @@ function updateSlots(selPressed) {
             slotMoney += bet * 40;
             slotMessage = "JACKPOT!";
             slotMessageTimer = 30;
-            tone(1000, 500);
+            audio.tone(1000, 500);
         } else if (slotReels[0] === slotReels[1] && slotReels[1] === slotReels[2]) {
             var multiplier;
             switch (slotReels[0]) {
@@ -1324,12 +1346,12 @@ function updateSlots(selPressed) {
             slotMoney += bet * multiplier;
             slotMessage = "WIN!";
             slotMessageTimer = 20;
-            tone(800, 300);
+            audio.tone(800, 300);
         } else if (slotReels[0] === slotReels[1] || slotReels[1] === slotReels[2]) {
             slotMoney += bet * 1;
             slotMessage = "Pair!";
             slotMessageTimer = 15;
-            tone(600, 200);
+            audio.tone(600, 200);
         }
         if (slotMoney <= 0) slotState = SLOT_STATE_GAME_OVER;
         slotStaticDrawn = false;
@@ -1486,7 +1508,7 @@ function updateFlappyBird() {
         prevGameState = STATE_FLAPPY_BIRD;
         gameState = STATE_GAME_OVER;
         if (!suppressGameOverSound) {
-            tone(400, 300); tone(300, 300);
+            audio.tone(400, 300); audio.tone(300, 300);
         }
         suppressGameOverSound = false;
         flappyState = FLAPPY_STATE_MENU;
@@ -1509,16 +1531,16 @@ function updateFlappyBird() {
         if (!pipes[i].passed && pipes[i].x + pipes[i].width < bird.x - BIRD_WIDTH / 2) {
             pipes[i].passed = true;
             flappyScore++;
-            tone(800, 100);
+            audio.tone(800, 100);
         }
         if (checkCollision(bird.x - BIRD_WIDTH / 2, bird.y - BIRD_HEIGHT / 2, BIRD_WIDTH, BIRD_HEIGHT,
             pipes[i].x, 0, pipes[i].width, pipes[i].y) ||
             checkCollision(bird.x - BIRD_WIDTH / 2, bird.y - BIRD_HEIGHT / 2, BIRD_WIDTH, BIRD_HEIGHT,
-            pipes[i].x, pipes[i].y + pipes[i].height, pipes[i].width, HEIGHT - pipes[i].y - pipes[i].height - GROUND_HEIGHT)) {
+                pipes[i].x, pipes[i].y + pipes[i].height, pipes[i].width, HEIGHT - pipes[i].y - pipes[i].height - GROUND_HEIGHT)) {
             prevGameState = STATE_FLAPPY_BIRD;
             gameState = STATE_GAME_OVER;
             if (!suppressGameOverSound) {
-                tone(400, 300);
+                audio.tone(400, 300);
             }
             suppressGameOverSound = false;
             flappyState = FLAPPY_STATE_MENU;
@@ -1699,23 +1721,23 @@ function determineWinner() {
     } else if (blackjack.playerBlackjack) {
         blackjack.playerMoney += Math.floor(blackjack.currentBet * 2.5);
         blackjack.resultMessage = "Blackjack! You Win!";
-        tone(800, 300);
+        audio.tone(800, 300);
     } else if (blackjack.dealerBlackjack) {
         blackjack.resultMessage = "Dealer Blackjack! You Lose!";
-        tone(500, 200);
+        audio.tone(500, 200);
     } else if (blackjack.playerBust) {
         blackjack.resultMessage = "Bust! You Lose!";
-        tone(500, 200);
+        audio.tone(500, 200);
     } else if (blackjack.dealerBust || playerValue > dealerValue) {
         blackjack.playerMoney += blackjack.currentBet * 2;
         blackjack.resultMessage = "You Win!";
-        tone(800, 300);
+        audio.tone(800, 300);
     } else if (playerValue === dealerValue) {
         blackjack.playerMoney += blackjack.currentBet;
         blackjack.resultMessage = "Push!";
     } else {
         blackjack.resultMessage = "You Lose!";
-        tone(500, 200);
+        audio.tone(500, 200);
     }
 
     if (!blackjack.resultMessage.includes(" ")) {
@@ -1789,7 +1811,7 @@ function drawBlackjack() {
                 } else if (blackjack.dealerHand[i]) {
                     drawFillRect(5 + i * 30, 40, 20, 30, WHITE);
                     setTextColor(blackjack.dealerHand[i].suit === 'H' ||
-                                 blackjack.dealerHand[i].suit === 'D' ? GRAY : BLACK);
+                        blackjack.dealerHand[i].suit === 'D' ? GRAY : BLACK);
                     drawString(blackjack.dealerHand[i].value + blackjack.dealerHand[i].suit, 7 + i * 30, 55);
                 }
             }
@@ -1800,7 +1822,7 @@ function drawBlackjack() {
                 if (blackjack.playerHand[i]) {
                     drawFillRect(5 + i * 30, 90, 20, 30, WHITE);
                     setTextColor(blackjack.playerHand[i].suit === 'H' ||
-                                 blackjack.playerHand[i].suit === 'D' ? GRAY : BLACK);
+                        blackjack.playerHand[i].suit === 'D' ? GRAY : BLACK);
                     drawString(blackjack.playerHand[i].value + blackjack.playerHand[i].suit, 7 + i * 30, 105);
                 }
             }
@@ -1821,7 +1843,7 @@ function drawBlackjack() {
                 if (blackjack.dealerHand[i]) {
                     drawFillRect(5 + i * 30, 40, 20, 30, WHITE);
                     setTextColor(blackjack.dealerHand[i].suit === 'H' ||
-                                 blackjack.dealerHand[i].suit === 'D' ? GRAY : BLACK);
+                        blackjack.dealerHand[i].suit === 'D' ? GRAY : BLACK);
                     drawString(blackjack.dealerHand[i].value + blackjack.dealerHand[i].suit, 7 + i * 30, 55);
                 }
             }
@@ -1832,14 +1854,14 @@ function drawBlackjack() {
                 if (blackjack.playerHand[i]) {
                     drawFillRect(5 + i * 30, 90, 20, 30, WHITE);
                     setTextColor(blackjack.playerHand[i].suit === 'H' ||
-                                 blackjack.playerHand[i].suit === 'D' ? GRAY : BLACK);
+                        blackjack.playerHand[i].suit === 'D' ? GRAY : BLACK);
                     drawString(blackjack.playerHand[i].value + blackjack.playerHand[i].suit, 7 + i * 30, 105);
                 }
             }
 
             setTextSize(2);
             setTextColor(blackjack.resultMessage.includes("Win") ? GRAY :
-                         blackjack.resultMessage.includes("Lose") ? YELLOW : WHITE);
+                blackjack.resultMessage.includes("Lose") ? YELLOW : WHITE);
 
             try {
                 var lines = blackjack.resultMessage.split(" ");
@@ -2074,7 +2096,7 @@ function handleInput() {
                     flappyStaticDrawn = false;
                 } else if (flappyState === FLAPPY_STATE_GAME) {
                     bird.velocity = -FLAP_POWER;
-                    tone(600, 150);
+                    audio.tone(600, 150);
                 }
             }
             if (prevPressed && flappyState === FLAPPY_STATE_GAME) {
@@ -2337,4 +2359,4 @@ function main() {
         delay(Math.max(1, 33 - frameTime));
     }
 }
-main()
+main();

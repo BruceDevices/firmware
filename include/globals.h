@@ -16,30 +16,34 @@
 #include "core/serial_commands/cli.h"
 #include "core/startup_app.h"
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <ESP32Time.h>
 #include <LittleFS.h>
 #include <NTPClient.h>
 #include <SPI.h>
-#include <Timezone.h>
 #include <functional>
 #include <io_expander/io_expander.h> // ./lib/HAL
 #include <vector>
 extern io_expander ioExpander;
 
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_PCF85063A)
+#include "../lib/RTC/pcf85063_RTC.h"
+extern pcf85063_RTC _rtc;
+#else
 #include "../lib/RTC/cplus_RTC.h"
 extern cplus_RTC _rtc;
+#endif
 extern RTC_TimeTypeDef _time;
 extern RTC_DateTypeDef _date;
 #endif
 
 // Declaração dos objetos TFT
 #if defined(HAS_SCREEN)
+#include <display/tft.h>
 #include <tftLogger.h>
 extern tft_logger tft;
-extern TFT_eSprite sprite;
-extern TFT_eSprite draw;
+extern tft_sprite sprite;
+extern tft_sprite draw;
 #else
 #include <tftLogger.h>
 extern tft_logger tft;
@@ -62,7 +66,7 @@ extern XPowersPPM PPM;
 extern XPowersPPM PPM;
 #endif
 
-extern bool interpreter_start;
+extern int8_t interpreter_state; // -1 - stopped, 0 - background, 1 - waiting for foreground, 2 - foreground
 
 extern BruceConfig bruceConfig;
 extern BruceConfigPins bruceConfigPins;
@@ -71,7 +75,7 @@ extern SerialDevice *serialDevice;
 extern USBSerial USBserial;
 extern StartupApp startupApp;
 
-extern char timeStr[10];
+extern char timeStr[12];
 extern SPIClass sdcardSPI;
 extern SPIClass CC_NRF_SPI;
 extern bool clock_set;
@@ -79,7 +83,6 @@ extern time_t localTime;
 extern struct tm *timeInfo;
 extern ESP32Time rtc;
 extern NTPClient timeClient;
-extern Timezone myTZ;
 
 extern int prog_handler; // 0 - Flash, 1 - LittleFS, 2 - Download
 
@@ -216,14 +219,16 @@ extern volatile int EncoderLedChange;
 #endif
 
 extern TaskHandle_t xHandle;
-extern inline bool check(volatile bool &btn) {
+extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
 #ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
     vTaskSuspend(xHandle);
-    btn = false;
-    AnyKeyPress = false;
-    SerialCmdPress = false;
+    if (resetButtonStatus) {
+        btn = false;
+        AnyKeyPress = false;
+        SerialCmdPress = false;
+    }
     delay(10);
     vTaskResume(xHandle);
     return true;

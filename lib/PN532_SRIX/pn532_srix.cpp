@@ -14,7 +14,7 @@
  *
  * @author Lilz
  * @license  GNU Lesser General Public License v3.0 (see license.txt)
- *  Refactored by Senape3000 to reuse Adafruit_PN532 constants only
+ *  Refactored by Senape3000 to reuse Adafruit_PN532 constants only (v1.2)
  *  This is a library for the communication with an I2C PN532 NFC/RFID breakout board.
  *  adapted from Adafruit's library.
  *  This library supports only I2C to communicate.
@@ -68,7 +68,7 @@ bool Arduino_PN532_SRIX::SAMConfig() {
 
 void Arduino_PN532_SRIX::readData(uint8_t *buffer, uint8_t n) {
     delay(2);
-    Wire.requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)(n + 1));
+    Wire.requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)(n + 2));
 
     // Discard RDY byte
     Wire.read();
@@ -83,12 +83,70 @@ void Arduino_PN532_SRIX::readData(uint8_t *buffer, uint8_t n) {
 bool Arduino_PN532_SRIX::readACK() {
     uint8_t ackBuffer[6];
     readData(ackBuffer, 6);
-    return (memcmp(ackBuffer, pn532ack, 6) == 0);
+
+#ifdef SRIX_LIB_DEBUG
+    Serial.print("[PN532] ACK Read: ");
+    for(int i=0; i<6; i++) {
+        if(ackBuffer[i] < 0x10) Serial.print("0");
+        Serial.print(ackBuffer[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+#endif
+
+    bool result = (memcmp(ackBuffer, pn532ack, 6) == 0);
+    
+#ifdef SRIX_LIB_DEBUG
+    if(!result) Serial.println("[PN532] ❌ ACK Failed");
+#endif
+
+    return result;
 }
 
 bool Arduino_PN532_SRIX::isReady() {
-    if (_irq == 255) return true; // Polling mode
-    return (digitalRead(_irq) == LOW);
+    // --- POLLING MODE (No IRQ pin) ---
+    if (_irq == 255) {
+        // Request 1 byte from PN532 (Status Byte)
+        delayMicroseconds(500);
+        Wire.requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
+
+        // If no response or bus locked, assume not ready
+        if (!Wire.available()) {
+#ifdef SRIX_LIB_DEBUG
+            Serial.println("[PN532] isReady: No response from I2C (bus busy or chip offline)");
+#endif
+            return false;
+        }
+
+        // Read status byte
+        uint8_t status = Wire.read();
+
+#ifdef SRIX_LIB_DEBUG
+        Serial.print("[PN532] Status byte: 0x");
+        if(status < 0x10) Serial.print("0");
+        Serial.print(status, HEX);
+        Serial.print(" -> ");
+        Serial.println((status & 0x01) ? "READY" : "BUSY");
+#endif
+
+        // Check Bit 0 (LSB):
+        // 1 = Ready
+        // 0 = Busy
+        return (status & 0x01);
+    }
+
+    // --- IRQ MODE (Hardware pin) ---
+    // IRQ pin goes LOW when chip is ready
+    bool ready = (digitalRead(_irq) == LOW);
+
+#ifdef SRIX_LIB_DEBUG
+    Serial.print("[PN532] IRQ pin ");
+    Serial.print(_irq);
+    Serial.print(": ");
+    Serial.println(ready ? "LOW (Ready)" : "HIGH (Busy)");
+#endif
+
+    return ready;
 }
 
 bool Arduino_PN532_SRIX::waitReady(uint16_t timeout) {
@@ -101,7 +159,7 @@ bool Arduino_PN532_SRIX::waitReady(uint16_t timeout) {
         }
         delay(10);
     }
-
+    SRIX_LIB_LOG("Ready from waitReady");
     return true;
 }
 
@@ -113,7 +171,7 @@ void Arduino_PN532_SRIX::writeCommand(uint8_t *command, uint8_t commandLength) {
 
     Wire.beginTransmission(PN532_I2C_ADDRESS);
 
-    checksum = PN532_PREAMBLE + PN532_PREAMBLE + PN532_STARTCODE2;
+    checksum = PN532_PREAMBLE + PN532_STARTCODE1 + PN532_STARTCODE2;
     Wire.write(PN532_PREAMBLE);
     Wire.write(PN532_STARTCODE1);
     Wire.write(PN532_STARTCODE2);
@@ -135,12 +193,27 @@ void Arduino_PN532_SRIX::writeCommand(uint8_t *command, uint8_t commandLength) {
     Wire.endTransmission();
 }
 
-bool Arduino_PN532_SRIX::sendCommandCheckAck(uint8_t *command, uint8_t commandLength, uint16_t timeout) {
-    writeCommand(command, commandLength);
+bool Arduino_PN532_SRIX::sendCommandCheckAck(uint8_t *command, uint8_t commandLenght, uint16_t timeout) {
+    // default timeout of one second
+    // write the command
+    writeCommand(command, commandLenght);
 
-    if (!waitReady(timeout)) return false;
+    // Wait for chip to say its ready!
+    if (!waitReady(timeout)) { return false; }
 
-    return readACK();
+#ifdef SRIX_LIB_DEBUG
+    Serial.println(F("\nI2C IRQ received"));
+#endif
+
+    // Check acknowledgement
+    if (!readACK()) {
+#ifdef SRIX_LIB_DEBUG
+        Serial.println(F("\nNo ACK frame received!"));
+#endif
+        return false;
+    }
+
+    return true; // ACK is valid
 }
 
 // ========== PN532 GENERIC FUNCTIONS ==========
@@ -242,7 +315,11 @@ bool Arduino_PN532_SRIX::SRIX_write_block(uint8_t address, uint8_t *block) {
     _packetbuffer[5] = block[2];
     _packetbuffer[6] = block[3];
 
-    return sendCommandCheckAck(_packetbuffer, 7);
+    if (!sendCommandCheckAck(_packetbuffer, 7)) {
+        SRIX_LIB_LOG("[SRIX_LIB] Write FAIL");
+        return false; }
+    SRIX_LIB_LOG("[SRIX_LIB] Write OK");
+    return true;
 }
 
 bool Arduino_PN532_SRIX::SRIX_get_uid(uint8_t *buffer) {

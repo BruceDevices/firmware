@@ -65,6 +65,9 @@ Distributed under Creative Commons 2.5 -- Attribution & Share Alike
 #include <IRsend.h>
 #include <SD.h>
 #include <globals.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 // void xmitCodeElement(uint16_t ontime, uint16_t offtime, uint8_t PWM_code );
 void quickflashLEDx(uint8_t x);
@@ -72,3 +75,7 @@ void delay_ten_us(uint16_t us);
 void quickflashLED(void);
 void StartTvBGone();
 void checkIrTxPin();
+bool init_ir_tx_mutex();
+void lock_ir_tx();
+void unlock_ir_tx();
+void precise_delay_us(uint32_t us);

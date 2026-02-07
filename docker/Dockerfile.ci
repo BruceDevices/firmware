@@ -1,0 +1,18 @@
+FROM python:3.13-slim-bookworm
+
+# PlatformIO + host-tool build deps
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    git \
+    bash \
+    ca-certificates \
+    build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# PlatformIO + workflow deps
+RUN pip install --no-cache-dir platformio requests esptool intelhex
+
+WORKDIR /work
+
+# Keep PlatformIO home on a volume by default
+ENV PLATFORMIO_CORE_DIR=/root/.platformio

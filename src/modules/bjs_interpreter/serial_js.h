@@ -2,16 +2,20 @@
 #ifndef __SERIAL_JS_H__
 #define __SERIAL_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropSerialFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerSerial(duk_context *ctx);
-void registerConsole(duk_context *ctx);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-duk_ret_t native_serialPrint(duk_context *ctx);
-duk_ret_t native_serialPrintln(duk_context *ctx);
-duk_ret_t native_serialReadln(duk_context *ctx);
-duk_ret_t native_serialCmd(duk_context *ctx);
+JSValue native_serialPrint(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_serialPrintln(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_serialReadln(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_serialCmd(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 #endif

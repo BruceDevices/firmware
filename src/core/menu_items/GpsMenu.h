@@ -8,9 +8,10 @@ public:
     GpsMenu() : MenuItemInterface("GPS") {}
 
     void optionsMenu(void);
+    void wardrivingMenu(void);
     void drawIcon(float scale);
-    void drawIconImg();
-    bool getTheme() { return bruceConfig.theme.gps; }
+    bool hasTheme() { return bruceConfig.theme.gps; }
+    String themePath() { return bruceConfig.theme.paths.gps; }
 
 private:
     void configMenu(void);

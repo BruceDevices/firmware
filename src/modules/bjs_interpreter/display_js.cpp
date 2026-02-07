@@ -4,723 +4,777 @@
 #include "core/settings.h"
 #include "helpers_js.h"
 #include "stdio.h"
-#include <vector>
+#include "user_classes_js.h"
 
-duk_ret_t putPropDisplayFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "color", native_color, 4, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "fill", native_fillScreen, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setCursor", native_setCursor, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "print", native_print, DUK_VARARGS, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "println", native_println, DUK_VARARGS, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setTextColor", native_setTextColor, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setTextSize", native_setTextSize, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setTextAlign", native_setTextAlign, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawText", native_drawString, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawString", native_drawString, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawPixel", native_drawPixel, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawLine", native_drawLine, 5, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawRect", native_drawRect, 5, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawFillRect", native_drawFillRect, 5, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawFillRectGradient", native_drawFillRectGradient, 7, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawRoundRect", native_drawRoundRect, 6, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawFillRoundRect", native_drawFillRoundRect, 6, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawCircle", native_drawCircle, 4, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawFillCircle", native_drawFillCircle, 4, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawXBitmap", native_drawXBitmap, 7, magic);
-    // bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawBitmap", native_drawBitmap, 4, magic); 4bpp
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawJpg", native_drawJpg, 4, magic);
-#if !defined(LITE_VERSION)
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawGif", native_drawGif, 6, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "gifOpen", native_gifOpen, 2, magic);
-#endif
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "width", native_width, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "height", native_height, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "createSprite", native_createSprite, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getRotation", native_getRotation, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getBrightness", native_getBrightness, 0, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setBrightness", native_setBrightness, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "restoreBrightness", native_restoreBrightness, 0, magic);
-
-    return 0;
-}
-
-duk_ret_t registerDisplay(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "color", native_color, 4);
-    bduk_register_c_lightfunc(ctx, "fillScreen", native_fillScreen, 1);
-    bduk_register_c_lightfunc(ctx, "setTextColor", native_setTextColor, 1);
-    bduk_register_c_lightfunc(ctx, "setTextSize", native_setTextSize, 1);
-    bduk_register_c_lightfunc(ctx, "drawString", native_drawString, 3);
-    bduk_register_c_lightfunc(ctx, "setCursor", native_setCursor, 2);
-    bduk_register_c_lightfunc(ctx, "print", native_print, DUK_VARARGS);
-    bduk_register_c_lightfunc(ctx, "println", native_println, DUK_VARARGS);
-    bduk_register_c_lightfunc(ctx, "drawPixel", native_drawPixel, 3);
-    bduk_register_c_lightfunc(ctx, "drawLine", native_drawLine, 5);
-    bduk_register_c_lightfunc(ctx, "drawRect", native_drawRect, 5);
-    bduk_register_c_lightfunc(ctx, "drawFillRect", native_drawFillRect, 5);
-    bduk_register_c_lightfunc(ctx, "drawImage", native_drawImage, 4);
-    bduk_register_c_lightfunc(ctx, "drawJpg", native_drawJpg, 4);
-    bduk_register_c_lightfunc(ctx, "drawGif", native_drawGif, 6);
-    bduk_register_c_lightfunc(ctx, "gifOpen", native_gifOpen, 2);
-    bduk_register_c_lightfunc(ctx, "width", native_width, 0);
-    bduk_register_c_lightfunc(ctx, "height", native_height, 0);
-    bduk_register_c_lightfunc(ctx, "getRotation", native_getRotation, 0);
-    bduk_register_c_lightfunc(ctx, "getBrightness", native_getBrightness, 0);
-    bduk_register_c_lightfunc(ctx, "setBrightness", native_setBrightness, 2);
-    bduk_register_c_lightfunc(ctx, "restoreBrightness", native_restoreBrightness, 0);
-    return 0;
-}
-
-duk_ret_t native_color(duk_context *ctx) {
-    int color = ((duk_get_int(ctx, 0) & 0xF8) << 8) | ((duk_get_int(ctx, 1) & 0xFC) << 3) |
-                (duk_get_int(ctx, 2) >> 3);
-    if (duk_get_int_default(ctx, 3, 16) == 16) {
-        duk_push_int(ctx, color);
+JSValue native_color(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int r = 0, g = 0, b = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &r, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &g, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &b, argv[2]);
+    int color = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    int mode = 16;
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &mode, argv[3]);
+    if (mode == 16) {
+        return JS_NewInt32(ctx, color);
     } else {
-        duk_push_int(ctx, ((color & 0xE000) >> 8) | ((color & 0x0700) >> 6) | ((color & 0x0018) >> 3));
+        return JS_NewInt32(ctx, ((color & 0xE000) >> 8) | ((color & 0x0700) >> 6) | ((color & 0x0018) >> 3));
     }
-    return 1;
 }
 
 #if defined(HAS_SCREEN)
-std::vector<TFT_eSprite *> sprites;
+typedef struct {
+    tft_sprite *sprite;
+} SpriteData;
 #endif
-void clearSpritesVector() {
+
+/* Finalizer called by mquickjs when a Sprite JS object is freed. */
+void native_sprite_finalizer(JSContext *ctx, void *opaque) {
 #if defined(HAS_SCREEN)
-    for (auto sprite : sprites) {
-        if (sprite != 0) {
-            sprite->~TFT_eSprite();
-            free(sprite);
-            sprite = 0;
+    SpriteData *d = (SpriteData *)opaque;
+    if (!d) return;
+    if (d->sprite) {
+        delete d->sprite;
+        d->sprite = NULL;
+    }
+    free(d);
+#endif
+}
+
+#if defined(HAS_SCREEN)
+struct DisplayTarget {
+    tft_display *display;
+    tft_sprite *sprite;
+    bool isSprite;
+};
+
+static DisplayTarget get_display_target(JSContext *ctx, JSValue *this_val) {
+    DisplayTarget target{static_cast<tft_display *>(&tft), nullptr, false};
+    if (this_val && JS_IsObject(ctx, *this_val)) {
+        int cid = JS_GetClassID(ctx, *this_val);
+        if (cid == JS_CLASS_SPRITE) {
+            void *opaque = JS_GetOpaque(ctx, *this_val);
+            if (opaque) {
+                SpriteData *d = (SpriteData *)opaque;
+                if (d->sprite) {
+                    target.sprite = d->sprite;
+                    target.isSprite = true;
+                }
+            }
         }
     }
-    sprites.clear();
-#endif
-}
-
-#if defined(HAS_SCREEN)
-static inline TFT_eSPI *get_display(duk_int_t sprite) __attribute__((always_inline));
-static inline TFT_eSPI *get_display(duk_int_t sprite) {
-    return sprite == 0 ? static_cast<TFT_eSPI *>(&tft) : sprites.at(sprite - 1);
+    return target;
 }
 #else
-static inline SerialDisplayClass *get_display(duk_int_t sprite) __attribute__((always_inline));
-static inline SerialDisplayClass *get_display(duk_int_t sprite) {
+static SerialDisplayClass *get_display(JSContext *ctx, JSValue *this_val) {
     return static_cast<SerialDisplayClass *>(&tft);
 }
 #endif
 
-duk_ret_t native_setTextColor(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))->setTextColor(duk_get_int(ctx, 0));
-    return 0;
-}
-
-duk_ret_t native_setTextSize(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))->setTextSize(duk_get_int(ctx, 0));
-    return 0;
-}
-
-duk_ret_t native_setTextAlign(duk_context *ctx) {
-    // usage: setTextAlign(align: number, baseline: number)
-    // align: 0 - left, 1 - center, 2 - right
-    // baseline: 0 - top, 1 - middle, 2 - bottom, 3 - alphabetic
-    uint8_t align = duk_get_int(ctx, 0);
-    uint8_t baseline = duk_get_int_default(ctx, 1, 0);
-
-    if (duk_is_string(ctx, 0)) {
-        const char *alignString = duk_get_string(ctx, 0);
-        if (alignString[0] == 'l') align = 0;
-        else if (alignString[0] == 'c') align = 1;
-        else if (alignString[0] == 'r') align = 2;
-    }
-
-    if (duk_is_string(ctx, 1)) {
-        const char *baselineString = duk_get_string(ctx, 1);
-        if (baselineString[0] == 't') baseline = 0;
-        else if (baselineString[0] == 'm') baseline = 1;
-        else if (baselineString[0] == 'b') baseline = 2;
-        else if (baselineString[0] == 'a') baseline = 3;
-    }
-
-    get_display(duk_get_current_magic(ctx))->setTextDatum(align + baseline * 3);
-    return 0;
-}
-
-duk_ret_t native_drawRect(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->drawRect(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4)
-        );
-    return 0;
-}
-
-duk_ret_t native_drawFillRect(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->fillRect(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4)
-        );
-    return 0;
-}
-
-duk_ret_t native_drawFillRectGradient(duk_context *ctx) {
+JSValue native_setTextColor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int c = 0;
+    int bg = -1;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &c, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &bg, argv[1]);
 #if defined(HAS_SCREEN)
-    if (duk_get_string_default(ctx, 6, "h")[0] == 'h') {
-        get_display(duk_get_current_magic(ctx))
-            ->fillRectHGradient(
-                duk_get_int(ctx, 0),
-                duk_get_int(ctx, 1),
-                duk_get_int(ctx, 2),
-                duk_get_int(ctx, 3),
-                duk_get_int(ctx, 4),
-                duk_get_int(ctx, 5)
-            );
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) {
+        if (bg >= 0) target.sprite->setTextColor(c, bg);
+        else target.sprite->setTextColor(c);
     } else {
-        get_display(duk_get_current_magic(ctx))
-            ->fillRectVGradient(
-                duk_get_int(ctx, 0),
-                duk_get_int(ctx, 1),
-                duk_get_int(ctx, 2),
-                duk_get_int(ctx, 3),
-                duk_get_int(ctx, 4),
-                duk_get_int(ctx, 5)
-            );
+        if (bg >= 0) target.display->setTextColor(c, bg);
+        else target.display->setTextColor(c);
     }
 #else
-    get_display(duk_get_current_magic(ctx))
-        ->fillRect(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4)
-        );
+    if (bg >= 0) get_display(ctx, this_val)->setTextColor(c, bg);
+    else get_display(ctx, this_val)->setTextColor(c);
 #endif
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_drawRoundRect(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->drawRoundRect(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4),
-            duk_get_int(ctx, 5)
-        );
-    return 0;
-}
-
-duk_ret_t native_drawFillRoundRect(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->fillRoundRect(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4),
-            duk_get_int(ctx, 5)
-        );
-    return 0;
-}
-
-duk_ret_t native_drawCircle(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->drawCircle(duk_get_int(ctx, 0), duk_get_int(ctx, 1), duk_get_int(ctx, 2), duk_get_int(ctx, 3));
-    return 0;
-}
-
-duk_ret_t native_drawFillCircle(duk_context *ctx) {
-    get_display(duk_get_current_magic(ctx))
-        ->fillCircle(duk_get_int(ctx, 0), duk_get_int(ctx, 1), duk_get_int(ctx, 2), duk_get_int(ctx, 3));
-    return 0;
-}
-
-duk_ret_t native_drawLine(duk_context *ctx) {
-    // usage: drawLine(int16_t x, int16_t y, int16_t x2, int16_t y2, uint16_t color)
-    get_display(duk_get_current_magic(ctx))
-        ->drawLine(
-            duk_get_int(ctx, 0),
-            duk_get_int(ctx, 1),
-            duk_get_int(ctx, 2),
-            duk_get_int(ctx, 3),
-            duk_get_int(ctx, 4)
-        );
-    return 0;
-}
-
-duk_ret_t native_drawPixel(duk_context *ctx) {
-    // usage: drawPixel(int16_t x, int16_t y, uint16_t color)
-    get_display(duk_get_current_magic(ctx))
-        ->drawPixel(duk_get_int(ctx, 0), duk_get_int(ctx, 1), duk_get_int(ctx, 2));
-    return 0;
-}
-
-duk_ret_t native_drawXBitmap(duk_context *ctx) {
-    // usage: native_drawXBitmap(x: number, y: number, bitmap: ArrayBuffer, width: number, height: number,
-    // fgColor: number, bgColor?: number)
-    duk_int_t bitmapWidth = duk_get_int(ctx, 3);
-    duk_int_t bitmapHeight = duk_get_int(ctx, 4);
-    duk_size_t bitmapSize;
-    uint8_t *bitmapPointer = (uint8_t *)duk_get_buffer_data(ctx, 2, &bitmapSize);
-    if (bitmapPointer == NULL) {
-        return duk_error(
-            ctx, DUK_ERR_TYPE_ERROR, "%s: Failed to read bitmap data! Expected an ArrayBuffer.", "drawXBitmap"
-        );
-    }
-    duk_size_t expectedSize = ((bitmapWidth + 7) / 8) * bitmapHeight; // Ensure proper rounding
-    if (bitmapSize != expectedSize) {
-        return duk_error(
-            ctx,
-            DUK_ERR_TYPE_ERROR,
-            "%s: Bitmap size mismatch! Got %lu bytes, expected %lu bytes based on width=%d and height=%d.",
-            "drawXBitmap",
-            (unsigned long)bitmapSize,
-            (unsigned long)expectedSize,
-            bitmapWidth,
-            bitmapHeight
-        );
-    }
-
-    if (duk_is_number(ctx, 6)) {
-        get_display(duk_get_current_magic(ctx))
-            ->drawXBitmap(
-                duk_get_int(ctx, 0),
-                duk_get_int(ctx, 1),
-                bitmapPointer,
-                bitmapWidth,
-                bitmapHeight,
-                duk_get_int(ctx, 5),
-                duk_get_int(ctx, 6)
-            );
-    } else {
-        get_display(duk_get_current_magic(ctx))
-            ->drawXBitmap(
-                duk_get_int(ctx, 0),
-                duk_get_int(ctx, 1),
-                bitmapPointer,
-                bitmapWidth,
-                bitmapHeight,
-                duk_get_int(ctx, 5)
-            );
-    }
-    return 0;
-}
-
-duk_ret_t native_drawBitmap(duk_context *ctx) {
+JSValue native_setTextSize(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int s = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &s, argv[0]);
 #if defined(HAS_SCREEN)
-    // usage: drawBitmap(x: number, y: number, bitmap: ArrayBuffer, width: number, height: number, bpp: 16 | 8
-    // | 4 | 1, palette?: ArrayBuffer)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->setTextSize(s);
+    else target.display->setTextSize(s);
+#else
+    get_display(ctx, this_val)->setTextSize(s);
+#endif
+    return JS_UNDEFINED;
+}
 
-    duk_int_t x = duk_get_int(ctx, 0);
-    duk_int_t y = duk_get_int(ctx, 1);
-    duk_int_t width = duk_get_int(ctx, 3);
-    duk_int_t height = duk_get_int(ctx, 4);
-    duk_int_t bpp = duk_get_int(ctx, 5);
-    duk_size_t bitmapSize;
-    uint8_t *bitmapPointer = (uint8_t *)duk_get_buffer_data(ctx, 2, &bitmapSize);
-
-    if (!bitmapPointer) {
-        return duk_error(
-            ctx, DUK_ERR_TYPE_ERROR, "%s: Failed to read bitmap data! Expected an ArrayBuffer.", "drawBitmap"
-        );
-    }
-
-    // Calculate expected bitmap size
-    duk_size_t expectedSize;
-    bool bpp8 = false;
-    if (bpp == 16) {
-        expectedSize = width * height * 2; // 16bpp (RGB565)
-    } else if (bpp == 8) {
-        expectedSize = width * height; // 8bpp (RGB332)
-        bpp8 = true;
-    } else if (bpp == 4) {
-        expectedSize = (width * height + 1) / 2; // 4bpp (2 pixels per byte)
-    } else if (bpp == 1) {
-        expectedSize = ((width + 7) / 8) * height; // 1bpp (8 pixels per byte)
-    } else {
-        return duk_error(
-            ctx, DUK_ERR_TYPE_ERROR, "%s: Unsupported bpp value! Use 16, 8, 4, or 1.", "drawBitmap"
-        );
-    }
-
-    if (bitmapSize != expectedSize) {
-        return duk_error(
-            ctx,
-            DUK_ERR_TYPE_ERROR,
-            "%s: Bitmap size mismatch! Got %lu bytes, expected %lu bytes for %dx%d at %dbpp.",
-            "drawBitmap",
-            (unsigned long)bitmapSize,
-            (unsigned long)expectedSize,
-            width,
-            height,
-            bpp
-        );
-    }
-
-    // Handle palette if needed (only for 4bpp and 1bpp)
-    uint16_t *palette = nullptr;
-    duk_size_t paletteSize = 0;
-    if ((bpp == 4 || bpp == 1) && duk_is_buffer_data(ctx, 6)) {
-        palette = (uint16_t *)duk_get_buffer_data(ctx, 6, &paletteSize);
-        if (!palette || paletteSize == 0) {
-            return duk_error(
-                ctx, DUK_ERR_TYPE_ERROR, "%s: Invalid palette! Expected a valid ArrayBuffer.", "drawBitmap"
-            );
+JSValue native_setTextAlign(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    uint8_t align = 0;
+    uint8_t baseline = 0;
+    if (argc > 0) {
+        if (JS_IsString(ctx, argv[0])) {
+            JSCStringBuf sb;
+            const char *s = JS_ToCString(ctx, argv[0], &sb);
+            if (s) {
+                if (s[0] == 'l') align = 0;
+                else if (s[0] == 'c') align = 1;
+                else if (s[0] == 'r') align = 2;
+            }
+        } else if (JS_IsNumber(ctx, argv[0])) {
+            JS_ToInt32(ctx, (int *)&align, argv[0]);
         }
     }
-
-    // Draw bitmap
-    get_display(duk_get_current_magic(ctx))->pushImage(x, y, width, height, bitmapPointer, bpp8, palette);
-    return 0;
-#else
-    return duk_error(ctx, DUK_ERR_ERROR, "%s: not supported on this device!", "drawBitmap");
-#endif
-}
-
-duk_ret_t native_drawString(duk_context *ctx) {
-    // drawString(const char *string, int32_t x, int32_t y)
-    get_display(duk_get_current_magic(ctx))
-        ->drawString(duk_to_string(ctx, 0), duk_get_int(ctx, 1), duk_get_int(ctx, 2));
-    return 0;
-}
-
-duk_ret_t native_setCursor(duk_context *ctx) {
-    // setCursor(int16_t x, int16_t y)
-    get_display(duk_get_current_magic(ctx))->setCursor(duk_get_int(ctx, 0), duk_get_int(ctx, 0));
-    return 0;
-}
-
-duk_ret_t native_print(duk_context *ctx) {
-    internal_print(ctx, true, false);
-    return 0;
-}
-
-duk_ret_t native_println(duk_context *ctx) {
-    internal_print(ctx, true, true);
-    return 0;
-}
-
-duk_ret_t native_fillScreen(duk_context *ctx) {
-    // fill the screen or sprite with the passed color
-    duk_int_t magic = duk_get_current_magic(ctx);
-    if (magic == 0) {
-        tft.fillScreen(duk_get_int(ctx, 0));
-    } else {
+    if (argc > 1) {
+        if (JS_IsString(ctx, argv[1])) {
+            JSCStringBuf sb;
+            const char *s = JS_ToCString(ctx, argv[1], &sb);
+            if (s) {
+                if (s[0] == 't') baseline = 0;
+                else if (s[0] == 'm') baseline = 1;
+                else if (s[0] == 'b') baseline = 2;
+                else if (s[0] == 'a') baseline = 3;
+            }
+        } else if (JS_IsNumber(ctx, argv[1])) {
+            JS_ToInt32(ctx, (int *)&baseline, argv[1]);
+        }
+    }
 #if defined(HAS_SCREEN)
-        ((TFT_eSprite *)get_display(magic))->fillSprite(duk_get_int(ctx, 0));
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->setTextDatum(align + baseline * 3);
+    else target.display->setTextDatum(align + baseline * 3);
+#else
+    get_display(ctx, this_val)->setTextDatum(align + baseline * 3);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, h = 0, color = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &h, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &color, argv[4]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->drawRect(x, y, w, h, color);
+    else target.display->drawRect(x, y, w, h, color);
+#else
+    get_display(ctx, this_val)->drawRect(x, y, w, h, color);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFillRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, h = 0, color = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &h, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &color, argv[4]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->fillRect(x, y, w, h, color);
+    else target.display->fillRect(x, y, w, h, color);
+#else
+    get_display(ctx, this_val)->fillRect(x, y, w, h, color);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFillRectGradient(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, h = 0, c1 = 0, c2 = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &h, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &c1, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &c2, argv[5]);
+
+#if defined(HAS_SCREEN)
+    char mode = 'h';
+    if (argc > 6 && JS_IsString(ctx, argv[6])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[6], &sb);
+        if (s) mode = s[0];
+    }
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) {
+        if (mode == 'h') target.sprite->fillRectHGradient(x, y, w, h, c1, c2);
+        else target.sprite->fillRectVGradient(x, y, w, h, c1, c2);
+    } else {
+        if (mode == 'h') target.display->fillRectHGradient(x, y, w, h, c1, c2);
+        else target.display->fillRectVGradient(x, y, w, h, c1, c2);
+    }
+#else
+    get_display(ctx, this_val)->fillRect(x, y, w, h, c1);
+#endif
+
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawRoundRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, h = 0, r = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &h, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &r, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &c, argv[5]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->drawRoundRect(x, y, w, h, r, c);
+    else target.display->drawRoundRect(x, y, w, h, r, c);
+#else
+    get_display(ctx, this_val)->drawRoundRect(x, y, w, h, r, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFillRoundRect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, h = 0, r = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &h, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &r, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &c, argv[5]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->fillRoundRect(x, y, w, h, r, c);
+    else target.display->fillRoundRect(x, y, w, h, r, c);
+#else
+    get_display(ctx, this_val)->fillRoundRect(x, y, w, h, r, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawTriangle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x0, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y0, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &x1, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &y1, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &x2, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &y2, argv[5]);
+    if (argc > 6 && JS_IsNumber(ctx, argv[6])) JS_ToInt32(ctx, &c, argv[6]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->drawTriangle(x0, y0, x1, y1, x2, y2, c);
+#else
+    get_display(ctx, this_val)->drawTriangle(x0, y0, x1, y1, x2, y2, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFillTriangle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x0, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y0, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &x1, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &y1, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &x2, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &y2, argv[5]);
+    if (argc > 6 && JS_IsNumber(ctx, argv[6])) JS_ToInt32(ctx, &c, argv[6]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->fillTriangle(x0, y0, x1, y1, x2, y2, c);
+#else
+    get_display(ctx, this_val)->fillTriangle(x0, y0, x1, y1, x2, y2, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawCircle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, r = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &r, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &c, argv[3]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->drawCircle(x, y, r, c);
+    else target.display->drawCircle(x, y, r, c);
+#else
+    get_display(ctx, this_val)->drawCircle(x, y, r, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFillCircle(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, r = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &r, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &c, argv[3]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->fillCircle(x, y, r, c);
+    else target.display->fillCircle(x, y, r, c);
+#else
+    get_display(ctx, this_val)->fillCircle(x, y, r, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawArc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, r = 0, ir = 0, startAngle = 0, endAngle = 0, fg_color = 0, bg_color = 0;
+    bool smooth = false;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &r, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &ir, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &startAngle, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &endAngle, argv[5]);
+    if (argc > 6 && JS_IsNumber(ctx, argv[6])) JS_ToInt32(ctx, &fg_color, argv[6]);
+    if (argc > 7 && JS_IsNumber(ctx, argv[7])) JS_ToInt32(ctx, &bg_color, argv[7]);
+    if (argc > 8 && JS_IsBool(argv[8])) smooth = JS_ToBool(ctx, argv[8]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->drawArc(x, y, r, ir, startAngle, endAngle, fg_color, bg_color, smooth);
+#else
+    get_display(ctx, this_val)->drawArc(x, y, r, ir, startAngle, endAngle, fg_color, bg_color, smooth);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawWideLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0, width = 0, color = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x0, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y0, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &x1, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &y1, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &width, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &color, argv[5]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->drawWideLine(x0, y0, x1, y1, width, color);
+#else
+    get_display(ctx, this_val)->drawWideLine(x0, y0, x1, y1, width, color);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int xs = 0, ys = 0, xe = 0, ye = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &xs, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &ys, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &xe, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &ye, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &c, argv[4]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->drawLine(xs, ys, xe, ye, c);
+    else target.display->drawLine(xs, ys, xe, ye, c);
+#else
+    get_display(ctx, this_val)->drawLine(xs, ys, xe, ye, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFastVLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, h = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &h, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &c, argv[3]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->drawFastVLine(x, y, h, c);
+#else
+    get_display(ctx, this_val)->drawFastVLine(x, y, h, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawFastHLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, w = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &w, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &c, argv[3]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    target.display->drawFastHLine(x, y, w, c);
+#else
+    get_display(ctx, this_val)->drawFastHLine(x, y, w, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawPixel(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0, c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &c, argv[2]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->drawPixel(x, y, c);
+    else target.display->drawPixel(x, y, c);
+#else
+    get_display(ctx, this_val)->drawPixel(x, y, c);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawXBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // Accept strings, Uint8Array, ArrayBuffer or JS arrays containing byte values.
+    int bitmapWidth = 0, bitmapHeight = 0;
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &bitmapWidth, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &bitmapHeight, argv[4]);
+
+    size_t len = 0;
+    const uint8_t *data = NULL;
+
+    if (argc > 2) {
+        const char *s = NULL;
+        if (JS_IsString(ctx, argv[2])) {
+            JSCStringBuf sb;
+            s = JS_ToCStringLen(ctx, &len, argv[2], &sb);
+        } else if (JS_IsTypedArray(ctx, argv[2])) {
+            s = JS_GetTypedArrayBuffer(ctx, &len, argv[2]);
+        }
+        if (s) { data = (const uint8_t *)s; }
+    }
+
+    if (data == NULL) {
+        return JS_ThrowTypeError(
+            ctx, "%s: Expected string/ArrayBuffer/Uint8Array for bitmap data", "drawXBitmap"
+        );
+    }
+
+    size_t expectedSize = ((bitmapWidth + 7) / 8) * bitmapHeight;
+    if (len != expectedSize) {
+        Serial.printf("data = %s\n", data);
+        return JS_ThrowTypeError(ctx, "Bitmap size mismatch, len: %d, expected: %d", len, expectedSize);
+    }
+
+    int x = 0, y = 0, fg = 0, bg = -1;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &fg, argv[5]);
+    if (argc > 6 && JS_IsNumber(ctx, argv[6])) JS_ToInt32(ctx, &bg, argv[6]);
+
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) {
+        if (bg >= 0) {
+            target.sprite->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg, bg);
+        } else {
+            target.sprite->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg);
+        }
+    } else {
+        if (bg >= 0) {
+            target.display->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg, bg);
+        } else {
+            target.display->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg);
+        }
+    }
+#else
+    if (bg >= 0)
+        get_display(ctx, this_val)->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg, bg);
+    else get_display(ctx, this_val)->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg);
+#endif
+
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawString(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc > 0 && (JS_IsString(ctx, argv[0]) || JS_IsNumber(ctx, argv[0]) || JS_IsBool(argv[0]) ||
+                     JS_IsObject(ctx, argv[0]))) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[0], &sb);
+        int x = 0, y = 0;
+        if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &x, argv[1]);
+        if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &y, argv[2]);
+#if defined(HAS_SCREEN)
+        DisplayTarget target = get_display_target(ctx, this_val);
+        if (target.isSprite) target.sprite->drawString(s, x, y);
+        else target.display->drawString(s, x, y);
+#else
+        get_display(ctx, this_val)->drawString(s, x, y);
 #endif
     }
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_width(duk_context *ctx) {
-    int width = get_display(duk_get_current_magic(ctx))->width();
-    duk_push_int(ctx, width);
-    return 1;
+JSValue native_setCursor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int x = 0, y = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) target.sprite->setCursor(x, y);
+    else target.display->setCursor(x, y);
+#else
+    get_display(ctx, this_val)->setCursor(x, y);
+#endif
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_height(duk_context *ctx) {
-    int height = get_display(duk_get_current_magic(ctx))->height();
-    duk_push_int(ctx, height);
-    return 1;
+JSValue native_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    internal_print(ctx, this_val, argc, argv, true, false);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_drawImage(duk_context *ctx) {
-    FileParamsJS file = js_get_path_from_params(ctx, true, true);
-
-    drawImg(
-        *file.fs,
-        file.path,
-        duk_get_int_default(ctx, 1 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 2 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 3 + file.paramOffset, 0)
-    );
-    return 0;
+JSValue native_println(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    internal_print(ctx, this_val, argc, argv, true, true);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_drawJpg(duk_context *ctx) {
-    FileParamsJS file = js_get_path_from_params(ctx, true, true);
-
-    showJpeg(
-        *file.fs,
-        file.path,
-        duk_get_int_default(ctx, 1 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 2 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 3 + file.paramOffset, 0)
-    );
-    return 0;
+JSValue native_fillScreen(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(HAS_SCREEN)
+    int c = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &c, argv[0]);
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite && target.sprite) target.sprite->fillScreen(c);
+    else target.display->fillScreen(c);
+#endif
+    return JS_UNDEFINED;
 }
+
+JSValue native_width(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    int width = target.isSprite ? target.sprite->width() : target.display->width();
+#else
+    int width = get_display(ctx, this_val)->width();
+#endif
+    return JS_NewInt32(ctx, width);
+}
+
+JSValue native_height(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    int height = target.isSprite ? target.sprite->height() : target.display->height();
+#else
+    int height = get_display(ctx, this_val)->height();
+#endif
+    return JS_NewInt32(ctx, height);
+}
+
+JSValue native_drawImage(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
+    drawImg(*file.fs, file.path, 0, 0, 0);
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawJpg(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
+    showJpeg(*file.fs, file.path, 0, 0, 0);
+    return JS_UNDEFINED;
+}
+
+JSValue native_drawGif(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if !defined(LITE_VERSION)
-duk_ret_t native_drawGif(duk_context *ctx) {
-    FileParamsJS file = js_get_path_from_params(ctx, true, true);
+    (void)this_val;
+    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
 
-    showGif(
-        file.fs,
-        file.path.c_str(),
-        duk_get_int_default(ctx, 1 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 2 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 3 + file.paramOffset, 0),
-        duk_get_int_default(ctx, 4 + file.paramOffset, 0)
-    );
-    return 0;
-}
-
-std::vector<Gif *> gifs;
-void clearGifsVector() {
-    for (auto gif : gifs) {
-        delete gif;
-        gif = NULL;
+    int x = 0, y = 0, center = 0, playDurationMs = 0;
+    int base = file.paramOffset;
+    if (argc > base && JS_IsNumber(ctx, argv[base])) JS_ToInt32(ctx, &x, argv[base]);
+    if (argc > base + 1 && JS_IsNumber(ctx, argv[base + 1])) JS_ToInt32(ctx, &y, argv[base + 1]);
+    if (argc > base + 2) {
+        if (JS_IsBool(argv[base + 2])) center = JS_ToBool(ctx, argv[base + 2]);
+        else if (JS_IsNumber(ctx, argv[base + 2])) JS_ToInt32(ctx, &center, argv[base + 2]);
     }
-    gifs.clear();
+    if (argc > base + 3 && JS_IsNumber(ctx, argv[base + 3])) JS_ToInt32(ctx, &playDurationMs, argv[base + 3]);
+
+    showGif(file.fs, file.path.c_str(), x, y, center != 0, playDurationMs);
+#endif
+    return JS_UNDEFINED;
 }
 
-void clearDisplayModuleData() {
-    clearGifsVector();
-    clearSpritesVector();
+#if !defined(LITE_VERSION)
+typedef struct {
+    Gif *gif;
+} GifData;
+#endif
+
+void native_gif_finalizer(JSContext *ctx, void *opaque) {
+#if !defined(LITE_VERSION)
+    GifData *d = (GifData *)opaque;
+    if (!d) return;
+    if (d->gif) {
+        delete d->gif;
+        d->gif = NULL;
+    }
+    free(d);
+#endif
 }
 
-duk_ret_t native_gifPlayFrame(duk_context *ctx) {
-    int gifIndex = 0;
-    int x = duk_get_int_default(ctx, 0, 0);
-    int y = duk_get_int_default(ctx, 1, 0);
-    int bSync = duk_get_int_default(ctx, 3, 1);
-
-    duk_push_this(ctx);
-    if (duk_get_prop_string(ctx, -1, "gifPointer")) { gifIndex = duk_to_int(ctx, -1) - 1; }
-
+JSValue native_gifPlayFrame(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     uint8_t result = 0;
-    if (gifIndex >= 0) {
-        Gif *gif = gifs.at(gifIndex);
-        if (gif != NULL) { result = gif->playFrame(x, y, bSync); }
-    }
+#if !defined(LITE_VERSION)
+    int x = 0, y = 0, bSync = 1;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &bSync, argv[2]);
 
-    duk_push_int(ctx, result);
-    return 1;
+    if (JS_GetClassID(ctx, *this_val) == JS_CLASS_GIF) {
+        GifData *opaque = (GifData *)JS_GetOpaque(ctx, *this_val);
+        if (!opaque) return JS_ThrowInternalError(ctx, "Invalid GIF object");
+        Gif *gif = (Gif *)opaque->gif;
+        if (gif) { result = gif->playFrame(x, y, bSync); }
+    }
+#endif
+    return JS_NewInt32(ctx, result);
 }
 
-duk_ret_t native_gifDimensions(duk_context *ctx) {
-    int gifIndex = 0;
-
-    duk_push_this(ctx);
-    if (duk_get_prop_string(ctx, -1, "gifPointer")) { gifIndex = duk_to_int(ctx, -1) - 1; }
-
-    if (gifIndex < 0) {
-        duk_push_int(ctx, 0);
-    } else {
-        Gif *gif = gifs.at(gifIndex);
-        if (gif != NULL) {
-            int canvasWidth = gifs.at(gifIndex)->getCanvasWidth();
-            int canvasHeight = gifs.at(gifIndex)->getCanvasHeight();
-
-            duk_idx_t obj_idx = duk_push_object(ctx);
-            bduk_put_prop(ctx, obj_idx, "width", duk_push_int, canvasWidth);
-            bduk_put_prop(ctx, obj_idx, "height", duk_push_int, canvasHeight);
-        }
-    }
-
-    return 1;
+JSValue native_gifDimensions(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if !defined(LITE_VERSION)
+    if (!this_val || !JS_IsObject(ctx, *this_val)) return JS_NewInt32(ctx, 0);
+    GifData *opaque = (GifData *)JS_GetOpaque(ctx, *this_val);
+    if (!opaque) return JS_ThrowInternalError(ctx, "Invalid GIF object");
+    Gif *gif = (Gif *)opaque->gif;
+    if (!gif) return JS_NewInt32(ctx, 0);
+    int canvasWidth = gif->getCanvasWidth();
+    int canvasHeight = gif->getCanvasHeight();
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "width", JS_NewInt32(ctx, canvasWidth));
+    JS_SetPropertyStr(ctx, obj, "height", JS_NewInt32(ctx, canvasHeight));
+    return obj;
+#else
+    return JS_NULL;
+#endif
 }
 
-duk_ret_t native_gifReset(duk_context *ctx) {
-    int gifIndex = 0;
-
-    duk_push_this(ctx);
-    if (duk_get_prop_string(ctx, -1, "gifPointer")) { gifIndex = duk_to_int(ctx, -1) - 1; }
-
+JSValue native_gifReset(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     uint8_t result = 0;
-    if (gifIndex >= 0) {
-        Gif *gif = gifs.at(gifIndex);
-        if (gif != NULL) {
-            gifs.at(gifIndex)->reset();
+#if !defined(LITE_VERSION)
+    if (this_val && JS_IsObject(ctx, *this_val)) {
+        GifData *opaque = (GifData *)JS_GetOpaque(ctx, *this_val);
+        if (!opaque) return JS_ThrowInternalError(ctx, "Invalid GIF object");
+        Gif *gif = (Gif *)opaque->gif;
+        if (gif) {
+            gif->reset();
             result = 1;
         }
     }
-    duk_push_int(ctx, result);
-
-    return 1;
+#endif
+    return JS_NewInt32(ctx, result);
 }
 
-duk_ret_t native_gifClose(duk_context *ctx) {
-    int gifIndex = 0;
+JSValue native_gifClose(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if !defined(LITE_VERSION)
+    JSValue obj = JS_UNDEFINED;
+    if (argc > 0 && JS_IsObject(ctx, argv[0])) obj = argv[0];
+    else if (this_val && JS_IsObject(ctx, *this_val)) obj = *this_val;
+    if (JS_IsUndefined(obj)) return JS_NewInt32(ctx, 0);
 
-    if (duk_is_object(ctx, 0)) {
-        duk_to_object(ctx, 0);
-    } else {
-        duk_push_this(ctx);
+    int cid = JS_GetClassID(ctx, obj);
+    if (cid == JS_CLASS_GIF) {
+        void *opaque = JS_GetOpaque(ctx, obj);
+        if (!opaque) return JS_NewInt32(ctx, 0);
+        native_gif_finalizer(ctx, opaque);
+        JS_SetOpaque(ctx, obj, NULL);
+        return JS_NewInt32(ctx, 1);
     }
-    if (duk_get_prop_string(ctx, -1, "gifPointer")) { gifIndex = duk_to_int(ctx, -1) - 1; }
-
-    uint8_t result = 0;
-    if (gifIndex >= 0) {
-        Gif *gif = gifs.at(gifIndex);
-        if (gif != NULL) {
-            delete gif;
-            gifs.at(gifIndex) = NULL;
-            result = 1;
-            bduk_put_prop(ctx, -1, "gifPointer", duk_push_uint, 0);
-        }
-    }
-    duk_push_int(ctx, result);
-
-    return 1;
+#endif
+    return JS_NewInt32(ctx, 0);
 }
 
-duk_ret_t native_gifOpen(duk_context *ctx) {
-    FileParamsJS file = js_get_path_from_params(ctx, true, true);
-
+JSValue native_gifOpen(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if !defined(LITE_VERSION)
+    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
     Gif *gif = new Gif();
-
     bool success = gif->openGIF(file.fs, file.path.c_str());
-    if (!success) {
-        duk_push_null(ctx); // return null if not success
-    } else {
-        gifs.push_back(gif);
-        duk_idx_t obj_idx = duk_push_object(ctx);
-        bduk_put_prop(
-            ctx, obj_idx, "gifPointer", duk_push_uint, gifs.size()
-        ); // MEMO: 1 is the first element so 0 can be error
-
-        bduk_put_prop_c_lightfunc(ctx, obj_idx, "playFrame", native_gifPlayFrame, 3, 0);
-        bduk_put_prop_c_lightfunc(ctx, obj_idx, "dimensions", native_gifDimensions, 0, 0);
-        bduk_put_prop_c_lightfunc(ctx, obj_idx, "reset", native_gifReset, 0, 0);
-        bduk_put_prop_c_lightfunc(ctx, obj_idx, "close", native_gifClose, 0, 0);
-
-        duk_push_c_lightfunc(ctx, native_gifClose, 1, 1, 0);
-        duk_set_finalizer(ctx, obj_idx);
-    }
-
-    return 1;
-}
-#endif
-
-duk_ret_t native_deleteSprite(duk_context *ctx) {
-    int spriteIndex = duk_get_current_magic(ctx) - 1;
-
-    if (duk_is_object(ctx, 0)) {
-        duk_to_object(ctx, 0);
-        if (duk_get_prop_string(ctx, -1, "spritePointer")) { spriteIndex = duk_to_int(ctx, -1) - 1; }
-    }
-
-    uint8_t result = 0;
-#if defined(HAS_SCREEN)
-#ifndef BOARD_HAS_PSRAM
-    duk_push_boolean(ctx, 1);
-    return 1;
-#else
-    if (spriteIndex >= 0) {
-        TFT_eSprite *sprite = sprites.at(spriteIndex);
-        if (sprite != NULL) {
-            sprite->~TFT_eSprite();
-            free(sprite);
-            sprites.at(spriteIndex) = NULL;
-            result = 1;
-            bduk_put_prop(ctx, -1, "spritePointer", duk_push_uint, 0);
+    if (success) {
+        JSValue obj = JS_NewObjectClassUser(ctx, JS_CLASS_GIF);
+        if (JS_IsException(obj)) {
+            delete gif;
+            return obj;
         }
+        GifData *d = (GifData *)malloc(sizeof(GifData));
+        if (!d) {
+            delete gif;
+            return JS_ThrowOutOfMemory(ctx);
+        }
+        d->gif = gif;
+        JS_SetOpaque(ctx, obj, d);
+
+        return obj;
     }
 #endif
-#endif
-    duk_push_int(ctx, result);
-
-    return 1;
+    return JS_ThrowTypeError(ctx, "Failed to open GIF file");
 }
 
-duk_ret_t native_pushSprite(duk_context *ctx) {
-#if defined(HAS_SCREEN)
-#ifndef BOARD_HAS_PSRAM
-    duk_push_boolean(ctx, 1);
-    return 1;
-#else
-    duk_int_t magic = duk_get_current_magic(ctx);
-    sprites.at(magic - 1)->pushSprite(duk_get_int(ctx, 0), duk_get_int(ctx, 1));
-#endif
-#endif
-    return 0;
-}
+JSValue native_deleteSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSValue obj = JS_UNDEFINED;
+    if (argc > 0 && JS_IsObject(ctx, argv[0])) obj = argv[0];
+    else if (this_val && JS_IsObject(ctx, *this_val)) obj = *this_val;
+    if (JS_IsUndefined(obj)) return JS_NewInt32(ctx, 0);
 
-duk_ret_t native_createSprite(duk_context *ctx) {
-#if defined(HAS_SCREEN)
-
-#ifndef BOARD_HAS_PSRAM
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop(ctx, obj_idx, "spritePointer", duk_push_uint, 0);
-    putPropDisplayFunctions(ctx, obj_idx, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "pushSprite", native_pushSprite, 3, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "deleteSprite", native_deleteSprite, 1, 0);
-    duk_push_c_lightfunc(ctx, native_deleteSprite, 1, 1, 0);
-    duk_set_finalizer(ctx, obj_idx);
-    return 1;
-
-#else
-
-    TFT_eSprite *sprite = NULL;
-    sprite = (TFT_eSprite *)(psramFound() ? ps_malloc(sizeof(TFT_eSprite)) : malloc(sizeof(TFT_eSprite)));
-    // sprite = new TFT_eSprite(&tft);
-    if (sprite == NULL) {
-        return duk_error(ctx, DUK_ERR_ERROR, "%s: Memory allocation failed!", "createSprite");
+    int cid = JS_GetClassID(ctx, obj);
+    if (cid == JS_CLASS_SPRITE) {
+        void *opaque = JS_GetOpaque(ctx, obj);
+        if (!opaque) return JS_NewInt32(ctx, 0);
+        native_sprite_finalizer(ctx, opaque);
+        JS_SetOpaque(ctx, obj, NULL);
+        return JS_NewInt32(ctx, 1);
     }
-    new (sprite) TFT_eSprite(&tft);
 
-    int16_t width = duk_get_number_default(ctx, 0, tft.width());
-    int16_t height = duk_get_number_default(ctx, 1, tft.height());
-    uint8_t colorDepth = duk_get_number_default(ctx, 2, 16);
-    uint8_t frames = duk_get_number_default(ctx, 3, 1U);
+    return JS_NewInt32(ctx, 0);
+}
 
-    sprite->setColorDepth(colorDepth);
-    sprite->createSprite(width, height, frames);
-
-    sprites.push_back(sprite);
-
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop(ctx, obj_idx, "spritePointer", duk_push_uint, sprites.size());
-    putPropDisplayFunctions(
-        ctx, obj_idx, sprites.size()
-    ); // MEMO: 1 is the first element so 0 can be default tft
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "pushSprite", native_pushSprite, 3, sprites.size());
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "deleteSprite", native_deleteSprite, 1, sprites.size());
-
-    duk_push_c_lightfunc(ctx, native_deleteSprite, 1, 1, sprites.size());
-    duk_set_finalizer(ctx, obj_idx);
+JSValue native_pushSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(HAS_SCREEN) && defined(BOARD_HAS_PSRAM)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite && target.sprite) target.sprite->pushSprite(0, 0);
 #endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_createSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(HAS_SCREEN)
+    int16_t width = tft.width();
+    int16_t height = tft.height();
+    uint8_t colorDepth = 16;
+    uint8_t frames = 1;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, (int *)&width, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, (int *)&height, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, (int *)&colorDepth, argv[2]);
+
+    JSValue obj = JS_NewObjectClassUser(ctx, JS_CLASS_SPRITE);
+    if (JS_IsException(obj)) return obj;
+
+    SpriteData *d = (SpriteData *)malloc(sizeof(SpriteData));
+    if (!d) return JS_ThrowOutOfMemory(ctx);
+    d->sprite = new tft_sprite(static_cast<tft_display *>(&tft));
+    if (!d->sprite) {
+        free(d);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+    d->sprite->setColorDepth(colorDepth);
+    d->sprite->createSprite(width, height, frames);
+
+    // set opaque pointer so finalizer can free C resources
+    JS_SetOpaque(ctx, obj, d);
+
+    return obj;
 #else
-    duk_push_object(ctx);
+    return JS_NewObject(ctx);
 #endif
-
-    return 1;
 }
 
-duk_ret_t native_getRotation(duk_context *ctx) {
-    duk_push_int(ctx, bruceConfigPins.rotation);
-    return 1;
+JSValue native_getRotation(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewInt32(ctx, bruceConfigPins.rotation);
 }
 
-duk_ret_t native_getBrightness(duk_context *ctx) {
-    duk_push_int(ctx, currentScreenBrightness);
-    return 1;
+JSValue native_getBrightness(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewInt32(ctx, currentScreenBrightness);
 }
 
-duk_ret_t native_setBrightness(duk_context *ctx) {
-    int brightness = duk_get_int(ctx, 0);
-
+JSValue native_setBrightness(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int brightness = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &brightness, argv[0]);
     bool save = false;
-    if (duk_is_object(ctx, 1)) {
-        duk_get_prop_string(ctx, 1, "save");
-        save = duk_get_boolean(ctx, -1);
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue v = JS_GetPropertyStr(ctx, argv[1], "save");
+        if (!JS_IsUndefined(v)) save = JS_ToBool(ctx, v);
     }
     setBrightness(brightness, save);
-
-    return 1;
+    return JS_NewInt32(ctx, 1);
 }
 
-duk_ret_t native_restoreBrightness(duk_context *ctx) {
+JSValue native_restoreBrightness(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     setBrightness(bruceConfig.bright, false);
-    return 0;
+    return JS_UNDEFINED;
 }
 #endif

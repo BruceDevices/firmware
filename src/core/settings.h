@@ -62,7 +62,7 @@ void setDimmerTimeMenu();
 
 void setClock();
 
-void runClockLoop();
+void runClockLoop(bool showMenuHint = false);
 
 int gsetIrTxPin(bool set = false);
 
@@ -73,8 +73,6 @@ int gsetIrRxPin(bool set = false);
 int gsetRfTxPin(bool set = false);
 
 int gsetRfRxPin(bool set = false);
-
-void runClockLoop();
 
 void setSoundConfig();
 
@@ -95,6 +93,7 @@ void setNetworkCredsMenu();
 void setBadUSBBLEMenu();
 void setBadUSBBLEKeyboardLayoutMenu();
 void setBadUSBBLEKeyDelayMenu();
+void setBadUSBBLEShowOutputMenu();
 
 void setSPIPinsMenu(BruceConfigPins::SPIPins &value);
 
@@ -106,6 +105,12 @@ void setTheme();
 
 void setMacAddressMenu();
 
+#if !defined(LITE_VERSION)
 void enableBLEAPI();
+
+bool appStoreInstalled();
+
+void installAppStoreJS();
+#endif
 
 #endif
