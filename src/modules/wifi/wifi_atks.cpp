@@ -10,6 +10,7 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "evil_portal.h"
@@ -306,6 +307,9 @@ void wifi_atk_menu() {
     wifi_atk_unsetWifi();
 }
 void deauthFloodAttack() {
+    // Stop WebUI before setting WiFi mode for attack
+    cleanlyStopWebUiForWiFiFeature();
+    
     if (!wifi_atk_setWifi()) return; // error messages inside the function
 
     int nets;
@@ -378,6 +382,9 @@ uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filt
                         // unrelated APs
 
 void capture_handshake(String tssid, String mac, uint8_t channel) {
+
+    // Stop WebUI before setting WiFi mode for handshake capture
+    cleanlyStopWebUiForWiFiFeature();
 
     hsTracker = HandshakeTracker(); // Reset tracker for each new capture
 
@@ -661,6 +668,9 @@ AGAIN:
 ** @brief: Deploy Target deauth
 ***************************************************************************************/
 void target_atk(String tssid, String mac, uint8_t channel) {
+    // Stop WebUI before setting WiFi mode for attack
+    cleanlyStopWebUiForWiFiFeature();
+    
     // Initialize WiFi attack mode
     if (!wifi_atk_setWifi()) return; // Error messages handled internally
 

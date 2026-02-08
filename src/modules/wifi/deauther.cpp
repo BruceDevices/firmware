@@ -4,6 +4,7 @@
 #include "core/net_utils.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "scan_hosts.h"
 #include "wifi_atks.h"
 #include <esp_wifi.h>
@@ -126,6 +127,9 @@ void buildOptimizedDeauthFrame(uint8_t* frame,
 // ============================================
 
 void stationDeauth(Host host) {
+    // Stop WebUI before setting WiFi mode for station deauth
+    cleanlyStopWebUiForWiFiFeature();
+    
     uint8_t MAC[6];
     uint8_t gatewayMAC[6];
     uint8_t victimIP[4];

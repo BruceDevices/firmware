@@ -5,13 +5,18 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "esp_wifi.h"
 #include "wifi_atks.h"
 
 EvilPortal::EvilPortal(String tssid, uint8_t channel, bool deauth, bool verifyPwd)
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), webServer(80) {
+    // Allow configuration menus to work with WebUI active
     if (!setup()) return;
 
+    // Now stop WebUI cleanly before starting WiFi mode
+    cleanlyStopWebUiForWiFiFeature();
+    
     beginAP();
     loop();
 };

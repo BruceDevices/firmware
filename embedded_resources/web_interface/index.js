@@ -657,6 +657,8 @@ async function renderTFT(data) {
 
   let offset = 0;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let screenText = []; // Collect all text rendered on screen
+  
   while (offset < data.length) {
     ctx.beginPath();
     if (data[offset] !== 0xAA) {
@@ -783,6 +785,8 @@ async function renderTFT(data) {
         ctx.fillStyle = color565toCSS(input.bg);
 
         input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
+        screenText.push(input.txt); // Collect text for WiFi detection
+        
         var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
         var o = 0;
         if (fn === 15) o = input.txt.length * fw;
@@ -816,6 +820,20 @@ async function renderTFT(data) {
         ctx.fillRect(input.x, input.y, input.w, 1);
         break;
     }
+  }
+  
+  // Check if WiFi menu is present on screen and show/hide warning
+  const wifiWarning = $("#wifi-warning");
+  const allText = screenText.join(" ").toLowerCase();
+  const isWiFiMenu = allText.includes("wifi") || 
+                     allText.includes("evil portal") ||
+                     allText.includes("deauth") ||
+                     allText.includes("handshake");
+  
+  if (isWiFiMenu) {
+    wifiWarning.classList.remove("hidden");
+  } else {
+    wifiWarning.classList.add("hidden");
   }
 }
 function drawCanvasLoading() {

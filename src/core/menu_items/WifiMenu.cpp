@@ -42,19 +42,8 @@ bool showHiddenNetworks = false;
 void WifiMenu::optionsMenu() {
     returnToMenu = false;
     options.clear();
-    if (isWebUIActive) {
-        drawMainBorderWithTitle("WiFi", true);
-        padprintln("");
-        padprintln("Starting a Wifi function will probably make the WebUI stop working");
-        padprintln("");
-        padprintln("Sel: to continue");
-        padprintln("Any key: to Menu");
-        while (1) {
-            if (check(SelPress)) { break; }
-            if (check(AnyKeyPress)) { return; }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
-    }
+    // Note: WiFi features will cleanly stop WebUI automatically when they start
+    // User can navigate menu normally even with WebUI active
     if (WiFi.status() != WL_CONNECTED) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
@@ -70,10 +59,7 @@ void WifiMenu::optionsMenu() {
     }
     options.push_back({"Wifi Atks", wifi_atk_menu});
     options.push_back({"Evil Portal", [=]() {
-                           if (isWebUIActive || server) {
-                               stopWebUi();
-                               wifiDisconnect();
-                           }
+                           // WebUI cleanup now handled automatically inside EvilPortal constructor
                            EvilPortal();
                        }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});

@@ -6,6 +6,7 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "driver/gpio.h"
 #include "esp_event.h"
 #include "esp_system.h"
@@ -199,6 +200,9 @@ void safe_wifi_deinit() {
 }
 
 void karma_setup() {
+    // Stop WebUI before setting WiFi mode for karma attack
+    cleanlyStopWebUiForWiFiFeature();
+    
     // Clean shutdown if previous WiFi was active
     if (esp_wifi_stop() == ESP_OK) { safe_wifi_deinit(); }
 
