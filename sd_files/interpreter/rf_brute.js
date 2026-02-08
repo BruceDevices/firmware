@@ -37,12 +37,12 @@ function brute_force() {
         // example full cmd: "subghz tx 445533 433920000 174 10"
         //serialCmd("subghz tx " + curr_val + " " + freq + " 174 10");
 
-        
+
         var r = subghzTransmit(curr_val, freq, 174, 10);
         // TODO: customize te=174  count=10
 
         if(!r) drawString("ERROR: check serial log", 3 , 64);
-        
+
         delay(delay_ms);
     }
 }
@@ -50,25 +50,26 @@ function brute_force() {
 
 while(true)
 {
-  var choice = dialogChoice({
-    ["Init value:" + value_prefix]: "value_prefix",
-    ["Range bits:" + no_bits]: "no_bits",
-    ["Delay: " + delay_ms]: "delay_ms",
-    ["Frequency:" + freq]: "freq",
-    ["Start attack"]: "attack"
-  });
+    var menu_options = {};
+    menu_options["Init value:" + value_prefix] = "value_prefix";
+    menu_options["Range bits:" + no_bits] = "no_bits";
+    menu_options["Delay: " + delay_ms] = "delay_ms";
+    menu_options["Frequency:" + freq] = "freq";
+    menu_options["Start attack"] = "attack";
 
-  if(choice=="") break;  // quit
-  else if(choice=="value_prefix") value_prefix = parseInt(keyboardPrompt(String(value_prefix), 32, "starting value"));
-  else if(choice=="no_bits") no_bits = parseInt(keyboardPrompt(String(no_bits), 32, "bits to iterate"));
-  else if(choice=="delay_ms") delay_ms = parseInt(keyboardPrompt(String(delay_ms), 32, "delay afear each try (in ms)"));
-  else if(choice=="freq") freq = parseInt(keyboardPrompt(String(freq), 32, "Frequency"));
-  else if(choice=="attack") {
-      if(!value_prefix || !no_bits || !delay_ms || !freq) {
-          dialogError("invalid params");
-          continue;
-      }
-      brute_force();
+    var choice = dialogChoice(menu_options);
+
+    if(choice=="") break;  // quit
+    else if(choice=="value_prefix") value_prefix = parseInt(keyboardPrompt(String(value_prefix), 32, "starting value"));
+    else if(choice=="no_bits") no_bits = parseInt(keyboardPrompt(String(no_bits), 32, "bits to iterate"));
+    else if(choice=="delay_ms") delay_ms = parseInt(keyboardPrompt(String(delay_ms), 32, "delay afear each try (in ms)"));
+    else if(choice=="freq") freq = parseInt(keyboardPrompt(String(freq), 32, "Frequency"));
+    else if(choice=="attack") {
+        if(!value_prefix || !no_bits || !delay_ms || !freq) {
+            dialogError("invalid params");
+            continue;
+        }
+        brute_force();
   }
 
   fillScreen(0); // clear screen

@@ -28,19 +28,17 @@ StartupApp::StartupApp() {
 #ifndef LITE_VERSION
     _startupApps["Brucegotchi"] = []() { brucegotchi_start(); };
     _startupApps["Sniffer"] = []() { sniffer_setup(); };
+    _startupApps["GPS Tracker"] = []() { GPSTracker(); };
+    _startupApps["PN532 BLE"] = []() { Pn532ble(); };
+    _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
 #endif
     _startupApps["Clock"] = []() { runClockLoop(); };
     _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
-    _startupApps["GPS Tracker"] = []() { GPSTracker(); };
 #if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(); };
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
-#ifndef LITE_VERSION
-    _startupApps["PN532 BLE"] = []() { Pn532ble(); };
-    _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
-#endif
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs;

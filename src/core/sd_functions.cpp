@@ -6,6 +6,9 @@
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
+#if defined(HAS_NS4168_SPKR)
+#include "modules/others/audio_player.h"
+#endif
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_send.h"
 #include "mykeyboard.h" // using keyboard when calling rename
@@ -737,7 +740,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
                                                          }});
-					if (filepath.endsWith(".ir")) {
+                    if (filepath.endsWith(".ir")) {
                         options.insert(options.begin(), {"IR Choose cmd", [&]() {
                                                              delay(200);
                                                              chooseCmdIrFile(&fs, filepath);
@@ -746,7 +749,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
                                                          }});
-					}
+                    }
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
@@ -823,7 +826,8 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         options.insert(options.begin(), {"Play Audio", [&]() {
                                                              delay(200);
                                                              check(AnyKeyPress);
-                                                             playAudioFile(&fs, filepath);
+                                                             // playAudioFile(&fs, filepath);
+                                                             musicPlayerUI(&fs, filepath);
                                                          }});
 #endif
                     // generate qr codes from small files (<3K)

@@ -71,7 +71,7 @@ void IrRead::setup() {
     }
     if (count == 0) gsetIrRxPin(true); // Open dialog to choose irRx pin
 
-    setup_ir_pin(bruceConfigPins.irRx, INPUT);
+    setup_ir_pin(bruceConfigPins.irRx, INPUT_PULLUP);
     if (headless) return;
     // else
     returnToMenu = true; // make sure menu is redrawn when quitting in any point
@@ -81,18 +81,19 @@ void IrRead::setup() {
              quickButtons = quickButtonsTV;
              begin();
              return loop();
-         }                 },
+         }                     },
         {"AC",
          [&]() {
              quickButtons = quickButtonsAC;
              begin();
              return loop();
-         }                 },
-        {"SOUND", [&]() {
+         }                     },
+        {"SOUND",
+         [&]() {
              quickButtons = quickButtonsSOUND;
              begin();
              return loop();
-         }},
+         }                     },
         {"LED STRIP", [&]() {
              quickButtons = quickButtonsLED;
              begin();

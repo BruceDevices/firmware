@@ -4,6 +4,7 @@
 #include "core/powerSave.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
+#include "current_year.h"
 #include "esp32-hal-psram.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
@@ -345,6 +346,28 @@ void init_clock() {
     _rtc.GetPcf85063Time();
 #endif
     _rtc.GetTime(&_time);
+    _rtc.GetDate(&_date);
+
+    struct tm timeinfo = {};
+    timeinfo.tm_sec = _time.Seconds;
+    timeinfo.tm_min = _time.Minutes;
+    timeinfo.tm_hour = _time.Hours;
+    timeinfo.tm_mday = _date.Date;
+    timeinfo.tm_mon = _date.Month > 0 ? _date.Month - 1 : 0;
+    timeinfo.tm_year = _date.Year >= 1900 ? _date.Year - 1900 : 0;
+    time_t epoch = mktime(&timeinfo);
+    struct timeval tv = {.tv_sec = epoch};
+    settimeofday(&tv, nullptr);
+#else
+    struct tm timeinfo = {};
+    timeinfo.tm_year = CURRENT_YEAR - 1900;
+    timeinfo.tm_mon = 0x05;
+    timeinfo.tm_mday = 0x14;
+    time_t epoch = mktime(&timeinfo);
+    rtc.setTime(epoch);
+    clock_set = true;
+    struct timeval tv = {.tv_sec = epoch};
+    settimeofday(&tv, nullptr);
 #endif
 }
 

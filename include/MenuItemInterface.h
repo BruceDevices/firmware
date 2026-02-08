@@ -10,7 +10,15 @@ public:
     virtual void optionsMenu(void) = 0;
     virtual void drawIcon(float scale = 1) = 0;
     virtual void drawIconImg() {
-        drawImg(*bruceConfig.themeFS(), bruceConfig.getThemeItemImg(themePath()), 0, imgCenterY, true);
+        drawImg(
+            *bruceConfig.themeFS(),
+            bruceConfig.getThemeItemImg(themePath()),
+            0,
+            imgCenterY,
+            true,
+            bruceConfig.theme.gifDuration,
+            false
+        );
     }
     virtual bool hasTheme() = 0;
     virtual String themePath() = 0;

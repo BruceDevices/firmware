@@ -66,6 +66,7 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["badUSBBLEKeyboardLayout"] = badUSBBLEKeyboardLayout;
     setting["badUSBBLEKeyDelay"] = badUSBBLEKeyDelay;
+    setting["badUSBBLEShowOutput"] = badUSBBLEShowOutput;
 
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
@@ -368,6 +369,13 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["badUSBBLEKeyDelay"].isNull()) {
         badUSBBLEKeyDelay = setting["badUSBBLEKeyDelay"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
+    if (!setting["badUSBBLEShowOutput"].isNull()) {
+        badUSBBLEShowOutput = setting["badUSBBLEShowOutput"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -739,17 +747,21 @@ void BruceConfig::validateBadUSBBLEKeyboardLayout() {
     if (badUSBBLEKeyboardLayout < 0 || badUSBBLEKeyboardLayout > 13) badUSBBLEKeyboardLayout = 0;
 }
 
-void BruceConfig::setBadUSBBLEKeyDelay(int value) {
+void BruceConfig::setBadUSBBLEKeyDelay(uint16_t value) {
     badUSBBLEKeyDelay = value;
     validateBadUSBBLEKeyDelay();
     saveFile();
 }
 
 void BruceConfig::validateBadUSBBLEKeyDelay() {
-    if (badUSBBLEKeyDelay < 20) badUSBBLEKeyDelay = 20;
+    if (badUSBBLEKeyDelay < 0) badUSBBLEKeyDelay = 0;
     if (badUSBBLEKeyDelay > 500) badUSBBLEKeyDelay = 500;
 }
 
+void BruceConfig::setBadUSBBLEShowOutput(bool value) {
+    badUSBBLEShowOutput = value;
+    saveFile();
+}
 void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
 
 void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }

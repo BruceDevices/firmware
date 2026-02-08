@@ -9,7 +9,9 @@
 void GpsMenu::optionsMenu() {
     options = {
         {"Wardriving",  [this]() { wardrivingMenu(); }},
+#if !defined(LITE_VERSION)
         {"GPS Tracker", [=]() { GPSTracker(); }       },
+#endif
         {"Config",      [this]() { configMenu(); }    },
     };
     addOptionToMainMenu();

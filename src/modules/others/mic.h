@@ -37,12 +37,25 @@ void mic_function() {
 
 #include "core/display.h"
 #include <fft.h>
+#include <functional>
 #include <globals.h>
+
+/**
+ * @brief Microphone recording configuration
+ * @note Used by mic_record_app() and mic_record_wav_to_path()
+ */
+struct MicConfig {
+    uint32_t record_time_ms; ///< Recording duration (0 = unlimited)
+    float gain;              ///< Audio gain multiplier (0.5-4.0, default 2.0)
+    bool stealth_mode;       ///< Enable low-brightness mode
+};
 
 /* Mic */
 void mic_test();
 void mic_test_one_task();
-void mic_record();
-bool mic_record_wav_to_path(FS *fs, const String &path, uint32_t max_ms, bool stop_on_sel, uint32_t *out_bytes);
-
+bool mic_record_wav_to_path(
+    FS *fs, const String &path, uint32_t max_ms, uint32_t *out_bytes, float gain,
+    std::function<bool(void)> onProgress = nullptr
+);
+void mic_record_app(); // Mic GUI app @Senape3000
 #endif
