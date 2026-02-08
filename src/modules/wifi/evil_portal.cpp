@@ -16,7 +16,7 @@ EvilPortal::EvilPortal(String tssid, uint8_t channel, bool deauth, bool verifyPw
 
     // Now stop WebUI cleanly before starting WiFi mode
     cleanlyStopWebUiForWiFiFeature();
-    
+
     beginAP();
     loop();
 };

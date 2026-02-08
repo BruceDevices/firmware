@@ -66,7 +66,7 @@ void cleanlyStopWebUiForWiFiFeature() {
 
     // Brief notification (non-blocking)
     Serial.println("Stopping WebUI for WiFi feature...");
-    
+
     // Stop the WebUI
     if (server) {
         stopWebUi();
@@ -82,7 +82,7 @@ void cleanlyStopWebUiForWiFiFeature() {
         // Give WiFi time to fully disconnect
         vTaskDelay(pdMS_TO_TICKS(250));
     }
-    
+
     Serial.println("WebUI stopped, starting WiFi feature...");
 }
 /**********************************************************************
