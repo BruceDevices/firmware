@@ -1,0 +1,49 @@
+{
+    "build": {
+      "arduino": {
+        "ldscript": "esp32s3_out.ld",
+        "partitions": "default_16MB.csv"
+      },
+      "core": "esp32",
+      "extra_flags": [
+        "-DSMOOCHIEE_BOARD",
+        "-DARDUINO_RUNNING_CORE=1",
+        "-DARDUINO_EVENT_RUNNING_CORE=1",
+        "-DARDUINO_USB_CDC_ON_BOOT",
+        "-DARDUINO_USB_MODE=1",
+        "-DBOARD_HAS_PSRAM"
+      ],
+      "f_cpu": "240000000L",
+      "f_flash": "80000000L",
+      "flash_mode": "qio",
+      "hwids": [
+        [
+          "0x303A",
+          "0x1001"
+        ]
+      ],
+      "mcu": "esp32s3",
+      "variant": "pinouts"
+    },
+    "connectivity": [
+      "bluetooth",
+      "wifi"
+    ],
+    "debug": {
+      "openocd_target": "esp32s3.cfg"
+    },
+    "frameworks": [
+      "arduino",
+      "espidf"
+    ],
+    "name": "Smoochiee Board",
+    "upload": {
+      "flash_size": "16MB",
+      "maximum_ram_size": 327680,
+      "maximum_size": 16777216,
+      "require_upload_port": true,
+      "speed": 460800
+    },
+    "url": "https://docs.m5stack.com/en/core/StampS3",
+    "vendor": "Smoochiee"
+  }
