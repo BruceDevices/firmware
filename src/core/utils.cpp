@@ -267,7 +267,7 @@ String formatTimeDecimal(uint32_t totalMillis) {
     uint16_t minutes = totalMillis / 60000;
     float seconds = (totalMillis % 60000) / 1000.0;
 
-    char buffer[10];
+    char buffer[16];
     sprintf(buffer, "%02d:%06.3f", minutes, seconds);
     return String(buffer);
 }

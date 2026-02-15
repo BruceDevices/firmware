@@ -1376,7 +1376,7 @@ void setBadUSBBLEKeyDelayMenu() {
     String delayStr = num_keyboard(String(bruceConfig.badUSBBLEKeyDelay), 3, "Key Delay (ms):");
     if (delayStr != "\x1B") {
         uint16_t delayVal = static_cast<uint16_t>(delayStr.toInt());
-        if (delayVal >= 0 && delayVal <= 500) {
+        if (delayVal <= 500) {
             bruceConfig.setBadUSBBLEKeyDelay(delayVal);
         } else if (delayVal != 0) {
             displayError("Invalid key delay value (0 to 500)", true);
