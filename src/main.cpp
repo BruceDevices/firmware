@@ -105,7 +105,7 @@ bool returnToMenu;
 bool isSleeping = false;
 bool isScreenOff = false;
 bool dimmer = false;
-char timeStr[12];
+char timeStr[16];
 time_t localTime;
 struct tm *timeInfo;
 #if defined(HAS_RTC)
