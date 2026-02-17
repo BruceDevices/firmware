@@ -690,16 +690,8 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                 } else if (fileList[index].folder == false && fileList[index].operation == false) {
                     goto Files;
                 } else {
-                    options = {
-                        {"New Folder", [=]() { createFolder(fs, Folder); }},
-                    };
-                    if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
-                    options.push_back({"Close Menu", [&]() { yield(); }});
-                    options.push_back({"Main Menu", [&]() { exit = true; }});
-                    loopOptions(options);
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                    reload = true;
-                    redraw = true;
+                    // "> Back" item selected (operation == true) → go up one folder level
+                    goto BACK_FOLDER;
                 }
             } else {
             Files:
@@ -743,7 +735,16 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (filepath.endsWith(".ir")) {
                         options.insert(options.begin(), {"IR Choose cmd", [&]() {
                                                              delay(200);
-                                                             chooseCmdIrFile(&fs, filepath);
+                                                             bool goToMain = chooseCmdIrFile(&fs, filepath);
+                                                             if (goToMain) exit = true;
+                                                             else {
+                                                                 // Short press: stay in current folder
+                                                                 // Flush any residual EscPress so file browser
+                                                                 // doesn't navigate up a folder unintentionally
+                                                                 delay(100);
+                                                                 while (check(EscPress)) delay(10);
+                                                                 reload = true;
+                                                             }
                                                          }});
                         options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
                                                              delay(200);
