@@ -18,3 +18,4 @@ mqjs_build
 docker-logs
 lib/mquickjs_headers/mqjs_stdlib_generator
 lib/mquickjs_headers/mqjs_stdlib_generator.exe
+.github/agents/Bruce-AI.agent.md
