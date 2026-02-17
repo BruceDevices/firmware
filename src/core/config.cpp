@@ -22,6 +22,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
+    setting["keyboardLang"] = keyboardLang;
 
 #ifdef HAS_RGB_LED
     setting["ledBright"] = ledBright;
@@ -207,6 +208,11 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+    if (!setting["keyboardLang"].isNull()) {
+        keyboardLang = setting["keyboardLang"].as<String>();
+    } else {
+        keyboardLang = "QWERTY";
     }
 
 #ifdef HAS_RGB_LED
