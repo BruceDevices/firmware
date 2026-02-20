@@ -1,5 +1,6 @@
 #include "sd_functions.h"
-#include "display.h" // using displayRedStripe as error msg
+#include "display.h"
+extern void resetListFilesCache(); // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/wigle.h"
@@ -564,7 +565,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
     String Folder = rootPath;
     String PreFolder = rootPath;
     tft.drawPixel(0, 0, 0);
-    tft.fillScreen(bruceConfig.bgColor); // TODO: Does only the T-Embed CC1101 need this?
+    tft.fillScreen(bruceConfig.bgColor);
     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     if (&fs == &SD) {
         if (!setupSdCard()) {
@@ -573,29 +574,80 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
         }
     }
     bool exit = false;
-    // returnToMenu=true;  // make sure menu is redrawn when quitting in any point
 
     readFs(fs, Folder, allowed_ext);
 
-    maxFiles = fileList.size() - 1; // discount the >back operator
+    maxFiles = fileList.size() - 1;
     LongPress = false;
     unsigned long LongPressTmp = millis();
+
     while (1) {
-        delay(10);
-        // if(returnToMenu) break; // stop this loop and retur to the previous loop
-        if (exit) break; // stop this loop and retur to the previous loop
+        yield();
+
+        if (exit) break;
+
+        if (EscPress && PrevPress) EscPress = false;
+        if (check(EscPress)) goto BACK_FOLDER;
+
+#ifdef HAS_KEYBOARD
+        {
+            char pressed_letter = checkLetterShortcutPress();
+            if (pressed_letter > 0) {
+                if (tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
+                    index += 1;
+                    if (index <= maxFiles && tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
+                        redraw = true;
+                    }
+                }
+                for (int i = 0; i < maxFiles; i++) {
+                    if (tolower(fileList[i].filename.c_str()[0]) == pressed_letter) {
+                        index = i;
+                        redraw = true;
+                        break;
+                    }
+                }
+            }
+        }
+#endif
+
+        if (check(PrevPress) || check(UpPress)) {
+            for (int s = 0; s < 3; s++) {
+                if (index == 0) index = maxFiles;
+                else index--;
+                if (s < 2 && !(check(PrevPress) || check(UpPress))) break;
+            }
+            redraw = true;
+        }
+        if (check(NextPress) || check(DownPress)) {
+            for (int s = 0; s < 3; s++) {
+                if (index == maxFiles) index = 0;
+                else index++;
+                if (s < 2 && !(check(NextPress) || check(DownPress))) break;
+            }
+            redraw = true;
+        }
+        if (check(NextPagePress)) {
+            index += PAGE_JUMP_SIZE;
+            if (index > maxFiles) index = maxFiles - 1;
+            redraw = true;
+        }
+        if (check(PrevPagePress)) {
+            index -= PAGE_JUMP_SIZE;
+            if (index < 0) index = 0;
+            redraw = true;
+        }
 
         if (redraw) {
-            if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || reload) {
+            bool folderChanged = (strcmp(PreFolder.c_str(), Folder.c_str()) != 0);
+            bool forceFullRedraw = folderChanged || reload;
+
+            if (forceFullRedraw) {
                 index = 0;
-                tft.fillScreen(bruceConfig.bgColor);
-                tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                Serial.println("reload to read: " + Folder);
                 readFs(fs, Folder, allowed_ext);
                 PreFolder = Folder;
                 maxFiles = fileList.size() - 1;
-                if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index > maxFiles) index = 0;
                 reload = false;
+                resetListFilesCache();
             }
             if (fileList.size() < 2) readFs(fs, Folder, allowed_ext);
 
@@ -605,63 +657,8 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
 #endif
             redraw = false;
         }
+
         displayScrollingText(fileList[index].filename, coord);
-
-        // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
-        // This condition is important for StickCPlus, Core and other 3 Btn devices
-        if (EscPress && PrevPress) EscPress = false;
-        char pressed_letter;
-        if (check(EscPress)) goto BACK_FOLDER;
-
-#ifdef HAS_KEYBOARD
-        pressed_letter = checkLetterShortcutPress();
-
-        // check letter shortcuts
-        if (pressed_letter > 0) {
-            // Serial.println(pressed_letter);
-            if (tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                // already selected, go to the next
-                index += 1;
-                // check if index is still valid
-                if (index <= maxFiles && tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                    redraw = true;
-                    continue;
-                }
-            }
-            // else look again from the start
-            for (int i = 0; i < maxFiles; i++) {
-                if (tolower(fileList[i].filename.c_str()[0]) == pressed_letter) { // check if 1st char matches
-                    index = i;
-                    redraw = true;
-                    break; // quit on 1st match
-                }
-            }
-        }
-#endif
-
-        if (check(PrevPress) || check(UpPress)) {
-            if (index == 0) index = maxFiles;
-            else if (index > 0) index--;
-            redraw = true;
-        }
-        /* DW Btn to next item */
-        if (check(NextPress) || check(DownPress)) {
-            if (index == maxFiles) index = 0;
-            else index++;
-            redraw = true;
-        }
-        if (check(NextPagePress)) {
-            index += PAGE_JUMP_SIZE;
-            if (index > maxFiles) index = maxFiles - 1; // check bounds
-            redraw = true;
-            continue;
-        }
-        if (check(PrevPagePress)) {
-            index -= PAGE_JUMP_SIZE;
-            if (index < 0) index = 0; // check bounds
-            redraw = true;
-            continue;
-        }
         /* Select to install */
         if (LongPress || SelPress) {
             if (!LongPress) {
@@ -753,10 +750,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
-                                                             RfCodes data{};
-
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                txSubFile(data);
+                                                             txSubFile(&fs, filepath);
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
@@ -872,7 +866,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                 redraw = true;
             }
         WAITING:
-            delay(10);
+            yield();
         }
     }
     fileList.clear();

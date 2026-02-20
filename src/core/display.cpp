@@ -32,28 +32,34 @@ bool __attribute__((weak)) isCharging() { return false; }
 ***************************************************************************************/
 void displayScrollingText(const String &text, Opt_Coord &coord) {
     int len = text.length();
-    String displayText = text + "        "; // Add spaces for smooth looping
-    int scrollLen = len + 8;                // Full text plus space buffer
+    static String _lastText = "";
     static int i = 0;
     static long _lastmillis = 0;
+
+    // Reset scroll position when the selected item changes
+    if (text != _lastText) {
+        i = 0;
+        _lastText = text;
+        _lastmillis = 0;
+    }
+
     tft.setTextColor(coord.fgcolor, coord.bgcolor);
     if (len < coord.size) {
         // Text fits within limit, no scrolling needed
         return;
     } else if (millis() > _lastmillis + 200) {
-        String scrollingPart =
-            displayText.substring(i, i + (coord.size - 1)); // Display charLimit characters at a time
+        String displayText = text + "        ";
+        int scrollLen = len + 8;
+        String scrollingPart = displayText.substring(i, i + (coord.size - 1));
         tft.fillRect(
-            coord.x,
-            coord.y,
+            coord.x, coord.y,
             (coord.size - 1) * LW * tft.getTextSize(),
             LH * tft.getTextSize(),
             bruceConfig.bgColor
-        ); // Clear display area
-        tft.setCursor(coord.x, coord.y);
+        );
         tft.setCursor(coord.x, coord.y);
         tft.print(scrollingPart);
-        if (i >= scrollLen - coord.size) i = -1; // Loop back
+        if (i >= scrollLen - coord.size) i = -1;
         _lastmillis = millis();
         i++;
         if (i == 1) _lastmillis = millis() + 1000;
@@ -928,47 +934,81 @@ void drawWireguardStatus(int x, int y) {
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
 #define MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
+
+static bool _listFilesForceReset = true;
+void resetListFilesCache() { _listFilesForceReset = true; }
+
+// Draw one line with text+bg atomically — no flicker, no separate fillRect
+static void _drawLine(int visPos, bool selected, const FileList &item, int nchars) {
+    uint16_t fg;
+    if (item.folder) fg = getColorVariation(bruceConfig.priColor);
+    else if (item.operation) fg = ALCOLOR;
+    else fg = bruceConfig.priColor;
+
+    tft.setTextColor(fg, bruceConfig.bgColor);
+    tft.setCursor(10, 10 + visPos * LH * FM);
+    String txt = selected ? ">" : " ";
+    txt += item.filename;
+    while ((int)txt.length() < nchars) txt += ' ';
+    tft.print(txt.substring(0, nchars));
+}
+
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     Opt_Coord coord;
-    tft.drawPixel(0, 0, bruceConfig.bgColor);
-    if (index == 0) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-    }
-    tft.setCursor(10, 10);
     tft.setTextSize(FM);
-    int i = 0;
+
     int arraySize = fileList.size();
+    int nchars = (tftWidth - 20) / (6 * FM);
+
     int start = 0;
     if (index >= MAX_ITEMS) {
         start = index - MAX_ITEMS + 1;
         if (start < 0) start = 0;
     }
-    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
-    String txt = ">";
-    while (i < arraySize) {
-        if (i >= start) {
-            tft.setCursor(10, tft.getCursorY());
-            if (fileList[i].folder == true)
-                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
-            else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
 
-            if (index == i) {
-                txt = ">";
-                coord.x = 10 + FM * LW;
-                coord.y = tft.getCursorY();
-                coord.size = nchars;
-                coord.fgcolor =
-                    fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;
-            } else txt = " ";
-            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
+    static int _lastStart = -1;
+    static int _lastIndex = -1;
+
+    bool pageChanged = (_listFilesForceReset || start != _lastStart);
+
+    if (pageChanged) {
+        // Full redraw only when page changes or forced (folder change)
+        if (_listFilesForceReset) {
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
         }
-        i++;
-        if (i == (start + MAX_ITEMS) || i == arraySize) break;
+        for (int visPos = 0; visPos < MAX_ITEMS; visPos++) {
+            int i = start + visPos;
+            if (i >= arraySize) {
+                // Clear empty slot
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.setCursor(10, 10 + visPos * LH * FM);
+                String blank(nchars, ' ');
+                tft.print(blank);
+            } else {
+                _drawLine(visPos, i == index, fileList[i], nchars);
+            }
+        }
+        _listFilesForceReset = false;
+    } else if (index != _lastIndex) {
+        // Partial redraw: only the 2 lines that changed
+        int oldVis = _lastIndex - start;
+        int newVis = index - start;
+        if (oldVis >= 0 && oldVis < MAX_ITEMS && _lastIndex < arraySize)
+            _drawLine(oldVis, false, fileList[_lastIndex], nchars);
+        if (newVis >= 0 && newVis < MAX_ITEMS)
+            _drawLine(newVis, true, fileList[index], nchars);
     }
+
+    _lastStart = start;
+    _lastIndex = index;
+
+    coord.x = 10 + FM * LW;
+    coord.y = 10 + (index - start) * LH * FM;
+    coord.size = nchars;
+    coord.fgcolor = fileList[index].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
+    coord.bgcolor = bruceConfig.bgColor;
+
     return coord;
 }
 
@@ -1225,25 +1265,6 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     Serial.println("=====================================");
 
     delete[] data_array; // free heap before leaving
-    return true;
-}
-
-bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center) {
-    bool decoded = false;
-    if (data_array) {
-        decoded = JpegDec.decodeArray(data_array, data_size);
-    } else {
-        return false;
-    }
-
-    if (decoded) {
-        if (center) {
-            x = x + (tftWidth - JpegDec.width) / 2;
-            y = y + (tftHeight - JpegDec.height) / 2;
-        }
-        jpegRender(x, y);
-    }
-
     return true;
 }
 
