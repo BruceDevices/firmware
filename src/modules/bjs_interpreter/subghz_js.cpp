@@ -70,9 +70,9 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int t;
         JS_ToInt32(ctx, &t, argv[0]);
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, t); // custom timeout
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, false, true); // headless mode for JS
     } else {
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10);
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, false, true);
     }
     return JS_NewString(ctx, r.c_str());
 }
@@ -82,9 +82,9 @@ JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValu
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int t;
         JS_ToInt32(ctx, &t, argv[0]);
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, true); // custom timeout
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, true, true); // raw + headless for JS
     } else {
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, true);
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, true, true);
     }
     return JS_NewString(ctx, r.c_str());
 }
