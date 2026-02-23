@@ -22,6 +22,7 @@ public:
         CUSTOM_UID_MODE,
         WRITE_MODE,
         WRITE_NDEF_MODE,
+        EMULATE_MODE,
         ERASE_MODE,
         LOAD_MODE,
         SAVE_MODE
@@ -90,6 +91,7 @@ private:
     void check_card();
     void write_custom_uid();
     void clone_card();
+    void emulate_card();
     void erase_card();
     void write_data();
     void write_ndef_data();

@@ -68,6 +68,9 @@ private:
     std::vector<String> quickButtonsAC = {
         "POWER", "TEMP+", "TEMP-", "SPEED", "SWING", "SWING+", "SWING-", "JET", "UP", "DOWN", "MODE"
     };
+    std::vector<String> quickButtonsFAN = {
+        "POWER", "SPEED+", "SPEED-", "MODE", "TIMER", "SWING", "OSCILLATE", "UP", "DOWN", "LIGHT", "ION", "SLEEP"
+    };
     std::vector<String> quickButtonsSOUND = {"POWER",    "UP",      "DOWN", "LEFT",    "RIGHT",
                                              "OK",       "SOURCES", "VOL+", "VOL-",    "MUTE",
                                              "SETTINGS", "BACK",    "EQ",   "REC",     "PLAY/PAUSE",

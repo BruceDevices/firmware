@@ -516,15 +516,12 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     }
 
     // Parse handshake
-    padprintln("Parsing handshake...");
     HandshakeData hs;
     if (!parse_pcap_handshake(*fs, pcap_path, hs)) {
         displayError("Failed to parse handshake", true);
         vTaskDelay(pdMS_TO_TICKS(3000));
         return;
     }
-
-    padprintln("Handshake loaded!");
     padprintf("SSID: %s\n", hs.ssid[0] ? hs.ssid : "(not found)");
     padprintf(
         "AP: %02X:%02X:%02X:%02X:%02X:%02X\n",

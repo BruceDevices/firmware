@@ -22,11 +22,36 @@ Thanks to @bmorcelli for his help doing a better code.
 
 void advertise(uint8_t channel);
 void wakeUp();
+void toggle_all_channels();
 
 uint8_t state;
-uint8_t current_channel = 1;
+uint8_t current_channel = 255; // Will wrap to 0 on first increment, starting at first channel
 uint32_t last_mood_switch = 10001;
 bool pwnagotchi_exit = false;
+bool use_all_channels = false; // Toggle flag for all channels
+
+// Primary channels (default: 1, 6, 11)
+const uint8_t pri_wifi_channels_default[] = {1, 6, 11};
+
+// all_wifi_channels[] is already defined in sniffer.h - we'll use that
+
+// Pointer to current channel array
+const uint8_t *active_channels = pri_wifi_channels_default;
+uint8_t active_channels_size = sizeof(pri_wifi_channels_default) / sizeof(pri_wifi_channels_default[0]);
+
+void toggle_all_channels() {
+    use_all_channels = !use_all_channels;
+
+    if (use_all_channels) {
+        active_channels = all_wifi_channels;
+        active_channels_size = sizeof(all_wifi_channels) / sizeof(all_wifi_channels[0]);
+        current_channel = 255; // Will wrap to 0 on next increment
+    } else {
+        active_channels = pri_wifi_channels_default;
+        active_channels_size = sizeof(pri_wifi_channels_default) / sizeof(pri_wifi_channels_default[0]);
+        current_channel = 255; // Will wrap to 0 on next increment
+    }
+}
 
 void brucegotchi_setup() {
     initPwngrid();
@@ -46,19 +71,17 @@ void brucegotchi_update() {
     if (state == STATE_WAKE) {
         checkPwngridGoneFriends();
         current_channel++; // Sniffer ch variable
-        // It will hop through channels 1, 6 and 11 for better performance (most Wifi run in these channels,
-        // and by interference we can get 2 before and after the target) it will make us save space on
-        // registeredBeacon array, because we find the same beacon in 3 or 4 different channels (same MAC)
-        if (current_channel == sizeof(pri_wifi_channels)) { current_channel = 0; }
-        ch = pri_wifi_channels[current_channel];
-        advertise(pri_wifi_channels[current_channel]);
+        // Cycle through active channels
+        if (current_channel >= active_channels_size) { current_channel = 0; }
+        ch = active_channels[current_channel];
+        advertise(active_channels[current_channel]);
     }
     updateUi(true);
 }
 
 void wakeUp() {
-    for (uint8_t i = 0; i < sizeof(pri_wifi_channels); i++) {
-        setMood(i);
+    for (uint8_t i = 0; i < active_channels_size; i++) {
+        setMood(i % getNumberOfMoods());
         updateUi(false);
         vTaskDelay(1250 / portTICK_RATE_MS);
     }
@@ -80,7 +103,7 @@ void advertise(uint8_t channel) {
         setMood(MOOD_BROKEN, "", "Error: invalid argument", true);
         state = STATE_HALT;
     } else if (result == ESP_ERR_NO_MEM) {
-        setMood(MOOD_BROKEN, "", "Error: not enaugh memory", true);
+        setMood(MOOD_BROKEN, "", "Error: not enough memory", true);
         state = STATE_HALT;
     } else if (result != ESP_OK) {
         setMood(MOOD_BROKEN, "", "Error: unknown", true);
@@ -145,7 +168,7 @@ void brucegotchi_start() {
         if (millis() - tmp > (2000 + 1000 * _times) && Deauth_done && !pwgrid_done) {
 
             if (registeredBeacons.size() > 30)
-                registeredBeacons.clear(); // Clear registered beacons to restart search and avoir restarts
+                registeredBeacons.clear(); // Clear registered beacons to restart search and avoid restarts
             // Serial.println("<<---- Starting Deauthentication Process ---->>");
             for (auto registeredBeacon : registeredBeacons) {
                 char _MAC[20];
@@ -195,16 +218,22 @@ void brucegotchi_start() {
             brucegotchi_update();
         }
         if (check(SelPress)) {
+            // Build options menu with channel toggle status
+            String channel_status = use_all_channels ? "All Ch: ON" : "All Ch: OFF";
+
             // moved down here to reset the options, due to use in other parts in pwngrid spam
             options = {
                 {"Find friends", yield},
                 {"Pwngrid spam", send_pwnagotchi_beacon_main},
+                {channel_status.c_str(), toggle_all_channels},
                 {"Main Menu", lambdaHelper(set_pwnagotchi_exit, true)},
             };
             // Display menu
             loopOptions(options);
             // Redraw footer & header
             tft.fillScreen(bruceConfig.bgColor);
+            drawTopCanvas();
+            drawBottomCanvas();
             updateUi(true);
         }
         if (pwnagotchi_exit) { break; }

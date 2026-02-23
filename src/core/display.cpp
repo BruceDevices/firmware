@@ -486,6 +486,7 @@ int loopOptions(
         );
     if (index >= options.size()) index = 0;
     bool firstRender = true;
+    static unsigned long menuOpenTs = 0; // timestamp when menu was first rendered
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -525,6 +526,7 @@ int loopOptions(
                         firstRender
                     );
             }
+            if (firstRender) menuOpenTs = millis();
             firstRender = false;
             redraw = false;
         }
@@ -603,7 +605,11 @@ int loopOptions(
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
         */
-        if (check(SelPress) || forceMenuOption >= 0) {
+        // Prevent immediate selection if the SEL button was already being held when the menu opened.
+        // Allow a short grace period for the user to release the button first.
+        static const unsigned long MENU_SELECT_IGNORE_MS = 600; // ms to ignore SEL after menu opens
+
+        if (forceMenuOption >= 0 || (millis() - menuOpenTs > MENU_SELECT_IGNORE_MS && check(SelPress))) {
             uint16_t chosen = index;
             if (forceMenuOption >= 0) {
                 chosen = forceMenuOption;
@@ -1225,6 +1231,25 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     Serial.println("=====================================");
 
     delete[] data_array; // free heap before leaving
+    return true;
+}
+
+bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center) {
+    bool decoded = false;
+    if (data_array) {
+        decoded = JpegDec.decodeArray(data_array, data_size);
+    } else {
+        return false;
+    }
+
+    if (decoded) {
+        if (center) {
+            x = x + (tftWidth - JpegDec.width) / 2;
+            y = y + (tftHeight - JpegDec.height) / 2;
+        }
+        jpegRender(x, y);
+    }
+
     return true;
 }
 

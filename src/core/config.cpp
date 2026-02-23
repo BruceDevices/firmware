@@ -583,7 +583,7 @@ void BruceConfig::setLedEffect(int value) {
 }
 
 void BruceConfig::validateLedEffectValue() {
-    if (ledEffect < 0 || ledEffect > 5) ledEffect = 0;
+    if (ledEffect < 0 || ledEffect > 9) ledEffect = 0;
 }
 
 void BruceConfig::setLedEffectSpeed(int value) {

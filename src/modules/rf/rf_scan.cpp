@@ -120,7 +120,61 @@ bool RFScan::fast_scan() {
     return false;
 }
 
+void keeloq_identify(RfCodes &instance) {
+    FS *fs = NULL;
+
+    if (!getFsStorage(fs)) { return; }
+
+    KeeloqKeystore keystore{fs};
+
+    for (const auto &key : keystore.get_keys()) {
+        switch (key.type) {
+            case KEELOQ_SIMPLE_LEARNING: {
+                uint64_t decrypt = keeloq_decrypt(instance.encrypted, key.key);
+
+                if (instance.keeloq_check_decrypt(decrypt)) {
+                    instance.mf_name = key.mf_name;
+                    instance.hop = decrypt;
+
+                    return;
+                }
+
+                break;
+            }
+
+            case KEELOQ_NORMAL_LEARNING: {
+                uint64_t man = keeloq_normal_learning(instance.fix, key.key);
+                uint64_t decrypt = keeloq_decrypt(instance.encrypted, man);
+
+                if (instance.mf_name == "Centurion") {
+                    if (instance.keeloq_check_decrypt_centurion(decrypt)) {
+                        instance.hop = decrypt;
+
+                        return;
+                    }
+                }
+
+                if (instance.keeloq_check_decrypt(decrypt)) {
+                    instance.mf_name = key.mf_name;
+                    instance.hop = decrypt;
+
+                    return;
+                }
+
+                break;
+            }
+        }
+    }
+}
+
 void RFScan::read_rcswitch() {
+    received.fix = 0;
+    received.hop = 0;
+    received.btn = 0;
+    received.cnt = 0;
+    received.mf_name = "Unknown";
+    received.encrypted = 0;
+
     // Add decoded data only (if any) to the RCCode
     uint64_t decoded = rcswitch.getReceivedValue();
 
@@ -137,6 +191,17 @@ void RFScan::read_rcswitch() {
         received.Bit = rcswitch.getReceivedBitlength();
         received.filepath = "signal_" + String(signals);
         received.data = "";
+
+        if (rcswitch.getReceivedProtocol() == 23) {
+            uint64_t yek = reverse_bits(decoded, 64);
+
+            received.fix = yek >> 32;
+            received.btn = received.fix >> 28;
+            received.encrypted = yek & 0xFFFFFFFF;
+            received.serial = (yek >> 32) & 0xFFFFFFF;
+
+            keeloq_identify(received);
+        }
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
@@ -159,6 +224,14 @@ void RFScan::read_raw() {
     uint8_t repetition = 0;
 
     received.te = 0;
+
+    received.fix = 0;
+    received.hop = 0;
+    received.btn = 0;
+    received.cnt = 0;
+    received.mf_name = "Unknown";
+    received.encrypted = 0;
+
     for (transitions = 0; transitions < RCSWITCH_RAW_MAX_CHANGES; transitions++) {
         if (raw[transitions] == 0) break;
         if (transitions > 0) _data += " ";
@@ -194,6 +267,18 @@ void RFScan::read_raw() {
         received.indexed_durations = {};
         received.te = rcswitch.getReceivedDelay();
         received.Bit = rcswitch.getReceivedBitlength();
+
+        if (rcswitch.getReceivedProtocol() == 23) {
+            uint64_t yek = reverse_bits(decoded, 64);
+
+            received.fix = yek >> 32;
+            received.btn = received.fix >> 28;
+            received.encrypted = yek & 0xFFFFFFFF;
+            received.serial = (yek >> 32) & 0xFFFFFFF;
+
+            keeloq_identify(received);
+        }
+
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -313,9 +398,12 @@ void RFScan::set_option(RFMenuOption option) {
 void RFScan::replay_signal(bool asRaw) {
     String actualProtocol = received.protocol;
     if (asRaw) { received.protocol = "RAW"; }
+    displayTextLine("Sending..");
     sendRfCommand(received);
     addToRecentCodes(received);
     received.protocol = actualProtocol;
+
+    if (received.fix != 0 && !asRaw) { received.keeloq_step(1); }
 }
 
 void RFScan::save_signal(bool asRaw) {
@@ -333,6 +421,12 @@ void RFScan::reset_signals() {
     received.preset = "";
     received.protocol = "";
     signals = 0;
+    received.fix = 0;
+    received.hop = 0;
+    received.btn = 0;
+    received.cnt = 0;
+    received.mf_name = "Unknown";
+    received.encrypted = 0;
 }
 
 void RFScan::set_threshold() {
@@ -416,30 +510,58 @@ void display_signal_data(RfCodes received) {
 
     while (ss >> palavra) transitions++;
 
-    if (received.preset != "")
-        padprintln("Protocol: " + String(received.protocol) + "(" + received.preset + ")");
-    else padprintln("Protocol: " + String(received.protocol));
+    if (received.preset != "") {
+        if (received.fix != 0) {
+            padprintln("Protocol: KeeLoq");
+        } else padprintln("Protocol: " + String(received.protocol) + "(" + received.preset + ")");
+    } else padprintln("Protocol: " + String(received.protocol));
 
     if (received.key > 0) {
         decimalToHexString(received.key, hexString);
         if (received.protocol == "RAW") {
-            padprintln("Lenght: " + String(received.Bit) + " transitions");
+            padprintln("Length: " + String(received.Bit) + " transitions");
             // tft.setCursor(tft.getCursorX(), tft.getCursorY() + 2);
             padprintln("Record length: " + String(transitions) + " transitions");
         } else {
-            padprintln("Lenght: " + String(received.Bit) + " bits");
-            const char *b = dec2binWzerofill(received.key, min(received.Bit, 40));
-            // tft.setCursor(tft.getCursorX(), tft.getCursorY() + 2);
-            padprintln("Binary: " + String(b));
+            if (received.fix == 0) {
+                padprintln("Length: " + String(received.Bit) + " bits");
+                const char *b = dec2binWzerofill(received.key, min(received.Bit, 40));
+                // tft.setCursor(tft.getCursorX(), tft.getCursorY() + 2);
+                padprintln("Binary: " + String(b));
+            }
         }
     } else {
         strcpy(hexString, "No code identified");
-        padprintln("Lenght: No code identified");
+        padprintln("Length: No code identified");
         padprintln("Record length: " + String(transitions) + " transitions");
     }
 
     if (received.protocol == "RAW") padprintln("CRC: " + String(hexString));
-    else padprintln("Key: " + String(hexString));
+    else {
+        if (received.fix != 0) {
+            padprintln("Manufacturer: " + received.mf_name);
+
+            decimalToHexString(received.serial, hexString);
+            padprintln("Serial: " + String(hexString));
+
+            padprintln("Btn: " + String(received.btn));
+
+            decimalToHexString(received.fix, hexString);
+            padprintln("Fix: " + String(hexString));
+
+            if (received.mf_name != "Unknown") {
+                decimalToHexString(received.hop, hexString);
+                padprintln("Hop: " + String(hexString));
+
+                padprintln("Counter: " + String(received.cnt));
+            } else {
+                decimalToHexString(received.encrypted, hexString);
+                padprintln("Encrypted: " + String(hexString));
+            }
+        } else {
+            padprintln("Key: " + String(hexString));
+        }
+    }
 
     // if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
     //     int rssi = ELECHOUSE_cc1101.getRssi();
@@ -481,7 +603,18 @@ bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bo
         subfile_out += "Preset: " + String(codes.preset) + "\n";
         subfile_out += "Protocol: RcSwitch\n";
         subfile_out += "Bit: " + String(codes.Bit) + "\n";
-        subfile_out += "Key: " + String(key) + "\n";
+        if (codes.hop != 0) {
+            subfile_out += "Manufacturer: " + String(codes.mf_name) + "\n";
+            char hexString[64] = {0};
+
+            decimalToHexString(codes.serial, hexString);
+
+            subfile_out += "Serial: " + String(hexString) + "\n";
+            subfile_out += "Button: " + String(codes.btn) + "\n";
+            subfile_out += "Counter: " + String(codes.cnt) + "\n";
+        } else {
+            subfile_out += "Key: " + String(key) + "\n";
+        }
         subfile_out += "TE: " + String(codes.te) + "\n";
         filename = "rcs.sub";
         // subfile_out += "RAW_Data: " + codes.data;

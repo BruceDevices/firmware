@@ -92,6 +92,7 @@ public:
     virtual int erase() = 0;
     virtual int write(int cardBaudRate = 0) = 0;
     virtual int write_ndef() = 0;
+    virtual int emulate() { return NOT_IMPLEMENTED; }
     virtual int load() = 0;
     virtual int save(String filename) = 0;
 

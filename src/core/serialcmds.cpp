@@ -10,7 +10,7 @@ QueueHandle_t rspQueue = nullptr;
 TaskHandle_t serialcmdsTaskHandle;
 
 struct CmdPacket {
-    char text[SAFE_STACK_BUFFER_SIZE];
+    char text[512]; // command size
 };
 bool parseSerialCommand(const String &command, bool waitForResponse) {
     if (!cmdQueue || !rspQueue) {

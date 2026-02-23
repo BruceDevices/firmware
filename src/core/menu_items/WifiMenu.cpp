@@ -35,6 +35,7 @@
 // 32bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_386.exe
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "modules/wifi/tcp_utils.h"
+#include "modules/wifi/socks4_proxy.h"
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
 bool showHiddenNetworks = false;
@@ -80,6 +81,7 @@ void WifiMenu::optionsMenu() {
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
+    options.push_back({"SOCKS4 Proxy", []() { socks4Proxy(1080); }});
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffers", [this]() {

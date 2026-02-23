@@ -24,13 +24,27 @@ void interpreterHandler(void *pvParameters) {
     while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
 
     tft.fillScreen(TFT_BLACK);
-    tft.setRotation(bruceConfigPins.rotation);
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
     bool psramAvailable = psramFound();
 
-    size_t mem_size = psramAvailable ? 65536 : 32768;
+    size_t max_alloc = psramAvailable ? ESP.getMaxAllocPsram() : ESP.getMaxAllocHeap();
+    size_t mem_size = max_alloc < 150000 ? (max_alloc / 2 < 65536 ? max_alloc - 8192 : 65536) : 100000;
+    if (mem_size < 2000) {
+        print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
+        interpreter_state = -1;
+        vTaskDelete(NULL);
+        return;
+    }
+
     uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
+    if (mem_buf == NULL) {
+        print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
+        interpreter_state = -1;
+        vTaskDelete(NULL);
+        return;
+    }
+
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
 
@@ -82,8 +96,6 @@ void interpreterHandler(void *pvParameters) {
 
     printMemoryUsage("deinit interpreter");
 
-    // TODO: if backgroud app implemented, store in ctx and set if on foreground/background
-
     interpreter_state = -1;
     vTaskDelete(NULL);
     return;
@@ -119,12 +131,9 @@ void run_bjs_script() {
         loopOptions(options);
     }
     filename = loopSD(*fs, true, "BJS|JS");
-    script = readBigFile(fs, filename);
-    if (script == NULL) { return; }
-
-    returnToMenu = true;
-    interpreter_state = 1;
-    startInterpreterTask();
+    vTaskDelay(pdMS_TO_TICKS(200));
+    if (filename == "") { return; }
+    run_bjs_script_headless(*fs, filename);
 }
 
 bool run_bjs_script_headless(char *code) {
@@ -154,7 +163,11 @@ bool run_bjs_script_headless(FS fs, String filename) {
 
 String getScriptsFolder(FS *&fs) {
     String folder;
-    String possibleFolders[] = {"/scripts", "/BruceScripts", "/BruceJS"};
+    String possibleFolders[] = {
+        "/BruceJS",
+        "/BruceScripts",
+        "/scripts",
+    };
     int listSize = sizeof(possibleFolders) / sizeof(possibleFolders[0]);
 
     for (int i = 0; i < listSize; i++) {

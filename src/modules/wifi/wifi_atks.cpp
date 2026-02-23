@@ -90,6 +90,7 @@ static inline void prepareBeaconPacket(
     // ensure SSID slot is cleared (32 bytes) then copy SSID
     memset(&outPacket[38], 0x20, 32); // keep template behavior
     if (ssidLen > 32) ssidLen = 32;
+    outPacket[37] = ssidLen; // SSID element length
     if (ssidLen > 0) { memcpy(&outPacket[38], ssid, ssidLen); }
 
     // set channel and WPA flags

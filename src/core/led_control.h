@@ -12,6 +12,10 @@
 #define LED_EFFECT_COLOR_WHEEL 3
 #define LED_EFFECT_CHASE 4
 #define LED_EFFECT_CHASE_TAIL 5
+#define LED_EFFECT_RAINBOW_CHASE 6
+#define LED_EFFECT_DISCO 7
+#define LED_EFFECT_FIRE 8
+#define LED_EFFECT_RAINBOW_BREATHE 9
 
 CRGB hsvToRgb(uint16_t h, uint8_t s, uint8_t v);
 uint32_t alterOneColorChannel(uint32_t color, uint16_t newR, uint16_t newG, uint16_t newB);

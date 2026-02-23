@@ -413,6 +413,89 @@ JSValue native_drawPixel(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     return JS_UNDEFINED;
 }
 
+JSValue native_drawBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int bitmapWidth = 0, bitmapHeight = 0, bpp = 8;
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &bitmapWidth, argv[3]);
+    if (argc > 4 && JS_IsNumber(ctx, argv[4])) JS_ToInt32(ctx, &bitmapHeight, argv[4]);
+    if (argc > 5 && JS_IsNumber(ctx, argv[5])) JS_ToInt32(ctx, &bpp, argv[5]);
+
+    size_t bitmapSize = 0;
+    const uint8_t *bitmapPointer = NULL;
+
+    if (argc > 2) {
+        const char *s = NULL;
+        if (JS_IsString(ctx, argv[2])) {
+            JSCStringBuf sb;
+            s = JS_ToCStringLen(ctx, &bitmapSize, argv[2], &sb);
+        } else if (JS_IsTypedArray(ctx, argv[2])) {
+            s = JS_GetTypedArrayBuffer(ctx, &bitmapSize, argv[2]);
+        }
+        if (s) { bitmapPointer = (const uint8_t *)s; }
+    }
+
+    if (bitmapPointer == NULL) {
+        return JS_ThrowTypeError(
+            ctx, "%s: Expected string/ArrayBuffer/Uint8Array for bitmap data", "drawBitmap"
+        );
+    }
+
+    // Calculate expected bitmap size
+    size_t expectedSize;
+    bool bpp8 = false;
+    if (bpp == 16) {
+        expectedSize = bitmapWidth * bitmapHeight * 2; // 16bpp (RGB565)
+    } else if (bpp == 8) {
+        expectedSize = bitmapWidth * bitmapHeight; // 8bpp (RGB332)
+        bpp8 = true;
+    } else if (bpp == 4) {
+        expectedSize = (bitmapWidth * bitmapHeight + 1) / 2; // 4bpp (2 pixels per byte)
+    } else if (bpp == 1) {
+        expectedSize = ((bitmapWidth + 7) / 8) * bitmapHeight; // 1bpp (8 pixels per byte)
+    } else {
+        return JS_ThrowTypeError(ctx, "%s: Unsupported bpp value! Use 16, 8, 4, or 1.", "drawBitmap");
+    }
+
+    if (bitmapSize != expectedSize) {
+        return JS_ThrowTypeError(
+            ctx,
+            "%s: Bitmap size mismatch! Got %lu bytes, expected %lu bytes for %dx%d at %dbpp.",
+            "drawBitmap",
+            (unsigned long)bitmapSize,
+            (unsigned long)expectedSize,
+            bitmapWidth,
+            bitmapHeight,
+            bpp
+        );
+    }
+
+    int x = 0, y = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+
+    // Handle palette if needed (only for 4bpp and 1bpp)
+    uint16_t *palette = nullptr;
+    size_t paletteSize = 0;
+    if ((bpp == 4 || bpp == 1) && JS_IsTypedArray(ctx, argv[6])) {
+        palette = (uint16_t *)JS_GetTypedArrayBuffer(ctx, &paletteSize, argv[6]);
+        if (!palette || paletteSize == 0) {
+            return JS_ThrowTypeError(ctx, "%s: Invalid palette! Expected a valid ArrayBuffer.", "drawBitmap");
+        }
+    }
+
+#if defined(HAS_SCREEN)
+    DisplayTarget target = get_display_target(ctx, this_val);
+    if (target.isSprite) {
+        target.sprite->pushImage(x, y, bitmapWidth, bitmapHeight, bitmapPointer, bpp8, palette);
+    } else {
+        target.display->pushImage(x, y, bitmapWidth, bitmapHeight, bitmapPointer, bpp8, palette);
+    }
+#else
+    get_display(ctx, this_val)->pushImage(x, y, bitmapWidth, bitmapHeight, bitmapPointer, bpp8, palette);
+#endif
+
+    return JS_UNDEFINED;
+}
+
 JSValue native_drawXBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     // Accept strings, Uint8Array, ArrayBuffer or JS arrays containing byte values.
     int bitmapWidth = 0, bitmapHeight = 0;
@@ -467,9 +550,11 @@ JSValue native_drawXBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue 
         }
     }
 #else
-    if (bg >= 0)
+    if (bg >= 0) {
         get_display(ctx, this_val)->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg, bg);
-    else get_display(ctx, this_val)->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg);
+    } else {
+        get_display(ctx, this_val)->drawXBitmap(x, y, (uint8_t *)data, bitmapWidth, bitmapHeight, fg);
+    }
 #endif
 
     return JS_UNDEFINED;
@@ -556,14 +641,35 @@ JSValue native_drawImage(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 }
 
 JSValue native_drawJpg(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
-    showJpeg(*file.fs, file.path, 0, 0, 0);
+    FileParamsJS file;
+    int x = 0, y = 0, center = 0;
+    int base = 0;
+
+    if (!JS_IsTypedArray(ctx, argv[0])) {
+        file = js_get_path_from_params(ctx, argv, true, true);
+        base = file.paramOffset;
+    }
+
+    if (argc > base && JS_IsNumber(ctx, argv[base + 1])) JS_ToInt32(ctx, &x, argv[base + 1]);
+    if (argc > base + 1 && JS_IsNumber(ctx, argv[base + 2])) JS_ToInt32(ctx, &y, argv[base + 2]);
+    if (argc > base + 2) {
+        if (JS_IsBool(argv[base + 3])) center = JS_ToBool(ctx, argv[base + 3]);
+        else if (JS_IsNumber(ctx, argv[base + 3])) JS_ToInt32(ctx, &center, argv[base + 3]);
+    }
+
+    if (!JS_IsTypedArray(ctx, argv[0])) {
+        showJpeg(*file.fs, file.path, x, y, center);
+    } else {
+        size_t jpgSize = 0;
+        const uint8_t *jpgData = (const uint8_t *)JS_GetTypedArrayBuffer(ctx, &jpgSize, argv[0]);
+        if (!jpgData) { return JS_ThrowTypeError(ctx, "drawJpg: Invalid Uint8Array data"); }
+        showJpeg(jpgData, jpgSize, x, y, center);
+    }
     return JS_UNDEFINED;
 }
 
 JSValue native_drawGif(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if !defined(LITE_VERSION)
-    (void)this_val;
     FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
 
     int x = 0, y = 0, center = 0, playDurationMs = 0;
@@ -715,8 +821,13 @@ JSValue native_deleteSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue
 
 JSValue native_pushSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(HAS_SCREEN) && defined(BOARD_HAS_PSRAM)
+    int x = 0, y = 0, transparent = TFT_TRANSPARENT;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &transparent, argv[2]);
+
     DisplayTarget target = get_display_target(ctx, this_val);
-    if (target.isSprite && target.sprite) target.sprite->pushSprite(0, 0);
+    if (target.isSprite && target.sprite) target.sprite->pushSprite(x, y, transparent);
 #endif
     return JS_UNDEFINED;
 }
