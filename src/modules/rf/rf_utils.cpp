@@ -1,4 +1,5 @@
 #include "rf_utils.h"
+#include "core/sd_functions.h"
 #include "core/settings.h"
 
 // CRC-64-ECMA constants
@@ -81,6 +82,137 @@ RfCodes recent_rfcodes[16];       // TODO: save/load in EEPROM
 int recent_rfcodes_last_used = 0; // TODO: save/load in EEPROM
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
+
+bool RfCodes::keeloq_check_decrypt(uint32_t decrypt) {
+    uint16_t end_serial = serial & 0xFF;
+
+    if ((decrypt >> 28 == btn) && (((((uint16_t)(decrypt >> 16)) & 0xFF) == end_serial) ||
+                                   ((((uint16_t)(decrypt >> 16)) & 0xFF) == 0))) {
+        cnt = decrypt & 0xFFFF;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool RfCodes::keeloq_check_decrypt_centurion(uint32_t decrypt) {
+    if ((decrypt >> 28 == btn) && ((((uint16_t)(decrypt >> 16)) & 0x3FF) == 0x1CE)) {
+        cnt = decrypt & 0xFFFF;
+
+        return true;
+    }
+
+    return false;
+}
+
+void RfCodes::keeloq_step(uint16_t step) {
+    cnt += step;
+
+    hop = btn << 28 | (serial & 0x3FF) << 16 | cnt;
+
+    if (mf_name == "Aprimatic") {
+        uint32_t apri_serial = serial;
+        uint8_t apr1 = 0;
+
+        for (uint16_t i = 1; i != 0b10000000000; i <<= 1) {
+            if (apri_serial & i) apr1++;
+        }
+
+        apri_serial &= 0b00001111111111;
+
+        if (apr1 % 2 == 0) { apri_serial |= 0b110000000000; }
+
+        hop = btn << 28 | (apri_serial & 0xFFF) << 16 | cnt;
+    } else if (mf_name == "DTM_Neo" || mf_name == "FAAC_RC,XT" || mf_name == "Mutanco_Mutancode" ||
+               mf_name == "Came_Space" || mf_name == "Genius_Bravo" || mf_name == "GSN" ||
+               mf_name == "Rosh" || mf_name == "Rossi" || mf_name == "Peccinin" || mf_name == "Steelmate" ||
+               mf_name == "Cardin_S449") {
+        hop = btn << 28 | (serial & 0xFFF) << 16 | cnt;
+    } else if (mf_name == "NICE_Smilo" || mf_name == "NICE_MHOUSE" || mf_name == "JCM_Tech") {
+        hop = btn << 28 | (serial & 0xFF) << 16 | cnt;
+    } else if (mf_name == "Merlin") {
+        hop = btn << 28 | (0x000) << 16 | cnt;
+    } else if (mf_name == "Centurion") {
+        hop = btn << 28 | (0x1CE) << 16 | cnt;
+    } else if (mf_name == "Monarch") {
+        hop = btn << 28 | (0x100) << 16 | cnt;
+    } else if (mf_name == "Dea_Mio") {
+        uint8_t first_disc_num = (serial >> 8) & 0xF;
+        uint8_t result_disc = (0xC + (first_disc_num % 4));
+
+        uint32_t dea_serial = (serial & 0xFF) | (((uint32_t)result_disc) << 8);
+
+        hop = btn << 28 | (dea_serial & 0xFFF) << 16 | cnt;
+    }
+
+    FS *fs = NULL;
+
+    if (!getFsStorage(fs)) { return; }
+
+    KeeloqKeystore keystore{fs};
+
+    KeeloqKey current_key;
+
+    for (const auto &key : keystore.get_keys()) {
+        if (key.mf_name == mf_name) { current_key = key; }
+    }
+
+    switch (current_key.type) {
+        case KEELOQ_SIMPLE_LEARNING: {
+            encrypted = keeloq_encrypt(hop, current_key.key);
+
+            break;
+        }
+        case KEELOQ_NORMAL_LEARNING: {
+            uint64_t man = keeloq_normal_learning(hop, current_key.key);
+
+            encrypted = keeloq_encrypt(hop, man);
+
+            break;
+        }
+    }
+
+    key = reverse_bits(encrypted, 32) << 32 | reverse_bits(fix, 32);
+}
+
+std::vector<String> split_string(String str, char c) {
+    std::vector<String> cols{};
+    size_t start = 0;
+
+    while (start < str.length()) {
+        auto it = str.indexOf(c, start);
+
+        if (it == -1) break;
+
+        cols.emplace_back(&str[start], it - start);
+        start = it + 1;
+    }
+
+    if (start <= str.length() && !str.isEmpty()) cols.emplace_back(&str[start], str.length() - start);
+
+    return cols;
+}
+
+KeeloqKeystore::KeeloqKeystore(FS *fs) {
+    File keystore = fs->open("/mfcodes");
+
+    if (!keystore) { return; }
+
+    String line = keystore.readStringUntil('\n');
+
+    for (; line != ""; line = keystore.readStringUntil('\n')) {
+        auto cols = split_string(line, ';');
+
+        if (cols.size() != 3) { return; }
+
+        KeeloqKey key{cols[0], std::strtoull(cols[1].c_str(), NULL, 16), (uint8_t)cols[2].toInt()};
+
+        keys.push_back(key);
+    }
+}
+
+const std::vector<KeeloqKey> &KeeloqKeystore::get_keys() { return keys; }
 
 bool initRfModule(String mode, float frequency) {
     // use default frequency if no one is passed
@@ -303,6 +435,17 @@ int find_pulse_index(const std::vector<int> &indexed_durations, int duration) {
     return closest_index; // Otherwise, return the closest match
 }
 
+uint64_t reverse_bits(uint64_t num, uint8_t bits) {
+    uint64_t res = 0;
+
+    for (uint8_t i = 0; i < bits; ++i) {
+        res <<= 1;
+        res |= bitAt(num, i);
+    }
+
+    return res;
+}
+
 // Function to compute CRC-64-ECMA
 uint64_t crc64_ecma(const std::vector<int> &data) {
     uint64_t crc = CRC64_ECMA_INIT;
@@ -419,4 +562,39 @@ void rf_range_selection(float currentFrequency) {
 
     if (bruceConfigPins.rfFxdFreq) displayTextLine("Scan freq set to " + String(bruceConfigPins.rfFreq));
     else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
+}
+
+uint32_t keeloq_encrypt(const uint32_t data, const uint64_t key) {
+    uint32_t x = data, r;
+
+    for (r = 0; r < 528; r++)
+        x = (x >> 1) ^ ((bitAt(x, 0) ^ bitAt(x, 16) ^ (uint32_t)bitAt(key, r & 63) ^
+                         bitAt(KEELOQ_NLF, g5(x, 1, 9, 20, 26, 31)))
+                        << 31);
+
+    return x;
+}
+
+uint32_t keeloq_decrypt(const uint32_t data, const uint64_t key) {
+    uint32_t x = data, r;
+
+    for (r = 0; r < 528; r++)
+        x = (x << 1) ^ bitAt(x, 31) ^ bitAt(x, 15) ^ (uint32_t)bitAt(key, (15 - r) & 63) ^
+            bitAt(KEELOQ_NLF, g5(x, 0, 8, 19, 25, 30));
+
+    return x;
+}
+
+uint64_t keeloq_normal_learning(uint32_t data, const uint64_t key) {
+    uint32_t k1, k2;
+
+    data &= 0x0FFFFFFF;
+    data |= 0x20000000;
+    k1 = keeloq_decrypt(data, key);
+
+    data &= 0x0FFFFFFF;
+    data |= 0x60000000;
+    k2 = keeloq_decrypt(data, key);
+
+    return ((uint64_t)k2 << 32) | k1;
 }

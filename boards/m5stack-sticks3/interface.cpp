@@ -222,21 +222,9 @@ bool isCharging() {
 ** Handles audio CODEC to enable/disable speaker
 **********************************************************************/
 void _setup_codec_speaker(bool enable) {
-
-    static constexpr const uint8_t enabled_bulk_data[] = {
-        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
-        2, 0x01, 0xB5, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
-        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
-        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
-        2, 0x12, 0x00, // 0x12 SYSTEM/ power-up DAC - NOT default
-        2, 0x13, 0x10, // 0x13 SYSTEM/ Enable output to HP drive - NOT default
-        2, 0x32, 0xBF, // 0x32 DAC/ DAC volume (0xBF == ±0 dB )
-        2, 0x37, 0x08, // 0x37 DAC/ Bypass DAC equalizer - NOT default
-        0
-    };
-    static constexpr const uint8_t disabled_bulk_data[] = {0};
-
-    i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+    M5.Speaker.setVolume(bruceConfig.soundVolume);
+    if (enable) M5.Speaker.begin();
+    else M5.Speaker.end();
 }
 
 /*********************************************************************
@@ -245,32 +233,8 @@ void _setup_codec_speaker(bool enable) {
 ** Handles audio CODEC to enable/disable microphone
 **********************************************************************/
 void _setup_codec_mic(bool enable) {
-    // Set microfone pin for ADV
+    if (enable) M5.Mic.begin();
+    else M5.Mic.end();
+
     mic_bclk_pin = (gpio_num_t)17;
-
-    static constexpr const uint8_t enabled_bulk_data[] = {
-        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
-        2, 0x01, 0xBA, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
-        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
-        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
-        2, 0x0E, 0x02, // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
-        2, 0x14, 0x10, // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
-        2, 0x17, 0xBF, // ES8311_ADC_REG17 : ADC_VOLUME 0xBF == ± 0 dB
-        2, 0x1C, 0x6A, // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
-        0
-    };
-    static constexpr const uint8_t disabled_bulk_data[] = {
-        2,
-        0x0D,
-        0xFC, // 0x0D SYSTEM/ Power down analog circuitry
-        2,
-        0x0E,
-        0x6A, // 0x0E SYSTEM
-        2,
-        0x00,
-        0x00, // 0x00 RESET/  CSM POWER DOWN
-        0
-    };
-
-    i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
 }

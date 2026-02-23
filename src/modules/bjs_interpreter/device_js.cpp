@@ -66,6 +66,7 @@ JSValue native_getFreeHeapSize(JSContext *ctx, JSValue *this_val, int argc, JSVa
     JS_SetPropertyStr(ctx, obj, "ram_size", JS_NewInt32(ctx, ESP.getHeapSize()));
     JS_SetPropertyStr(ctx, obj, "psram_free", JS_NewInt32(ctx, ESP.getFreePsram()));
     JS_SetPropertyStr(ctx, obj, "psram_size", JS_NewInt32(ctx, ESP.getPsramSize()));
+    JS_SetPropertyStr(ctx, obj, "psram_largest_free_block", JS_NewInt32(ctx, ESP.getMaxAllocPsram()));
 
     return obj;
 }

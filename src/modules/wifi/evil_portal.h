@@ -10,9 +10,7 @@ class EvilPortal {
     public:
         CaptiveRequestHandler(EvilPortal *portal) : _portal(portal) {}
         virtual ~CaptiveRequestHandler() { _portal = nullptr; }
-        bool canHandle(AsyncWebServerRequest *request) {
-            return true;
-        }; // request->addInterestingHeader("ANY");
+        bool canHandle(AsyncWebServerRequest *request) { return true; }
         void handleRequest(AsyncWebServerRequest *request);
 
     private:
@@ -20,15 +18,9 @@ class EvilPortal {
     };
 
 public:
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Constructor
-    /////////////////////////////////////////////////////////////////////////////////////
-    EvilPortal(String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false);
+    EvilPortal(String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false, bool autoMode = false);
     ~EvilPortal();
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Operations
-    /////////////////////////////////////////////////////////////////////////////////////
     bool setup(void);
     void beginAP(void);
     void setupRoutes(void);
@@ -39,7 +31,8 @@ private:
     uint8_t _channel;
     bool _deauth;
     bool isDeauthHeld = false;
-    bool _verifyPwd; // From PR branch
+    bool _verifyPwd;
+    bool _autoMode;
     AsyncWebServer webServer;
 
     DNSServer dnsServer;
@@ -57,6 +50,9 @@ private:
     int previousTotalCapturedCredentials = -1;
     String capturedCredentialsHtml = "";
     bool verifyPass = false;
+
+    // Track handler for cleanup
+    CaptiveRequestHandler* _captiveHandler = nullptr;
 
     void portalController(AsyncWebServerRequest *request);
     void credsController(AsyncWebServerRequest *request);

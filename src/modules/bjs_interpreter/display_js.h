@@ -28,6 +28,7 @@ JSValue native_drawLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 JSValue native_drawFastVLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawFastHLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawPixel(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_drawBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawXBitmap(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_drawString(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_setCursor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);

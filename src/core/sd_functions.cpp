@@ -683,6 +683,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         {"Close Menu", [&]() { yield(); }                                                  },
                         {"Main Menu",  [&]() { exit = true; }                                              },
                     };
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -696,6 +697,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
                     options.push_back({"Close Menu", [&]() { yield(); }});
                     options.push_back({"Main Menu", [&]() { exit = true; }});
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -708,6 +710,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                              fileList[index].filename; // Folder=="/"? "":"/" +
                     // Debug viewer
                     Serial.println(Folder);
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     redraw = true;
                 } else if (fileList[index].folder == false && fileList[index].operation == false) {
                     // Save the file/folder info to Clear memory to allow other functions to work better
@@ -753,7 +756,10 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
-                                                             txSubFile(&fs, filepath);
+                                                             RfCodes data{};
+
+                                                             if (readSubFile(&fs, filepath, data))
+                                                                txSubFile(data);
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
@@ -849,8 +855,12 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     }
                     options.push_back({"Close Menu", [&]() { yield(); }});
                     options.push_back({"Main Menu", [&]() { exit = true; }});
-                    if (!filePicker) loopOptions(options);
-                    else {
+                    if (!filePicker) {
+                        while (check(SelPress)) {
+                            yield();
+                        } // wait for SEL release to avoid repeated activations
+                        loopOptions(options);
+                    } else {
                         result = filepath;
                         break;
                     }
