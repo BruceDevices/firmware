@@ -1,486 +1,515 @@
 :root {
-    --color: #ff3ec8;
-    --background: #242424;
-    --light-color: color-mix(in srgb, var(--color) 20%, gray 20%);;
+  --color: #ff3ec8;
+  --background: #242424;
+  --light-color: color-mix(in srgb, var(--color) 20%, gray 20%);
 }
 * {
   -webkit-box-sizing: border-box;
-     -moz-box-sizing: border-box;
-          box-sizing: border-box;
-    font-family: "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console", monospace;
-    color: var(--color);
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  color: var(--color);
 }
 html {
-    padding: 0;
-    margin: 0;
+  padding: 0;
+  margin: 0;
 }
 body {
-    background-color: var(--background);
-    font-size: 12px;
-    padding: 10px;
-    margin: 0;
+  background-color: var(--background);
+  font-size: 12px;
+  padding: 10px;
+  margin: 0;
 }
 .ml-10 {
   margin-left: 10px !important;
 }
-.act-browse, .btn-action,
-.icon-action, .act-edit-file {
-    cursor: pointer;
-    outline: 0;
+.act-browse,
+.btn-action,
+.icon-action,
+.act-edit-file {
+  cursor: pointer;
+  outline: 0;
 }
 .btn-action {
-    border: 1px solid var(--color);
-    background-color: transparent;
-    padding: 2px 7px;
-    text-decoration: none;
-    text-align: center;
+  border: 1px solid var(--color);
+  background-color: transparent;
+  padding: 2px 7px;
+  text-decoration: none;
+  text-align: center;
 }
 .btn-action:hover:not(:disabled),
 .btn-action.active,
 .btn-action:hover:not(:disabled) > *,
 .btn-action.active > * {
-    background-color: var(--color);
-    color: var(--background);
+  background-color: var(--color);
+  color: var(--background);
 }
-.btn-action:disabled  {
-    filter: brightness(50%);
-    cursor: not-allowed;
+.btn-action:disabled {
+  filter: brightness(50%);
+  cursor: not-allowed;
 }
-.btn-action.btn-default  {
-    font-weight: bold;
-    border: 2px solid var(--color);
-    padding: 1px 7px;
+.btn-action.btn-default {
+  font-weight: bold;
+  border: 2px solid var(--color);
+  padding: 1px 7px;
 }
 .icon-action {
-    border: 0;
-    background-color: transparent;
-    width: 24px;
-    height: 24px;
-    padding: 1px;
-    margin: 0;
-    text-align: center;
-    vertical-align: middle;
-    display: inline-block;
-    position: relative;
-    overflow: hidden;
+  border: 0;
+  background-color: transparent;
+  width: 24px;
+  height: 24px;
+  padding: 1px;
+  margin: 0;
+  text-align: center;
+  vertical-align: middle;
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
 }
-svg > g, svg > path {
-    fill: var(--color);
+svg > g,
+svg > path {
+  fill: var(--color);
 }
 .icon-action.act-download svg,
-.icon-action.act-download svg > path{
-    stroke: var(--color);
-    fill: transparent;
+.icon-action.act-download svg > path {
+  stroke: var(--color);
+  fill: transparent;
 }
 .icon-action:hover {
-    background-color: var(--color);
+  background-color: var(--color);
 }
 .icon-action:hover svg > g,
 .icon-action:hover svg > path {
-    fill: var(--background);
+  fill: var(--background);
 }
 .icon-action.act-download:hover svg,
-.icon-action.act-download:hover svg > path{
-    stroke: var(--background);
-    fill: var(--color);
+.icon-action.act-download:hover svg > path {
+  stroke: var(--background);
+  fill: var(--color);
 }
 .inp-uploader {
-    opacity: 0;
-    position: absolute;
-    cursor: pointer;
-    top: 0;
+  opacity: 0;
+  position: absolute;
+  cursor: pointer;
+  top: 0;
 }
 .container {
-    max-width: 800px;
-    margin: auto;
-    border: 1px solid var(--color);
+  max-width: 800px;
+  margin: auto;
+  border: 1px solid var(--color);
 }
 .container .header {
-    display: flex;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--color);
-    align-items: center;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color);
+  align-items: center;
 }
 .container .header .title {
-    padding: 9px 12px;
-    cursor: pointer;
-    text-align: center;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: center;
 }
-.left-part, .right-part {
-    padding: 4px 6px;
+.left-part,
+.right-part {
+  padding: 4px 6px;
 }
 .left-part {
-    border-left: 1px solid var(--color);
-    margin-right:auto;
-    width:auto;
+  border-left: 1px solid var(--color);
+  margin-right: auto;
+  width: auto;
 }
 .right-part {
-    margin-left:auto;
-    text-align: right;
+  margin-left: auto;
+  text-align: right;
 }
 .container .header button {
-    margin-top: 2px;
-    margin-bottom: 2px;
-    width: 100px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  width: 100px;
 }
 .container .free-space {
-    border-bottom: 1px solid var(--color);
-    justify-content: space-between;
-    display: flex;
+  border-bottom: 1px solid var(--color);
+  justify-content: space-between;
+  display: flex;
 }
 .container .free-space .block-space {
-    width: 50%;
-    border: 0px;
-    border-right: 1px solid var(--color);
-    padding: 5px;
-    white-space: normal;
-    word-wrap: break-word;
-    overflow: visible;
+  width: 50%;
+  border: 0px;
+  border-right: 1px solid var(--color);
+  padding: 5px;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
 }
 .container .free-space .block-space:last-child {
-    border: 0px;
+  border: 0px;
 }
 .container .action-content {
-    padding: 5px;
-    border-bottom: 1px solid var(--color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  padding: 5px;
+  border-bottom: 1px solid var(--color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 .container .action-content .breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 .container .content .table {
-    width: 100%;
-    border: 0px;
-    border-collapse: collapse;
-    table-layout: fixed;
+  width: 100%;
+  border: 0px;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 .container .content .table .col-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .container .content .table .col-size {
-    width: 90px;
-    text-align: right;
+  width: 90px;
+  text-align: right;
 }
 .container .content .table .col-action {
-    width: 130px;
-    text-align: right;
+  width: 130px;
+  text-align: right;
 }
 .container .content .table tbody tr td {
-    padding: 5px;
-    height: 34px;
+  padding: 5px;
+  height: 34px;
 }
 .container .content .table tbody tr:hover {
-    background-color: var(--light-color);
+  background-color: var(--light-color);
 }
 .container .content .table thead tr th {
-    border-bottom: 1px solid var(--color);
-    font-weight: bold;
-    font-size: 14px;
-    padding: 5px;
+  border-bottom: 1px solid var(--color);
+  font-weight: bold;
+  font-size: 14px;
+  padding: 5px;
 }
 .table .col-action.type-folder .act-download,
 .table .col-action .act-play {
-    display: none;
+  display: none;
 }
 .table .col-action.executable .act-play {
-    display: inherit;
+  display: inherit;
 }
 .dialog-background {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding:  10px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
 }
 .dialog {
-    border: 1px solid var(--color);
-    min-width: 250px;
-    max-width: 400px;
-    background-color: var(--background);
+  border: 1px solid var(--color);
+  min-width: 250px;
+  max-width: 400px;
+  background-color: var(--background);
 }
 .dialog .dialog-head {
-    border-bottom: 1px solid var(--color);
-    padding: 5px 10px;
-    font-size: 14px;
-    font-weight: bold;
-    align-items: center;
-    display: flex;
-    gap: 5px;
+  border-bottom: 1px solid var(--color);
+  padding: 5px 10px;
+  font-size: 14px;
+  font-weight: bold;
+  align-items: center;
+  display: flex;
+  gap: 5px;
 }
 .dialog .dialog-head span {
-    display: inline-block;
+  display: inline-block;
 }
 .dialog .dialog-body {
-    padding: 10px;
+  padding: 10px;
 }
 .dialog .dialog-body p:first-child {
-    margin-top: 0;
+  margin-top: 0;
 }
 .dialog .dialog-body input {
-    display: block;
-    min-width: 300px;
-    width: 100%;
-    border: 1px solid var(--color);
-    background-color: var(--background);
-    outline: 0px;
-    padding: 2px 4px;
+  display: block;
+  min-width: 300px;
+  width: 100%;
+  border: 1px solid var(--color);
+  background-color: var(--background);
+  outline: 0px;
+  padding: 2px 4px;
 }
 .dialog .dialog-footer {
-    padding: 10px;
-    border-top: 1px solid var(--color);
-    text-align: right;
+  padding: 10px;
+  border-top: 1px solid var(--color);
+  text-align: right;
 }
 .dialog.navigator {
-    max-width: 500px;
+  max-width: 500px;
 }
 .dialog.navigator .dialog-head {
-    display: flex;
-    justify-content: space-between;
-    padding-right: 5px;
+  display: flex;
+  justify-content: space-between;
+  padding-right: 5px;
 }
 .dialog.navigator .dialog-head select {
-    background-color: var(--background);
-    padding: 1px;
-    border: 1px solid var(--color);
+  background-color: var(--background);
+  padding: 1px;
+  border: 1px solid var(--color);
 }
 .dialog.navigator .dialog-body {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap:  10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
 }
 .dialog.navigator #navigator-screen {
-    border: 1px solid var(--color);
-    border-radius: 3px;
+  border: 1px solid var(--color);
+  border-radius: 3px;
 }
 .dialog.navigator .navigator-canvas {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    border: 1px solid var(--color);
-    border-radius: 3px;
-    /* background-color: var(--color); */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--color);
+  border-radius: 3px;
+  /* background-color: var(--color); */
 }
 .dialog.navigator .navigator-canvas > div {
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    gap: 1px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 1px;
 }
 .dialog.navigator .navigator-canvas .nav {
-    width: 38px;
-    height: 38px;
-    border-radius: 3px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    background: var(--background);
+  width: 38px;
+  height: 38px;
+  border-radius: 3px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--background);
 }
 .dialog.navigator .navigator-canvas .nav.nav-ok:before {
-    content: "";
-    width: 16px;
-    height: 16px;
-    display: inline-block;
-    background-color: var(--color);
-    border-radius: 100%;
+  content: "";
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-color: var(--color);
+  border-radius: 100%;
 }
 .dialog.navigator .navigator-canvas .nav.nav-page-up svg {
-    transform: rotate(-90deg);
+  transform: rotate(-90deg);
 }
 .dialog.navigator .navigator-canvas .nav.nav-page-down svg {
-    transform: rotate(90deg);
+  transform: rotate(90deg);
 }
 .dialog.navigator .navigator-canvas .nav.nav-down svg {
-    transform: rotate(180deg);
+  transform: rotate(180deg);
 }
 .dialog.navigator .navigator-canvas .nav.nav-left svg {
-    transform: rotate(-90deg);
+  transform: rotate(-90deg);
 }
 .dialog.navigator .navigator-canvas .nav.nav-right svg {
-    transform: rotate(90deg);
+  transform: rotate(90deg);
 }
 .dialog.navigator .navigator-canvas .nav:hover {
-    color: var(--background);
-    background: var(--color);
+  color: var(--background);
+  background: var(--color);
 }
 .dialog.navigator .navigator-canvas .nav:hover svg path,
 .dialog.navigator .navigator-canvas .nav:hover svg line {
-    color: var(--background);
-    fill: var(--background);
+  color: var(--background);
+  fill: var(--background);
 }
 .dialog.navigator .navigator-canvas .nav:hover svg circle {
-    stroke: var(--background);
+  stroke: var(--background);
 }
 .dialog.navigator .navigator-canvas .nav.nav-ok:hover:before {
-    background-color: var(--background);
+  background-color: var(--background);
+}
+.dialog.navigator .navigator-warning {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 5px;
+  background-color: rgba(255, 165, 0, 0.15);
+  border: 1px solid orange;
+  border-radius: 3px;
+  text-align: center;
+  font-size: 11px;
+  color: orange;
+}
+.dialog.navigator .navigator-warning.hidden {
+  display: none;
 }
 .dialog.status .dialog-body {
-    padding: 10px 0;
-    text-align: center;
+  padding: 10px 0;
+  text-align: center;
 }
 .dialog.settings .dialog-body {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 .dialog.settings .dialog-body .btn-action {
-    display: block;
-    padding: 6px 5px;
+  display: block;
+  padding: 6px 5px;
 }
 .dialog.editor {
-    width: 100%;
-    max-width: 100%;
-    height: 100%;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
 }
 .dialog.editor .dialog-body {
-    width: 100%;
-    height: calc(100% - 70px);
-    padding: 0;
-    overflow: hidden;
+  width: 100%;
+  height: calc(100% - 70px);
+  padding: 0;
+  overflow: hidden;
 }
 .dialog.editor .editor-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    background-color: var(--background);
-    font-family: "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console", monospace;
-    font-size: 14px;
-    line-height: 1.4;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--background);
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  font-size: 14px;
+  line-height: 1.4;
 }
 .dialog.editor .line-numbers {
-    background-color: color-mix(in srgb, var(--background) 95%, var(--color) 5%);
-    border-right: 1px solid var(--light-color);
-    color: var(--light-color);
-    padding: 7px 8px;
-    text-align: right;
-    user-select: none;
-    white-space: pre;
-    overflow: hidden;
+  background-color: color-mix(in srgb, var(--background) 95%, var(--color) 5%);
+  border-right: 1px solid var(--light-color);
+  color: var(--light-color);
+  padding: 7px 8px;
+  text-align: right;
+  user-select: none;
+  white-space: pre;
+  overflow: hidden;
 }
 .dialog.editor .file-content {
-    flex: 1;
-    background-color: var(--background);
-    border: 0;
-    padding: 5px;
-    outline: 0;
-    resize: none;
-    font-family: "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console", monospace;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre;
-    overflow-wrap: normal;
-    overflow: auto;
+  flex: 1;
+  background-color: var(--background);
+  border: 0;
+  padding: 5px;
+  outline: 0;
+  resize: none;
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow: auto;
 }
 .dialog.upload .dialog-body {
-    padding: 10px;
+  padding: 10px;
 }
 .dialog.upload .upload-loading {
-    width: 350px;
-    border: 1px solid var(--color);
-    margin-bottom: 5px;
-    position: relative;
-    padding: 3px 7px;
+  width: 350px;
+  border: 1px solid var(--color);
+  margin-bottom: 5px;
+  position: relative;
+  padding: 3px 7px;
 }
 .dialog.upload .dialog-body .upload-loading:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 .dialog.upload .upload-loading .bar {
-    width: 0;
-    background-color: var(--light-color);
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 1;
+  width: 0;
+  background-color: var(--light-color);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
 }
 .dialog.upload .upload-loading .upload-name {
-    z-index: 2;
-    position: relative;
-    font-weight: bold;
+  z-index: 2;
+  position: relative;
+  font-weight: bold;
 }
 .hidden {
-    display: none !important;
+  display: none !important;
 }
-.upload-area, .loading-area {
-    position: fixed;
-    top: 0;
-    left: 0;
-    background-color: rgba(0,0,0,.8);
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+.upload-area,
+.loading-area {
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .upload-area::before {
-    content: "Drop files here to upload them to current folder";
-    border: 3px dashed var(--color);
-    background-color: var(--background);
-    font-size: 24px;
-    padding: 20px;
-    height: 300px;
-    width: 300px;
-    text-align: center;
-    font-weight: bold;
-    vertical-align: center;
-    display: flex;
-    align-items: center;
+  content: "Drop files here to upload them to current folder";
+  border: 3px dashed var(--color);
+  background-color: var(--background);
+  font-size: 24px;
+  padding: 20px;
+  height: 300px;
+  width: 300px;
+  text-align: center;
+  font-weight: bold;
+  vertical-align: center;
+  display: flex;
+  align-items: center;
 }
 .loading-area .text {
-    color: var(--color);
-    border: 1px solid var(--color);
-    padding: 10px 20px;
-    min-width: 250px;
-    text-align: center;
-    max-width: 350px;
-    background-color: var(--background);
+  color: var(--color);
+  border: 1px solid var(--color);
+  padding: 10px 20px;
+  min-width: 250px;
+  text-align: center;
+  max-width: 350px;
+  background-color: var(--background);
 }
 .oinput-file-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 250px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
 }
 .dialog.navigator .dialog-head div {
-    display: flex;
-    gap: 5px;
+  display: flex;
+  gap: 5px;
 }
 ::selection {
   background: var(--color);
   color: var(--background);
 }
-#force-reload, #refresh-folder {
-    padding: 0;
-    height: 21px;
-    display: flex;
-    width: 21px;
-    justify-content: center;
-    align-items: center;
-    border:  0;
+#force-reload,
+#refresh-folder {
+  padding: 0;
+  height: 21px;
+  display: flex;
+  width: 21px;
+  justify-content: center;
+  align-items: center;
+  border: 0;
 }
-#force-reload svg path, #refresh-folder svg path {
-    fill: var(--background);
+#force-reload svg path,
+#refresh-folder svg path {
+  fill: var(--background);
 }
-#force-reload:hover svg path, #refresh-folder:hover svg path {
-    fill: var(--color);
-    stroke: var(--background);
+#force-reload:hover svg path,
+#refresh-folder:hover svg path {
+  fill: var(--color);
+  stroke: var(--background);
 }
-#force-reload.reloading svg path, #refresh-folder.reloading svg path {
+#force-reload.reloading svg path,
+#refresh-folder.reloading svg path {
   animation: rotation 1s linear infinite;
   transform-origin: 50% 50%;
 }

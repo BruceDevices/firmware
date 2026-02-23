@@ -26,6 +26,22 @@ JSValue native_analogWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue 
     return JS_UNDEFINED;
 }
 
+JSValue native_analogWriteResolution(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, resolution = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &resolution, argv[1]);
+    analogWriteResolution(pin, resolution);
+    return JS_UNDEFINED;
+}
+
+JSValue native_analogWriteFrequency(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, freq = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &freq, argv[1]);
+    analogWriteFrequency(pin, freq);
+    return JS_UNDEFINED;
+}
+
 JSValue native_digitalRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     int pin = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
@@ -63,29 +79,52 @@ JSValue native_dacWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 #endif
 }
 
-JSValue native_ledcSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    int ch = 0, freq = 50, duty = 0;
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &ch, argv[0]);
-    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &freq, argv[1]);
-    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &duty, argv[2]);
-    int val = ledcAttach(ch, freq, duty);
-    return JS_NewInt32(ctx, val);
-}
-
-JSValue native_ledcAttachPin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    int pin = 0, ch = 0;
+JSValue native_ledcAttach(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, freq = 0, resolution = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
-    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &ch, argv[1]);
-    ledcAttach(pin, 50, ch);
-    return JS_UNDEFINED;
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &freq, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &resolution, argv[2]);
+    bool result = ledcAttach(pin, freq, resolution);
+    return JS_NewBool(result);
 }
 
 JSValue native_ledcWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    int ch = 0, value = 0;
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &ch, argv[0]);
+    int pin = 0, value = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
     if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &value, argv[1]);
-    ledcWrite(ch, value);
-    return JS_UNDEFINED;
+    bool result = ledcWrite(pin, value);
+    return JS_NewBool(result);
+}
+
+JSValue native_ledcWriteTone(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, freq = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &freq, argv[1]);
+    bool result = ledcWriteTone(pin, freq);
+    return JS_NewBool(result);
+}
+JSValue native_ledcFade(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, start_duty = 0, target_duty = 0, max_fade_time_ms = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &start_duty, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &target_duty, argv[2]);
+    if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &max_fade_time_ms, argv[3]);
+    bool result = ledcFade(pin, start_duty, target_duty, max_fade_time_ms);
+    return JS_NewBool(result);
+}
+JSValue native_ledcChangeFrequency(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, freq = 0, resolution = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &freq, argv[1]);
+    if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &resolution, argv[2]);
+    bool result = ledcChangeFrequency(pin, freq, resolution);
+    return JS_NewBool(result);
+}
+JSValue native_ledcDetach(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int pin = 0, freq = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &pin, argv[0]);
+    bool result = ledcDetach(pin);
+    return JS_NewBool(result);
 }
 
 JSValue native_pinMode(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {

@@ -5,6 +5,7 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "esp_wifi.h"
 #include "wifi_atks.h"
 
@@ -13,6 +14,8 @@ EvilPortal::EvilPortal(String tssid, uint8_t channel, bool deauth, bool verifyPw
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), 
       _autoMode(autoMode), _backgroundMode(backgroundMode), webServer(80) {
     if (!setup()) return;
+    // Now stop WebUI cleanly before starting WiFi mode
+    cleanlyStopWebUiForWiFiFeature();
     beginAP();
     if (!_backgroundMode) {
         loop();  // Full UI loop for foreground mode
@@ -734,29 +737,3 @@ bool EvilPortal::verifyCreds(String &Ssid, String &Password) {
     return isConnected;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// Karma Integration Methods
-/////////////////////////////////////////////////////////////////////////////
-
-bool EvilPortal::hasCredentials() {
-    return totalCapturedCredentials > 0 && lastCred.length() > 0;
-}
-
-String EvilPortal::getCapturedSSID() {
-    return apName;
-}
-
-String EvilPortal::getCapturedPassword() {
-    int pwdStart = lastCred.indexOf("pwd: ");
-    if (pwdStart == -1) pwdStart = lastCred.indexOf("pass: ");
-    if (pwdStart == -1) pwdStart = lastCred.indexOf("password: ");
-    
-    if (pwdStart != -1) {
-        pwdStart = lastCred.indexOf(": ", pwdStart) + 2;
-        int pwdEnd = lastCred.indexOf("\n", pwdStart);
-        if (pwdEnd != -1) {
-            return lastCred.substring(pwdStart, pwdEnd);
-        }
-    }
-    return "";
-}

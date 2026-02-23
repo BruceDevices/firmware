@@ -6,6 +6,11 @@
 #include <queue>
 #include <Arduino.h>
 #include <TimeLib.h>
+#include "core/display.h"
+#include "core/mykeyboard.h"
+#include "core/sd_functions.h"
+#include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "driver/gpio.h"
 #include "esp_event.h"
 #include "esp_system.h"
@@ -2161,6 +2166,8 @@ void saveNetworkHistory(FS &fs) {
 }
 
 void karma_setup() {
+    // Stop WebUI before setting WiFi mode for karma attack
+    cleanlyStopWebUiForWiFiFeature();
     static bool isInitialized = false;
     if (isInitialized) {
         esp_wifi_set_promiscuous(false);

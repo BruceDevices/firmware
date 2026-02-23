@@ -46,6 +46,7 @@ public:
     int soundVolume = 100;
     int wifiAtStartup = 0;
     int instantBoot = 0;
+    String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
 
 #ifdef HAS_RGB_LED
     // Led

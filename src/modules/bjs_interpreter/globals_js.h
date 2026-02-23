@@ -37,6 +37,10 @@ JSValue native_to_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 JSValue native_to_hex_string(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_to_lower_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_to_upper_case(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_atob(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_btoa(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_atob_bin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_btoa_bin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_exit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 }
 

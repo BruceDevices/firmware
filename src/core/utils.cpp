@@ -34,6 +34,14 @@ void addOptionToMainMenu() {
 ** Description:   Returns the battery value from 1-100
 ***************************************************************************************/
 int getBattery() {
+#ifdef USE_BQ27220_VIA_I2C
+    // Use BQ27220 fuel gauge for accurate battery reading
+    float pct = bq.getChargePcnt();
+    // Guard against library/device errors returning out-of-range values
+    if (pct <= 0.0f) return 1;
+    if (pct > 100.0f) return 100;
+    return (int)pct;
+#endif
 #ifdef ANALOG_BAT_PIN
 #ifndef ANALOG_BAT_MULTIPLIER
 #define ANALOG_BAT_MULTIPLIER 2.0f
@@ -267,7 +275,7 @@ String formatTimeDecimal(uint32_t totalMillis) {
     uint16_t minutes = totalMillis / 60000;
     float seconds = (totalMillis % 60000) / 1000.0;
 
-    char buffer[10];
+    char buffer[16];
     sprintf(buffer, "%02d:%06.3f", minutes, seconds);
     return String(buffer);
 }

@@ -24,3 +24,4 @@ void serveWebUIFile(
 void configureWebServer();
 void startWebUi(bool mode_ap = false);
 void stopWebUi();
+void cleanlyStopWebUiForWiFiFeature();

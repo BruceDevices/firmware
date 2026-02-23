@@ -10,6 +10,7 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "evil_portal.h"
@@ -96,6 +97,7 @@ static inline void prepareBeaconPacket(
     // ensure SSID slot is cleared (32 bytes) then copy SSID
     memset(&outPacket[38], 0x20, 32); // keep template behavior
     if (ssidLen > 32) ssidLen = 32;
+    outPacket[37] = ssidLen; // SSID element length
     if (ssidLen > 0) { memcpy(&outPacket[38], ssid, ssidLen); }
 
     // set channel and WPA flags
@@ -367,6 +369,8 @@ void wifi_atk_menu() {
 }
 
 void deauthFloodAttack() {
+    // Stop WebUI before setting WiFi mode for attack
+    cleanlyStopWebUiForWiFiFeature();
     resetGlobalState();
     if (!wifi_atk_setWifi()) return;
 
@@ -440,6 +444,9 @@ uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filt
                         // unrelated APs
 
 void capture_handshake(String tssid, String mac, uint8_t channel) {
+
+    // Stop WebUI before setting WiFi mode for handshake capture
+    cleanlyStopWebUiForWiFiFeature();
 
     hsTracker = HandshakeTracker(); // Reset tracker for each new capture
 
@@ -517,7 +524,6 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
     );
 
     bool hsExists = false;
-    bool captured = false;
     FS *fs;
     if (setupSdCard()) {
         fs = &SD;
@@ -567,7 +573,6 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
         uint64_t apKey = 0;
         for (int i = 0; i < 6; ++i) { apKey = (apKey << 8) | bssid_array[i]; }
         markHandshakeReady(apKey);
-        captured = true;
         Serial.println("Handshake file already exists");
     }
 
@@ -600,7 +605,6 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
     int initialNumEAPOL = num_EAPOL;
     int prevNumEAPOL = initialNumEAPOL;
     bool hasBeacons = false;
-    bool hasEAPOL = false;
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
@@ -623,8 +627,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
 
         // Mark handshake captured only when we have useable EAPOL Frame pairs
         if (handshakeUsable(hsTracker)) {
-            hasEAPOL = true;
-            captured = true;
+            // Handshake is usable
         }
 
         if (needRedraw) {
@@ -736,6 +739,8 @@ AGAIN:
 ***************************************************************************************/
 void target_atk(String tssid, String mac, uint8_t channel) {
     resetGlobalState();
+    // Stop WebUI before setting WiFi mode for attack
+    cleanlyStopWebUiForWiFiFeature();
     if (!wifi_atk_setWifi()) return;
 
     // Prepare deauth frame
