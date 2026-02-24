@@ -778,6 +778,7 @@ RestartRec:
             unsigned int *_raw = rcswitch.getRAWReceivedRawdata();
             int transitions = 0;
             signed int sign = 1;
+            received.data = ""; // initialize BEFORE building (was wrongly placed after, wiping data)
             for (transitions = 0; transitions < RCSWITCH_RAW_MAX_CHANGES; transitions++) {
                 if (_raw[transitions] == 0) break;
                 if (transitions > 0) received.data += " ";
@@ -788,11 +789,12 @@ RestartRec:
             if (transitions > 20) {
                 received.frequency = long(frequency * 1000000);
                 received.protocol = "RAW";
-                received.preset = "0"; // ????
+                received.preset = "0";
                 received.filepath = "unsaved";
-                received.data = "";
-
+                // NOTE: do NOT clear received.data here - it was just built above
                 if (!headless) display_info(received, 1, raw);
+            } else {
+                received.data = ""; // too few transitions - discard
             }
             // ResetSignal:
             rcswitch.resetAvailable();
@@ -852,12 +854,17 @@ RestartRec:
         }
         if (max_loops > 0) {
             // headless mode, quit if nothing received after max_loops
+            vTaskDelay(1000 / portTICK_PERIOD_MS); // wait first, THEN check
             max_loops -= 1;
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
             if (max_loops == 0) {
-                Serial.println("timeout");
-                return "";
+                // Use sentinel -1: loop runs one more iteration to catch signals
+                // that arrived during vTaskDelay before giving up
+                max_loops = -1;
             }
+        } else if (max_loops == -1) {
+            // Final check already done in this iteration - truly timed out
+            Serial.println("timeout");
+            return "";
         }
     }
 Exit:
