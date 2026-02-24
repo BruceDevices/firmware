@@ -9,8 +9,8 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
-#include "core/wifi/wifi_common.h"
 #include "core/wifi/webInterface.h"
+#include "core/wifi/wifi_common.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "evil_portal.h"
@@ -133,9 +133,9 @@ void wifi_complete_cleanup() {
     delay(300);
 }
 
-void checkHeap(const char* tag) {
+void checkHeap(const char *tag) {
     uint32_t currentHeap = ESP.getFreeHeap();
-    Serial.printf("[HEAP] %s - Free: %d\n", tag, currentHeap);
+    Serial.printf("[HEAP] %s - Free: %ld\n", tag, currentHeap);
 }
 
 void resetGlobalState() {
@@ -224,9 +224,7 @@ void wifi_atk_info(String tssid, String mac, uint8_t channel) {
 bool wifi_atk_setWifi() {
     checkHeap("Wifi atk start");
 
-    if (WiFi.getMode() != WIFI_MODE_NULL) {
-        return true;
-    }
+    if (WiFi.getMode() != WIFI_MODE_NULL) { return true; }
 
     wifi_complete_cleanup();
     delay(100);
@@ -405,7 +403,9 @@ ScanNets:
     while (true) {
         for (const auto &record : ap_records) {
             channel = record.primary;
-            wsl_bypasser_send_raw_frame(&record, record.primary, _default_target); // Sets channel to the same AP
+            wsl_bypasser_send_raw_frame(
+                &record, record.primary, _default_target
+            ); // Sets channel to the same AP
             tft.setCursor(10, tftHeight - 45);
             tft.println("Channel " + String(record.primary) + "    ");
             for (int i = 0; i < 100; i++) {
@@ -830,9 +830,7 @@ char randomName[32];
 char *randomSSID() {
     const char *charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     int len = rand() % 22 + 7;
-    for (int i = 0; i < len; ++i) {
-        randomName[i] = charset[rand() % strlen(charset)];
-    }
+    for (int i = 0; i < len; ++i) { randomName[i] = charset[rand() % strlen(charset)]; }
     randomName[len] = '\0';
     return randomName;
 }
@@ -1020,9 +1018,7 @@ void beaconAttack() {
     // Get user input for single SSID mode
     if (BeaconMode == 4) {
         singleSSID = keyboard("BruceBeacon", 26, "Base SSID:");
-        if (singleSSID.length() == 0) {
-            return;
-        }
+        if (singleSSID.length() == 0) { return; }
     }
 #endif
     if (BeaconMode != 3) {
