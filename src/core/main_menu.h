@@ -19,6 +19,8 @@
 #include "menu_items/RFMenu.h"
 #include "menu_items/ScriptsMenu.h"
 #include "menu_items/WifiMenu.h"
+#include "menu_items/BW16Menu.h"
+
 class MainMenu {
 public:
     FileMenu fileMenu;
@@ -35,6 +37,7 @@ public:
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     WifiMenu wifiMenu;
+    BW16Menu bw16Menu;
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;
     EthernetMenu ethernetMenu;
