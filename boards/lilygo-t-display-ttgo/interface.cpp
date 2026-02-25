@@ -4,6 +4,8 @@
 
 #include <globals.h>
 #include <interface.h>
+#include "core/display.h"
+
 volatile bool nxtPress = false;
 volatile bool prvPress = false;
 volatile bool ecPress = false;
@@ -108,6 +110,43 @@ void InputHandler(void) {
             prvPress = false;
             ecPress = false;
             slPress = false;
+        }
+    }
+
+    // New logic for Shutdown
+    static unsigned long upBtnHoldStart = 0;
+    static bool upBtnHeldState = false;
+    static int lastShutdownCountdown = 0;
+
+    // Check UP_BTN (GPIO 35)
+    if (digitalRead(UP_BTN) == LOW) { // Pressed
+        if (menuOptionType == MENU_TYPE_MAIN) {
+             if (!upBtnHeldState) {
+                 upBtnHoldStart = millis();
+                 upBtnHeldState = true;
+             } else {
+                 unsigned long elapsed = millis() - upBtnHoldStart;
+                 int remaining = 5 - (elapsed / 1000);
+
+                 if (remaining <= 0) {
+                     powerOff();
+                 } else if (remaining != lastShutdownCountdown) {
+                     // Draw countdown
+                     tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+                     String msg = "OFF: " + String(remaining);
+                     tft.drawCentreString(msg.c_str(), tftWidth / 2, tftHeight / 2, 4);
+                     lastShutdownCountdown = remaining;
+                 }
+             }
+        }
+    } else {
+        if (upBtnHeldState) {
+            upBtnHeldState = false;
+            // Clear countdown
+            if (lastShutdownCountdown > 0) {
+                 tft.fillRect(0, tftHeight / 2, tftWidth, 40, bruceConfig.bgColor);
+                 lastShutdownCountdown = 0;
+            }
         }
     }
 }

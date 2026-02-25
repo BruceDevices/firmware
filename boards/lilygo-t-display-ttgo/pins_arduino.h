@@ -71,7 +71,7 @@ static const uint8_t SCL = GROVE_SCL;
 
 // Display Setup#
 #define HAS_SCREEN
-#define ROTATION 3
+#define ROTATION 1
 #define MINBRIGHT (uint8_t)1
 
 // Font Sizes#
@@ -92,8 +92,8 @@ static const uint8_t SCL = GROVE_SCL;
 // Buttons & Navigation
 #define BTN_ALIAS "\"OK\""
 #define HAS_3_BUTTONS
-#define UP_BTN 0
-#define DW_BTN 35
+#define UP_BTN 35
+#define DW_BTN 0
 #define BTN_ACT LOW
 
 // IR pins
