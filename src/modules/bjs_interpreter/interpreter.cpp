@@ -38,7 +38,12 @@ void interpreterHandler(void *pvParameters) {
     } else {
         mem_size = 100000;
     }
-    log_d("JS engine memory: %zu bytes (max_alloc: %zu, psram: %s)", mem_size, max_alloc, psramAvailable ? "yes" : "no");
+    log_d(
+        "JS engine memory: %zu bytes (max_alloc: %zu, psram: %s)",
+        mem_size,
+        max_alloc,
+        psramAvailable ? "yes" : "no"
+    );
     if (mem_size < 2000) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
         interpreter_state = -1;
@@ -172,11 +177,7 @@ bool run_bjs_script_headless(FS fs, String filename) {
 
 String getScriptsFolder(FS *&fs) {
     String folder;
-    String possibleFolders[] = {
-        "/BruceJS",
-        "/BruceScripts",
-        "/scripts",
-    };
+    String possibleFolders[] = {"/scripts", "/BruceScripts", "/BruceJS"};
     int listSize = sizeof(possibleFolders) / sizeof(possibleFolders[0]);
 
     for (int i = 0; i < listSize; i++) {

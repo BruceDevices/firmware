@@ -694,10 +694,10 @@ String rf_scan(float start_freq, float stop_freq, int max_loops) {
                     Serial.print(mark_freq);
                     Serial.print(F(" Rssi: "));
                     Serial.println(mark_rssi);
+                    out += String(mark_freq) + ",";
                     mark_rssi = -100;
                     compare_freq = 0;
                     mark_freq = 0;
-                    out += String(mark_freq) + ",";
                 } else {
                     compare_freq = mark_freq * 100;
                     freq = mark_freq - 0.10;
@@ -828,29 +828,6 @@ RestartRec:
             }
             // headless mode
             return subfile_out;
-
-            if (check(SelPress)) {
-                int chosen = 0;
-                options = {
-                    {"Replay signal", [&]() { chosen = 1; }},
-                    {"Save signal",   [&]() { chosen = 2; }},
-                };
-                loopOptions(options);
-                if (chosen == 1) {
-                    rcswitch.disableReceive();
-                    sendRfCommand(received);
-                    addToRecentCodes(received);
-                    goto RestartRec;
-                } else if (chosen == 2) {
-                    decimalToHexString(received.key, hexString);
-                    RCSwitch_SaveSignal(frequency, received, raw, hexString);
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
-                    drawMainBorder();
-                    tft.setCursor(10, 28);
-                    tft.setTextSize(FP);
-                    tft.println("Waiting for a " + String(frequency) + " MHz " + "signal.");
-                }
-            }
         }
         if (max_loops > 0) {
             // headless mode, quit if nothing received after max_loops

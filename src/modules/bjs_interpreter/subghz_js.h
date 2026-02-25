@@ -14,6 +14,11 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
+// Raw pulse TX API for bruteforce and custom protocol transmission
+JSValue native_subghzTxSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_subghzTxPulses(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_subghzTxEnd(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
 #ifdef __cplusplus
 }
 #endif
