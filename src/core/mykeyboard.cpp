@@ -94,7 +94,7 @@ char azerty_keyset[azerty_keyboard_height][azerty_keyboard_width][2] = {
      {'i', 'I'},
      {'o', 'O'},
      {'p', 'P'},
-     {'^', '\xa8'}, // ^ / ¨
+     {'.', '\xa8'}, // ^ / ¨
      {'$', '\xa3'} },// $ / £
     // Row 3: QSDFGH row
     {{'q', 'Q'},
