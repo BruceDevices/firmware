@@ -29,7 +29,16 @@ void interpreterHandler(void *pvParameters) {
     bool psramAvailable = psramFound();
 
     size_t max_alloc = psramAvailable ? ESP.getMaxAllocPsram() : ESP.getMaxAllocHeap();
-    size_t mem_size = max_alloc < 150000 ? (max_alloc / 2 < 65536 ? max_alloc - 8192 : 65536) : 100000;
+    size_t mem_size;
+    if (max_alloc < 150000) {
+        mem_size = (max_alloc / 2 < 65536) ? max_alloc - 8192 : 65536;
+    } else if (psramAvailable && max_alloc > 1000000) {
+        // PSRAM available with plenty of space: allocate up to 512KB for large scripts
+        mem_size = (max_alloc > 4000000) ? 512000 : 256000;
+    } else {
+        mem_size = 100000;
+    }
+    log_d("JS engine memory: %zu bytes (max_alloc: %zu, psram: %s)", mem_size, max_alloc, psramAvailable ? "yes" : "no");
     if (mem_size < 2000) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
         interpreter_state = -1;
