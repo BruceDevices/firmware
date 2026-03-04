@@ -1203,7 +1203,11 @@ public:
     }
 
     void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data) {};
+    void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint16_t *data) {};
     void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data, uint16_t transparent) {};
+    void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t *data, bool bpp8, uint16_t *cmap) {};
+    void
+    pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t *data, bool bpp8, uint16_t *cmap) {};
 
     void setAddrWindow(int32_t xs, int32_t ys, int32_t w, int32_t h) {};
     void pushPixels(const void *data_in, uint32_t len) {};

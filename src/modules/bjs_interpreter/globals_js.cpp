@@ -1,7 +1,8 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "globals_js.h"
 #include "user_classes_js.h"
-#include <chrono>
+
+#include "mbedtls/base64.h"
 
 JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     JS_GC(ctx);
@@ -211,7 +212,7 @@ void run_timers(JSContext *ctx) {
     JSTimerContextState *state = get_timer_state(ctx, false);
     if (!state) return;
 
-    while (true) {
+    while (interpreter_state >= 0) {
         min_delay = 1000;
         cur_time = millis();
         has_timer = false;
@@ -286,13 +287,11 @@ JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return JS_NewInt64(ctx, (int64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000));
+    return JS_NewInt64(ctx, (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL)));
 }
 
 JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return JS_NewInt64(ctx, (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL)));
+    return JS_NewInt64(ctx, (int64_t)millis());
 }
 
 // TODO: Implement user module
@@ -325,19 +324,17 @@ JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv
 }
 
 JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    using namespace std::chrono;
-    auto now = high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    auto millis = duration_cast<milliseconds>(duration).count();
-    return JS_NewInt64(ctx, (int64_t)millis);
+    return JS_NewInt64(ctx, (int64_t)millis());
 }
 
 JSValue native_delay(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (interpreter_state < 0) { return JS_ThrowInternalError(ctx, "Script exited"); }
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int ms;
         JS_ToInt32(ctx, &ms, argv[0]);
         vTaskDelay(pdMS_TO_TICKS(ms));
     }
+    if (interpreter_state < 0) { return JS_ThrowInternalError(ctx, "Script exited"); }
     return JS_UNDEFINED;
 }
 
@@ -405,6 +402,157 @@ JSValue native_to_upper_case(JSContext *ctx, JSValue *this_val, int argc, JSValu
         }
     }
     return JS_NewString(ctx, "");
+}
+
+JSValue native_atob(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "atob: arg0 must be string");
+    }
+
+    size_t in_len = 0;
+    JSCStringBuf in_sb;
+    const char *in = JS_ToCStringLen(ctx, &in_len, argv[0], &in_sb);
+    if (!in) return JS_EXCEPTION;
+
+    // Strip ASCII whitespace to be a bit more forgiving.
+    uint8_t *clean = (uint8_t *)malloc(in_len + 1);
+    if (!clean) return JS_ThrowOutOfMemory(ctx);
+    size_t clean_len = 0;
+    for (size_t i = 0; i < in_len; ++i) {
+        char ch = in[i];
+        if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t') continue;
+        clean[clean_len++] = (uint8_t)ch;
+    }
+
+    size_t out_max = (clean_len / 4) * 3 + 3;
+    uint8_t *out = (uint8_t *)malloc(out_max);
+    if (!out) {
+        free(clean);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+
+    size_t out_len = 0;
+    int rc = mbedtls_base64_decode(out, out_max, &out_len, clean, clean_len);
+    free(clean);
+
+    if (rc != 0) {
+        free(out);
+        return JS_ThrowTypeError(ctx, "atob: invalid base64");
+    }
+
+    JSValue s = buffer_latin1_to_string(ctx, out, out_len);
+    free(out);
+    return s;
+}
+
+JSValue native_btoa(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "btoa: missing arg0");
+
+    // btoa(string) where string is latin1/binary
+    if (JS_IsString(ctx, argv[0])) {
+        size_t in_len = 0;
+        JSCStringBuf in_sb;
+        const char *in = JS_ToCStringLen(ctx, &in_len, argv[0], &in_sb);
+        if (!in) return JS_EXCEPTION;
+
+        uint8_t *bytes = NULL;
+        size_t bytes_len = 0;
+        if (!buffer_latin1_string_to_bytes((const uint8_t *)in, in_len, &bytes, &bytes_len)) {
+            return JS_ThrowTypeError(ctx, "btoa: input must be latin1/binary string");
+        }
+
+        size_t out_max = ((bytes_len + 2) / 3) * 4 + 1;
+        uint8_t *out = (uint8_t *)malloc(out_max);
+        if (!out) {
+            free(bytes);
+            return JS_ThrowOutOfMemory(ctx);
+        }
+
+        size_t out_len = 0;
+        int rc = mbedtls_base64_encode(out, out_max, &out_len, bytes, bytes_len);
+        free(bytes);
+
+        if (rc != 0) {
+            free(out);
+            return JS_ThrowTypeError(ctx, "btoa: base64 encode failed");
+        }
+
+        JSValue s = JS_NewStringLen(ctx, (const char *)out, out_len);
+        free(out);
+        return s;
+    }
+
+    // btoa(Uint8Array|TypedArray)
+    if (JS_IsTypedArray(ctx, argv[0])) {
+        size_t bytes_len = 0;
+        const uint8_t *bytes = (const uint8_t *)JS_GetTypedArrayBuffer(ctx, &bytes_len, argv[0]);
+        if (!bytes) return JS_ThrowTypeError(ctx, "btoa: invalid typed array backing store");
+
+        size_t out_max = ((bytes_len + 2) / 3) * 4 + 1;
+        uint8_t *out = (uint8_t *)malloc(out_max);
+        if (!out) return JS_ThrowOutOfMemory(ctx);
+
+        size_t out_len = 0;
+        int rc = mbedtls_base64_encode(out, out_max, &out_len, bytes, bytes_len);
+        if (rc != 0) {
+            free(out);
+            return JS_ThrowTypeError(ctx, "btoa: base64 encode failed");
+        }
+
+        JSValue s = JS_NewStringLen(ctx, (const char *)out, out_len);
+        free(out);
+        return s;
+    }
+
+    return JS_ThrowTypeError(ctx, "btoa: arg0 must be string or Uint8Array");
+}
+
+JSValue native_btoa_bin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsTypedArray(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "btoa_bin: arg0 must be Uint8Array");
+    }
+    // Delegate to btoa() typed-array path.
+    return native_btoa(ctx, this_val, 1, argv);
+}
+
+JSValue native_atob_bin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "atob_bin: arg0 must be string");
+    }
+
+    size_t in_len = 0;
+    JSCStringBuf in_sb;
+    const char *in = JS_ToCStringLen(ctx, &in_len, argv[0], &in_sb);
+    if (!in) return JS_EXCEPTION;
+
+    // Strip ASCII whitespace
+    uint8_t *clean = (uint8_t *)malloc(in_len + 1);
+    if (!clean) return JS_ThrowOutOfMemory(ctx);
+    size_t clean_len = 0;
+    for (size_t i = 0; i < in_len; ++i) {
+        char ch = in[i];
+        if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t') continue;
+        clean[clean_len++] = (uint8_t)ch;
+    }
+
+    size_t out_max = (clean_len / 4) * 3 + 3;
+    uint8_t *out = (uint8_t *)malloc(out_max);
+    if (!out) {
+        free(clean);
+        return JS_ThrowOutOfMemory(ctx);
+    }
+
+    size_t out_len = 0;
+    int rc = mbedtls_base64_decode(out, out_max, &out_len, clean, clean_len);
+    free(clean);
+    if (rc != 0) {
+        free(out);
+        return JS_ThrowTypeError(ctx, "atob_u8: invalid base64");
+    }
+
+    JSValue bytes = JS_NewUint8ArrayCopy(ctx, out, out_len);
+    free(out);
+    return bytes;
 }
 
 JSValue native_exit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {

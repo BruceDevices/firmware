@@ -88,6 +88,12 @@ void IrRead::setup() {
              begin();
              return loop();
          }                     },
+        {"FAN",
+         [&]() {
+             quickButtons = quickButtonsFAN;
+             begin();
+             return loop();
+         }                     },
         {"SOUND",
          [&]() {
              quickButtons = quickButtonsSOUND;

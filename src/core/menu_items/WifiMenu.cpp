@@ -35,6 +35,7 @@
 // 32bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_386.exe
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "modules/wifi/tcp_utils.h"
+#include "modules/wifi/socks4_proxy.h"
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
 bool showHiddenNetworks = false;
@@ -42,19 +43,8 @@ bool showHiddenNetworks = false;
 void WifiMenu::optionsMenu() {
     returnToMenu = false;
     options.clear();
-    if (isWebUIActive) {
-        drawMainBorderWithTitle("WiFi", true);
-        padprintln("");
-        padprintln("Starting a Wifi function will probably make the WebUI stop working");
-        padprintln("");
-        padprintln("Sel: to continue");
-        padprintln("Any key: to Menu");
-        while (1) {
-            if (check(SelPress)) { break; }
-            if (check(AnyKeyPress)) { return; }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
-    }
+    // Note: WiFi features will cleanly stop WebUI automatically when they start
+    // User can navigate menu normally even with WebUI active
     if (WiFi.status() != WL_CONNECTED) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
@@ -70,26 +60,17 @@ void WifiMenu::optionsMenu() {
     }
     options.push_back({"Wifi Atks", wifi_atk_menu});
     options.push_back({"Evil Portal", [=]() {
-                           if (isWebUIActive || server) {
-                               stopWebUi();
-                               wifiDisconnect();
-                           }
+                           // WebUI cleanup now handled automatically inside EvilPortal constructor
                            EvilPortal();
                        }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
+    options.push_back({"SOCKS4 Proxy", []() { socks4Proxy(1080); }});
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
-    options.push_back({"Sniffers", [this]() {
-                           std::vector<Option> snifferOptions;
-                           snifferOptions.push_back({"Raw Sniffer", sniffer_setup});
-                           snifferOptions.push_back({"Probe Sniffer", karma_setup});
-                           snifferOptions.push_back({"Back", [this]() { optionsMenu(); }});
-
-                           loopOptions(snifferOptions, MENU_TYPE_SUBMENU, "Sniffers");
-                       }});
+    options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!wifiConnected) doScan = wifiConnectMenu();

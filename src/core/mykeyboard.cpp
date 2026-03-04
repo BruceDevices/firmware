@@ -66,6 +66,122 @@ char qwerty_keyset[qwerty_keyboard_height][qwerty_keyboard_width][2] = {
      {'/', '/'} }
 };
 
+// AZERTY KEYSET (French)
+const int azerty_keyboard_width = 12;
+const int azerty_keyboard_height = 4;
+char azerty_keyset[azerty_keyboard_height][azerty_keyboard_width][2] = {
+    // Row 1: numbers / symbols
+    {{'1', '&'},
+     {'2', '\xc3'}, // é
+     {'3', '"'},
+     {'4', '\''},
+     {'5', '('},
+     {'6', '-'},
+     {'7', '\xe8'}, // è
+     {'8', '_'},
+     {'9', '\xe7'}, // ç
+     {'0', '\xe0'}, // à
+     {')', '\xb0'},
+     {'=', '+'}  },
+    // Row 2: AZERTY row
+    {{'a', 'A'},
+     {'z', 'Z'},
+     {'e', 'E'},
+     {'r', 'R'},
+     {'t', 'T'},
+     {'y', 'Y'},
+     {'u', 'U'},
+     {'i', 'I'},
+     {'o', 'O'},
+     {'p', 'P'},
+     {'^', '\xa8'}, // ^ / ¨
+     {'$', '\xa3'} },// $ / £
+    // Row 3: QSDFGH row
+    {{'q', 'Q'},
+     {'s', 'S'},
+     {'d', 'D'},
+     {'f', 'F'},
+     {'g', 'G'},
+     {'h', 'H'},
+     {'j', 'J'},
+     {'k', 'K'},
+     {'l', 'L'},
+     {'m', 'M'},
+     {'\xf9', '%'}, // ù / %
+     {'*', '\xb5'} },// * / µ
+    // Row 4: WXCVBN row
+    {{'<', '>'},
+     {'w', 'W'},
+     {'x', 'X'},
+     {'c', 'C'},
+     {'v', 'V'},
+     {'b', 'B'},
+     {'n', 'N'},
+     {',', '?'},
+     {';', '.'},
+     {':', '/'},
+     {'!', '\xa7'}, // ! / §
+     {'-', '_'} }
+};
+
+// QWERTZ KEYSET (German)
+const int qwertz_keyboard_width = 12;
+const int qwertz_keyboard_height = 4;
+char qwertz_keyset[qwertz_keyboard_height][qwertz_keyboard_width][2] = {
+    // Row 1
+    {{'1', '!'},
+     {'2', '"'},
+     {'3', '\xa7'}, // §
+     {'4', '$'},
+     {'5', '%'},
+     {'6', '&'},
+     {'7', '/'},
+     {'8', '('},
+     {'9', ')'},
+     {'0', '='},
+     {'\xdf', '?'}, // ß / ?
+     {'\'', '`'} },
+    // Row 2: QWERTZ row
+    {{'q', 'Q'},
+     {'w', 'W'},
+     {'e', 'E'},
+     {'r', 'R'},
+     {'t', 'T'},
+     {'z', 'Z'},
+     {'u', 'U'},
+     {'i', 'I'},
+     {'o', 'O'},
+     {'p', 'P'},
+     {'\xfc', '\xdc'}, // ü / Ü
+     {'+', '*'}  },
+    // Row 3: ASDF row
+    {{'a', 'A'},
+     {'s', 'S'},
+     {'d', 'D'},
+     {'f', 'F'},
+     {'g', 'G'},
+     {'h', 'H'},
+     {'j', 'J'},
+     {'k', 'K'},
+     {'l', 'L'},
+     {'\xf6', '\xd6'}, // ö / Ö
+     {'\xe4', '\xc4'}, // ä / Ä
+     {'#', '\''}},
+    // Row 4: YXCVBN row
+    {{'<', '>'},
+     {'y', 'Y'},
+     {'x', 'X'},
+     {'c', 'C'},
+     {'v', 'V'},
+     {'b', 'B'},
+     {'n', 'N'},
+     {'m', 'M'},
+     {',', ';'},
+     {'.', ':'},
+     {'-', '_'},
+     {'/', '/'} }
+};
+
 // HEX KEYSET
 const int hex_keyboard_width = 4;
 const int hex_keyboard_height = 4;
@@ -1095,12 +1211,40 @@ String generalKeyboard(
     return current_text;
 }
 
-/// This calls the QWERTY keyboard. Returns the user typed strings, return the ASCII ESC character
-/// if the operation was cancelled
+/// Opens a simple option menu to select the keyboard layout/language.
+/// The choice is stored in bruceConfig.keyboardLang and saved to flash.
+void setKeyboardLanguage() {
+    std::vector<Option> langOptions = {
+        {"QWERTY (English)",  []() { bruceConfig.keyboardLang = "QWERTY";  bruceConfig.saveFile(); }},
+        {"AZERTY (Français)", []() { bruceConfig.keyboardLang = "AZERTY";  bruceConfig.saveFile(); }},
+        {"QWERTZ (Deutsch)",  []() { bruceConfig.keyboardLang = "QWERTZ";  bruceConfig.saveFile(); }},
+        {"Back",              []() {}                                                                },
+    };
+
+    // Show current selection in the title
+    String title = String("Keyboard: ") + bruceConfig.keyboardLang;
+    loopOptions(langOptions, MENU_TYPE_SUBMENU, title.c_str());
+}
+
+/// This calls the keyboard. The keyset is chosen based on bruceConfig.keyboardLang.
+/// Supported values: "QWERTY" (default), "AZERTY" (French), "QWERTZ" (German).
+/// Returns the user typed string, or the ASCII ESC character if cancelled.
 String keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
-    return generalKeyboard<qwerty_keyboard_height, qwerty_keyboard_width>(
-        current_text, max_size, textbox_title, qwerty_keyset, mask_input
-    );
+    String lang = bruceConfig.keyboardLang;
+    if (lang == "AZERTY") {
+        return generalKeyboard<azerty_keyboard_height, azerty_keyboard_width>(
+            current_text, max_size, textbox_title, azerty_keyset, mask_input
+        );
+    } else if (lang == "QWERTZ") {
+        return generalKeyboard<qwertz_keyboard_height, qwertz_keyboard_width>(
+            current_text, max_size, textbox_title, qwertz_keyset, mask_input
+        );
+    } else {
+        // Default: QWERTY
+        return generalKeyboard<qwerty_keyboard_height, qwerty_keyboard_width>(
+            current_text, max_size, textbox_title, qwerty_keyset, mask_input
+        );
+    }
 }
 
 /// This calls a keyboard with the characters useful to write hexadecimal codes.

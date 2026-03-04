@@ -85,6 +85,8 @@ JSValue native_wifiScan(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
         JS_SetPropertyStr(ctx, obj, "encryptionType", JS_NewString(ctx, enctype));
         JS_SetPropertyStr(ctx, obj, "SSID", JS_NewString(ctx, WiFi.SSID(i).c_str()));
         JS_SetPropertyStr(ctx, obj, "MAC", JS_NewString(ctx, WiFi.BSSIDstr(i).c_str()));
+        JS_SetPropertyStr(ctx, obj, "RSSI", JS_NewInt32(ctx, WiFi.RSSI(i)));
+        JS_SetPropertyStr(ctx, obj, "channel", JS_NewInt32(ctx, WiFi.channel(i)));
         JS_SetPropertyUint32(ctx, arr, idx++, obj);
     }
     return arr;

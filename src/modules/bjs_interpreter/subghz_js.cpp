@@ -2,8 +2,13 @@
 #include "subghz_js.h"
 
 #include "modules/rf/rf_scan.h"
+#include "modules/rf/rf_utils.h"
 
 #include "helpers_js.h"
+
+// Tracks whether txSetup() has been called (raw pulse TX session is active)
+static bool _txSessionActive = false;
+static int _txPin = -1;
 
 JSValue native_subghzTransmitFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     // usage: subghzTransmitFile(filename : string, hideDefaultUI : boolean);
@@ -70,9 +75,9 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int t;
         JS_ToInt32(ctx, &t, argv[0]);
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, t); // custom timeout
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, false, true); // headless mode for JS
     } else {
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10);
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, false, true);
     }
     return JS_NewString(ctx, r.c_str());
 }
@@ -82,9 +87,9 @@ JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValu
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         int t;
         JS_ToInt32(ctx, &t, argv[0]);
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, true); // custom timeout
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, t, true, true); // raw + headless for JS
     } else {
-        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, true);
+        r = RCSwitch_Read(bruceConfigPins.rfFreq, 10, true, true);
     }
     return JS_NewString(ctx, r.c_str());
 }
@@ -96,6 +101,84 @@ JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, J
         JS_ToNumber(ctx, &v, argv[0]);
         bruceConfigPins.rfFreq = v; // float global var
     }
+    return JS_UNDEFINED;
+}
+
+// ============================================================================
+// Raw pulse TX API — allows JS brute-force apps to send arbitrary pulse
+// sequences without per-code init/deinit overhead.
+//
+//   subghz.txSetup(freq_mhz)  — init CC1101 for TX at given frequency
+//   subghz.txPulses(array)    — send array of signed µs durations (+HIGH/−LOW)
+//   subghz.txEnd()            — deinit the RF module
+// ============================================================================
+
+JSValue native_subghzTxSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: subghz.txSetup(freq_mhz : number)
+    // returns: true on success, false on error
+    float freq = 433.92f;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
+        double fv;
+        JS_ToNumber(ctx, &fv, argv[0]);
+        freq = (float)fv;
+    }
+
+    if (!initRfModule("tx", freq)) { return JS_NewBool(false); }
+
+    // Determine TX pin based on module configuration
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+        _txPin = bruceConfigPins.CC1101_bus.io0;
+    } else {
+        _txPin = bruceConfigPins.rfTx;
+    }
+    pinMode(_txPin, OUTPUT);
+    _txSessionActive = true;
+    return JS_NewBool(true);
+}
+
+JSValue native_subghzTxPulses(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: subghz.txPulses(pulses : int[])
+    // pulses: array of signed integers in microseconds
+    //   positive value → set pin HIGH for that many µs
+    //   negative value → set pin LOW  for |value| µs
+    // returns: true on success, false on error
+    if (!_txSessionActive || _txPin < 0) { return JS_NewBool(false); }
+    if (argc < 1) return JS_NewBool(false);
+
+    // Get array length
+    JSValue lenVal = JS_GetPropertyStr(ctx, argv[0], "length");
+    int len = 0;
+    JS_ToInt32(ctx, &len, lenVal);
+
+    if (len <= 0 || len > 2048) { return JS_NewBool(false); }
+
+    // Read pulses from JS array and transmit directly (no heap allocation
+    // needed — process one element at a time to save RAM)
+    for (int i = 0; i < len; i++) {
+        JSValue v = JS_GetPropertyUint32(ctx, argv[0], i);
+        int duration = 0;
+        JS_ToInt32(ctx, &duration, v);
+
+        if (duration > 0) {
+            digitalWrite(_txPin, HIGH);
+            delayMicroseconds(duration);
+        } else if (duration < 0) {
+            digitalWrite(_txPin, LOW);
+            delayMicroseconds(-duration);
+        }
+    }
+    // Ensure pin is LOW after transmission
+    digitalWrite(_txPin, LOW);
+    return JS_NewBool(true);
+}
+
+JSValue native_subghzTxEnd(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: subghz.txEnd()
+    // Deinitializes the RF module after a txSetup() session
+    if (_txSessionActive && _txPin >= 0) { digitalWrite(_txPin, LOW); }
+    deinitRfModule();
+    _txSessionActive = false;
+    _txPin = -1;
     return JS_UNDEFINED;
 }
 

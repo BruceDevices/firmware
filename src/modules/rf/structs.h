@@ -24,7 +24,14 @@ struct RawRecordingStatus {
 };
 struct RfCodes {
     uint32_t frequency = 0;
+    uint32_t serial = 0;
     uint64_t key = 0;
+    uint16_t cnt = 0;
+    uint32_t fix = 0;
+    uint32_t hop = 0;
+    uint32_t encrypted = 0;
+    uint8_t btn = 0;
+    String mf_name = "Unknown";
     String protocol = "";
     String preset = "";
     String data = "";
@@ -33,6 +40,11 @@ struct RfCodes {
     String filepath = "";
     int Bit = 0;
     int BitRAW = 0;
+
+    bool keeloq_check_decrypt(uint32_t decrypt);
+    bool keeloq_check_decrypt_centurion(uint32_t decrypt);
+
+    void keeloq_step(uint16_t step);
 };
 
 struct FreqFound {
@@ -51,6 +63,12 @@ struct Protocol {
     HighLow zero;
     HighLow one;
     bool invertedSignal;
+};
+
+struct KeeloqKey {
+    String mf_name{};
+    uint64_t key = 0;
+    uint32_t type = 0;
 };
 
 #endif

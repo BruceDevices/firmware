@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "ir_js.h"
 
+#include "modules/ir/custom_ir.h"
 #include "modules/ir/ir_read.h"
 
 #include "helpers_js.h"
@@ -10,11 +11,10 @@
 JSValue native_irTransmitFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (argc < 1 || !JS_IsString(ctx, argv[0]))
         return JS_ThrowTypeError(ctx, "irTransmitFile(filename:string) required");
-    JSCStringBuf sb;
-    const char *filename = JS_ToCString(ctx, argv[0], &sb);
+    FileParamsJS file = js_get_path_from_params(ctx, argv, true, true);
     bool hideDefaultUI = false;
     if (argc > 1 && JS_IsBool(argv[1])) hideDefaultUI = JS_ToBool(ctx, argv[1]);
-    bool r = serialCli.parse(String("ir tx_from_file ") + String(filename) + " " + String(hideDefaultUI));
+    bool r = txIrFile(file.fs, file.path, hideDefaultUI);
     return JS_NewBool(r);
 }
 
@@ -24,16 +24,10 @@ JSValue native_irTransmit(JSContext *ctx, JSValue *this_val, int argc, JSValue *
     JSCStringBuf sb;
     const char *data = JS_ToCString(ctx, argv[0], &sb);
     const char *protocol = "NEC";
-    if (argc > 1 && JS_IsString(ctx, argv[1])) {
-        JSCStringBuf sb2;
-        protocol = JS_ToCString(ctx, argv[1], &sb2);
-    }
+    if (argc > 1 && JS_IsString(ctx, argv[1])) { protocol = JS_ToCString(ctx, argv[1], &sb); }
     int bits = 32;
     if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, &bits, argv[2]);
-    bool r = serialCli.parse(
-        String("IRSend {'Data':'") + String(data) + "','Protocol':'" + String(protocol) +
-        "','Bits':" + String(bits) + "}"
-    );
+    bool r = sendDecodedCommand(protocol, data, bits);
     return JS_NewBool(r);
 }
 

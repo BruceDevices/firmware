@@ -6,7 +6,8 @@
 #define JS_CLASS_SPRITE (JS_CLASS_USER + 1)
 #define JS_CLASS_TEXTVIEWER (JS_CLASS_USER + 2)
 #define JS_CLASS_GIF (JS_CLASS_USER + 3)
+#define JS_CLASS_BUFFER (JS_CLASS_USER + 4)
 /* total number of classes */
-#define JS_CLASS_COUNT (JS_CLASS_USER + 4)
+#define JS_CLASS_COUNT (JS_CLASS_USER + 5)
 
 #endif

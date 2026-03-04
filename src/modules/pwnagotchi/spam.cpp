@@ -29,6 +29,9 @@ const char *names[30]; // Increase size if needed
 int num_faces = 0;
 int num_names = 0;
 
+// External variable for all channels toggle
+extern bool use_all_channels;
+
 // Forward declarations
 void displaySpamStatus();
 void loadFacesAndNames();
@@ -114,11 +117,26 @@ const char *pwnd_names[] = {
 
 // Tâche pour envoyer des trames beacon avec changement de face, de nom et de canal
 void beacon_task(void *pvParameters) {
-    const uint8_t channels[] = {1, 6, 11}; // Liste des canaux Wi-Fi à utiliser
-    const int num_channels = sizeof(channels) / sizeof(channels[0]);
+    // Primary channels
+    const uint8_t channels_primary[] = {1, 6, 11};
+    // All channels
+    const uint8_t channels_all[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    const uint8_t *channels;
+    int num_channels;
+
     const int num_pwnd_faces = sizeof(pwnd_faces) / sizeof(pwnd_faces[0]);
 
     while (spamRunning) {
+        // Determine which channels to use based on toggle
+        if (use_all_channels) {
+            channels = channels_all;
+            num_channels = sizeof(channels_all) / sizeof(channels_all[0]);
+        } else {
+            channels = channels_primary;
+            num_channels = sizeof(channels_primary) / sizeof(channels_primary[0]);
+        }
+
         if (dos_pwnd) {
             // Send PWND beacons
             for (int ch = 0; ch < num_channels; ++ch) {
@@ -158,8 +176,14 @@ void displaySpamStatus() {
     int current_face_index = 0;
     int current_name_index = 0;
     int current_channel_index = 0;
-    const uint8_t channels[] = {1, 6, 11};
-    const int num_channels = sizeof(channels) / sizeof(channels[0]);
+
+    // Primary channels
+    const uint8_t channels_primary[] = {1, 6, 11};
+    // All channels
+    const uint8_t channels_all[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    const uint8_t *channels;
+    int num_channels;
 
     while (spamRunning) {
 
@@ -176,11 +200,21 @@ void displaySpamStatus() {
             Serial.printf("Change Identity %s.\n", change_identity ? "enabled" : "disabled");
         }
 
+        // Determine which channels to use based on toggle
+        if (use_all_channels) {
+            channels = channels_all;
+            num_channels = sizeof(channels_all) / sizeof(channels_all[0]);
+        } else {
+            channels = channels_primary;
+            num_channels = sizeof(channels_primary) / sizeof(channels_primary[0]);
+        }
+
         // Update and display current face, name, and channel
         tft.setCursor(45, 45);
         tft.printf("Flood:%s", change_identity ? "1" : "0");
         tft.setCursor(125, 45);
         tft.printf("DoScreen:%s", dos_pwnd ? "1" : "0");
+
         if (!dos_pwnd) {
             tft.setCursor(0, 50);
             tft.printf("Face: \n%s                                              ", faces[current_face_index]);

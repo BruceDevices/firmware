@@ -52,6 +52,39 @@ void stopWebUi() {
         mdnsRunning = false;
     }
 }
+
+/**********************************************************************
+**  Function: cleanlyStopWebUiForWiFiFeature
+**  Cleanly stop WebUI and AP mode before starting a WiFi feature
+**  This prevents WiFi mode conflicts when features need exclusive control
+**********************************************************************/
+void cleanlyStopWebUiForWiFiFeature() {
+    // Only proceed if WebUI is active
+    if (!isWebUIActive && !server) {
+        return;
+    }
+
+    // Brief notification (non-blocking)
+    Serial.println("Stopping WebUI for WiFi feature...");
+
+    // Stop the WebUI
+    if (server) {
+        stopWebUi();
+        // Give the web server time to fully shut down
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    // Disconnect WiFi AP mode if it's the WebUI's AP
+    // Check if we're in AP or APSTA mode (used by WebUI)
+    wifi_mode_t currentMode = WiFi.getMode();
+    if (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA) {
+        wifiDisconnect();
+        // Give WiFi time to fully disconnect
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+
+    Serial.println("WebUI stopped, starting WiFi feature...");
+}
 /**********************************************************************
 **  Function: loopOptionsWebUi
 **  Display options to launch the WebUI

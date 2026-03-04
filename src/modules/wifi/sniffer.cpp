@@ -30,6 +30,7 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include <Arduino.h>
 #include <globals.h>
 #if defined(ESP32)
@@ -944,6 +945,9 @@ static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems
 
 //===== SETUP =====//
 void sniffer_setup() {
+    // Stop WebUI before setting WiFi mode for sniffer
+    cleanlyStopWebUiForWiFiFeature();
+    
     FS *Fs;
     int redraw = true;
     bool clearScreen = true;
@@ -1293,7 +1297,7 @@ Exit:
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_set_promiscuous_rx_cb(NULL);
-    esp_wifi_deinit();
+    // DO NOT call esp_wifi_deinit() here - let wifi_common.h handle it
     sniffer_wait_for_flush(1000);
     closeRawFile();
     closeDeauthFile();

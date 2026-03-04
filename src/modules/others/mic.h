@@ -58,4 +58,19 @@ bool mic_record_wav_to_path(
     std::function<bool(void)> onProgress = nullptr
 );
 void mic_record_app(); // Mic GUI app @Senape3000
+
+/**
+ * Capture raw audio samples from microphone
+ * Returns array of 16-bit PCM samples
+ *
+ * @param numSamples - Number of samples to capture (64-4096)
+ * @param sampleRate - Sample rate in Hz (8000, 16000, 22050, 32000, 44100, 48000)
+ * @param gain - Audio gain multiplier (0.5-4.0)
+ * @param outSamples - [OUT] Pointer to sample buffer (caller must free())
+ * @param outSampleRate - [OUT] Actual sample rate used
+ * @return true if successful
+ */
+bool mic_capture_samples(
+    uint32_t numSamples, uint32_t sampleRate, float gain, int16_t **outSamples, uint32_t *outSampleRate
+);
 #endif
