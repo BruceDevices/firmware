@@ -102,6 +102,15 @@ public:
     void removeOverlappedImages(int x, int y, int center, int ms);
 
     void fillScreen(int32_t color);
+    void setViewport(int32_t x, int32_t y, int32_t w, int32_t h, bool vp = true) {
+        if (isSleeping) return;
+        BRUCE_TFT_DRIVER::setViewport(x, y, w, h, vp);
+    }
+
+    void resetViewport() {
+        if (isSleeping) return;
+        BRUCE_TFT_DRIVER::resetViewport();
+    }
     void startAsyncSerial();
     void stopAsyncSerial();
     void getTftInfo();
