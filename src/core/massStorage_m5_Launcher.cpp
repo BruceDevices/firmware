@@ -1,10 +1,11 @@
+#ifdef ARDUINO_USB_MODE
+
 #include "massStorage.h"
-#include "core/display.h"
+#include "display.h"
+#include "sd_functions.h"
 #include <USB.h>
-#include <tusb.h>
-#if defined(SOC_USB_OTG_SUPPORTED)
+
 bool MassStorage::shouldStop = false;
-int32_t MassStorage::status = -1;
 
 MassStorage::MassStorage() { setup(); }
 
@@ -22,32 +23,19 @@ void MassStorage::setup() {
     setShouldStop(false);
 
     if (!setupSdCard()) {
-        displayError("SD card not found.");
+        displayRedStripe("SD card not found.");
         delay(1000);
         return;
     }
 
     beginUsb();
 
-    delay(500);
+    vTaskDelay(pdTICKS_TO_MS(500));
     return loop();
 }
 
 void MassStorage::loop() {
-    int32_t prev_status = -1;
-    while (!check(EscPress) && !shouldStop) {
-        if (prev_status != status) {
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            switch (status) {
-                case ARDUINO_USB_STARTED_EVENT: drawUSBStickIcon(true);  break;
-                case ARDUINO_USB_RESUME_EVENT:  drawUSBStickIcon(true);  break;
-                case ARDUINO_USB_STOPPED_EVENT: drawUSBStickIcon(false); break;
-                case ARDUINO_USB_SUSPEND_EVENT: drawUSBStickIcon(false); break;
-                default: break;
-            }
-            prev_status = status;
-        } else vTaskDelay(20 / portTICK_PERIOD_MS);
-    }
+    while (!check(EscPress) && !shouldStop) yield();
 }
 
 void MassStorage::beginUsb() {
@@ -55,21 +43,14 @@ void MassStorage::beginUsb() {
     setupUsbEvent();
     drawUSBStickIcon(false);
     USB.begin();
-    // If USB was already connected before opening mass storage,
-    // STARTED event already fired before our listener was registered.
-    // Check and force status so loop() picks it up immediately.
-    vTaskDelay(300 / portTICK_PERIOD_MS);
-    if (tud_connected()) {
-        status = ARDUINO_USB_STARTED_EVENT;
-    }
 }
 
 void MassStorage::setupUsbCallback() {
-    uint32_t secSize = SD.sectorSize();
-    uint32_t numSectors = SD.numSectors();
+    uint32_t secSize = SDM.sectorSize();
+    uint32_t numSectors = SDM.numSectors();
 
     msc.vendorID("ESP32");
-    msc.productID("BRUCE");
+    msc.productID("Launcher");
     msc.productRevision("1.0");
 
     msc.onRead(usbReadCallback);
@@ -82,32 +63,44 @@ void MassStorage::setupUsbCallback() {
 
 void MassStorage::setupUsbEvent() {
     USB.onEvent([](void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-        if (event_base == ARDUINO_USB_EVENTS) { status = event_id; }
+        if (event_base == ARDUINO_USB_EVENTS) {
+            auto *data = reinterpret_cast<arduino_usb_event_data_t *>(event_data);
+            switch (event_id) {
+                case ARDUINO_USB_STARTED_EVENT: drawUSBStickIcon(true); break;
+                case ARDUINO_USB_STOPPED_EVENT: drawUSBStickIcon(false); break;
+                case ARDUINO_USB_SUSPEND_EVENT: MassStorage::displayMessage("USB suspend"); break;
+                case ARDUINO_USB_RESUME_EVENT: MassStorage::displayMessage("USB resume"); break;
+                default: break;
+            }
+        }
     });
 }
 
 void MassStorage::displayMessage(String message) {
-    drawMainBorderWithTitle("Mass Storage");
-    padprintln("");
-    padprintln(message);
+    tft->drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, ALCOLOR);
+    tft->fillRoundRect(6, 6, tftWidth - 12, tftHeight - 12, 5, BGCOLOR);
+    setTftDisplay(7, 7, ALCOLOR, FP, BGCOLOR);
+    tft->drawCentreString("-= USB MSC =-", tftWidth / 2, 0, 8);
+    tft->setCursor(10, 20);
+    tftprint(message, 10, 5);
 }
 
 int32_t usbWriteCallback(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
     // Verify freespace
-    uint64_t freeSpace = SD.totalBytes() - SD.usedBytes();
+    uint64_t freeSpace = SDM.totalBytes() - SDM.usedBytes();
     if (bufsize > freeSpace) {
         return -1; // no space available
     }
 
     // Verify sector size
-    const uint32_t secSize = SD.sectorSize();
+    const uint32_t secSize = SDM.sectorSize();
     if (secSize == 0) return -1; // disk error
 
     // Write blocs
     for (uint32_t x = 0; x < bufsize / secSize; ++x) {
         uint8_t blkBuffer[secSize];
         memcpy(blkBuffer, buffer + secSize * x, secSize);
-        if (!SD.writeRAW(blkBuffer, lba + x)) {
+        if (!SDM.writeRAW(blkBuffer, lba + x)) {
             return -1; // write error
         }
     }
@@ -116,12 +109,12 @@ int32_t usbWriteCallback(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_
 
 int32_t usbReadCallback(uint32_t lba, uint32_t offset, void *buffer, uint32_t bufsize) {
     // Verify sector size
-    const uint32_t secSize = SD.sectorSize();
+    const uint32_t secSize = SDM.sectorSize();
     if (secSize == 0) return -1; // disk error
 
     // Read blocs
     for (uint32_t x = 0; x < bufsize / secSize; ++x) {
-        if (!SD.readRAW(reinterpret_cast<uint8_t *>(buffer) + (x * secSize), lba + x)) {
+        if (!SDM.readRAW(reinterpret_cast<uint8_t *>(buffer) + (x * secSize), lba + x)) {
             return -1; // read error
         }
     }
@@ -138,8 +131,13 @@ bool usbStartStopCallback(uint8_t power_condition, bool start, bool load_eject) 
 }
 
 void drawUSBStickIcon(bool plugged) {
+#ifdef E_PAPER_DISPLAY
+    tft->stopCallback();
+#endif
+    MassStorage::displayMessage("");
+
     float scale;
-    if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
+    if (rotation & 0b01) scale = float((float)tftHeight / (float)135);
     else scale = float((float)tftWidth / (float)240);
 
     int iconW = scale * 120;
@@ -171,16 +169,20 @@ void drawUSBStickIcon(bool plugged) {
     int ledX = bodyX + 2 * ledW;
     int ledY = bodyY + (iconH - ledH) / 2;
 
-    MassStorage::displayMessage("");
     // Body
-    tft.fillRoundRect(bodyX, bodyY, bodyW, bodyH, radius, TFT_DARKCYAN);
+    tft->fillRoundRect(bodyX, bodyY, bodyW, bodyH, radius, DARKCYAN);
     // Port USB
-    tft.fillRoundRect(portX, portY, portW, portH, radius, TFT_LIGHTGREY);
+    tft->fillRoundRect(portX, portY, portW, portH, radius, LIGHTGREY);
     // Small square on port
-    tft.fillRoundRect(portDetailX, portDetailY1, portDetailW, portDetailH, radius, TFT_DARKGREY);
-    tft.fillRoundRect(portDetailX, portDetailY2, portDetailW, portDetailH, radius, TFT_DARKGREY);
+    tft->fillRoundRect(portDetailX, portDetailY1, portDetailW, portDetailH, radius, DARKGREY);
+    tft->fillRoundRect(portDetailX, portDetailY2, portDetailW, portDetailH, radius, DARKGREY);
     // Led
-    tft.fillRoundRect(ledX, ledY, ledW, ledH, radius, plugged ? TFT_GREEN : TFT_RED);
+    tft->fillRoundRect(ledX, ledY, ledW, ledH, radius, plugged ? GREEN : RED);
+
+    tft->display(false);
+#ifdef E_PAPER_DISPLAY
+    tft->startCallback();
+#endif
 }
 
-#endif // SOC_USB_OTG_SUPPORTED
+#endif // ARDUINO_USB_MODE
