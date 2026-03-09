@@ -2,7 +2,7 @@
 #define __BW16_MENU_H__
 
 #include "MenuItemInterface.h"
-#include "modules/bw16/bw16.h"
+#include "modules/BW16/bw16.h"
 
 class Bw16Menu : public MenuItemInterface {
 public:
