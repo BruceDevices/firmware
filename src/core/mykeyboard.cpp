@@ -293,7 +293,7 @@ KeyboardAction handleKeyboardSelection(
             case 3: // SPACE button
                 if (handleSpaceAdd(current_text, max_size)) return KEYBOARD_REDRAW;
                 break;
-            case 4: // BACK button
+            case 4: // CLOSE button
                 current_text = "\x1B";
                 return KEYBOARD_CANCEL;
             default: break;
@@ -328,7 +328,7 @@ String generalKeyboard(
     bool caps = false;
     bool selection_made = false; // used for detecting if an key or a button was selected
     bool redraw = true;
-    long last_input_time = millis(); // used for input debouncing
+    long last_input_time = millis() - 300; // init to allow immediate first touch
     // cursor coordinates: kep track of where the next character should be printed (in screen pixels)
     int cursor_x = 0;
     int cursor_y = 0;
@@ -342,67 +342,43 @@ String generalKeyboard(
 
     /*====================Initial Setup====================*/
 
-    int buttons_number = 5;
+    int buttons_number = 5; // OK | CAP | DEL | SPACE | CLOSE  (always 5)
 
-    /*-----------------------------HOW btns_layout IS CALCULATED-----------------------------*/
-    // const char *buttons_strings[] = {"OK", "CAP", "DEL", "SPACE", "BACK"};
-    // // { x coord of btn border, btn width, x coord of the inside text }
-    // int btns_layout[buttons_number][3];
-    // // OK btn is special, is larger than the others considering its only two letters
-    // btns_layout[0][0] = 7;  // space between the first button and the left margin
-    // btns_layout[0][1] = 46; // we use a padding of 12px instead of 9px
-    // btns_layout[0][3] = 19; // 7+12px
-    // for (size_t i = 0; i < buttons_number; i++) {
-    //     // start of previous btn + width of that btn + 2px padding between the buttons
-    //     btns_layout[i][0] = btns_layout[i - 1][0] + btns_layout[i - 1][1] + 2;
-    //     // 12px per character (10 for char + 2 for padding before next letter) - last padding
-    //     // + 9px padding * 2 (before and after string)
-    //     btns_layout[i][1] = (strlen(buttons_strings[i]) * 12) - 2 + 9 * 2;
-    //     // x coord for start of string
-    //     btns_layout[i][2] = btns_layout[i][0] + 9;
-    // }
-    //
-    // for smaller screens is the same thing, just different values for padding etc.
-    //
-    // btns_layouts are hard coded because there is no way yet to enable/disable buttons,
-    // so these do not change
-    /*---------------------------------------------------------------------------------------*/
+#if FM > 1      // Normal size display (ILI9341 320x240 and similar)
+#define KBLH 20 // Keyboard Button Line Height (px)
 
-#if FM > 1      // Normal keyboard size
-#define KBLH 20 // Keyboard Buttons Line Height
-    // { x coord of btn border, btn width, x coord of the inside text }
-    // 12 px = 10 px + 2 of padding between the letters -> refer to the section above to better understand
-    // ((12px * n_letters) - 2px ) + 9*2px = width
-    int btns_layout[buttons_number][3] = {
-        {7,   46, 19 }, // OK button
-        {55,  52, 64 }, // CAP button
-        {109, 52, 118}, // DEL button
-        {163, 76, 172}, // SPACE button
-        {241, 64, 250}, // BACK button
-    };
+    // Divide screen width equally among all 5 buttons so CLOSE is always visible.
+    // Each button gets tftWidth/5 pixels. Text is placed 4px from the left edge of each button.
+    int btns_layout[5][3]; // fixed 5 buttons: OK|CAP|DEL|SPACE|CLOSE
+    {
+        int bw = tftWidth / buttons_number;
+        for (int _i = 0; _i < buttons_number; _i++) {
+            btns_layout[_i][0] = _i * bw + 1;  // x start
+            btns_layout[_i][1] = bw - 2;        // width
+            btns_layout[_i][2] = _i * bw + 4;  // x for text
+        }
+    }
 
-    const int key_width = tftWidth / KeyboardWidth;
-    const int key_height = (tftHeight - (2 * KBLH + 14)) / KeyboardHeight;
-    // characters are 14px high and 10px wide
+    const int key_width    = tftWidth / KeyboardWidth;
+    const int key_height   = (tftHeight - (2 * KBLH + 14)) / KeyboardHeight;
     const int text_offset_x = key_width / 2 - 5;
     const int text_offset_y = key_height / 2 - 7;
-#else           // small keyboard size, for  smaller screen, like Marauder Mini and others ;)
-#define KBLH 10 // Keyboard Buttons Line Height
-    // in smaller screens there is no space left for the BACK button
-    buttons_number = 4; // {"OK", "CAP", "DEL", "SPACE"};
 
-    // 5px per char
-    int btns_layout[buttons_number][3] = {
-        {2,  20, 5 }, // OK button
-        {22, 25, 25}, // CAP button
-        {47, 25, 50}, // DEL button
-        {72, 50, 75}, // SPACE button
-        // {122, 40, 125}, // BACK button
-    };
+#else           // Small display (Marauder-Mini, StickC etc.)
+#define KBLH 10
 
-    const int key_width = tftWidth / KeyboardWidth;
-    const int key_height = (tftHeight - (2 * KBLH + 14)) / KeyboardHeight;
-    // characters are 7px high and 5px wide
+    int btns_layout[5][3]; // fixed 5 buttons
+    {
+        int bw = tftWidth / buttons_number;
+        for (int _i = 0; _i < buttons_number; _i++) {
+            btns_layout[_i][0] = _i * bw + 1;
+            btns_layout[_i][1] = bw - 2;
+            btns_layout[_i][2] = _i * bw + 2;
+        }
+    }
+
+    const int key_width    = tftWidth / KeyboardWidth;
+    const int key_height   = (tftHeight - (2 * KBLH + 14)) / KeyboardHeight;
     const int text_offset_x = key_width / 2 - 2;
     const int text_offset_y = key_height / 2 - 3;
 #endif
@@ -526,8 +502,7 @@ String generalKeyboard(
                     );
                 } else tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
                 tft.drawString("SPACE", btns_layout[3][2], 5);
-#if FM > 1 // draw only on large enough screens
-           //   BACK
+            //   CLOSE (shown on all screen sizes)
                 if (x > 3 && y == -1) {
                     tft.setTextColor(bruceConfig.bgColor, getComplementaryColor2(bruceConfig.bgColor));
                     tft.fillRect(
@@ -538,8 +513,7 @@ String generalKeyboard(
                         getComplementaryColor2(bruceConfig.bgColor)
                     );
                 } else tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
-                tft.drawString("BACK", btns_layout[4][2], 5);
-#endif
+                tft.drawString("CLOSE", btns_layout[4][2], 5);
             }
 
             // Prints the chars counter
@@ -685,6 +659,13 @@ String generalKeyboard(
             last_input_time = millis() + 100;
         }
 
+        // EscPress alone (not held with Next/Prev) = cancel/close keyboard immediately
+        // This works outside debounce so Back button is always responsive
+        if (check(EscPress) && !NextPress && !PrevPress) {
+            current_text = "\x1B"; // cancel - return to previous menu
+            break;
+        }
+
         if (millis() - last_input_time > 250) { // INPUT DEBOUCING
             // waits at least 250ms before accepting another input, to prevent rapid involuntary repeats
 
@@ -707,6 +688,7 @@ String generalKeyboard(
                 bool touchHandled = false;
 
                 if (box_list[buttons_start_index].contain(touchPoint.x, touchPoint.y)) { // OK btn
+                    touchPoint.Clear();
                     break;
                 }
                 if (box_list[buttons_start_index + 1].contain(touchPoint.x, touchPoint.y)) { // CAPS btn
@@ -726,12 +708,11 @@ String generalKeyboard(
                         touchHandled = true;
                     }
                 }
-#if FM > 1
-                if (box_list[buttons_start_index + 4].contain(touchPoint.x, touchPoint.y)) { // BACK btn
-                    current_text = "\x1B"; // ASCII ESC CHARACTER
+                if (box_list[buttons_start_index + 4].contain(touchPoint.x, touchPoint.y)) { // CLOSE btn
+                    touchPoint.Clear();
+                    current_text = "\x1B"; // cancels input - returns to previous menu
                     break;
                 }
-#endif
                 for (k = 0; k < keyboard_boxes; k++) {
                     if (box_list[k].contain(touchPoint.x, touchPoint.y)) {
                         if (caps)
@@ -985,13 +966,15 @@ String generalKeyboard(
 #if !defined(HAS_TOUCH)
             LongPress = true;
 #endif
-            if ((check(SelPress) || selection_made) && touchPoint.pressed == false) {
+            // Physical button SelPress - works regardless of touch state
+            // (Touch handling already ran in the HAS_TOUCH block above)
+            if (check(SelPress) || selection_made) {
                 LongPress = false;
                 selection_made = true;
             } else {
                 /* NEXT "Btn" to move forward on th X axis (to the right) */
                 // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
-                if (check(NextPress) && touchPoint.pressed == false) {
+                if (check(NextPress)) { // physical button - not blocked by touch state
                     if (EscPress) {
                         y++;
                     } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
@@ -1027,7 +1010,7 @@ String generalKeyboard(
                     redraw = true;
                 }
                 /* PREV "Btn" to move backwards on th X axis (to the left) */
-                if (check(PrevPress) && touchPoint.pressed == false) {
+                if (check(PrevPress)) { // physical button - not blocked by touch state
                     if (EscPress) {
                         y--;
                     } else if (x <= 0) {

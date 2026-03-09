@@ -15,6 +15,7 @@
 #include "evil_portal.h"
 #include "sniffer.h"
 #include "vector"
+#include "array"
 #include <Arduino.h>
 #include <globals.h>
 #include <nvs_flash.h>
@@ -235,75 +236,128 @@ void wifi_atk_menu() {
         if (!wifi_atk_setWifi()) return; // Error messages inside the function
     }
     if (scanAtks) {
-        int nets;
-        displayTextLine("Scanning..");
-        // include hidden networks in the scan depending on toggle
-        nets = WiFi.scanNetworks(false, showHiddenNetworks);
+        const int LINE_H    = 10;
+        const int LIST_TOP  = 44;
+        const int FOOT_Y    = tftHeight - 14;
+        const int LIST_BOT  = FOOT_Y - 2;
+        const int MAX_LINES = (LIST_BOT - LIST_TOP) / LINE_H;
+        const int MAX_CHARS = (tftWidth - 2 * BORDER_PAD_X) / 6;
+
         ap_records.clear();
         options = {};
-        for (int i = 0; i < nets; i++) {
-            wifi_ap_record_t record;
-            memset(&record, 0, sizeof(record));
-            // copy bssid
-            memcpy(record.bssid, WiFi.BSSID(i), 6);
-            // copy channel/primary
-            record.primary = static_cast<uint8_t>(WiFi.channel(i));
-            // copy authmode
-            record.authmode = static_cast<wifi_auth_mode_t>(WiFi.encryptionType(i));
-            // copy ssid bytes into record.ssid (if supported by struct)
-            // Ensure safe copy (wifi_ap_record_t typically has ssid[32])
-            if (strlen(WiFi.SSID(i).c_str()) > 0) {
-                strncpy((char *)record.ssid, WiFi.SSID(i).c_str(), sizeof(record.ssid) - 1);
-                record.ssid[sizeof(record.ssid) - 1] = '\0';
-            } else {
-                // empty -> leave zeroed or explicit empty string
-                record.ssid[0] = '\0';
+        std::vector<String> netLabels;
+        ap_records.reserve(30);
+        netLabels.reserve(30);
+        options.reserve(30);
+
+        bool stopScan = false;
+        int  lastN    = 0;
+        unsigned long lastSpin = millis();
+        int  spinFrame = 0;
+
+        drawMainBorderWithTitle("WiFi Scan");
+
+        tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+        tft.drawString("Found: 0", BORDER_PAD_X, FOOT_Y, 1);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawRightString("OK=stop+select", tftWidth - BORDER_PAD_X, FOOT_Y, 1);
+
+        WiFi.scanNetworks(true, showHiddenNetworks);
+
+        while (!stopScan) {
+            if (check(SelPress) || check(NextPress)) {
+                WiFi.scanDelete();
+                stopScan = true;
+                break;
+            }
+            if (check(EscPress)) {
+                WiFi.scanDelete();
+                stopScan = true;
+                options.clear();
+                break;
             }
 
-            ap_records.push_back(record);
-
-            String ssid = WiFi.SSID(i);
-            int encryptionType = WiFi.encryptionType(i);
-            int32_t rssi = WiFi.RSSI(i);
-            int32_t ch = WiFi.channel(i);
-            String encryptionPrefix = (encryptionType == WIFI_AUTH_OPEN) ? "" : "#";
-            String encryptionTypeStr;
-            switch (encryptionType) {
-                case WIFI_AUTH_OPEN: encryptionTypeStr = "Open"; break;
-                case WIFI_AUTH_WEP: encryptionTypeStr = "WEP"; break;
-                case WIFI_AUTH_WPA_PSK: encryptionTypeStr = "WPA/PSK"; break;
-                case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
-                case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
-                case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
-                default: encryptionTypeStr = "Unknown"; break;
+            if (millis() - lastSpin > 300) {
+                spinFrame = (spinFrame + 1) & 3;
+                lastSpin = millis();
             }
 
-            // if SSID is empty -> indicate hidden
-            String displaySSID = ssid;
-            if (displaySSID.length() == 0) {
-                // show the BSSID so user can recognize it
-                displaySSID = "<Hidden SSID> " + WiFi.BSSIDstr(i);
+            int result = WiFi.scanComplete();
+            if (result >= 0) {
+                int n = result;
+                netLabels.clear();
+                ap_records.clear();
+                options = {};
+
+                for (int i = 0; i < n; i++) {
+                    String  ssid    = WiFi.SSID(i);
+                    int     encType = WiFi.encryptionType(i);
+                    int32_t rssi    = WiFi.RSSI(i);
+                    int32_t ch      = WiFi.channel(i);
+
+                    wifi_ap_record_t record;
+                    memset(&record, 0, sizeof(record));
+                    memcpy(record.bssid, WiFi.BSSID(i), 6);
+                    record.primary  = static_cast<uint8_t>(ch);
+                    record.authmode = static_cast<wifi_auth_mode_t>(encType);
+                    if (ssid.length() > 0)
+                        strncpy((char *)record.ssid, ssid.c_str(), sizeof(record.ssid) - 1);
+                    ap_records.push_back(record);
+
+                    String prefix = (encType == WIFI_AUTH_OPEN) ? "" : "#";
+                    String encStr;
+                    switch (encType) {
+                        case WIFI_AUTH_OPEN:            encStr = "Open";  break;
+                        case WIFI_AUTH_WEP:             encStr = "WEP";   break;
+                        case WIFI_AUTH_WPA_PSK:         encStr = "WPA";   break;
+                        case WIFI_AUTH_WPA2_PSK:        encStr = "WPA2";  break;
+                        case WIFI_AUTH_WPA_WPA2_PSK:    encStr = "WPA/2"; break;
+                        case WIFI_AUTH_WPA2_ENTERPRISE: encStr = "Ent";   break;
+                        default:                        encStr = "?";      break;
+                    }
+                    if (ssid.length() == 0) ssid = "<Hidden> " + WiFi.BSSIDstr(i);
+                    String lbl = prefix + ssid + " (" + String(rssi) + " ch" + String(ch) + " " + encStr + ")";
+                    netLabels.push_back(lbl);
+
+                    int idx = (int)ap_records.size() - 1;
+                    String ssidStr  = ssid;
+                    String bssidStr = WiFi.BSSIDstr(i);
+                    uint8_t chNum   = static_cast<uint8_t>(ch);
+                    options.push_back({lbl.c_str(), [=]() {
+                        ap_record = ap_records[idx];
+                        target_atk_menu(ssidStr.c_str(), bssidStr, chNum);
+                    }});
+                }
+                WiFi.scanDelete();
+                lastN = n;
+
+                tft.fillRect(BORDER_PAD_X, LIST_TOP, tftWidth - 2*BORDER_PAD_X, LIST_BOT - LIST_TOP, bruceConfig.bgColor);
+                for (int li = 0; li < MAX_LINES && li < n; li++) {
+                    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                    String lbl = netLabels[li];
+                    if ((int)lbl.length() > MAX_CHARS) lbl = lbl.substring(0, MAX_CHARS - 1);
+                    tft.drawString(lbl, BORDER_PAD_X, LIST_TOP + li * LINE_H, 1);
+                }
+
+                WiFi.scanNetworks(true, showHiddenNetworks);
             }
 
-            String optionText = encryptionPrefix + displaySSID + " (" + String(rssi) + "|" +
-                                encryptionTypeStr + "|ch." + String(ch) + ")";
+            tft.fillRect(BORDER_PAD_X, FOOT_Y, tftWidth - 2*BORDER_PAD_X, 8, bruceConfig.bgColor);
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.drawString("Found: " + String(lastN), BORDER_PAD_X, FOOT_Y, 1);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawRightString("OK=stop+select", tftWidth - BORDER_PAD_X, FOOT_Y, 1);
 
-            options.push_back({optionText.c_str(), [=]() {
-                                   ap_record = ap_records[i];
-                                   target_atk_menu(
-                                       WiFi.SSID(i).c_str(),
-                                       WiFi.BSSIDstr(i),
-                                       static_cast<uint8_t>(WiFi.channel(i))
-                                   );
-                               }});
+            vTaskDelay(20 / portTICK_PERIOD_MS);
         }
 
-        addOptionToMainMenu();
-
-        loopOptions(options);
+        if (!options.empty()) {
+            addOptionToMainMenu();
+            loopOptions(options);
+        }
         options.clear();
     }
-    wifi_atk_unsetWifi();
+            wifi_atk_unsetWifi();
 }
 void deauthFloodAttack() {
     if (!wifi_atk_setWifi()) return; // error messages inside the function
@@ -455,7 +509,6 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
     );
 
     bool hsExists = false;
-    bool captured = false;
     FS *fs;
     if (setupSdCard()) {
         fs = &SD;
@@ -505,7 +558,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
         uint64_t apKey = 0;
         for (int i = 0; i < 6; ++i) { apKey = (apKey << 8) | bssid_array[i]; }
         markHandshakeReady(apKey);
-        captured = true;
+
         Serial.println("Handshake file already exists");
     }
 
@@ -553,7 +606,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
         // Mark handshake captured only when we have useable EAPOL Frame pairs
         if (handshakeUsable(hsTracker)) {
             hasEAPOL = true;
-            captured = true;
+
         }
 
         if (needRedraw) {

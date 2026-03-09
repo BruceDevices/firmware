@@ -136,9 +136,12 @@ void run_bjs_script() {
         loopOptions(options);
     }
     filename = loopSD(*fs, true, "BJS|JS");
-    vTaskDelay(pdMS_TO_TICKS(200));
-    if (filename == "") { return; }
-    run_bjs_script_headless(*fs, filename);
+    script = readBigFile(fs, filename);
+    if (script == NULL) { return; }
+
+    returnToMenu = true;
+    interpreter_state = 1;
+    startInterpreterTask();
 }
 
 bool run_bjs_script_headless(char *code) {

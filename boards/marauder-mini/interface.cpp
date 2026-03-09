@@ -14,7 +14,7 @@ void _setup_gpio() {
     pinMode(L_BTN, INPUT);
 
     bruceConfig.colorInverted = 0;
-    bruceConfigPins.rotation = 0; // portrait mode for Phantom
+    bruceConfigPins.rotation = 3; // portrait mode for Phantom
 }
 
 /***************************************************************************************
@@ -100,6 +100,6 @@ void powerOff() {}
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to turn off the device (name is odd btw)
+** Btn logic to tornoff the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

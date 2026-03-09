@@ -57,8 +57,7 @@ static const uint8_t ADC2 = 8;
 // SERIAL (GPS) dedicated pins
 #define SERIAL_TX 21
 #define SERIAL_RX 22
-#define GPS_SERIAL_TX SERIAL_TX
-#define GPS_SERIAL_RX SERIAL_RX
+
 #define HAS_BTN 1
 #define SEL_BTN 34
 #define UP_BTN 36
@@ -90,8 +89,8 @@ static const uint8_t ADC2 = 8;
 #define FG 2
 
 #define HAS_SCREEN 1
-#define ROTATION 0
-#define MINBRIGHT 160
+#define ROTATION 2
+#define MINBRIGHT 200
 
 #define SDCARD_CS 4
 #define SDCARD_SCK 18
@@ -99,7 +98,7 @@ static const uint8_t ADC2 = 8;
 #define SDCARD_MOSI 23
 
 #define GROVE_SDA 33
-#define GROVE_SCL 26
+#define GROVE_SCL 25
 
 #define SPI_SCK_PIN 18
 #define SPI_MISO_PIN 19

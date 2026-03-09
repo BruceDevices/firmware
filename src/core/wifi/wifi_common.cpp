@@ -8,7 +8,9 @@
 #include <esp_event.h>
 #include <esp_netif.h>
 #include <globals.h>
+#include "esp_wifi.h"
 
+extern bool showHiddenNetworks;
 static TaskHandle_t timezoneTaskHandle = NULL;
 
 void ensureWifiPlatform() {
@@ -137,62 +139,132 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             break;
 
         case WIFI_STA: { // station mode
-            int nets;
             WiFi.mode(WIFI_MODE_STA);
-
-            // wifiMACMenu();
             applyConfiguredMAC();
 
-            bool refresh_scan = false;
-            do {
-                displayTextLine("Scanning..");
-                nets = WiFi.scanNetworks();
-                options = {};
-                for (int i = 0; i < nets; i++) {
-                    if (options.size() < 250) {
-                        String ssid = WiFi.SSID(i);
-                        int encryptionType = WiFi.encryptionType(i);
-                        int32_t rssi = WiFi.RSSI(i);
-                        int32_t ch = WiFi.channel(i);
-                        // Check if the network is secured
-                        String encryptionPrefix = (encryptionType == WIFI_AUTH_OPEN) ? "" : "#";
-                        String encryptionTypeStr;
-                        switch (encryptionType) {
-                            case WIFI_AUTH_OPEN: encryptionTypeStr = "Open"; break;
-                            case WIFI_AUTH_WEP: encryptionTypeStr = "WEP"; break;
-                            case WIFI_AUTH_WPA_PSK: encryptionTypeStr = "WPA/PSK"; break;
-                            case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
-                            case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
-                            case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
-                            default: encryptionTypeStr = "Unknown"; break;
-                        }
+            const int LINE_H    = 10;
+            const int LIST_TOP  = 44;
+            const int FOOT_Y    = tftHeight - 14;
+            const int LIST_BOT  = FOOT_Y - 2;
+            const int MAX_LINES = (LIST_BOT - LIST_TOP) / LINE_H;
+            const int MAX_CHARS = (tftWidth - 2 * BORDER_PAD_X) / 6;
 
-                        String optionText = encryptionPrefix + ssid + "(" + String(rssi) + "|" +
-                                            encryptionTypeStr + "|ch." + String(ch) + ")";
+            std::vector<String> netLabels;
+            std::vector<String> netSSIDs;
+            std::vector<int>    netEncTypes;
+            netLabels.reserve(30);
+            netSSIDs.reserve(30);
+            netEncTypes.reserve(30);
 
-                        options.push_back({optionText.c_str(), [=]() {
-                                               _wifiConnect(ssid, encryptionType);
-                                           }});
-                    }
+            bool stopScan = false;
+            int  lastN    = 0;
+            int  spinFrame = 0;
+            unsigned long lastSpin = millis();
+
+            drawMainBorderWithTitle("WiFi Scan");
+
+            // Draw initial footer
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.drawString("Found: 0", BORDER_PAD_X, FOOT_Y, 1);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawRightString("OK=stop+select", tftWidth - BORDER_PAD_X, FOOT_Y, 1);
+
+            // Start async scan
+            WiFi.scanNetworks(true, showHiddenNetworks);
+
+            while (!stopScan) {
+                // Check buttons every loop — async scan never blocks
+                if (check(SelPress) || check(NextPress)) {
+                    WiFi.scanDelete();
+                    stopScan = true;
+                    break;
                 }
-                options.push_back({"Hidden SSID", [=]() {
-                                       String __ssid = keyboard("", 32, "Your SSID");
-                                       _wifiConnect(__ssid.c_str(), 8);
-                                   }});
-                addOptionToMainMenu();
-
-                loopOptions(options);
-                options.clear();
-
                 if (check(EscPress)) {
-                    refresh_scan = true;
-                } else {
-                    refresh_scan = false;
+                    WiFi.scanDelete();
+                    stopScan = true;
+                    netLabels.clear();
+                    break;
                 }
-            } while (refresh_scan);
-        } break;
 
-        case WIFI_AP_STA: // repeater mode
+                // Spin animation
+                if (millis() - lastSpin > 300) {
+                    spinFrame = (spinFrame + 1) & 3;
+                    lastSpin = millis();
+                }
+
+                int result = WiFi.scanComplete();
+                if (result >= 0) {
+                    // Scan finished — rebuild list
+                    int n = result;
+                    netLabels.clear();
+                    netSSIDs.clear();
+                    netEncTypes.clear();
+
+                    for (int i = 0; i < n; i++) {
+                        String  ssid    = WiFi.SSID(i);
+                        int     encType = WiFi.encryptionType(i);
+                        int32_t rssi    = WiFi.RSSI(i);
+                        int32_t ch      = WiFi.channel(i);
+                        String  prefix  = (encType == WIFI_AUTH_OPEN) ? "" : "#";
+                        String  encStr;
+                        switch (encType) {
+                            case WIFI_AUTH_OPEN:            encStr = "Open";  break;
+                            case WIFI_AUTH_WEP:             encStr = "WEP";   break;
+                            case WIFI_AUTH_WPA_PSK:         encStr = "WPA";   break;
+                            case WIFI_AUTH_WPA2_PSK:        encStr = "WPA2";  break;
+                            case WIFI_AUTH_WPA_WPA2_PSK:    encStr = "WPA/2"; break;
+                            case WIFI_AUTH_WPA2_ENTERPRISE: encStr = "Ent";   break;
+                            default:                        encStr = "?";      break;
+                        }
+                        if (ssid.length() == 0) ssid = "<Hidden> " + WiFi.BSSIDstr(i);
+                        netLabels.push_back(prefix + ssid + " (" + String(rssi) + " ch" + String(ch) + " " + encStr + ")");
+                        netSSIDs.push_back(ssid);
+                        netEncTypes.push_back(encType);
+                    }
+                    WiFi.scanDelete();
+                    lastN = n;
+
+                    // Redraw list
+                    tft.fillRect(BORDER_PAD_X, LIST_TOP, tftWidth - 2*BORDER_PAD_X, LIST_BOT - LIST_TOP, bruceConfig.bgColor);
+                    for (int li = 0; li < MAX_LINES && li < n; li++) {
+                        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                        String lbl = netLabels[li];
+                        if ((int)lbl.length() > MAX_CHARS) lbl = lbl.substring(0, MAX_CHARS - 1);
+                        tft.drawString(lbl, BORDER_PAD_X, LIST_TOP + li * LINE_H, 1);
+                    }
+
+                    // Restart for continuous scanning
+                    WiFi.scanNetworks(true, showHiddenNetworks);
+                }
+
+                // Redraw footer with current count + spinner
+                tft.fillRect(BORDER_PAD_X, FOOT_Y, tftWidth - 2*BORDER_PAD_X, 8, bruceConfig.bgColor);
+                tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+                tft.drawString("Found: " + String(lastN), BORDER_PAD_X, FOOT_Y, 1);
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.drawRightString("OK=stop+select", tftWidth - BORDER_PAD_X, FOOT_Y, 1);
+
+                vTaskDelay(20 / portTICK_PERIOD_MS);
+            }
+
+            if (netLabels.empty()) break;
+
+            options = {};
+            for (int i = 0; i < (int)netLabels.size(); i++) {
+                String ssid    = netSSIDs[i];
+                int    encType = netEncTypes[i];
+                String lbl     = netLabels[i];
+                options.push_back({lbl.c_str(), [=]() { _wifiConnect(ssid, encType); }});
+            }
+            options.push_back({"Hidden SSID", [=]() {
+                String hiddenSsid = keyboard("", 32, "Your SSID");
+                _wifiConnect(hiddenSsid.c_str(), 8);
+            }});
+            addOptionToMainMenu();
+            loopOptions(options);
+            options.clear();
+        } break;
+                case WIFI_AP_STA: // repeater mode
                           // _setupRepeater();
             break;
 
@@ -222,7 +294,7 @@ void wifiConnectTask(void *pvParameters) {
         if (pwd == "") continue;
 
         WiFi.begin(ssid, pwd);
-        for (int i = 0; i < 50; i++) {
+        for (int j = 0; j < 50; j++) { // j avoids shadowing outer loop i
             if (WiFi.status() == WL_CONNECTED) {
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
