@@ -750,6 +750,9 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
+                                                             RfCodes data{};
+                                                             if (readSubFile(&fs, filepath, data))
+                                                                txSubFile(data);
                                                              txSubFile(&fs, filepath);
                                                          }});
                     if (filepath.endsWith(".csv")) {
