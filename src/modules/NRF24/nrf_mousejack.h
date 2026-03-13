@@ -11,7 +11,7 @@
  */
 #ifndef __NRF_MOUSEJACK_H
 #define __NRF_MOUSEJACK_H
-
+#if !defined(LITE_VERSION)
 #include "modules/NRF24/nrf_common.h"
 
 // ── Maximum targets ───────────────────────────────────────────
@@ -109,5 +109,5 @@ struct MjDuckyKey {
 
 /// Main MouseJack menu entry
 void nrf_mousejack();
-
+#endif
 #endif // __NRF_MOUSEJACK_H

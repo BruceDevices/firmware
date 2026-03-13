@@ -1,6 +1,6 @@
 #ifndef __ESP_CONNECTION_H__
 #define __ESP_CONNECTION_H__
-
+#if !defined(LITE_VERSION)
 #include <esp_now.h>
 #include <globals.h>
 #include <vector>
@@ -79,4 +79,5 @@ private:
     static EspConnection *instance;
 };
 
+#endif
 #endif

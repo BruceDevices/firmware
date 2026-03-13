@@ -569,6 +569,52 @@ static const JSPropDef js_runtime[] = {
 
 const JSClassDef js_runtime_obj = JS_OBJECT_DEF("Runtime", js_runtime);
 
+/* BLE module */
+static const JSPropDef js_ble[] = {
+    JS_CFUNC_DEF("scan", 1, native_bleScan),
+    JS_CFUNC_DEF("advertise", 1, native_bleAdvertise),
+    JS_CFUNC_DEF("stopAdvertise", 0, native_bleStopAdvertise),
+    JS_PROP_END,
+};
+
+const JSClassDef js_ble_obj = JS_OBJECT_DEF("BLE", js_ble);
+
+/* NRF24 module */
+static const JSPropDef js_nrf24[] = {
+    JS_CFUNC_DEF("begin", 1, native_nrf24Begin),
+    JS_CFUNC_DEF("send", 2, native_nrf24Send),
+    JS_CFUNC_DEF("receive", 1, native_nrf24Receive),
+    JS_CFUNC_DEF("setChannel", 1, native_nrf24SetChannel),
+    JS_CFUNC_DEF("isConnected", 0, native_nrf24IsConnected),
+    JS_PROP_END,
+};
+
+const JSClassDef js_nrf24_obj = JS_OBJECT_DEF("NRF24", js_nrf24);
+
+/* LED module */
+static const JSPropDef js_led[] = {
+    JS_CFUNC_DEF("setColor", 3, native_ledSetColor),
+    JS_CFUNC_DEF("setBrightness", 1, native_ledSetBrightness),
+    JS_CFUNC_DEF("off", 0, native_ledOff),
+    JS_CFUNC_DEF("blink", 1, native_ledBlink),
+    JS_PROP_END,
+};
+
+const JSClassDef js_led_obj = JS_OBJECT_DEF("LED", js_led);
+
+/* Menu module (native Bruce UI) */
+static const JSPropDef js_menu[] = {
+    JS_CFUNC_DEF("show", 2, native_menuShow),
+    JS_CFUNC_DEF("showMainBorder", 1, native_menuShowMainBorder),
+    JS_CFUNC_DEF("showMainBorderWithTitle", 1, native_menuShowMainBorderWithTitle),
+    JS_CFUNC_DEF("printTitle", 1, native_menuPrintTitle),
+    JS_CFUNC_DEF("printSubtitle", 1, native_menuPrintSubtitle),
+    JS_CFUNC_DEF("displayMessage", 1, native_menuDisplayMessage),
+    JS_PROP_END,
+};
+
+const JSClassDef js_menu_obj = JS_OBJECT_DEF("Menu", js_menu);
+
 /* Display module */
 static const JSPropDef js_display[] = {
     JS_CFUNC_DEF("color", 4, native_color),
@@ -807,6 +853,10 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),
     JS_PROP_CLASS_DEF("subghz", &js_subghz_obj),
     JS_PROP_CLASS_DEF("wifi", &js_wifi_obj),
+    JS_PROP_CLASS_DEF("ble", &js_ble_obj),
+    JS_PROP_CLASS_DEF("nrf24", &js_nrf24_obj),
+    JS_PROP_CLASS_DEF("led", &js_led_obj),
+    JS_PROP_CLASS_DEF("menu", &js_menu_obj),
 
     // MUST BE IN THE SAME ORDER AS IN THE user_classes_js FILE they cannot be guarded by #ifdef LITE_VERSION
     JS_PROP_CLASS_DEF("TimersState", &js_timers_state_class),

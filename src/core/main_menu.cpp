@@ -23,6 +23,7 @@ MainMenu::MainMenu() {
 #if !defined(LITE_VERSION)
 #if !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
+        &appsMenu,
 #endif
         &loraMenu,
 #endif

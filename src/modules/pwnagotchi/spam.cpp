@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include <ArduinoJson.h>
@@ -403,3 +403,4 @@ void send_pwnagotchi_beacon_main() {
     // Display the spam status and wait for user input
     displaySpamStatus();
 }
+#endif

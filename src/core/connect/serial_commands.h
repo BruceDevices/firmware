@@ -1,6 +1,6 @@
 #ifndef __ESP_SERIAL_CMD_H__
 #define __ESP_SERIAL_CMD_H__
-
+#if !defined(LITE_VERSION)
 #include "esp_connection.h"
 
 class EspSerialCmd : public EspConnection {
@@ -35,4 +35,5 @@ private:
     Message createCmdMessage();
 };
 
+#endif
 #endif

@@ -9,7 +9,7 @@
  * Credits: Based on uC_mousejack / Bastille Research / EvilMouse,
  *          adapted for Bruce architecture with multi-platform input.
  */
-
+#if !defined(LITE_VERSION)
 #include "nrf_mousejack.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -952,3 +952,4 @@ void nrf_mousejack() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "MouseJack");
 }
+#endif

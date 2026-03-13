@@ -1,3 +1,4 @@
+#ifndef LITE_VERSION
 // --- wifi_recover.cpp ---
 /*
   WiFi Password Cracker for Bruce (ESP32-S3 / T-Embed)
@@ -1168,3 +1169,4 @@ void wifi_recover_menu() {
     wifi_crack_handshake(wordlist, pcap);
     while (!check(AnyKeyPress)) vTaskDelay(pdMS_TO_TICKS(50));
 }
+#endif

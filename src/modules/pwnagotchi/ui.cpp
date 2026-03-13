@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "ui.h"
 #include "../wifi/sniffer.h"
 
@@ -157,3 +157,4 @@ void drawMood(String face, String phrase, bool broken) {
     tft.drawPixel(0, 0, 0);
     tft.drawCentreString(phrase, canvas_center_x, canvas_h - 30, SMOOTH_FONT);
 }
+#endif

@@ -1,14 +1,15 @@
 #include "wifi_commands.h"
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
+#include <globals.h>
+#if !defined(LITE_VERSION)
 #include "esp_netif.h"
 #include "esp_netif_net_stack.h"
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/tcp_utils.h"
-#include <globals.h>
 #include <modules/ethernet/ARPScanner.h>
 // #include "modules/wifi/responder.h"
-
+#endif
 uint32_t wifiCallback(cmd *c) {
     Command cmd(c);
     Argument statusArg = cmd.getArgument("status");
@@ -63,7 +64,7 @@ uint32_t webuiCallback(cmd *c) {
 
     return true;
 }
-
+#if !defined(LITE_VERSION)
 uint32_t scanHostsCallback(cmd *c) {
     esp_netif_t *esp_netinterface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (esp_netinterface == nullptr) {
@@ -92,7 +93,7 @@ uint32_t listenTCPCallback(cmd *c) {
 
     return true;
 }
-
+#endif
 /*
 uint32_t responderCallback(cmd *c) {
     if (!wifiConnected) {

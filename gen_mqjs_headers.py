@@ -33,6 +33,7 @@ INCLUDES = [
     'buffer_js',
     'audio_js',
     'badusb_js',
+    'ble_js',
     'device_js',
     'display_js',
     'dialog_js',
@@ -41,9 +42,12 @@ INCLUDES = [
     'i2c_js',
     'ir_js',
     'keyboard_js',
+    'led_js',
     'math_js',
+    'menu_js',
     'mic_js',
     'notification_js',
+    'nrf24_js',
     'rfid_js',
     'runtime_js',
     'serial_js',
@@ -174,10 +178,18 @@ def generate_headers():
 
         # Build the generator as a native host executable. The output headers are
         # still forced to 32-bit target format via the generator's `-m32` flag.
+        # Ensure the compiler's bin directory is in PATH so sub-processes
+        # (cc1, as, ld) can be found -- required on Windows/MSYS2.
+        cc_dir = os.path.dirname(shutil.which(host_cc) or host_cc)
+        sub_env = os.environ.copy()
+        if cc_dir:
+            sub_env["PATH"] = cc_dir + os.pathsep + sub_env.get("PATH", "")
+
         gcc_result = subprocess.run(
             [host_cc, *CFLAGS, "-o", GEN, *SRC],
             capture_output=True,
             text=True,
+            env=sub_env,
         )
         if gcc_result.returncode != 0:
             if gcc_result.stdout:
@@ -194,14 +206,14 @@ def generate_headers():
         print("gen_mqjs_headers.py Generating QuickJS headers for 32-bit targets")
 
         with open(os.path.join(BJS_INTERPRETER_PATH, "mqjs_stdlib.h"), "w") as f:
-            result = subprocess.run([GEN, "-m32"], capture_output=True, text=True, check=True)
+            result = subprocess.run([GEN, "-m32"], capture_output=True, text=True, check=True, env=sub_env)
             for line in INCLUDES:
                 f.write(f'#include "{line}.h"\n')
             f.write("\n")
             f.write(result.stdout)
 
         with open(os.path.join(BUILD_DIR, "mquickjs_atom.h"), "w") as f:
-            subprocess.check_call([GEN, "-a", "-m32"], stdout=f)
+            subprocess.check_call([GEN, "-a", "-m32"], stdout=f, env=sub_env)
 
     except Exception as e:
         print("\nError generating MicroQuickJS headers (gen_mqjs_headers.py).")

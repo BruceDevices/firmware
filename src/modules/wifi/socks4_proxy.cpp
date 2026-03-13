@@ -7,6 +7,7 @@
  * Official socks4 example is a **client** (connect to proxy). We implement the server.
  * See socks4_proxy.h for links.
  */
+#ifndef LITE_VERSION
 #include "modules/wifi/socks4_proxy.h"
 #include "core/display.h"
 #include "core/wifi/wifi_common.h"
@@ -38,8 +39,9 @@ static void relayLoop(WiFiClient &client, WiFiClient &target) {
     }
 }
 
-static bool readSocks4Request(WiFiClient &client, uint8_t &cd, uint16_t &dstPort,
-                             uint8_t dstIp[4], char *hostname, size_t hostnameSize) {
+static bool readSocks4Request(
+    WiFiClient &client, uint8_t &cd, uint16_t &dstPort, uint8_t dstIp[4], char *hostname, size_t hostnameSize
+) {
     if (hostname && hostnameSize) hostname[0] = '\0';
     uint8_t vn;
     if (client.read(&vn, 1) != 1 || vn != SOCKS4_VERSION) return false;
@@ -67,8 +69,9 @@ static bool readSocks4Request(WiFiClient &client, uint8_t &cd, uint16_t &dstPort
 }
 
 static void sendSocks4Reply(WiFiClient &client, uint8_t cd, uint16_t dstPort, const uint8_t *dstIp) {
-    uint8_t reply[8] = {0, cd, (uint8_t)(dstPort >> 8), (uint8_t)(dstPort & 0xff),
-                        dstIp[0], dstIp[1], dstIp[2], dstIp[3]};
+    uint8_t reply[8] = {
+        0, cd, (uint8_t)(dstPort >> 8), (uint8_t)(dstPort & 0xff), dstIp[0], dstIp[1], dstIp[2], dstIp[3]
+    };
     client.write(reply, 8);
 }
 
@@ -133,9 +136,10 @@ void socks4Proxy(uint16_t port) {
             continue;
         }
 
-        String destStr = hostname[0] != '\0'
-                             ? (String(hostname) + ":" + String(dstPort))
-                             : (IPAddress(dstIp[0], dstIp[1], dstIp[2], dstIp[3]).toString() + ":" + String(dstPort));
+        String destStr =
+            hostname[0] != '\0'
+                ? (String(hostname) + ":" + String(dstPort))
+                : (IPAddress(dstIp[0], dstIp[1], dstIp[2], dstIp[3]).toString() + ":" + String(dstPort));
         tft.println("  -> " + destStr + " ...");
         Serial.println("[SOCKS4] Connecting to " + destStr);
 
@@ -169,3 +173,4 @@ void socks4Proxy(uint16_t port) {
         Serial.println("[SOCKS4] Tunnel closed: " + clientIp + " -> " + destStr);
     }
 }
+#endif

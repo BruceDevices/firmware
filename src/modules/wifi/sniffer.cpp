@@ -4,6 +4,7 @@
               github.com/spacehuhn
   ===========================================
 */
+#if !defined(LITE_VERSION)
 #include "sniffer.h"
 /* include all necessary libraries */
 #include "esp_wifi.h"
@@ -29,8 +30,8 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
-#include "core/wifi/wifi_common.h"
 #include "core/wifi/webInterface.h"
+#include "core/wifi/wifi_common.h"
 #include <Arduino.h>
 #include <globals.h>
 #if defined(ESP32)
@@ -947,7 +948,7 @@ static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems
 void sniffer_setup() {
     // Stop WebUI before setting WiFi mode for sniffer
     cleanlyStopWebUiForWiFiFeature();
-    
+
     FS *Fs;
     int redraw = true;
     bool clearScreen = true;
@@ -1309,3 +1310,4 @@ void setHandshakeSniffer() {
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_set_promiscuous_rx_cb(sniffer);
 }
+#endif
