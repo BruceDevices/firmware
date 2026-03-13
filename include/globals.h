@@ -138,9 +138,9 @@ struct keyStroke { // DO NOT CHANGE IT!!!!!
         fn = false;
         del = false;
         enter = false;
-        bool alt = false;
-        bool ctrl = false;
-        bool gui = false;
+        alt = false;
+        ctrl = false;
+        gui = false;
         modifiers = 0;
         word.clear();
         hid_keys.clear();
