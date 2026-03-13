@@ -9,6 +9,29 @@ extern RotaryEncoder *encoder;
 RotaryEncoder *encoder = nullptr;
 IRAM_ATTR void checkPosition() { encoder->tick(); }
 
+/*********************************************************************
+**  Screensaver board hooks — T-Embed CC1101
+**
+**  Enter: detach encoder IRQs so they don't accumulate ticks or
+**         trigger EncoderLedChange during light sleep.
+**  Exit:  reset encoder position, clear LED state, re-attach IRQs.
+**********************************************************************/
+void _screensaver_board_enter() {
+    detachInterrupt(digitalPinToInterrupt(ENCODER_INA));
+    detachInterrupt(digitalPinToInterrupt(ENCODER_INB));
+}
+
+void _screensaver_board_exit() {
+    // Reset encoder position so accumulated ticks don't fire on resume
+    if (encoder) encoder->setPosition(0);
+#ifdef HAS_ENCODER_LED
+    EncoderLedChange = 0;
+#endif
+    // Re-attach encoder interrupts
+    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+}
+
 // Battery libs
 #if defined(T_EMBED_1101)
 // Power handler for battery detection
@@ -226,136 +249,129 @@ void checkReboot() {
     // Early exit if button not pressed
     if (digitalRead(BK_BTN) != BTN_ACT) return;
 
-    // Constants for better readability
-    const int SLEEP_TIMEOUT = 3;
-    const int RESTART_TIMEOUT = 5;
-    const int DISPLAY_DELAY = 500;
-    const char *SLEEP_TEXT = "DEEP SLEEP IN 3/3";
-    const char *RESTART_TEXT = "RESTART IN 5/5";
+    // Timing thresholds
+    const uint32_t SCREENSAVER_THRESHOLD = 600;  // 0.6s → screensaver
+    const uint32_t SLEEP_THRESHOLD       = 3000; // 3s   → deep sleep
+    const uint32_t RESTART_THRESHOLD     = 5000; // 5s   → restart
+    const uint32_t DISPLAY_DELAY         = 200;  // delay before showing hint
 
-    // Calculate banner dimensions once
-    const int maxTextWidth = tft.textWidth(SLEEP_TEXT, 1);
-    const int bannerX = tftWidth / 2 - maxTextWidth / 2 - 5;
-    const int bannerY = 12;
-    const int bannerWidth = maxTextWidth + 10;
-    const int bannerHeight = tft.fontHeight(1);
+    // Banner geometry (sized for the longest string)
+    const char *LONGEST_TEXT = "DEEP SLEEP IN 3/3";
+    const int maxTextWidth   = tft.textWidth(LONGEST_TEXT, 1);
+    const int bannerX        = tftWidth / 2 - maxTextWidth / 2 - 5;
+    const int bannerY        = 12;
+    const int bannerW        = maxTextWidth + 10;
+    const int bannerH        = tft.fontHeight(1);
 
-    // Helper function to clear banner area
-    auto clearBanner = [&]() { tft.fillRect(bannerX, 7, bannerWidth, 18, bruceConfig.bgColor); };
+    auto clearBanner   = [&]() { tft.fillRect(bannerX, 7, bannerW, 18, bruceConfig.bgColor); };
+    auto clearTextLine = [&]() { tft.fillRect(bannerX, bannerY, bannerW, bannerH, bruceConfig.bgColor); };
 
-    // Helper function to clear text line only
-    auto clearTextLine = [&]() {
-        tft.fillRect(bannerX, bannerY, bannerWidth, bannerHeight, bruceConfig.bgColor);
-    };
+    uint32_t pressStart    = millis();
+    bool bannerShown       = false;
+    bool screensaverHinted = false;
+    bool isRestartMode     = false;
+    bool previousMode      = false;
+    int  countDown         = 0;
 
-    uint32_t time_count = millis();
-    bool isRestartMode = false;
-    bool previousMode = false;
-    int countDown = 0;
-    bool bannerInitialized = false;
-
+    // ── Phase 1: wait for release or threshold ────────────────────────────
     while (digitalRead(BK_BTN) == BTN_ACT) {
-        // Check if SEL_BTN is pressed for restart mode
+        uint32_t held = millis() - pressStart;
         isRestartMode = (digitalRead(SEL_BTN) == BTN_ACT);
 
-        // Handle mode change: reset timer and clear display
-        if (isRestartMode != previousMode && bannerInitialized) {
+        // Mode switched → reset timer and display
+        if (isRestartMode != previousMode && bannerShown) {
             clearBanner();
-            time_count = millis();
-            countDown = 0;
-            bannerInitialized = false;
-            previousMode = isRestartMode;
+            pressStart    = millis();
+            held          = 0;
+            countDown     = 0;
+            bannerShown   = false;
+            screensaverHinted = false;
+            previousMode  = isRestartMode;
             delay(50);
             continue;
         }
-
         previousMode = isRestartMode;
 
-        // Only show countdown after initial delay
-        if (millis() - time_count <= DISPLAY_DELAY) {
-            delay(10);
-            continue;
-        }
-
-        // Initialize banner on first display
-        if (!bannerInitialized) {
+        // ── 500ms – 1000ms: show screensaver hint (non-restart mode only) ──
+        if (!isRestartMode && held >= DISPLAY_DELAY && held < SCREENSAVER_THRESHOLD && !screensaverHinted) {
+            screensaverHinted = true;
+            bannerShown = true;
+            tft.setTextSize(1);
             clearBanner();
-            bannerInitialized = true;
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawCentreString("SCREENSAVER", tftWidth / 2, bannerY, 1);
         }
 
-        // Calculate current countdown value
-        int newCountDown = (millis() - time_count - DISPLAY_DELAY) / 1000 + 1;
-
-        // Only update display if countdown changed OR mode just initialized
-        if (newCountDown != countDown || !bannerInitialized) {
-            countDown = newCountDown;
-
-            // Initialize banner on first display
-            if (!bannerInitialized) {
+        // ── 1000ms+: switch to sleep/restart countdown ────────────────────
+        if (held >= SCREENSAVER_THRESHOLD) {
+            if (!bannerShown || screensaverHinted) {
+                // Clear whatever was shown before and start countdown
                 clearBanner();
-                bannerInitialized = true;
+                bannerShown   = true;
+                screensaverHinted = false;
+                countDown     = 0;
             }
 
-            tft.setTextSize(1);
+            int newCountDown = (held - SCREENSAVER_THRESHOLD) / 1000 + 1;
+            if (newCountDown != countDown) {
+                countDown = newCountDown;
+                tft.setTextSize(1);
+                clearTextLine();
 
-            if (isRestartMode) {
-                // RESTART MODE: 5 seconds
-                if (countDown >= RESTART_TIMEOUT + 1) {
-                    // Execute restart
-                    tft.fillScreen(bruceConfig.bgColor);
+                if (isRestartMode) {
+                    int remaining = (RESTART_THRESHOLD - SCREENSAVER_THRESHOLD) / 1000;
+                    if (countDown > remaining) {
+                        tft.fillScreen(bruceConfig.bgColor);
+                        tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+                        tft.drawCentreString("RESTARTING...", tftWidth / 2, tftHeight / 2, 2);
+                        delay(1000);
+                        ESP.restart();
+                    }
                     tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
-                    tft.drawCentreString("RESTARTING...", tftWidth / 2, tftHeight / 2, 2);
-                    delay(1000);
-                    ESP.restart();
+                    tft.drawCentreString(
+                        "RESTART IN " + String(countDown) + "/" + String(remaining),
+                        tftWidth / 2, bannerY, 1
+                    );
+                } else {
+                    int remaining = (SLEEP_THRESHOLD - SCREENSAVER_THRESHOLD) / 1000;
+                    if (countDown > remaining) {
+                        tft.fillScreen(bruceConfig.bgColor);
+                        while (digitalRead(BK_BTN) == BTN_ACT);
+                        delay(200);
+                        powerDownNFC();
+                        powerDownCC1101();
+                        tft.sleep(true);
+                        delay(1000);
+                        digitalWrite(PIN_POWER_ON, LOW);
+                        esp_sleep_enable_ext0_wakeup(GPIO_NUM_6, LOW);
+                        esp_deep_sleep_start();
+                    }
+                    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                    tft.drawCentreString(
+                        "DEEP SLEEP IN " + String(countDown) + "/" + String(remaining),
+                        tftWidth / 2, bannerY, 1
+                    );
                 }
-
-                // Display countdown
-                tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
-                clearTextLine();
-                tft.drawCentreString(
-                    "RESTART IN " + String(countDown) + "/" + String(RESTART_TIMEOUT),
-                    tftWidth / 2,
-                    bannerY,
-                    1
-                );
-
-            } else {
-                // DEEP SLEEP MODE: Normal text, 3 seconds
-                if (countDown >= SLEEP_TIMEOUT + 1) {
-                    // Execute deep sleep
-                    tft.fillScreen(bruceConfig.bgColor);
-                    while (digitalRead(BK_BTN) == BTN_ACT);
-                    delay(200);
-                    powerDownNFC();
-                    powerDownCC1101();
-                    tft.sleep(true);
-                    delay(1000); // Delay for debouncing ;)
-                    digitalWrite(PIN_POWER_ON, LOW);
-                    esp_sleep_enable_ext0_wakeup(GPIO_NUM_6, LOW);
-                    esp_deep_sleep_start();
-                }
-
-                // Display countdown
-                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-                clearTextLine();
-                tft.drawCentreString(
-                    "DEEP SLEEP IN " + String(countDown) + "/" + String(SLEEP_TIMEOUT),
-                    tftWidth / 2,
-                    bannerY,
-                    1
-                );
             }
         }
 
         delay(10);
     }
 
-    // Clear banner after button release
+    // ── Button released ───────────────────────────────────────────────────
+    uint32_t held = millis() - pressStart;
     delay(30);
-    if (millis() - time_count > DISPLAY_DELAY) {
-        clearBanner();
-        drawStatusBar();
+
+    if (bannerShown) clearBanner();
+
+    // Released in screensaver window (500ms – 1000ms, non-restart mode) → screensaver
+    if (!isRestartMode && held >= DISPLAY_DELAY && held < SCREENSAVER_THRESHOLD) {
+        enterScreensaver();
+        return; // status bar will be redrawn by loopOptions after screensaver
     }
+
+    // If we released after the display delay without going into deep sleep → redraw
+    if (held > DISPLAY_DELAY) drawStatusBar();
 #endif
 }
 
