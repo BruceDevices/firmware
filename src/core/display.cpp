@@ -2,6 +2,7 @@
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
+#include "powerSave.h"
 #include "settings.h" //for timeStr
 #include "utils.h"
 #include <JPEGDecoder.h>
@@ -15,10 +16,8 @@ void panelSleep(bool on) {
 #if defined(ST7789_2_DRIVER) || defined(ST7789_DRIVER)
     if (on) {
         tft.writecommand(0x10); // SLPIN: panel off
-        delay(5);
     } else {
         tft.writecommand(0x11); // SLPOUT: panel on
-        delay(120);
     }
 #endif
     // Disables tft writings on the display
@@ -32,28 +31,34 @@ bool __attribute__((weak)) isCharging() { return false; }
 ***************************************************************************************/
 void displayScrollingText(const String &text, Opt_Coord &coord) {
     int len = text.length();
-    String displayText = text + "        "; // Add spaces for smooth looping
-    int scrollLen = len + 8;                // Full text plus space buffer
+    static String _lastText = "";
     static int i = 0;
     static long _lastmillis = 0;
+
+    // Reset scroll position when the selected item changes
+    if (text != _lastText) {
+        i = 0;
+        _lastText = text;
+        _lastmillis = 0;
+    }
+
     tft.setTextColor(coord.fgcolor, coord.bgcolor);
     if (len < coord.size) {
         // Text fits within limit, no scrolling needed
         return;
     } else if (millis() > _lastmillis + 200) {
-        String scrollingPart =
-            displayText.substring(i, i + (coord.size - 1)); // Display charLimit characters at a time
+        String displayText = text + "        ";
+        int scrollLen = len + 8;
+        String scrollingPart = displayText.substring(i, i + (coord.size - 1));
         tft.fillRect(
-            coord.x,
-            coord.y,
+            coord.x, coord.y,
             (coord.size - 1) * LW * tft.getTextSize(),
             LH * tft.getTextSize(),
             bruceConfig.bgColor
-        ); // Clear display area
-        tft.setCursor(coord.x, coord.y);
+        );
         tft.setCursor(coord.x, coord.y);
         tft.print(scrollingPart);
-        if (i >= scrollLen - coord.size) i = -1; // Loop back
+        if (i >= scrollLen - coord.size) i = -1;
         _lastmillis = millis();
         i++;
         if (i == 1) _lastmillis = millis() + 1000;
@@ -113,16 +118,18 @@ void turnOffDisplay() { setBrightness(0, false); }
 
 bool wakeUpScreen() {
     previousMillis = millis();
+    // During screensaver, don't instantly restore — let enterScreensaver handle fade-in
+    if (isScreensaverActive) return false;
     if (isScreenOff) {
         isScreenOff = false;
         dimmer = false;
         getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(10)); // Reduced from 200ms for smoother transition
         return true;
     } else if (dimmer) {
         dimmer = false;
         getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(10)); // Reduced from 200ms for smoother transition
         return true;
     }
     return false;
@@ -485,11 +492,27 @@ int loopOptions(
             bruceConfig.bgColor
         );
     if (index >= options.size()) index = 0;
+
+    // Animation fade-in menu principal au premier démarrage
+#if !defined(LITE_VERSION)
+    extern bool _menuFadeInDone;
+    if (menuType == MENU_TYPE_MAIN && !_menuFadeInDone) {
+        _menuFadeInDone = true;
+        // Backlight off avant de dessiner le menu
+        _setBrightness(0);
+        currentScreenBrightness = 0;
+        // Attendre que l'écran soit vraiment éteint avant de dessiner
+        delay(50);
+    }
+#endif
+
+    // Dessiner le menu À L'OMBRE (après le delay, donc invisible)
     bool firstRender = true;
-    static unsigned long menuOpenTs = 0; // timestamp when menu was first rendered
-    drawMainBorder();
     while (1) {
-        // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
+        // Pour le premier render du menu principal, tout dessiner à l'ombre
+        if (firstRender && menuType == MENU_TYPE_MAIN) {
+            drawMainBorder();  // Border + barre de statut
+        }
         if (exit) break;
         if (menuType == MENU_TYPE_MAIN) {
             checkReboot();
@@ -526,7 +549,19 @@ int loopOptions(
                         firstRender
                     );
             }
-            if (firstRender) menuOpenTs = millis();
+
+            // Fade-in après avoir dessiné le menu (seulement premier appel menu principal)
+#if !defined(LITE_VERSION)
+            if (firstRender && menuType == MENU_TYPE_MAIN) {
+                // Fade-in ultra-fluide (3ms par step)
+                for (int b = 0; b <= bruceConfig.bright; b++) {
+                    _setBrightness(b);
+                    delay(3);
+                }
+                currentScreenBrightness = bruceConfig.bright;
+            }
+#endif
+
             firstRender = false;
             redraw = false;
         }
@@ -559,35 +594,71 @@ int loopOptions(
             redraw = true;
 #else
             long _tmp = millis();
+            bool _handledNavigation = false;
 #ifndef HAS_ENCODER // T-Embed doesn't need it
             LongPress = true;
-            while (PrevPress && menuType != MENU_TYPE_MAIN) {
-                if (millis() - _tmp > 200)
-                    tft.drawArc(
-                        tftWidth / 2,
-                        tftHeight / 2,
-                        25,
-                        15,
-                        0,
-                        360 * (millis() - (_tmp + 200)) / 500,
-                        getColorVariation(bruceConfig.priColor),
-                        bruceConfig.bgColor
-                    );
-                vTaskDelay(10 / portTICK_RATE_MS);
-            }
-            tft.drawArc(
-                tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
-            );
-            LongPress = false;
-#endif
-            if (millis() - _tmp > 700) { // longpress detected to exit
-                index = -1;
-                break;
+            if (menuType == MENU_TYPE_MAIN) {
+                // Hold 600ms in main menu → screensaver
+                while (PrevPress && (millis() - _tmp < 600)) {
+                    if (millis() - _tmp > 150)
+                        tft.drawArc(
+                            tftWidth / 2,
+                            tftHeight / 2,
+                            25,
+                            15,
+                            0,
+                            360 * (millis() - (_tmp + 150)) / 450,
+                            getColorVariation(bruceConfig.priColor),
+                            bruceConfig.bgColor
+                        );
+                    vTaskDelay(10 / portTICK_RATE_MS);
+                }
+                tft.drawArc(
+                    tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
+                );
+                LongPress = false;
+                _handledNavigation = true;
+                if (millis() - _tmp >= 600) {
+                    check(PrevPress);
+                    enterScreensaver();
+                    redraw = true;
+                } else {
+                    check(PrevPress);
+                    if (index == 0) index = options.size() - 1;
+                    else if (index > 0) index--;
+                    redraw = true;
+                }
             } else {
-                check(PrevPress);
-                if (index == 0) index = options.size() - 1;
-                else if (index > 0) index--;
-                redraw = true;
+                while (PrevPress) {
+                    if (millis() - _tmp > 200)
+                        tft.drawArc(
+                            tftWidth / 2,
+                            tftHeight / 2,
+                            25,
+                            15,
+                            0,
+                            360 * (millis() - (_tmp + 200)) / 500,
+                            getColorVariation(bruceConfig.priColor),
+                            bruceConfig.bgColor
+                        );
+                    vTaskDelay(10 / portTICK_RATE_MS);
+                }
+                tft.drawArc(
+                    tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
+                );
+                LongPress = false;
+            }
+#endif
+            if (!_handledNavigation) {
+                if (millis() - _tmp > 700) { // longpress detected to exit
+                    index = -1;
+                    break;
+                } else {
+                    check(PrevPress);
+                    if (index == 0) index = options.size() - 1;
+                    else if (index > 0) index--;
+                    redraw = true;
+                }
             }
 #endif
         }
@@ -605,11 +676,7 @@ int loopOptions(
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
         */
-        // Prevent immediate selection if the SEL button was already being held when the menu opened.
-        // Allow a short grace period for the user to release the button first.
-        static const unsigned long MENU_SELECT_IGNORE_MS = 600; // ms to ignore SEL after menu opens
-
-        if (forceMenuOption >= 0 || (millis() - menuOpenTs > MENU_SELECT_IGNORE_MS && check(SelPress))) {
+        if (check(SelPress) || forceMenuOption >= 0) {
             uint16_t chosen = index;
             if (forceMenuOption >= 0) {
                 chosen = forceMenuOption;
@@ -641,6 +708,17 @@ void progressHandler(int progress, size_t total, String message) {
     }
     tft.fillRect(20, tftHeight - 45, barWidth, 13, bruceConfig.priColor);
 }
+
+/***************************************************************************************
+** Function name: resetMainMenuFadeIn
+** Description:   Réinitialise le flag de fade-in du menu principal pour l'animation
+***************************************************************************************/
+#if !defined(LITE_VERSION)
+bool _menuFadeInDone = false;
+void resetMainMenuFadeIn() {
+    _menuFadeInDone = false;
+}
+#endif
 
 /***************************************************************************************
 ** Function name: drawOptions
@@ -716,6 +794,7 @@ Exit:
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
+    tft.fillScreen(bruceConfig.bgColor);  // Effacer le menu précédent
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -934,47 +1013,81 @@ void drawWireguardStatus(int x, int y) {
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
 #define MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
+
+static bool _listFilesForceReset = true;
+void resetListFilesCache() { _listFilesForceReset = true; }
+
+// Draw one line with text+bg atomically — no flicker, no separate fillRect
+static void _drawLine(int visPos, bool selected, const FileList &item, int nchars) {
+    uint16_t fg;
+    if (item.folder) fg = getColorVariation(bruceConfig.priColor);
+    else if (item.operation) fg = ALCOLOR;
+    else fg = bruceConfig.priColor;
+
+    tft.setTextColor(fg, bruceConfig.bgColor);
+    tft.setCursor(10, 10 + visPos * LH * FM);
+    String txt = selected ? ">" : " ";
+    txt += item.filename;
+    while ((int)txt.length() < nchars) txt += ' ';
+    tft.print(txt.substring(0, nchars));
+}
+
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     Opt_Coord coord;
-    tft.drawPixel(0, 0, bruceConfig.bgColor);
-    if (index == 0) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-    }
-    tft.setCursor(10, 10);
     tft.setTextSize(FM);
-    int i = 0;
+
     int arraySize = fileList.size();
+    int nchars = (tftWidth - 20) / (6 * FM);
+
     int start = 0;
     if (index >= MAX_ITEMS) {
         start = index - MAX_ITEMS + 1;
         if (start < 0) start = 0;
     }
-    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
-    String txt = ">";
-    while (i < arraySize) {
-        if (i >= start) {
-            tft.setCursor(10, tft.getCursorY());
-            if (fileList[i].folder == true)
-                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
-            else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
 
-            if (index == i) {
-                txt = ">";
-                coord.x = 10 + FM * LW;
-                coord.y = tft.getCursorY();
-                coord.size = nchars;
-                coord.fgcolor =
-                    fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;
-            } else txt = " ";
-            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
+    static int _lastStart = -1;
+    static int _lastIndex = -1;
+
+    bool pageChanged = (_listFilesForceReset || start != _lastStart);
+
+    if (pageChanged) {
+        // Full redraw only when page changes or forced (folder change)
+        if (_listFilesForceReset) {
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
         }
-        i++;
-        if (i == (start + MAX_ITEMS) || i == arraySize) break;
+        for (int visPos = 0; visPos < MAX_ITEMS; visPos++) {
+            int i = start + visPos;
+            if (i >= arraySize) {
+                // Clear empty slot
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.setCursor(10, 10 + visPos * LH * FM);
+                String blank(nchars, ' ');
+                tft.print(blank);
+            } else {
+                _drawLine(visPos, i == index, fileList[i], nchars);
+            }
+        }
+        _listFilesForceReset = false;
+    } else if (index != _lastIndex) {
+        // Partial redraw: only the 2 lines that changed
+        int oldVis = _lastIndex - start;
+        int newVis = index - start;
+        if (oldVis >= 0 && oldVis < MAX_ITEMS && _lastIndex < arraySize)
+            _drawLine(oldVis, false, fileList[_lastIndex], nchars);
+        if (newVis >= 0 && newVis < MAX_ITEMS)
+            _drawLine(newVis, true, fileList[index], nchars);
     }
+
+    _lastStart = start;
+    _lastIndex = index;
+
+    coord.x = 10 + FM * LW;
+    coord.y = 10 + (index - start) * LH * FM;
+    coord.size = nchars;
+    coord.fgcolor = fileList[index].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
+    coord.bgcolor = bruceConfig.bgColor;
+
     return coord;
 }
 
@@ -1231,25 +1344,6 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     Serial.println("=====================================");
 
     delete[] data_array; // free heap before leaving
-    return true;
-}
-
-bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center) {
-    bool decoded = false;
-    if (data_array) {
-        decoded = JpegDec.decodeArray(data_array, data_size);
-    } else {
-        return false;
-    }
-
-    if (decoded) {
-        if (center) {
-            x = x + (tftWidth - JpegDec.width) / 2;
-            y = y + (tftHeight - JpegDec.height) / 2;
-        }
-        jpegRender(x, y);
-    }
-
     return true;
 }
 

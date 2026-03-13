@@ -107,7 +107,6 @@ bool showGif(
 );
 #endif
 bool showJpeg(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
-bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center = false);
 
 uint16_t getComplementaryColor(uint16_t color);
 uint16_t getComplementaryColor2(uint16_t color);
@@ -176,6 +175,11 @@ inline int loopOptions(std::vector<Option> &options, int _index) {
 inline int loopOptions(std::vector<Option> &options) {
     return loopOptions(options, MENU_TYPE_REGULAR, "", 0, false);
 }
+
+// Réinitialise le flag de fade-in du menu principal (pour l'animation à chaque retour)
+#if !defined(LITE_VERSION)
+void resetMainMenuFadeIn();
+#endif
 
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
