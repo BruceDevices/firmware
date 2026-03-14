@@ -499,10 +499,10 @@ int loopOptions(
     if (menuType == MENU_TYPE_MAIN && !_menuFadeInDone) {
         _menuFadeInDone = true;
         // Backlight off avant de dessiner le menu
-        _setBrightness(0);
+        setBrightness(0, false);
         currentScreenBrightness = 0;
-        // Attendre que l'écran soit vraiment éteint avant de dessiner
-        delay(50);
+        // Petit delay avant le fade-in
+        delay(2);
     }
 #endif
 
@@ -553,9 +553,9 @@ int loopOptions(
             // Fade-in après avoir dessiné le menu (seulement premier appel menu principal)
 #if !defined(LITE_VERSION)
             if (firstRender && menuType == MENU_TYPE_MAIN) {
-                // Fade-in ultra-fluide (3ms par step)
+                // Fade-in fluide
                 for (int b = 0; b <= bruceConfig.bright; b++) {
-                    _setBrightness(b);
+                    setBrightness(b, false);
                     delay(3);
                 }
                 currentScreenBrightness = bruceConfig.bright;
