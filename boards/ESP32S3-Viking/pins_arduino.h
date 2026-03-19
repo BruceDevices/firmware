@@ -99,7 +99,6 @@ static const uint8_t MISO = SPI_MISO_PIN;
 #define TFT_BL   -1
 #define TFT_BACKLIGHT_ON HIGH
 #define SMOOTH_FONT 1
-#define TOUCH_CS -1 // No SPI touch, using I2C capacitive touch
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 20000000
 
