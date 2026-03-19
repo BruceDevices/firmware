@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #ifndef DEVICE_NAME
-#define DEVICE_NAME "ES3C28P"
+#define DEVICE_NAME "ESP32S3-Viking"
 #endif
 
 // =============================================
@@ -91,12 +91,12 @@ static const uint8_t MISO = SPI_MISO_PIN;
 #define TFT_WIDTH 240
 #define TFT_HEIGHT 320
 #define TFT_MISO 13
-#define TFT_MOSI 11
-#define TFT_SCLK 12
-#define TFT_CS 10
-#define TFT_DC 46
-#define TFT_RST -1 // Connected to CHIP_PU (shared with board reset)
-#define TFT_BL 45  // Backlight control (HIGH = on)
+#define TFT_MOSI 10
+#define TFT_SCLK 11
+#define TFT_CS   9
+#define TFT_DC   8
+#define TFT_RST  7
+#define TFT_BL   -1
 #define TFT_BACKLIGHT_ON HIGH
 #define SMOOTH_FONT 1
 #define TOUCH_CS -1 // No SPI touch, using I2C capacitive touch
@@ -115,13 +115,7 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // Touch Screen (FT6336G via I2C @ 0x38)
 // =============================================
 #define HAS_TOUCH 1
-#define HAS_CAPACITIVE_TOUCH 1
-#define TOUCH_FT6336_I2C 1
-#define FT6336_I2C_ADDR 0x38
-#define FT6336_I2C_CONFIG_SDA 16
-#define FT6336_I2C_CONFIG_SCL 15
-#define FT6336_TOUCH_CONFIG_RST 18
-#define FT6336_TOUCH_CONFIG_INT 17
+#define TOUCH_CS  6
 
 // =============================================
 // Font Sizes
@@ -133,7 +127,7 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // =============================================
 // RGB LED (WS2812 NeoPixel)
 // =============================================
-#define HAS_RGB_LED 1
+#define HAS_RGB_LED 0
 #define RGB_LED 42
 #define LED_TYPE WS2812B
 #define LED_ORDER GRB
@@ -156,27 +150,27 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // I2S: MCLK=4, BCLK=5, LRC=7, DOUT=8, DIN=6
 // Per LCD Wiki example: GPIO8=DOUT (ESP32→ES8311), GPIO6=DIN (ES8311→ESP32)
 // =============================================
-#define HAS_NS4168_SPKR 1 // Compatible I2S speaker interface
-#define ES8311_CODEC 1
-#define ES8311_ADDR 0x18
-#define I2S_MCLK_PIN 4 // Master clock
-#define BCLK 5         // Bit clock
-#define WCLK 7         // Word clock (LRC)
-#define DOUT 8         // Data out (ESP32 → ES8311 SDIN for playback)
-#define MCLK 4         // Alias for I2S_MCLK_PIN
-#define AMP_EN_PIN 1   // FM8002E amplifier enable (active LOW)
+//#define HAS_NS4168_SPKR 1 // Compatible I2S speaker interface
+//#define ES8311_CODEC 1
+//#define ES8311_ADDR 0x18
+//#define I2S_MCLK_PIN 4 // Master clock
+//#define BCLK 5         // Bit clock
+//#define WCLK 7         // Word clock (LRC)
+//#define DOUT 8         // Data out (ESP32 → ES8311 SDIN for playback)
+//#define MCLK 4         // Alias for I2S_MCLK_PIN
+//#define AMP_EN_PIN 1   // FM8002E amplifier enable (active LOW)
 
 // Microphone (via ES8311 ADC)
-#define MIC_SPM1423 1
-#define PIN_CLK 7 // I2S WS/LRC for mic (used as ws pin in std I2S mode)
-#define I2S_SCLK_PIN 5
-#define I2S_DATA_PIN 6 // I2S DIN (ES8311 SDOUT → ESP32 for recording)
-#define PIN_DATA 6
+//#define MIC_SPM1423 1
+//#define PIN_CLK 7 // I2S WS/LRC for mic (used as ws pin in std I2S mode)
+//#define I2S_SCLK_PIN 5
+//#define I2S_DATA_PIN 6 // I2S DIN (ES8311 SDOUT → ESP32 for recording)
+//#define PIN_DATA 6
 
 // =============================================
 // Battery ADC
 // =============================================
-#define ANALOG_BAT_PIN 9
+#define ANALOG_BAT_PIN -1
 #define ANALOG_BAT_MULTIPLIER 2.0f // Voltage divider: multiply ADC by 2
 
 // =============================================
