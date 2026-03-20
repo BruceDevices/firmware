@@ -47,7 +47,7 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // SD Card - Uses SDIO mode (not SPI)
 // SD_CLK=38, SD_CMD=40, SD_D0=39, SD_D1=41, SD_D2=48, SD_D3=47
 // =============================================
-#define SDCARD_CS -1
+#define SDCARD_CS  -1
 #define SDCARD_SCK -1
 #define SDCARD_MISO -1
 #define SDCARD_MOSI -1
@@ -84,29 +84,35 @@ static const uint8_t MISO = SPI_MISO_PIN;
 
 // =============================================
 // TFT Display (ILI9341V via SPI)
+// Per official LCD Wiki ES3C28P pinout:
+// TFT_CS=IO10, TFT_DC=IO46, TFT_SCK=IO12, TFT_MOSI=IO11
+// TFT_MISO=IO13, TFT_RST=CHIP_PU(-1), TFT_BL=IO45
 // =============================================
 #define USER_SETUP_LOADED
-#define ILI9341_2_DRIVER 1
-#define TFT_INVERSION_ON 1 // Fix inverted colors
-#define TFT_WIDTH 240
+#define ILI9341_2_DRIVER    1
+#define TFT_INVERSION_ON    1  // Fix inverted colors
+
+#define TFT_WIDTH  240
 #define TFT_HEIGHT 320
+
 #define TFT_MISO 13
-#define TFT_MOSI 10
-#define TFT_SCLK 11
-#define TFT_CS   9
-#define TFT_DC   8
-#define TFT_RST  7
-#define TFT_BL   -1
+#define TFT_MOSI 11
+#define TFT_SCLK 12
+#define TFT_CS   10
+#define TFT_DC   46
+#define TFT_RST  -1  // Shared with CHIP_PU (EN), managed by board reset
+#define TFT_BL   45
 #define TFT_BACKLIGHT_ON HIGH
+
 #define SMOOTH_FONT 1
-#define SPI_FREQUENCY 40000000
+#define SPI_FREQUENCY     40000000
 #define SPI_READ_FREQUENCY 20000000
 
 // =============================================
 // Display Setup
 // =============================================
 #define HAS_SCREEN 1
-#define ROTATION 1 // Landscape mode (320x240)
+#define ROTATION 1  // Landscape mode (320x240)
 #define MINBRIGHT 1
 #define BACKLIGHT 45
 
@@ -114,7 +120,7 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // Touch Screen (FT6336G via I2C @ 0x38)
 // =============================================
 #define HAS_TOUCH 1
-#define TOUCH_CS  6
+#define TOUCH_CS -1  // FT6336G uses I2C, no CS pin
 
 // =============================================
 // Font Sizes
@@ -138,48 +144,48 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // Buttons
 // =============================================
 #define HAS_BTN 1
-#define BTN_ALIAS "\"Boot\""
-#define BTN_PIN 0 // BOOT button
+#define BTN_ALIAS '"Boot"'
+#define BTN_PIN 0   // BOOT button
 #define BTN_ACT LOW
-#define SEL_BTN 0 // BOOT button used as Select
+#define SEL_BTN 0   // BOOT button used as Select
 
 // =============================================
 // Audio System (ES8311 codec + I2S + FM8002E amplifier)
 // ES8311 I2C: SDA=16, SCL=15 (shared with touch)
-// I2S: MCLK=4, BCLK=5, LRC=7, DOUT=8, DIN=6
-// Per LCD Wiki example: GPIO8=DOUT (ESP32→ES8311), GPIO6=DIN (ES8311→ESP32)
+// I2S: MCLK=4, BCLK=5, LRC=7, DOUT=6, DIN=6
+// Per LCD Wiki: IO4=I2S_MCK, IO5=I2S_SCK, IO6=I2S_DO, IO7=I2S_LRC
+// Audio_EN=IO1 (active LOW)
 // =============================================
-//#define HAS_NS4168_SPKR 1 // Compatible I2S speaker interface
+//#define HAS_NS4168_SPKR 1   // Compatible I2S speaker interface
 //#define ES8311_CODEC 1
 //#define ES8311_ADDR 0x18
-//#define I2S_MCLK_PIN 4 // Master clock
-//#define BCLK 5         // Bit clock
-//#define WCLK 7         // Word clock (LRC)
-//#define DOUT 8         // Data out (ESP32 → ES8311 SDIN for playback)
-//#define MCLK 4         // Alias for I2S_MCLK_PIN
-//#define AMP_EN_PIN 1   // FM8002E amplifier enable (active LOW)
-
+//#define I2S_MCLK_PIN 4      // Master clock
+//#define BCLK 5              // Bit clock
+//#define WCLK 7              // Word clock (LRC)
+//#define DOUT 6              // Data out (ESP32 -> ES8311 SDIN for playback)
+//#define MCLK 4              // Alias for I2S_MCLK_PIN
+//#define AMP_EN_PIN 1        // FM8002E amplifier enable (active LOW)
 // Microphone (via ES8311 ADC)
 //#define MIC_SPM1423 1
-//#define PIN_CLK 7 // I2S WS/LRC for mic (used as ws pin in std I2S mode)
+//#define PIN_CLK 7           // I2S WS/LRC for mic
 //#define I2S_SCLK_PIN 5
-//#define I2S_DATA_PIN 6 // I2S DIN (ES8311 SDOUT → ESP32 for recording)
+//#define I2S_DATA_PIN 6      // I2S DIN (ES8311 SDOUT -> ESP32 for recording)
 //#define PIN_DATA 6
 
 // =============================================
 // Battery ADC
+// Per LCD Wiki: BAT_ADC = IO9 with x2 voltage divider
 // =============================================
-#define ANALOG_BAT_PIN -1
-#define ANALOG_BAT_MULTIPLIER 2.0f // Voltage divider: multiply ADC by 2
+#define ANALOG_BAT_PIN 9
+#define ANALOG_BAT_MULTIPLIER 2.0f   // Voltage divider: multiply ADC by 2
 
 // =============================================
 // Infrared (external, via expansion pins)
 // =============================================
-#define TXLED 2 // IR TX default (expansion GPIO2)
-#define RXLED 3 // IR RX default (expansion GPIO3)
-#define LED_ON HIGH
+#define TXLED 2   // IR TX default (expansion GPIO2)
+#define RXLED 3   // IR RX default (expansion GPIO3)
+#define LED_ON  HIGH
 #define LED_OFF LOW
-
 #define IR_TX_PINS '{{"GPIO2", 2}, {"GPIO3", 3}, {"GPIO14", 14}, {"GPIO21", 21}}'
 #define IR_RX_PINS '{{"GPIO2", 2}, {"GPIO3", 3}, {"GPIO14", 14}, {"GPIO21", 21}}'
 
@@ -207,7 +213,7 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // =============================================
 // Deep Sleep
 // =============================================
-#define DEEPSLEEP_WAKEUP_PIN 0 // BOOT button
+#define DEEPSLEEP_WAKEUP_PIN 0   // BOOT button
 #define DEEPSLEEP_PIN_ACT LOW
 
 #endif /* Pins_Arduino_h */
