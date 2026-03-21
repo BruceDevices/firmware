@@ -199,8 +199,8 @@ static const uint8_t MISO = TFT_MISO_PIN;
 #define RXLED    39
 #define LED_ON   HIGH
 #define LED_OFF  LOW
-#define IR_TX_PINS '{"GPIO38", 38}, {"GPIO39", 39}, {"GPIO20", 20}, {"GPIO21", 21}'
-#define IR_RX_PINS '{"GPIO38", 38}, {"GPIO39", 39}, {"GPIO20", 20}, {"GPIO21", 21}'
+#define IR_TX_PINS {{"GPIO38", 38}, {"GPIO39", 39}, {"GPIO20", 20}, {"GPIO21", 21}}
+#define IR_RX_PINS {{"GPIO38", 38}, {"GPIO39", 39}, {"GPIO20", 20}, {"GPIO21", 21}}
 
 // =============================================
 // RF 433MHz ASK (right side of KIT B)
@@ -208,8 +208,8 @@ static const uint8_t MISO = TFT_MISO_PIN;
 // IO10 = RX DATA -> odbiornik (wieksza plytka, piny VCC/GND/DATA)
 // Zasilanie modulow: VCC -> 5V (lub 3.3V), GND -> GND
 // =============================================
-#define RF_TX_PINS '{"GPIO9", 9}, {"GPIO10", 10}, {"GPIO11", 11}'
-#define RF_RX_PINS '{"GPIO9", 9}, {"GPIO10", 10}, {"GPIO11", 11}'
+#define RF_TX_PINS {{"GPIO9", 9}, {"GPIO10", 10}, {"GPIO11", 11}}
+#define RF_RX_PINS {{"GPIO9", 9}, {"GPIO10", 10}, {"GPIO11", 11}}
 
 // =============================================
 // Serial / GPS
