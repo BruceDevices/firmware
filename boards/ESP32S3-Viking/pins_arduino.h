@@ -212,6 +212,8 @@ static const uint8_t MISO = TFT_MISO_PIN;
 #define RF_RX_PINS {{"GPIO9", 9}, {"GPIO10", 10}, {"GPIO11", 11}}
 
 // =============================================
+#define RF_TX_DEFAULT_PIN  9  // IO9 = TX DATA (nadajnik)
+#define RF_RX_DEFAULT_PIN  10 // IO10 = RX DATA (odbiornik)
 // Serial / GPS
 // =============================================
 #define SERIAL_TX    43
