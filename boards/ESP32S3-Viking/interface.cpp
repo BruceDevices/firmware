@@ -18,6 +18,7 @@
  *   IO18 -> T_CS, IO8 -> T_IRQ
  */
 #include "core/powerSave.h"
+#include "core/utils.h"
 #include <Arduino.h>
 #include <globals.h>
 #include <interface.h>
@@ -27,8 +28,8 @@
  ** Description:         Initial GPIO setup for the device
  ******************************************************************************/
 void _setup_gpio() {
-    // ---- WS2812 LED off at startup (neopixelWrite built into Arduino-ESP32) ----
-    neopixelWrite(RGB_LED, 0, 0, 0);
+    // ---- WS2812 LED off at startup ----
+    rgbLedWrite(RGB_LED, 0, 0, 0);
 
     // ---- Touch CS pin - TFT_eSPI will handle the rest ----
     pinMode(TOUCH_CS, OUTPUT);
@@ -83,7 +84,7 @@ void _post_setup_gpio() {
     analogWrite(TFT_BL, 255);
 
     // ---- LED off after TFT init ----
-    neopixelWrite(RGB_LED, 0, 0, 0);
+    rgbLedWrite(RGB_LED, 0, 0, 0);
 }
 
 /******************************************************************************
@@ -141,7 +142,7 @@ void InputHandler(void) {
  ** Function:            powerOff
  ******************************************************************************/
 void powerOff() {
-    neopixelWrite(RGB_LED, 0, 0, 0);
+    rgbLedWrite(RGB_LED, 0, 0, 0);
     if (TFT_BL >= 0) analogWrite(TFT_BL, 0);
     tft.writecommand(0x10); // SLPIN
     esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_PIN, BTN_ACT);
