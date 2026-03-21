@@ -16,6 +16,9 @@
  *   IO7 -> LCD_MOSI/T_DIN, IO15 -> LCD_SCK/T_CLK
  *   IO16 -> LCD_MISO/T_DO, IO17 -> LCD_BL
  *   IO18 -> T_CS, IO8 -> T_IRQ
+ *
+ * Touch recalibration: hold BOOT button during startup to erase saved
+ * calibration data and run the calibration wizard again.
  */
 #include "core/powerSave.h"
 #include "core/utils.h"
@@ -24,8 +27,8 @@
 #include <interface.h>
 
 /******************************************************************************
- ** Function name:       _setup_gpio()
- ** Description:         Initial GPIO setup for the device
+ ** Function name:      _setup_gpio()
+ ** Description:        Initial GPIO setup for the device
  ******************************************************************************/
 void _setup_gpio() {
     // ---- WS2812 LED off at startup ----
@@ -43,22 +46,47 @@ void _setup_gpio() {
     bruceConfigPins.rfidModule  = PN532_I2C_MODULE;
     bruceConfigPins.irRx        = RXLED;
     bruceConfigPins.irTx        = TXLED;
-
     Serial.begin(115200);
 }
 
 /******************************************************************************
- ** Function name:       _post_setup_gpio()
- ** Description:         Second stage GPIO setup - runs after TFT init
+ ** Function name:      _post_setup_gpio()
+ ** Description:        Second stage GPIO setup - runs after TFT init
  ******************************************************************************/
 void _post_setup_gpio() {
     // ---- Touch calibration via TFT_eSPI built-in ----
     pinMode(TOUCH_CS, OUTPUT);
 
     uint16_t calData[5];
+    bool doCalibration = false;
+
+    // Check if BOOT button is held at startup -> force recalibration
+    if (digitalRead(BTN_PIN) == BTN_ACT) {
+        // Wait to confirm intentional press (debounce)
+        delay(100);
+        if (digitalRead(BTN_PIN) == BTN_ACT) {
+            // Show message on screen
+            tft.setRotation(ROTATION);
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_WHITE, TFT_BLACK);
+            tft.setTextSize(2);
+            tft.setCursor(20, 100);
+            tft.println("Recalibrating touch...");
+            tft.setCursor(20, 130);
+            tft.println("Release BOOT button");
+            // Wait for button release
+            while (digitalRead(BTN_PIN) == BTN_ACT) delay(10);
+            delay(500);
+            // Delete saved calibration data
+            LittleFS.remove("/calData");
+            doCalibration = true;
+        }
+    }
+
     File caldata = LittleFS.open("/calData", "r");
-    if (!caldata) {
-        // No calibration data - run calibration
+    if (!caldata || doCalibration) {
+        if (caldata) caldata.close();
+        // No calibration data (or forced) - run calibration
         tft.setRotation(ROTATION);
         tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 10);
         caldata = LittleFS.open("/calData", "w");
@@ -68,78 +96,69 @@ void _post_setup_gpio() {
             caldata.close();
         }
     } else {
-        Serial.print("\nTouch calibration data: ");
+        // Load saved calibration data
         for (int i = 0; i < 5; i++) {
-            String line = caldata.readStringUntil('\n');
-            calData[i] = line.toInt();
-            Serial.printf("%d, ", calData[i]);
+            calData[i] = caldata.parseInt();
         }
-        Serial.println();
         caldata.close();
+        tft.setTouch(calData);
     }
-    tft.setTouch(calData);
 
     // ---- Backlight on ----
-    pinMode(TFT_BL, OUTPUT);
-    analogWrite(TFT_BL, 255);
+    if (TFT_BL >= 0) analogWrite(TFT_BL, 255);
 
-    // ---- LED off after TFT init ----
+    // ---- LED off ----
     rgbLedWrite(RGB_LED, 0, 0, 0);
 }
 
 /******************************************************************************
- ** Function:            getBattery
+ ** Function name:      _setBrightness()
+ ** Description:        Set TFT backlight brightness
  ******************************************************************************/
-int getBattery() { return -1; }
-
-/******************************************************************************
- ** Function:            _setBrightness
- ******************************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (TFT_BL < 0) return;
-    if (brightval == 0) {
-        analogWrite(TFT_BL, 0);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100.0f));
-        analogWrite(TFT_BL, bl);
-    }
+void _setBrightness(uint8_t brightness) {
+    int bl = map(brightness, 0, 100, MINBRIGHT, 255);
+    analogWrite(TFT_BL, bl);
 }
 
 /******************************************************************************
- ** Function:            InputHandler
- ** Uses TFT_eSPI built-in XPT2046 touch + BOOT button
+ ** Function name:      InputHandler()
+ ** Description:        Handles touch and button input for Bruce UI
  ******************************************************************************/
-void InputHandler(void) {
-    static long d_tmp = 0;
-    if (millis() - d_tmp > 200 || LongPress) {
-        // ---- Touch via TFT_eSPI built-in (USE_TFT_eSPI_TOUCH) ----
-        uint16_t t_x, t_y;
+void InputHandler() {
+    static unsigned long lastTouch = 0;
+    unsigned long now = millis();
+
+    // ---- Touch input (poll every ~200ms or on LongPress) ----
+    if (now - lastTouch > 200 || LongPress) {
+        lastTouch = now;
+        uint16_t t_x = 0, t_y = 0;
         bool touched = tft.getTouch(&t_x, &t_y);
         if (touched) {
-            d_tmp = millis();
-            if (!wakeUpScreen()) AnyKeyPress = true;
-            else goto END;
-            touchPoint.x = t_x;
-            touchPoint.y = t_y;
+            touchPoint.x       = t_x;
+            touchPoint.y       = t_y;
             touchPoint.pressed = true;
-            touchHeatMap(touchPoint);
-            END:
-            d_tmp = millis();
-        }
-
-        // ---- BOOT Button ----
-        if (digitalRead(BTN_PIN) == BTN_ACT) {
-            if (!wakeUpScreen()) {
+            if (wakeUpScreen()) AnyKeyPress = true;
+            else {
                 AnyKeyPress = true;
-                SelPress = true;
+                touchHeatMap(touchPoint);
             }
-            while (digitalRead(BTN_PIN) == BTN_ACT) delay(10);
+        } else {
+            touchPoint.pressed = false;
         }
+    }
+
+    // ---- BOOT Button ----
+    if (digitalRead(BTN_PIN) == BTN_ACT) {
+        if (!wakeUpScreen()) {
+            AnyKeyPress = true;
+            SelPress    = true;
+        }
+        while (digitalRead(BTN_PIN) == BTN_ACT) delay(10);
     }
 }
 
 /******************************************************************************
- ** Function:            powerOff
+ ** Function name:      powerOff()
  ******************************************************************************/
 void powerOff() {
     rgbLedWrite(RGB_LED, 0, 0, 0);
@@ -152,7 +171,7 @@ void powerOff() {
 void goToDeepSleep() { powerOff(); }
 
 /******************************************************************************
- ** Function:            checkReboot
+ ** Function name:      checkReboot()
  ******************************************************************************/
 void checkReboot() {
     int c = 0;
@@ -163,6 +182,6 @@ void checkReboot() {
 }
 
 /******************************************************************************
- ** Function:            isCharging
+ ** Function name:      isCharging()
  ******************************************************************************/
 bool isCharging() { return false; }
