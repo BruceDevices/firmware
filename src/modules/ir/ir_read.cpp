@@ -12,6 +12,7 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/settings.h"
+#include "custom_ir.h"
 #include "ir_utils.h"
 #include <IRrecv.h>
 #include <IRutils.h>
@@ -57,6 +58,30 @@ IrRead::IrRead(bool headless_mode, bool raw_mode) {
 }
 bool quickloop = false;
 
+static String getParsedProtocolName(const decode_results &r) {
+    switch (r.decode_type) {
+        case decode_type_t::RC5:
+            return (r.command > 0x3F) ? "RC5X" : "RC5";
+        case decode_type_t::RC6:
+            return "RC6";
+        case decode_type_t::SAMSUNG:
+            return "Samsung32";
+        case decode_type_t::SONY:
+            if (r.address > 0xFF) return "SIRC20";
+            if (r.address > 0x1F) return "SIRC15";
+            return "SIRC";
+        case decode_type_t::NEC:
+            if (r.address > 0xFFFF) return "NEC42ext";
+            if (r.address > 0xFF1F) return "NECext";
+            if (r.address > 0xFF) return "NEC42";
+            return "NEC";
+        case decode_type_t::UNKNOWN:
+            return "";
+        default:
+            return typeToString(r.decode_type, r.repeat);
+    }
+}
+
 void IrRead::setup() {
     irrecv.enableIRIn();
 
@@ -85,12 +110,6 @@ void IrRead::setup() {
         {"AC",
          [&]() {
              quickButtons = quickButtonsAC;
-             begin();
-             return loop();
-         }                     },
-        {"FAN",
-         [&]() {
-             quickButtons = quickButtonsFAN;
              begin();
              return loop();
          }                     },
@@ -133,12 +152,21 @@ void IrRead::loop() {
 #endif
             break;
         }
-        if (check(NextPress)) save_signal();
-        if (quickloop && button_pos == quickButtons.size()) save_device();
-        if (check(SelPress)) save_device();
-        if (check(PrevPress)) discard_signal();
 
-        read_signal();
+        if (_emulate_mode) {
+            if (check(SelPress)) emulate_signal();               // OK  = send again
+            if (check(NextPress)) { _emulate_mode = false; discard_signal(); } // NEXT = new signal
+            if (check(PrevPress)) { _emulate_mode = false; save_signal(); }    // PREV = save signal
+        } else {
+            if (check(NextPress)) save_signal();
+            if (quickloop && button_pos == quickButtons.size()) save_device();
+            if (check(SelPress)) {
+                if (_read_signal) emulate_signal();              // OK on captured = emulate
+                else save_device();                              // OK without signal = save device
+            }
+            if (check(PrevPress)) discard_signal();
+            read_signal();
+        }
     }
 }
 
@@ -178,11 +206,17 @@ void IrRead::display_banner() {
 void IrRead::display_btn_options() {
     tft.println("");
     tft.println("");
-    if (_read_signal) {
-        padprintln("Press [PREV] to discard signal");
+    if (_emulate_mode) {
+        padprintln("Press [OK]   to send again");
+        padprintln("Press [NEXT] for new signal");
+        padprintln("Press [PREV] to save signal");
+    } else if (_read_signal) {
+        padprintln("Press [OK]   to emulate signal");
         padprintln("Press [NEXT] to save signal");
+        padprintln("Press [PREV] to discard");
+    } else {
+        if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     }
-    if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     padprintln("Press [ESC]  to exit");
 }
 
@@ -191,14 +225,22 @@ void IrRead::read_signal() {
 
     _read_signal = true;
 
-    // Always switches to RAW data, regardless of the decoding result
-    raw = true;
+    // Prefer parsed mode when protocol is recognized and it is not an AC state.
+    // Fallback to RAW for unknown/stateful protocols.
+    raw = (results.decode_type == decode_type_t::UNKNOWN) || hasACState(results.decode_type);
 
     display_banner();
 
     // Dump of signal details
+    if (!raw) {
+        String proto = getParsedProtocolName(results);
+        padprintln("Protocol: " + (proto.length() ? proto : "UNKNOWN"));
+        padprintln("Bits: " + String(results.bits));
+    }
+
     padprint("RAW Data Captured:");
     String raw_signal = parse_raw_signal();
+    _captured_raw_signal = raw_signal; // store for immediate emulation
     tft.println(
         raw_signal.substring(0, 45) + (raw_signal.length() > 45 ? "..." : "")
     ); // Shows the RAW signal on the display
@@ -209,8 +251,42 @@ void IrRead::read_signal() {
 
 void IrRead::discard_signal() {
     if (!_read_signal) return;
+    _emulate_mode = false;
+    _captured_raw_signal = "";
     irrecv.resume();
     begin();
+}
+
+void IrRead::emulate_signal() {
+    IRCode code;
+    if (raw) {
+        code.type = "raw";
+        code.frequency = IR_FREQUENCY;
+        code.data = _captured_raw_signal;
+    } else {
+        code.type = "parsed";
+        code.protocol = getParsedProtocolName(results);
+        code.address = uint32ToString(results.address);
+        code.command = uint32ToString(results.command);
+        code.bits = results.bits;
+        code.data = resultToHexidecimal(&results);
+        if (code.protocol == "") {
+            code.type = "raw";
+            code.frequency = IR_FREQUENCY;
+            code.data = _captured_raw_signal;
+        }
+    }
+    sendIRCommand(&code);
+    if (code.type == "parsed" &&
+        (code.protocol == "RC5" || code.protocol == "RC5X" || code.protocol == "RC6")) {
+        delay(35);
+        sendIRCommand(&code);
+    }
+    _emulate_mode = true;
+    display_banner();
+    tft.setTextSize(FP);
+    padprintln("Signal emulated!");
+    display_btn_options();
 }
 
 void IrRead::save_signal() {
