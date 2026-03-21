@@ -661,6 +661,7 @@ function renderParsedFiles() {
       e.querySelector('.act-rename').setAttribute("data-action", "renameFolder");
       e.querySelector(".col-name").textContent = item.name;
       e.querySelector(".col-name").setAttribute("title", item.name);
+      e.querySelector(".col-size").textContent = item.size;
       e.querySelector(".col-action").classList.add("type-folder");
       visibleCount++;
     }
@@ -1097,6 +1098,10 @@ btnForceReload.addEventListener("click", function (e) {
 // Mobile menu toggle
 document.getElementById('mobile-menu-toggle').addEventListener('click', function () {
   document.getElementById('header-nav').classList.toggle('open');
+});
+
+btnRefreshFolder.addEventListener('click', function () {
+  fetchFiles(currentDrive, currentPath);
 });
 // Close mobile menu on any nav button click
 document.querySelectorAll('#header-nav .btn').forEach(function (btn) {
