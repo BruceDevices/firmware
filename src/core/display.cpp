@@ -486,7 +486,6 @@ int loopOptions(
         );
     if (index >= options.size()) index = 0;
     bool firstRender = true;
-    static unsigned long menuOpenTs = 0; // timestamp when menu was first rendered
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -526,7 +525,6 @@ int loopOptions(
                         firstRender
                     );
             }
-            if (firstRender) menuOpenTs = millis();
             firstRender = false;
             redraw = false;
         }
@@ -605,11 +603,7 @@ int loopOptions(
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
         */
-        // Prevent immediate selection if the SEL button was already being held when the menu opened.
-        // Allow a short grace period for the user to release the button first.
-        static const unsigned long MENU_SELECT_IGNORE_MS = 600; // ms to ignore SEL after menu opens
-
-        if (forceMenuOption >= 0 || (millis() - menuOpenTs > MENU_SELECT_IGNORE_MS && check(SelPress))) {
+        if (check(SelPress) || forceMenuOption >= 0) {
             uint16_t chosen = index;
             if (forceMenuOption >= 0) {
                 chosen = forceMenuOption;
@@ -774,38 +768,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 }
 
 void drawStatusBar() {
-    int i = 0;
     uint8_t bat = getBattery();
-    uint8_t bat_margin = 85;
-    if (bat > 0) {
-        drawBatteryStatus(bat);
-    } else bat_margin = 26;
-    if (sdcardMounted) {
-        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.setTextSize(FP);
-        tft.drawString("SD", tftWidth - (bat_margin), 12);
-        i++;
-    } // Indication for SD card on screen
-    if (gpsConnected) {
-        drawGpsSmall(tftWidth - (bat_margin + 23 * i), 7);
-        i++;
-    }
-    if (WiFi.getMode()) {
-        drawWifiSmall(tftWidth - (bat_margin + 23 * i), 7);
-        i++;
-    } // Draw Wifi Symbol beside battery
-    if (isWebUIActive) {
-        drawWebUISmall(tftWidth - (bat_margin + 23 * i), 7);
-        i++;
-    } // Draw Wifi Symbol beside battery
-    if (BLEConnected) {
-        drawBLESmall(tftWidth - (bat_margin + 23 * i), 7);
-        i++;
-    } // Draw BLE beside Wifi
-    if (isConnectedWireguard) {
-        drawWireguardStatus(tftWidth - (bat_margin + 24 * i), 7);
-        i++;
-    } // Draw Wg bedide BLE, if the others exist, if not, beside battery
+    if (bat > 0) drawBatteryStatus(bat);
 
     if (bruceConfig.theme.border) {
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
@@ -813,9 +777,8 @@ void drawStatusBar() {
     }
 
     if (clock_set) {
-        int clock_fontsize = 1; // Font size of the clock / BRUCE + BRUCE_VERSION
-        setTftDisplay(12, 12, bruceConfig.priColor, clock_fontsize, bruceConfig.bgColor);
-        tft.fillRect(12, 12, 100, clock_fontsize * LH, bruceConfig.bgColor);
+        setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
+        tft.fillRect(12, 12, 60, LH, bruceConfig.bgColor);
 #if defined(HAS_RTC)
         updateTimeStr(_rtc.getTimeStruct());
 #else
@@ -825,6 +788,71 @@ void drawStatusBar() {
     } else {
         setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
         tft.print("BRUCE " + String(BRUCE_VERSION));
+    }
+
+    int iconCount = 0;
+    bool showSD   = sdcardMounted;
+    bool showGPS  = gpsConnected;
+    bool showWifi = (WiFi.getMode() != 0);
+    bool showWeb  = isWebUIActive;
+    bool showBLE  = BLEConnected;
+    bool showWG   = isConnectedWireguard;
+    if (showSD)   iconCount++;
+    if (showGPS)  iconCount++;
+    if (showWifi) iconCount++;
+    if (showWeb)  iconCount++;
+    if (showBLE)  iconCount++;
+    if (showWG)   iconCount++;
+
+    if (iconCount > 0) {
+        const int IW  = 16;
+        const int IH  = 16;
+        const int GAP = 6;
+        int totalW = iconCount * IW + (iconCount - 1) * GAP;
+        int sx = (tftWidth - totalW) / 2;
+        int iy = 7;
+        int idx = 0;
+
+        if (showSD) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            tft.setTextDatum(MC_DATUM);
+            tft.drawString("SD", x + IW / 2, iy + IH / 2);
+            tft.setTextDatum(TL_DATUM);
+            idx++;
+        }
+        if (showGPS) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            drawGpsSmall(x, iy);
+            idx++;
+        }
+        if (showWifi) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            drawWifiSmall(x, iy);
+            idx++;
+        }
+        if (showWeb) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            drawWebUISmall(x, iy);
+            idx++;
+        }
+        if (showBLE) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            drawBLESmall(x, iy);
+            idx++;
+        }
+        if (showWG) {
+            int x = sx + idx * (IW + GAP);
+            tft.fillRect(x, iy, IW, IH, bruceConfig.bgColor);
+            drawWireguardStatus(x, iy);
+            idx++;
+        }
     }
 }
 
@@ -902,13 +930,17 @@ void drawBatteryStatus(uint8_t bat) {
     uint16_t barcolor = bruceConfig.priColor;
     if (bat < 16) barcolor = color = TFT_RED;
     else if (bat < 34) barcolor = color = TFT_YELLOW;
-    if (charging) color = TFT_GREEN;
 
-    tft.drawRoundRect(tftWidth - 43, 6, 36, 19, 2, charging ? color : bruceConfig.bgColor); // (bolder border)
     tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, color);
     tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 45, 12, 1);
+    tft.fillRect(tftWidth - 85, 7, 42, 18, bruceConfig.bgColor);
+    if (charging) {
+        tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+        tft.drawRightString("CHG", tftWidth - 44, 12, 1);
+    } else {
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 44, 12, 1);
+    }
     tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
     tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, bruceConfig.bgColor);
     tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, bruceConfig.bgColor);
@@ -918,14 +950,12 @@ void drawBatteryStatus(uint8_t bat) {
 ** Description:   Draws a padlock when connected
 ***************************************************************************************/
 void drawWireguardStatus(int x, int y) {
-    tft.fillRect(x, y, 20, 17, bruceConfig.bgColor);
     if (isConnectedWireguard) {
-        tft.drawRoundRect(11 + x, 0 + y, 8, 12, 5, TFT_GREEN);
-        tft.fillRoundRect(10 + x, 8 + y, 10, 8, 0, TFT_GREEN);
+        tft.drawRoundRect(4 + x, 0 + y, 8, 10, 4, TFT_GREEN);
+        tft.fillRoundRect(3 + x, 7 + y, 10, 8, 0, TFT_GREEN);
     } else {
-        tft.drawRoundRect(1 + x, 0 + y, 8, 12, 5, bruceConfig.priColor);
-        tft.fillRoundRect(0 + x, 8 + y, 10, 8, 0, bruceConfig.bgColor);
-        tft.fillRoundRect(6 + x, 8 + y, 10, 10, 0, bruceConfig.priColor);
+        tft.drawRoundRect(4 + x, 0 + y, 8, 10, 4, bruceConfig.priColor);
+        tft.fillRoundRect(3 + x, 7 + y, 10, 8, 0, bruceConfig.priColor);
     }
 }
 
@@ -981,28 +1011,23 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 // desenhos do menu principal, sprite "draw" com 80x80 pixels
 
 void drawWifiSmall(int x, int y) {
-    tft.fillRect(x, y, 16, 16, bruceConfig.bgColor);
-    tft.fillCircle(9 + x, 14 + y, 1, bruceConfig.priColor);
-    tft.drawArc(9 + x, 14 + y, 4, 6, 130, 230, bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawArc(9 + x, 14 + y, 10, 12, 130, 230, bruceConfig.priColor, bruceConfig.bgColor);
+    tft.fillCircle(8 + x, 13 + y, 1, bruceConfig.priColor);
+    tft.drawArc(8 + x, 13 + y, 4, 6, 130, 230, bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawArc(8 + x, 13 + y, 9, 11, 130, 230, bruceConfig.priColor, bruceConfig.bgColor);
 }
 
 void drawWebUISmall(int x, int y) {
-    tft.fillRect(x, y, 16, 16, bruceConfig.bgColor);
-
     tft.drawCircle(8 + x, 8 + y, 7, bruceConfig.priColor);
-
     tft.drawLine(3 + x, 4 + y, 14 + x, 4 + y, bruceConfig.priColor);
     tft.drawLine(2 + x, 8 + y, 15 + x, 8 + y, bruceConfig.priColor);
     tft.drawLine(3 + x, 12 + y, 14 + x, 12 + y, bruceConfig.priColor);
 }
 
 void drawBLESmall(int x, int y) {
-    tft.fillRect(x, 2 + y, 17, 13, bruceConfig.bgColor);
-    tft.drawWideLine(8 + x, 8 + y, 4 + x, 5 + y, 2, bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawWideLine(8 + x, 8 + y, 4 + x, 13 + y, 2, bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawTriangle(8 + x, 8 + y, 8 + x, 2 + y, 13 + x, 5 + y, bruceConfig.priColor);
-    tft.drawTriangle(8 + x, 8 + y, 8 + x, 14 + y, 13 + x, 11 + y, bruceConfig.priColor);
+    tft.drawWideLine(8 + x, 8 + y, 4 + x, 4 + y, 2, bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawWideLine(8 + x, 8 + y, 4 + x, 12 + y, 2, bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawTriangle(8 + x, 8 + y, 8 + x, 1 + y, 13 + x, 4 + y, bruceConfig.priColor);
+    tft.drawTriangle(8 + x, 8 + y, 8 + x, 15 + y, 13 + x, 12 + y, bruceConfig.priColor);
 }
 
 void drawBLE_beacon(int x, int y, uint16_t color) {
@@ -1024,10 +1049,9 @@ void drawGPS(int x, int y) {
 }
 
 void drawGpsSmall(int x, int y) {
-    tft.fillRect(x, y, 17, 17, bruceConfig.bgColor);
-    tft.drawEllipse(9 + x, 14 + y, 4, 3, bruceConfig.priColor);
-    tft.drawArc(9 + x, 6 + y, 5, 2, 0, 340, bruceConfig.priColor, bruceConfig.bgColor);
-    tft.fillTriangle(9 + x, 15 + y, 5 + x, 9 + y, 13 + x, 9 + y, bruceConfig.priColor);
+    tft.drawEllipse(8 + x, 13 + y, 4, 3, bruceConfig.priColor);
+    tft.drawArc(8 + x, 5 + y, 5, 2, 0, 340, bruceConfig.priColor, bruceConfig.bgColor);
+    tft.fillTriangle(8 + x, 14 + y, 4 + x, 8 + y, 12 + x, 8 + y, bruceConfig.priColor);
 }
 
 void drawCreditCard(int x, int y) {
@@ -1231,25 +1255,6 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     Serial.println("=====================================");
 
     delete[] data_array; // free heap before leaving
-    return true;
-}
-
-bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center) {
-    bool decoded = false;
-    if (data_array) {
-        decoded = JpegDec.decodeArray(data_array, data_size);
-    } else {
-        return false;
-    }
-
-    if (decoded) {
-        if (center) {
-            x = x + (tftWidth - JpegDec.width) / 2;
-            y = y + (tftHeight - JpegDec.height) / 2;
-        }
-        jpegRender(x, y);
-    }
-
     return true;
 }
 
