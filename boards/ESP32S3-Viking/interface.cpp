@@ -17,8 +17,6 @@
  *   IO16 -> LCD_MISO/T_DO, IO17 -> LCD_BL
  *   IO18 -> T_CS, IO8 -> T_IRQ
  */
-#include "core/powerSave.h"
-#include "core/utils.h"
 #include <Arduino.h>
 #include <FastLED.h>
 #include <globals.h>
@@ -62,10 +60,10 @@ void _setup_gpio() {
     pinMode(BTN_PIN, INPUT);
 
     // ---- Default module config ----
-    bruceConfigPins.rfModule   = CC1101_SPI_MODULE;
-    bruceConfigPins.rfidModule = PN532_I2C_MODULE;
-    bruceConfigPins.irRx = RXLED;
-    bruceConfigPins.irTx = TXLED;
+    bruceConfigPins.rfModule    = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule  = PN532_I2C_MODULE;
+    bruceConfigPins.irRx        = RXLED;
+    bruceConfigPins.irTx        = TXLED;
 
     Serial.begin(115200);
 }
@@ -77,6 +75,7 @@ void _setup_gpio() {
 void _post_setup_gpio() {
     // ---- Touch calibration via TFT_eSPI built-in ----
     pinMode(TOUCH_CS, OUTPUT);
+
     uint16_t calData[5];
     File caldata = LittleFS.open("/calData", "r");
     if (!caldata) {
@@ -112,9 +111,7 @@ void _post_setup_gpio() {
 /******************************************************************************
  ** Function:            getBattery
  ******************************************************************************/
-int getBattery() {
-    return -1;
-}
+int getBattery() { return -1; }
 
 /******************************************************************************
  ** Function:            _setBrightness
@@ -155,7 +152,7 @@ void InputHandler(void) {
         if (digitalRead(BTN_PIN) == BTN_ACT) {
             if (!wakeUpScreen()) {
                 AnyKeyPress = true;
-                SelPress    = true;
+                SelPress = true;
             }
             while (digitalRead(BTN_PIN) == BTN_ACT) delay(10);
         }
@@ -189,6 +186,4 @@ void checkReboot() {
 /******************************************************************************
  ** Function:            isCharging
  ******************************************************************************/
-bool isCharging() {
-    return false;
-}
+bool isCharging() { return false; }
