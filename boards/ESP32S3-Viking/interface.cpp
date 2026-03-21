@@ -18,30 +18,16 @@
  *   IO18 -> T_CS, IO8 -> T_IRQ
  */
 #include <Arduino.h>
-#include <FastLED.h>
 #include <globals.h>
 #include <interface.h>
 
 // =============================================
-// WS2812 RGB LED (GPIO48) via FastLED
+// WS2812 RGB LED (GPIO48) via neopixelWrite()
+// neopixelWrite is built into Arduino-ESP32,
+// no external library needed in variant scope.
 // =============================================
-static CRGB _leds[1];
-static bool _ledsInitialized = false;
-
-static void initLeds() {
-    if (!_ledsInitialized) {
-        FastLED.addLeds<WS2812B, RGB_LED, GRB>(_leds, 1);
-        FastLED.setBrightness(0);
-        _leds[0] = CRGB::Black;
-        FastLED.show();
-        _ledsInitialized = true;
-    }
-}
-
 static void setLedOff() {
-    initLeds();
-    _leds[0] = CRGB::Black;
-    FastLED.show();
+    neopixelWrite(RGB_LED, 0, 0, 0);
 }
 
 /******************************************************************************
