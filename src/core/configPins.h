@@ -199,7 +199,8 @@ public:
 #endif
     float rfFreq = 433.92;
     int rfFxdFreq = 1;
-    int rfModule = M5_RF_MODULE;     int rfScanRange = 3;
+    int rfModule = M5_RF_MODULE;
+    int rfScanRange = 3;
 
     // iButton Pin
     int iButton = 0;
