@@ -30,6 +30,8 @@ public:
 
 private:
     bool _read_signal = false;
+    bool _emulate_mode = false;
+    String _captured_raw_signal = "";
     decode_results results;
     uint16_t *rawcode;
     uint16_t raw_data_len;
@@ -51,6 +53,7 @@ private:
     /////////////////////////////////////////////////////////////////////////////////////
     void begin();
     void read_signal();
+    void emulate_signal();
     void save_device();
     void save_signal();
     void discard_signal();
@@ -68,21 +71,18 @@ private:
     std::vector<String> quickButtonsAC = {
         "POWER", "TEMP+", "TEMP-", "SPEED", "SWING", "SWING+", "SWING-", "JET", "UP", "DOWN", "MODE"
     };
-    std::vector<String> quickButtonsFAN = {
-        "POWER", "SPEED+", "SPEED-", "MODE", "TIMER", "SWING", "OSCILLATE", "UP", "DOWN", "LIGHT", "ION", "SLEEP"
-    };
     std::vector<String> quickButtonsSOUND = {"POWER",    "UP",      "DOWN", "LEFT",    "RIGHT",
                                              "OK",       "SOURCES", "VOL+", "VOL-",    "MUTE",
                                              "SETTINGS", "BACK",    "EQ",   "REC",     "PLAY/PAUSE",
                                              "STOP",     "NEXT",    "PREV", "SHUFFLE", "REPEAT"};
     std::vector<String> quickButtonsLED = {
     "ON", "OFF", "BRIGHTNESS+", "BRIGHTNESS-",
-    "RED", "GREEN", "BLUE", "WHITE",           
+    "RED", "GREEN", "BLUE", "WHITE",
     "ORANGE", "PEA_GREEN", "DARK_BLUE",
-    "DARK_YELLOW", "CYAN", "PURPLE",        
-    "YELLOW", "LIGHT_BLUE", "MAGENTA",    
-    "LIGHT_YELLOW", "SKY_BLUE", "ROSE",       
-    "MODE_FLASH", "MODE_STROBE", "MODE_FADE", "MODE_SMOOTH" 
+    "DARK_YELLOW", "CYAN", "PURPLE",
+    "YELLOW", "LIGHT_BLUE", "MAGENTA",
+    "LIGHT_YELLOW", "SKY_BLUE", "ROSE",
+    "MODE_FLASH", "MODE_STROBE", "MODE_FADE", "MODE_SMOOTH"
 };
     std::vector<String> &quickButtons = quickButtonsTV;
 };
