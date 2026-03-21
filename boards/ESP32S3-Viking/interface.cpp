@@ -17,15 +17,62 @@
  *   IO16 -> LCD_MISO/T_DO, IO17 -> LCD_BL
  *   IO18 -> T_CS, IO8 -> T_IRQ
  */
-#include <Arduino.h>
-#include <globals.h>
-#include <interface.h>
 
-// =============================================
+// Only framework-level headers are allowed here (variant compilation scope).
+// Project headers (globals.h, interface.h) are NOT available at this stage.
+// All project symbols are referenced via extern declarations below.
+#include <Arduino.h>
+#include <TFT_eSPI.h>
+#include <LittleFS.h>
+#include <esp_sleep.h>
+
+// ---------------------------------------------------------------------------
+// Forward declarations / externs for project symbols used in this file
+// (defined in src/ and linked at link time)
+// ---------------------------------------------------------------------------
+extern TFT_eSPI tft;
+
+struct TouchPoint_t {
+    uint16_t x = 0;
+    uint16_t y = 0;
+    bool pressed = false;
+};
+extern TouchPoint_t touchPoint;
+
+extern bool wakeUpScreen();
+extern void touchHeatMap(TouchPoint_t);
+
+extern volatile bool AnyKeyPress;
+extern volatile bool SelPress;
+extern volatile bool LongPress;
+
+// BruceConfigPins - only fields we actually set
+struct _BruceConfigPins {
+    int rfModule;
+    int rfidModule;
+    int irRx;
+    int irTx;
+};
+extern _BruceConfigPins bruceConfigPins;
+
+// Module type constants (defined in src/core/configPins.h or similar)
+#ifndef CC1101_SPI_MODULE
+#define CC1101_SPI_MODULE 0
+#endif
+#ifndef PN532_I2C_MODULE
+#define PN532_I2C_MODULE 0
+#endif
+#ifndef RXLED
+#define RXLED -1
+#endif
+#ifndef TXLED
+#define TXLED -1
+#endif
+
+// ---------------------------------------------------------------------------
 // WS2812 RGB LED (GPIO48) via neopixelWrite()
-// neopixelWrite is built into Arduino-ESP32,
-// no external library needed in variant scope.
-// =============================================
+// neopixelWrite is built into Arduino-ESP32 - no external library needed.
+// ---------------------------------------------------------------------------
 static void setLedOff() {
     neopixelWrite(RGB_LED, 0, 0, 0);
 }
