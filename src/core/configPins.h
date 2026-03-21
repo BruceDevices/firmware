@@ -187,9 +187,16 @@ public:
     int irRx = RXLED;
 
     // RF
+    #ifdef RF_TX_DEFAULT_PIN
+    int rfTx = RF_TX_DEFAULT_PIN;
+#else
     int rfTx = GROVE_SDA;
+#endif
+#ifdef RF_RX_DEFAULT_PIN
+    int rfRx = RF_RX_DEFAULT_PIN;
+#else
     int rfRx = GROVE_SCL;
-    int rfModule = M5_RF_MODULE;
+#endif
     float rfFreq = 433.92;
     int rfFxdFreq = 1;
     int rfScanRange = 3;
