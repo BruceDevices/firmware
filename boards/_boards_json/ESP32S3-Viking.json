@@ -3,11 +3,11 @@
     "arduino": {
       "ldscript": "esp32s3_out.ld",
       "partitions": "default_16MB.csv",
-      "memory_type": "dio_opi"
+      "memory_type": "qio_opi"
     },
     "core": "esp32",
     "extra_flags": [
-      "-DES3C28P",
+      "-DDESP32S3_VIKING",
       "-DBOARD_HAS_PSRAM",
       "-DARDUINO_RUNNING_CORE=1",
       "-DARDUINO_EVENT_RUNNING_CORE=1",
@@ -16,7 +16,7 @@
     ],
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
-    "flash_mode": "dio",
+    "flash_mode": "qio",
     "hwids": [
       [
         "0X303A",
@@ -24,7 +24,7 @@
       ]
     ],
     "mcu": "esp32s3",
-    "variant": "pinouts"
+    "variant": "ESP32S3-Viking"
   },
   "connectivity": [
     "bluetooth",
@@ -45,6 +45,6 @@
     "require_upload_port": true,
     "speed": 921600
   },
-  "url": "https://www.lcdwiki.com/2.8inch_ESP32-S3_Display",
-  "vendor": "ShenZhen QDtech (LCDWIKI)"
+  "url": "https://github.com/piotrkliszka-bot/Bruce",
+  "vendor": "Custom ESP32-S3 N16R8 KIT B"
 }
