@@ -471,24 +471,28 @@ svg { flex-shrink: 0; }
 }
 .login-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-xl); padding: 0; width: 100%; max-width: 380px;
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-xl); padding: 0; width: 100%; max-width: 360px;
+  box-shadow: var(--shadow-lg); overflow: hidden;
 }
-.login-card .dialog-head { padding: 20px 24px 0; border: none; font-size: 20px; }
-.login-card .dialog-body { padding: 20px 24px; }
-.login-card .dialog-body label { margin-top: 14px; }
-.login-card .dialog-body label:first-child { margin-top: 0; }
-.login-card .dialog-body input {
-  width: 100%; padding: 10px 14px; background: var(--background);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-size: 14px; font-family: inherit;
-  outline: none; transition: border-color var(--tr);
+.login-card .dialog-head {
+  padding: 18px 20px; font-size: 18px; font-weight: 600;
+  border-bottom: 1px solid var(--border);
 }
-.login-card .dialog-body input:focus { border-color: var(--color); }
 .login-card .dialog-footer {
-  padding: 16px 24px 24px; border: none;
+  padding: 16px 20px; border-top: 1px solid var(--border);
+  background: var(--surface-2);
 }
-.login-card .dialog-footer .btn { width: 100%; justify-content: center; padding: 11px; font-size: 14px; }
+.login-card .dialog-footer .btn { width: 100%; justify-content: center; padding: 10px; font-size: 14px; }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active{
+    -webkit-box-shadow: 0 0 0 30px var(--background) inset !important;
+    -webkit-text-fill-color: var(--text) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
 #notice {
   padding: 10px 14px; border-radius: var(--radius);
   background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.2);
