@@ -63,6 +63,15 @@ static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
 // =============================================
+// I2C - Wire.h requires SDA/SCL to be defined
+// Using free GPIO3 and GPIO46 (left side KIT B)
+// =============================================
+#define GROVE_SDA  3
+#define GROVE_SCL 46
+static const uint8_t SDA = GROVE_SDA;
+static const uint8_t SCL = GROVE_SCL;
+
+// =============================================
 // SPI Bus (shared: ILI9341 display + XPT2046 touch)
 // Using sequential GPIO block on left side of KIT B
 // =============================================
