@@ -7,15 +7,28 @@
  *   - ILI9341 2.8" SPI TFT 240x320 (TENSTAR ROBOT)
  *   - XPT2046 Resistive Touchscreen (TOUCH_CS=IO18, T_IRQ=IO8)
  *     handled by TFT_eSPI built-in touch support (USE_TFT_eSPI_TOUCH)
+ *   - PN532 NFC/RFID (SPI - osobna magistrala, GPIO 9-14)
  *   - WS2812 RGB LED (GPIO48)
  *   - BOOT button (GPIO0)
  *
- * Wiring (left side of KIT B, top to bottom, no cable crossing):
+ * Wiring TFT (left side of KIT B, top to bottom, no cable crossing):
  *   GND -> GND, 3V3 -> VCC
  *   IO4 -> LCD_RST, IO5 -> LCD_CS, IO6 -> LCD_DC
  *   IO7 -> LCD_MOSI/T_DIN, IO15 -> LCD_SCK/T_CLK
  *   IO16 -> LCD_MISO/T_DO, IO17 -> LCD_BL
  *   IO18 -> T_CS, IO8 -> T_IRQ
+ *
+ * Wiring PN532 SPI (left side of KIT B, lower block):
+ *   IO9  -> PN532 SCK
+ *   IO10 -> PN532 MISO
+ *   IO11 -> PN532 MOSI
+ *   IO12 -> PN532 SS (CS)
+ *   IO13 -> PN532 IRQ
+ *   IO14 -> PN532 RSTO
+ *
+ * Wiring RF 433MHz (right side of KIT B):
+ *   IO19 -> RF TX DATA (nadajnik)
+ *   IO20 -> RF RX DATA (odbiornik)
  *
  * Touch recalibration: hold BOOT button during startup to erase saved
  * calibration data and run the calibration wizard again.
@@ -43,7 +56,7 @@ void _setup_gpio() {
 
     // ---- Default module config ----
     bruceConfigPins.rfModule    = CC1101_SPI_MODULE;
-    bruceConfigPins.rfidModule  = PN532_I2C_MODULE;
+    bruceConfigPins.rfidModule  = PN532_SPI_MODULE;
     bruceConfigPins.irRx        = RXLED;
     bruceConfigPins.irTx        = TXLED;
     Serial.begin(115200);
@@ -134,8 +147,8 @@ void InputHandler() {
         uint16_t t_x = 0, t_y = 0;
         bool touched = tft.getTouch(&t_x, &t_y);
         if (touched) {
-            touchPoint.x       = t_x;
-            touchPoint.y       = t_y;
+            touchPoint.x = t_x;
+            touchPoint.y = t_y;
             touchPoint.pressed = true;
             if (wakeUpScreen()) AnyKeyPress = true;
             else {
@@ -151,7 +164,7 @@ void InputHandler() {
     if (digitalRead(BTN_PIN) == BTN_ACT) {
         if (!wakeUpScreen()) {
             AnyKeyPress = true;
-            SelPress    = true;
+            SelPress = true;
         }
         while (digitalRead(BTN_PIN) == BTN_ACT) delay(10);
     }
