@@ -31,7 +31,10 @@ enum DuckyCommandType {
     DuckyCommandType_AltChar,
     DuckyCommandType_AltString,
     DuckyCommandType_StringDelay,
-    DuckyCommandType_DefaultStringDelay
+    DuckyCommandType_DefaultStringDelay,
+    DuckyCommandType_VolumeUp,
+    DuckyCommandType_CenterClick,
+
 };
 
 struct DuckyCommand {
@@ -152,6 +155,9 @@ const DuckyCommand duckyCmds[]{
     {"SPACE",                 KEY_SPACE,        DuckyCommandType_Cmd               },
     {"FN",                    KEYFN,            DuckyCommandType_Cmd               },
     {"GLOBE",                 KEYFN,            DuckyCommandType_Cmd               },
+    {"SUBIR_VOL",             0,                DuckyCommandType_VolumeUP           },
+    {"CLICK_CENTRO",          0,                DuckyCommandType_CenterClick       },
+
 };
 
 const uint8_t *keyboardLayouts[] = {
@@ -644,6 +650,20 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                     hid->press(comb.key2);
                     if (comb.key3 != 0) hid->press(comb.key3);
                     if (str.length() > 0) { hid->press(str.c_str()[0]); }
+        }
+        else if (Cmd->type == DuckyCommandType_VolumeUp) {
+              hid->press(0xED); // Código HID de Volumen+
+                            delay(100);
+                                 hid->releaseAll();
+                                }
+         else if (Cmd->type == DuckyCommandType_CenterClick) {
+             hid->move(0, 0);   // Calibrar esquina
+                               delay(150);
+                                 hid->move(63, 63); // Centro relativo
+                               delay(150);
+                                 hid->click();      // ¡Click!
+                   }
+
                 }
             }
         }
