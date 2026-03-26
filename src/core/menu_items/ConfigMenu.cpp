@@ -271,6 +271,7 @@ void ConfigMenu::devMenu() {
             {"I2C Pins",        [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
             {"UART Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
             {"GPS Pins",        [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
+            {"Mic Pins",        [this]() { setMicPinsMenu(bruceConfigPins.mic_bus); }     },
             {"Serial USB",      [this]() { switchToUSBSerial(); }                       },
             {"Serial UART",     [this]() { switchToUARTSerial(); }                      },
             {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }             },

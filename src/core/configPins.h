@@ -9,6 +9,14 @@
 #define CC1101_GDO2_PIN -1
 #endif
 
+// Boards without a microphone don't define these; fall back to "no pin".
+#ifndef PIN_CLK
+#define PIN_CLK GPIO_NUM_NC
+#endif
+#ifndef PIN_DATA
+#define PIN_DATA GPIO_NUM_NC
+#endif
+
 enum RFIDModules {
     M5_RFID2_MODULE = 0,
     PN532_I2C_MODULE = 1,
@@ -60,6 +68,25 @@ public:
         void toJson(JsonObject obj) const {
             obj["sda"] = sda;
             obj["scl"] = scl;
+        }
+    };
+
+    struct I2SPins {
+        gpio_num_t clk = GPIO_NUM_NC;
+        gpio_num_t data = GPIO_NUM_NC;
+
+        I2SPins() : clk(GPIO_NUM_NC), data(GPIO_NUM_NC) {}
+
+        I2SPins(gpio_num_t clk = GPIO_NUM_NC, gpio_num_t data = GPIO_NUM_NC) : clk(clk), data(data) {}
+
+        void fromJson(JsonObject obj) {
+            clk = (gpio_num_t)(obj["clk"] | (int)GPIO_NUM_NC);
+            data = (gpio_num_t)(obj["data"] | (int)GPIO_NUM_NC);
+        }
+
+        void toJson(JsonObject obj) const {
+            obj["clk"] = clk;
+            obj["data"] = data;
         }
     };
 
@@ -200,6 +227,9 @@ public:
     // RFID
     int rfidModule = M5_RFID2_MODULE;
 
+    // Microphone
+    I2SPins mic_bus = {(gpio_num_t)PIN_CLK, (gpio_num_t)PIN_DATA};
+
     // GPS
     int gpsBaudrate = 9600;
 
@@ -257,6 +287,9 @@ public:
 
     // iButton
     void setiButtonPin(int value);
+
+    // Microphone
+    void setMicPins(I2SPins value);
 
     // RFID
     void setRfidModule(RFIDModules value);

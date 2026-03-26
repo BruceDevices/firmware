@@ -101,6 +101,8 @@ void setUARTPinsMenu(BruceConfigPins::UARTPins &value);
 
 void setI2CPinsMenu(BruceConfigPins::I2CPins &value);
 
+void setMicPinsMenu(BruceConfigPins::I2SPins &value);
+
 void setTheme();
 
 void setMacAddressMenu();
