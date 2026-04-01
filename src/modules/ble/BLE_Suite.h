@@ -1,6 +1,6 @@
 #ifndef BLE_SUITE_H
 #define BLE_SUITE_H
-
+#if !defined(LITE_VERSION)
 #include <NimBLEDevice.h>
 #include "fastpair_crypto.h"
 #include "HFP_Exploit.h"
@@ -210,7 +210,7 @@ public:
     bool exploitFastPairConnection(NimBLEAddress target, FastPairExploitType exploitType);
     void spamFastPairPopups(FastPairPopupType popupType, int count);
     bool testVulnerability(NimBLEAddress target);
-    
+
     // Public exploit methods
     bool executeMemoryCorruption(NimBLERemoteCharacteristic* pChar);
     bool executeStateConfusion(NimBLERemoteCharacteristic* pChar);
@@ -260,7 +260,7 @@ public:
     WhisperPairExploit();
     BLEAttackManager bleManager;
     FastPairCrypto crypto;
-    
+
     NimBLERemoteCharacteristic* findKBPCharacteristic(NimBLERemoteService* fastpairService);
     bool performRealHandshake(NimBLERemoteCharacteristic* kbpChar, uint8_t* devicePubKey);
     bool sendProtocolAttack(NimBLERemoteCharacteristic* kbpChar, const uint8_t* devicePubKey);
@@ -494,4 +494,5 @@ void showPayloadSubMenu(NimBLEAddress target);
 void showTestingSubMenu(NimBLEAddress target);
 void executeAttackWithTargetScan(int attackIndex);
 
+#endif
 #endif

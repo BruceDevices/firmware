@@ -6,7 +6,7 @@ Thanks 7h30th3r0n3 for making this possible in esp32
 https://github.com/7h30th3r0n3/Evil-M5Project
 ============================================================================================================================
 */
-
+#ifndef LITE_VERSION
 #include "responder.h"
 #include "clients.h"
 #include "core/display.h"
@@ -1070,3 +1070,4 @@ void responder() {
     // waitAndReturnToMenu("Return to menu");
     returnToMenu = true;
 }
+#endif

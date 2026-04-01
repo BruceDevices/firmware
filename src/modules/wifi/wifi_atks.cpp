@@ -282,7 +282,9 @@ void wifi_atk_menu() {
     bool scanAtks = false;
     options = {
         {"Target Atks",  [&]() { scanAtks = true; }    },
+#ifndef LITE_VERSION
         {"Karma Attack", [=]() { karma_setup(); }      },
+#endif
         {"Beacon SPAM",  [=]() { beaconAttack(); }     },
         {"Deauth Flood", [=]() { deauthFloodAttack(); }},
     };
@@ -442,7 +444,7 @@ ScanNets:
 ***************************************************************************************/
 uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filter out EAPOL frames of
                         // unrelated APs
-
+#if !defined(LITE_VERSION)
 void capture_handshake(String tssid, String mac, uint8_t channel) {
 
     // Stop WebUI before setting WiFi mode for handshake capture
@@ -710,7 +712,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
     delay(100);
     returnToMenu = true;
 }
-
+#endif
 /***************************************************************************************
 ** function: target_atk_menu
 ** @brief: Open menu to choose which AP Attack
@@ -720,7 +722,9 @@ AGAIN:
     options = {
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
         {"Deauth",              [=]() { target_atk(tssid, mac, channel); }         },
+#ifndef LITE_VERSION
         {"Capture Handshake",   [=]() { capture_handshake(tssid, mac, channel); }  },
+#endif
         {"Clone Portal",        [=]() { EvilPortal(tssid, channel, false, false); }},
         {"Deauth+Clone",        [=]() { EvilPortal(tssid, channel, true, false); } },
         {"Deauth+Clone+Verify",
@@ -842,6 +846,7 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "Martin Router King\n"
                                 "John Wilkes Bluetooth\n"
                                 "Pretty Fly for a Wi-Fi\n"
+#ifndef LITE_VERSION
                                 "Bill Wi the Science Fi\n"
                                 "I Believe Wi Can Fi\n"
                                 "Tell My Wi-Fi Love Her\n"
@@ -870,6 +875,7 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "VIRUS.EXE\n"
                                 "Virus-Infected Wi-Fi\n"
                                 "Starbucks Wi-Fi\n"
+#endif
                                 "Text 64ALL for Password\n"
                                 "Yell BRUCE for Password\n"
                                 "The Password Is 1234\n"

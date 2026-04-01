@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "ducky_typer.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -1059,3 +1060,4 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     hid->releaseAll();
     returnToMenu = true;
 }
+#endif

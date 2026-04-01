@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "serial_commands.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -164,3 +165,4 @@ void EspSerialCmd::displaySentFooter() {
     padprintln("");
     padprintln("Press [ESC] to leave");
 }
+#endif

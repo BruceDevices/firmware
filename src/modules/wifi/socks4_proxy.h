@@ -1,6 +1,6 @@
 #ifndef SOCKS4_PROXY_H
 #define SOCKS4_PROXY_H
-
+#ifndef LITE_VERSION
 #include <cstdint>
 
 /**
@@ -14,7 +14,8 @@
  * - espressif/asio repo is **archived**; migration is to ESP-Protocols.
  * - Current Asio component: espressif/esp-protocols (components/asio), uses upstream Asio.
  * - Docs: https://docs.espressif.com/projects/esp-protocols/asio/docs/latest/
- * - Official socks4 **client** example: https://components.espressif.com/components/espressif/asio/versions/1.28.0/examples/socks4
+ * - Official socks4 **client** example:
+ * https://components.espressif.com/components/espressif/asio/versions/1.28.0/examples/socks4
  *
  * This module implements the **server** (ESP32 as proxy). Bruce uses the Arduino
  * framework; the Asio component is ESP-IDF–oriented, so we use WiFiServer/WiFiClient
@@ -22,5 +23,5 @@
  * socks4/async_request patterns (with acceptor + relay instead of client connect).
  */
 void socks4Proxy(uint16_t port = 1080);
-
+#endif
 #endif

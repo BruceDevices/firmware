@@ -1,7 +1,8 @@
+#if !defined(LITE_VERSION)
 #include "nrf_jammer_api.h"
-#include "nrf_jammer.h"
 #include "core/display.h"
 #include "modules/ble/BLE_Suite.h"
+#include "nrf_jammer.h"
 #include <RF24.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -17,8 +18,8 @@ static bool isHopping = false;
 static unsigned long jamStartTime = 0;
 
 static byte bleAdvertisingChannels[] = {37, 38, 39};
-static byte bleDataChannels[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-                                  18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
+static byte bleDataChannels[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18,
+                                 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36};
 
 bool isNRF24Available() {
     if (!nrf24Initialized) {
@@ -42,7 +43,7 @@ bool startBLEJammer(BLEJamMode mode, int param) {
     NRF24_MODE nrfMode = nrf_setMode();
     if (!CHECK_NRF_SPI(nrfMode)) return false;
 
-    switch(mode) {
+    switch (mode) {
         case BLE_JAM_ADV_CHANNELS:
             NRFradio.startConstCarrier(currentPowerLevel, bleAdvertisingChannels[0]);
             isHopping = false;
@@ -82,7 +83,7 @@ bool startBLEJammer(BLEJamMode mode, int param) {
 void updateBLEJammer() {
     if (!bleJammingActive) return;
     if (isHopping && (millis() - lastChannelHop > 100)) {
-        byte* channels = NULL;
+        byte *channels = NULL;
         int channelCount = 0;
         if (currentMode == BLE_JAM_HOP_ADV) {
             channels = bleAdvertisingChannels;
@@ -113,9 +114,7 @@ void stopBLEJammer() {
     currentChannelIndex = 0;
 }
 
-bool isBLEJammingActive() {
-    return bleJammingActive;
-}
+bool isBLEJammingActive() { return bleJammingActive; }
 
 int getCurrentBLEChannel() {
     if (!bleJammingActive) return -1;
@@ -141,7 +140,7 @@ void setBLEJammingPower(int powerLevel) {
     else if (powerLevel == 2) paLevel = RF24_PA_HIGH;
     else if (powerLevel == 3) paLevel = RF24_PA_MAX;
     else return;
-    
+
     currentPowerLevel = paLevel;
     if (bleJammingActive) {
         stopBLEJammer();
@@ -154,19 +153,15 @@ bool jamBLEChannel(int channel) {
     return startBLEJammer(BLE_JAM_TARGET_CHANNEL, channel);
 }
 
-bool jamBLEAdvertisingChannels() {
-    return startBLEJammer(BLE_JAM_ADV_CHANNELS);
-}
+bool jamBLEAdvertisingChannels() { return startBLEJammer(BLE_JAM_ADV_CHANNELS); }
 
-bool jamBLEConnectionChannel(NimBLEAddress target) {
-    return startBLEJammer(BLE_JAM_ADV_CHANNELS);
-}
+bool jamBLEConnectionChannel(NimBLEAddress target) { return startBLEJammer(BLE_JAM_ADV_CHANNELS); }
 
 bool jamDuringConnect(NimBLEAddress target) {
     if (!isNRF24Available()) return false;
     startBLEJammer(BLE_JAM_ADV_CHANNELS);
     String connectionMethod = "";
-    NimBLEClient* pClient = attemptConnectionWithStrategies(target, connectionMethod);
+    NimBLEClient *pClient = attemptConnectionWithStrategies(target, connectionMethod);
     stopBLEJammer();
     if (pClient) {
         pClient->disconnect();
@@ -175,3 +170,4 @@ bool jamDuringConnect(NimBLEAddress target) {
     }
     return false;
 }
+#endif

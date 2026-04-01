@@ -1,6 +1,6 @@
 #ifndef NRF_JAMMER_API_H
 #define NRF_JAMMER_API_H
-
+#if !defined(LITE_VERSION)
 #include "modules/NRF24/nrf_common.h"
 #include <NimBLEDevice.h>
 
@@ -25,4 +25,5 @@ bool jamBLEAdvertisingChannels();
 bool jamBLEConnectionChannel(NimBLEAddress target);
 bool jamDuringConnect(NimBLEAddress target);
 
+#endif
 #endif

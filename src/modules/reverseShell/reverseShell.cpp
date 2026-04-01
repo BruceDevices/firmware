@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "core/display.h"
 
 #include <DNSServer.h>
@@ -129,3 +130,4 @@ void ReverseShell() {
         }
     }
 }
+#endif

@@ -4,7 +4,7 @@
  * @version 0.1
  * @date 2025-05-15
  */
-
+#if !defined(LITE_VERSION)
 #include "ARPScanner.h"
 #include "ARPSpoofer.h"
 #include "ARPoisoner.h"
@@ -92,14 +92,14 @@ bool wait_ping = true;
 
 static void ping_cb(esp_ping_handle_t hdl, void *args) {
     // Turn on just for debug
-    //Serial.println("Ping done");
+    // Serial.println("Ping done");
     wait_ping = false;
     esp_ping_stop(hdl);
     esp_ping_delete_session(hdl);
 }
 
 static void ping_cb_fail(esp_ping_handle_t hdl, void *args) {
-    //Serial.println("Ping Fail");
+    // Serial.println("Ping Fail");
     wait_ping = false;
     esp_ping_stop(hdl);
     esp_ping_delete_session(hdl);
@@ -318,8 +318,8 @@ void ARPScanner::afterScanOptions(const Host &host) {
          }},
 #if !defined(LITE_VERSION)
         {"ARP Poisoning", [this]() { ARPoisoner{gateway}; }},
-        {"DHCP Starvation", [=]() { DHCPStarvation(); }      },
-        {"MAC Flooding",    [=]() { MACFlooding(); }         },
+        {"DHCP Starvation", [=]() { DHCPStarvation(); }},
+        {"MAC Flooding", [=]() { MACFlooding(); }},
 #endif
     };
     // if(sdcardMounted && bruceConfig.devMode) options.push_back({"ARP MITM (WIP)",  [&](){ opt=5;  }});
@@ -329,3 +329,4 @@ void ARPScanner::afterScanOptions(const Host &host) {
         // arpSpoofing(host, true);
     }
 }
+#endif

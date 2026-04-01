@@ -1,7 +1,7 @@
 // --- wifi_recover.h ---
 #ifndef WIFI_RECOVER_H
 #define WIFI_RECOVER_H
-
+#ifndef LITE_VERSION
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,5 +15,5 @@ void wifi_recover_menu();
 #ifdef __cplusplus
 }
 #endif
-
+#endif
 #endif // WIFI_RECOVER_H

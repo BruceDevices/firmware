@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "ArduinoJson.h"
 #include "esp_wifi.h"
 #include "esp_wifi_types.h"
@@ -38,3 +38,4 @@ uint8_t getPwngridTotalPeers();
 String getPwngridLastFriendName();
 signed int getPwngridClosestRssi();
 void checkPwngridGoneFriends();
+#endif

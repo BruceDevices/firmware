@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "../wifi/sniffer.h"
 #include "../wifi/wifi_atks.h"
 #include "core/mykeyboard.h"
@@ -245,3 +245,4 @@ void brucegotchi_start() {
     esp_wifi_set_promiscuous_rx_cb(nullptr);
     wifiDisconnect();
 }
+#endif

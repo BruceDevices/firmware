@@ -1,5 +1,5 @@
 #pragma once
-
+#if !defined(LITE_VERSION)
 #include <Arduino.h>
 #include <NimBLEAdvertisedDevice.h>
 #include <NimBLEDevice.h>
@@ -19,3 +19,4 @@ void quickAppleSpam(int payloadIndex);
 bool isAppleSpamRunning();
 const char* getApplePayloadName(int index);
 int getApplePayloadCount();
+#endif

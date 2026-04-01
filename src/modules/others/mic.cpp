@@ -1008,8 +1008,8 @@ bool mic_capture_samples(
                          .mclk = I2S_GPIO_UNUSED,
                          .bclk = (gpio_num_t)PIN_CLK,
                          .ws = (gpio_num_t)PIN_WS,
-                         .din = (gpio_num_t)PIN_DATA,
                          .dout = I2S_GPIO_UNUSED,
+                         .din = (gpio_num_t)PIN_DATA,
                          .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
                          },
         };

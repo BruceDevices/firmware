@@ -10,6 +10,7 @@
 #include <globals.h>
 
 static TaskHandle_t timezoneTaskHandle = NULL;
+static bool wifiTransitioning = false;
 
 void ensureWifiPlatform() {
     static bool netifInitialized = false;
@@ -120,15 +121,28 @@ bool _setupAP() {
 }
 
 void wifiDisconnect() {
+    wifiTransitioning = true;
+    
     WiFi.softAPdisconnect(true); // turn off AP mode
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.disconnect(true, true); // turn off STA mode
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.mode(WIFI_OFF);         // enforces WIFI_OFF mode
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    
     wifiConnected = false;
-    returnToMenu = true;
+    wifiTransitioning = false;
 }
 
 bool wifiConnectMenu(wifi_mode_t mode) {
     if (WiFi.isConnected()) return false; // safeguard
+
+    // Check if WiFi is in transition
+    if (wifiTransitioning) {
+        displayTextLine("WiFi busy, please wait...");
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        return false;
+    }
 
     switch (mode) {
         case WIFI_AP: // access point
@@ -211,6 +225,12 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 void wifiConnectTask(void *pvParameters) {
     if (WiFi.status() == WL_CONNECTED) return;
 
+    // Check if WiFi is in transition
+    if (wifiTransitioning) {
+        vTaskDelete(NULL);
+        return;
+    }
+
     WiFi.mode(WIFI_MODE_STA);
     int nets = WiFi.scanNetworks();
     String ssid;
@@ -247,6 +267,14 @@ String checkMAC() { return String(WiFi.macAddress()); }
 
 bool wifiConnecttoKnownNet(void) {
     if (WiFi.isConnected()) return true; // safeguard
+    
+    // Check if WiFi is in transition
+    if (wifiTransitioning) {
+        displayTextLine("WiFi busy, please wait...");
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        return false;
+    }
+    
     bool result = false;
     int nets;
     // WiFi.mode(WIFI_MODE_STA);

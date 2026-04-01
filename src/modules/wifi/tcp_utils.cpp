@@ -1,5 +1,6 @@
 // TODO: Be able to read bytes from server in background/task
 //       so there is no loss of data when inputing
+#ifndef LITE_VERSION
 #include "modules/wifi/tcp_utils.h"
 #include "core/wifi/wifi_common.h"
 
@@ -129,3 +130,4 @@ void clientTCP() {
     Serial.println("Connection closed.");
     client.stop();
 }
+#endif

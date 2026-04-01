@@ -1,5 +1,6 @@
 #ifndef __DUCKY_TYPER_H
 #define __DUCKY_TYPER_H
+#if !defined(LITE_VERSION)
 #include <Arduino.h>
 #include <SD.h>
 #include <USB.h>
@@ -55,4 +56,5 @@ bool handlePauseResume();
 // Presenter mode - press button to advance slides
 void PresenterMode(HIDInterface *&hid, bool ble = true);
 
+#endif
 #endif

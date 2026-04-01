@@ -1,31 +1,32 @@
 #ifndef KARMA_ATTACK_H
 #define KARMA_ATTACK_H
-
+#ifndef LITE_VERSION
+#include "evil_portal.h"
 #include <Arduino.h>
-#include <vector>
+#include <FS.h>
 #include <map>
 #include <queue>
-#include <FS.h>
+#include <vector>
 
 // Attack prioritization tiers
 enum AttackTier {
     TIER_NONE = 0,
-    TIER_FAST = 1,     // Quick opportunistic attacks
-    TIER_MEDIUM = 2,   // Standard priority targets
-    TIER_HIGH = 3,     // High-value targets
-    TIER_CLONE = 4     // Clone network attacks
+    TIER_FAST = 1,   // Quick opportunistic attacks
+    TIER_MEDIUM = 2, // Standard priority targets
+    TIER_HIGH = 3,   // High-value targets
+    TIER_CLONE = 4   // Clone network attacks
 };
 
 // Broadcast attack configuration
 struct BroadcastConfig {
     bool enableBroadcast = false;
-    uint32_t broadcastInterval = 150;    // ms between broadcasts
-    uint16_t batchSize = 100;            // SSIDs per batch
-    bool rotateChannels = true;          // Auto-rotate channels
-    uint32_t channelHopInterval = 5000;  // ms between channel hops
-    bool respondToProbes = true;         // Launch attacks on probe responses
-    uint8_t maxActiveAttacks = 3;        // Max simultaneous attacks
-    bool prioritizeResponses = true;     // Focus on SSIDs that get responses
+    uint32_t broadcastInterval = 150;   // ms between broadcasts
+    uint16_t batchSize = 100;           // SSIDs per batch
+    bool rotateChannels = true;         // Auto-rotate channels
+    uint32_t channelHopInterval = 5000; // ms between channel hops
+    bool respondToProbes = true;        // Launch attacks on probe responses
+    uint8_t maxActiveAttacks = 3;       // Max queued auto-attacks
+    bool prioritizeResponses = true;    // Focus on SSIDs that get responses
 };
 
 // Broadcast statistics tracking
@@ -48,29 +49,34 @@ typedef struct {
 
 // Client fingerprint for tracking across MAC randomization
 typedef struct {
-    uint32_t ieHash;                    // Hash of Information Elements
-    uint8_t supportedRates[16];          // Supported rates
-    uint8_t htCapabilities[32];          // HT capabilities
-    uint8_t vendorIEs[64];               // Vendor-specific IEs
-    uint8_t ieCount;                     // Number of IEs
+    uint32_t ieHash;            // Hash of Information Elements
+    uint8_t supportedRates[16]; // Supported rates
+    uint8_t htCapabilities[32]; // HT capabilities
+    uint8_t vendorIEs[64];      // Vendor-specific IEs
+    uint8_t ieCount;            // Number of IEs
 } ClientFingerprint;
+
+constexpr size_t PROBE_MAC_STR_LEN = 18;
+constexpr size_t PROBE_SSID_MAX_LEN = 32;
+constexpr size_t PROBE_SSID_BUF_LEN = PROBE_SSID_MAX_LEN + 1;
+constexpr size_t PROBE_FRAME_CAPTURE_LEN = 128;
 
 // Probe request data structure
 typedef struct {
-    String mac;
-    String ssid;
-    int rssi;
-    unsigned long timestamp;
+    char mac[PROBE_MAC_STR_LEN];
+    char ssid[PROBE_SSID_BUF_LEN];
+    int8_t rssi;
+    uint32_t timestamp;
     uint8_t channel;
-    uint8_t frame[128];
     uint16_t frame_len;
-    uint32_t fingerprint;                 // Hash of IE parameters for device tracking
+    uint32_t fingerprint; // Hash of IE parameters for device tracking
+    uint8_t *frame;
 } ProbeRequest;
 
 // Client behavior tracking (keyed by fingerprint, not MAC)
 typedef struct {
-    uint32_t fingerprint;                 // Unique client identifier
-    String lastMAC;                       // Last seen MAC (for reference only)
+    uint32_t fingerprint; // Unique client identifier
+    String lastMAC;       // Last seen MAC (for reference only)
     unsigned long firstSeen;
     unsigned long lastSeen;
     uint32_t probeCount;
@@ -133,20 +139,17 @@ typedef struct {
     uint32_t probeCount;
 } PendingPortal;
 
-// Background portal instance for multi-portal management
+// Single active portal instance
 struct BackgroundPortal {
-    EvilPortal* instance;                  // Portal instance
-    String portalId;                       // Unique ID for file naming
-    String ssid;                           // SSID being spoofed
-    uint8_t channel;                       // Channel this portal runs on
-    unsigned long lastHeartbeat;            // Last time we checked this portal
-    unsigned long launchTime;               // When portal was launched
-    bool hasCreds;                          // Whether credentials captured
-    String capturedPassword;                 // Captured password if any
-    bool victimConnected;                    // Whether a victim is actively connected
-    unsigned long lastClientActivity;        // Last time victim interacted
-    uint32_t clientFingerprint;               // Fingerprint of connected victim
-    bool markedForRemoval;                    // Flag for cleanup after capture
+    EvilPortal *instance;             // Portal instance
+    String portalId;                  // Unique ID for file naming
+    String ssid;                      // SSID being spoofed
+    uint8_t channel;                   // Channel this portal runs on
+    unsigned long lastHeartbeat;      // Last time we checked this portal
+    unsigned long launchTime;         // When portal was launched
+    bool hasCreds;                    // Whether credentials captured
+    String capturedPassword;          // Captured password if any
+    uint32_t clientFingerprint;       // Fingerprint of connected victim
 };
 
 // Karma configuration
@@ -236,10 +239,10 @@ private:
 // SSID Database class
 class SSIDDatabase {
 private:
-    static std::vector<String> ssidCache;
-    static bool cacheLoaded;
     static String currentFilename;
     static bool useLittleFS;
+    static FS *openSourceFs();
+    static bool readNextEntry(File &file, String &line);
     static bool loadFromFile();
 
 public:
@@ -262,9 +265,9 @@ public:
 
 // Operation modes for Karma
 enum KarmaMode {
-    MODE_PASSIVE = 0,    // Listen only, respond to probes
-    MODE_BROADCAST = 1,  // Actively advertise SSIDs + beacons
-    MODE_FULL = 2        // Both passive and broadcast
+    MODE_PASSIVE = 0,   // Listen only, respond to probes
+    MODE_BROADCAST = 1, // Actively advertise SSIDs + beacons
+    MODE_FULL = 2       // Both passive and broadcast
 };
 
 // Function prototypes
@@ -277,11 +280,11 @@ void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd)
 void launchTieredEvilPortal(PendingPortal &portal);
 std::vector<ProbeRequest> getUniqueProbes();
 std::vector<ClientBehavior> getVulnerableClients();
-size_t buildEnhancedProbeResponse(uint8_t *buffer, const String &ssid, 
-                                 const String &targetMAC, uint8_t channel, 
-                                 const RSNInfo &rsn, bool isHidden);
-size_t buildBeaconFrame(uint8_t *buffer, const String &ssid, 
-                        uint8_t channel, const RSNInfo &rsn);
+size_t buildEnhancedProbeResponse(
+    uint8_t *buffer, const String &ssid, const String &targetMAC, uint8_t channel, const RSNInfo &rsn,
+    bool isHidden
+);
+size_t buildBeaconFrame(uint8_t *buffer, const String &ssid, uint8_t channel, const RSNInfo &rsn);
 void generateRandomBSSID(uint8_t *bssid);
 void rotateBSSID();
 RSNInfo extractRSNInfo(const uint8_t *frame, int len);
@@ -297,29 +300,13 @@ void saveProbesToPCAP(FS &fs);
 void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName);
 void checkPortals();
 String generatePortalId(const String &templateName);
-void savePortalCredentials(const String &ssid, const String &identifier, 
-                          const String &password, const String &mac,
-                          uint8_t channel, const String &templateName,
-                          const String &portalId);
+void savePortalCredentials(
+    const String &ssid, const String &identifier, const String &password, const String &mac, uint8_t channel,
+    const String &templateName, const String &portalId
+);
 String getDisplayName(const String &fullPath, bool isSD);
 void matchAPSignal(uint8_t channel);
-void setChannelWithSecond(uint8_t channel);  // Helper for channel setting
+void setChannelWithSecond(uint8_t channel); // Helper for channel setting
 
-// External variables
-extern std::map<uint32_t, ClientBehavior> clientBehaviors;  // Keyed by fingerprint
-extern ProbeRequest probeBuffer[200];
-extern uint16_t probeBufferIndex;
-extern bool bufferWrapped;
-extern KarmaConfig karmaConfig;
-extern AttackConfig attackConfig;
-extern ActiveBroadcastAttack broadcastAttack;
-extern bool screenNeedsRedraw;
-extern uint32_t pmkidCaptured;
-extern uint32_t assocBlocked;
-extern std::vector<BackgroundPortal*> activePortals;  // Note: pointer vector
-extern KarmaMode currentMode;
-extern bool karmaPaused;
-extern bool handshakeCaptureEnabled;
-extern std::vector<HandshakeCapture> handshakeBuffer;
-
+#endif
 #endif
