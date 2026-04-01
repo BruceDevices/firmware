@@ -46,4 +46,10 @@
 #include "../ESP32-C5-tft/pins_arduino.h"
 #elif ESP32C5_DEVKITC_1
 #include "../ESP32-C5/pins_arduino.h"
+#elif ESP32S3_ST7789
+#include "../esp32s3-st7789/pins_arduino.h"
+#elif ESP_WROOM32_ILI9341
+#include "../esp-wroom32-ili9341/pins_arduino.h"
+#elif ESP_WROOM32_ST7789
+#include "../esp-wroom32-st7789/pins_arduino.h"
 #endif
