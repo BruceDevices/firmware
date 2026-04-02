@@ -66,6 +66,7 @@ on:
           - "Awok-Touch"
           - "WaveSentry-R1"
           - "LAUNCHER_WaveSentry-R1"
+          - "S3_supermini_madara"
 
 jobs:
   compile_selected:
