@@ -57,6 +57,7 @@ DEFAULT_ENVS=(
   Awok-Touch
   WaveSentry-R1
   LAUNCHER_WaveSentry-R1
+  S3_supermini_madara
 )
 
 if [[ -n "${PIO_ENVS:-}" ]]; then
