@@ -39,7 +39,7 @@ static const uint8_t report_descriptor[] = {
 };
 
 USBHIDKeyboard::USBHIDKeyboard()
-    : hid(HID_ITF_PROTOCOL_KEYBOARD), _asciimap(KeyboardLayout_en_US), shiftKeyReports(false),
+    : hid(HID_ITF_PROTOCOL_NONE), _asciimap(KeyboardLayout_en_US), shiftKeyReports(false),
       _cacheValid(false) {
     static bool initialized = false;
     if (!initialized) {
@@ -254,3 +254,4 @@ void USBHIDKeyboard::_buildShiftCache() {
 }
 
 #endif /* CONFIG_TINYUSB_HID_ENABLED */
+

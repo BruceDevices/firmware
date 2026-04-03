@@ -79,6 +79,7 @@ static const uint8_t U2F_REPORT_DESCRIPTOR[] = {
     0x06, 0xD0, 0xF1, // USAGE_PAGE (FIDO Alliance)
     0x09, 0x01,       // USAGE (U2F Authenticator Device)
     0xA1, 0x01,       // COLLECTION (Application)
+    0x85, 0x06,       // REPORT_ID (6)
     0x09, 0x20,       //   USAGE (Input Report Data)
     0x15, 0x00,       //   LOGICAL_MINIMUM (0)
     0x26, 0xFF, 0x00, //   LOGICAL_MAXIMUM (255)
@@ -1718,3 +1719,4 @@ void u2f_setup() {
 void u2f_setup() { displayError("USB HID disabled"); }
 
 #endif
+
