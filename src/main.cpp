@@ -104,8 +104,9 @@ bool BLEConnected = false;
 bool returnToMenu;
 bool isSleeping = false;
 bool isScreenOff = false;
+bool isScreensaverActive = false;
 bool dimmer = false;
-char timeStr[16];
+char timeStr[12];
 time_t localTime;
 struct tm *timeInfo;
 #if defined(HAS_RTC)
@@ -221,115 +222,231 @@ void begin_tft() {
     tftHeight = tft.height();
 #endif
     resetTftDisplay();
-    setBrightness(bruceConfig.bright, false);
+    // NOTE: brightness is intentionally NOT set here.
+    // boot_screen_anim() fades in the backlight as part of the animation.
+    // If instantBoot is true, the animation sets it before returning.
+    currentScreenBrightness = 0;
 }
 
 /*********************************************************************
  **  Function: boot_screen
  **  Draw boot screen
  *********************************************************************/
-void boot_screen() {
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+/*********************************************************************
+ **  Helper: lerpColor565
+ **  Linearly interpolate between two RGB565 colours. t = 0–255.
+ *********************************************************************/
+static uint16_t lerpColor565(uint16_t a, uint16_t b, uint8_t t) {
+    uint8_t ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
+    uint8_t br = (b >> 11) & 0x1F, bg = (b >> 5) & 0x3F, bb = b & 0x1F;
+    uint8_t r  = ar + ((int)(br - ar) * t / 255);
+    uint8_t g  = ag + ((int)(bg - ag) * t / 255);
+    uint8_t bv = ab + ((int)(bb - ab) * t / 255);
+    return (r << 11) | (g << 5) | bv;
+}
+
+/*********************************************************************
+ **  Helper: _boot_draw_splash
+ **  Draw the static splash frame entirely while backlight is OFF.
+ **  No flickering possible — screen is rendered blind.
+ *********************************************************************/
+static void _boot_draw_splash() {
+    uint16_t pri = bruceConfig.priColor;
+    uint16_t bg  = bruceConfig.bgColor;
+    uint16_t dim = lerpColor565(bg, pri, 80); // subtle accent
+
+    tft.fillScreen(bg);
+
+    // ── Corner accent brackets ────────────────────────────────────────
+    const int M = 8;  // margin
+    const int L = 18; // bracket arm length
+    // top-left
+    tft.drawFastHLine(M, M, L, pri);
+    tft.drawFastVLine(M, M, L, pri);
+    // top-right
+    tft.drawFastHLine(tftWidth - M - L, M, L, pri);
+    tft.drawFastVLine(tftWidth - M - 1, M, L, pri);
+    // bottom-left
+    tft.drawFastHLine(M, tftHeight - M - 1, L, pri);
+    tft.drawFastVLine(M, tftHeight - M - L, L, pri);
+    // bottom-right
+    tft.drawFastHLine(tftWidth - M - L, tftHeight - M - 1, L, pri);
+    tft.drawFastVLine(tftWidth - M - 1, tftHeight - M - L, L, pri);
+
+    // ── "BRUCE" centred, big ──────────────────────────────────────────
     tft.setTextSize(FM);
-    tft.drawPixel(0, 0, bruceConfig.bgColor);
-    tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
+    tft.setTextColor(pri, bg);
+    int titleY = tftHeight / 2 - FM * 6 - 8;
+    tft.drawCentreString("BRUCE", tftWidth / 2, titleY, 1);
+
+    // ── Accent line under title ────────────────────────────────────────
+    int lineY = titleY + FM * 14 + 4;
+    tft.drawFastHLine(M + L + 4, lineY, tftWidth - 2 * (M + L + 4), pri);
+    // thinner ghost line 2px below for depth
+    tft.drawFastHLine(M + L + 4 + 6, lineY + 2, tftWidth - 2 * (M + L + 4) - 12, dim);
+
+    // ── Version + subtitle ─────────────────────────────────────────────
     tft.setTextSize(FP);
-    tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
-    tft.setTextSize(FM);
-    tft.drawCentreString(
-        "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1
-    ); // will draw outside the screen on non touch devices
+    tft.setTextColor(dim, bg);
+    tft.drawCentreString("PREDATORY FIRMWARE", tftWidth / 2, lineY + 6, 1);
+    tft.setTextColor(lerpColor565(bg, pri, 120), bg);
+    tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, lineY + 6 + FP * 9 + 2, 1);
 }
 
 /*********************************************************************
  **  Function: boot_screen_anim
- **  Draw boot screen
+ **
+ **  Flow (no custom image):
+ **    • Draw splash with backlight OFF  → zero flicker possible
+ **    • Fade backlight 0 → bright       (~700 ms smooth reveal)
+ **    • Accent line pulse               (~1200 ms)
+ **    • Scanline wipe down to clear     (~300 ms)
+ **
+ **  Custom boot.jpg / boot.gif: behaviour unchanged.
+ **  instantBoot: skips animation, sets brightness directly.
  *********************************************************************/
 void boot_screen_anim() {
-    boot_screen();
-    int i = millis();
-    // checks for boot.jpg in SD and LittleFS for customization
+    // ── Handle instantBoot ─────────────────────────────────────────────
+    if (bruceConfig.instantBoot) {
+        tft.fillScreen(bruceConfig.bgColor);
+        _setBrightness(bruceConfig.bright);
+        currentScreenBrightness = bruceConfig.bright;
+        return;
+    }
+
+    // ── Custom boot image path (unchanged behaviour) ───────────────────
     int boot_img = 0;
-    bool drawn = false;
     if (sdcardMounted) {
-        if (SD.exists("/boot.jpg")) boot_img = 1;
+        if      (SD.exists("/boot.jpg")) boot_img = 1;
         else if (SD.exists("/boot.gif")) boot_img = 3;
     }
     if (boot_img == 0 && LittleFS.exists("/boot.jpg")) boot_img = 2;
-    else if (boot_img == 0 && LittleFS.exists("/boot.gif")) boot_img = 4;
-    if (bruceConfig.theme.boot_img) boot_img = 5; // override others
+    if (boot_img == 0 && LittleFS.exists("/boot.gif")) boot_img = 4;
+    if (bruceConfig.theme.boot_img) boot_img = 5;
 
-    tft.drawPixel(0, 0, 0);       // Forces back communication with TFT, to avoid ghosting
-                                  // Start image loop
-    while (millis() < i + 7000) { // boot image lasts for 5 secs
-        if ((millis() - i > 2000) && !drawn) {
-            tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
-            if (boot_img > 0 && !drawn) {
-                tft.fillScreen(bruceConfig.bgColor);
-                if (boot_img == 5) {
-                    drawImg(
-                        *bruceConfig.themeFS(),
-                        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_img),
-                        0,
-                        0,
-                        true,
-                        3600
-                    );
-                    Serial.println("Image from SD theme");
-                } else if (boot_img == 1) {
-                    drawImg(SD, "/boot.jpg", 0, 0, true);
-                    Serial.println("Image from SD");
-                } else if (boot_img == 2) {
-                    drawImg(LittleFS, "/boot.jpg", 0, 0, true);
-                    Serial.println("Image from LittleFS");
-                } else if (boot_img == 3) {
-                    drawImg(SD, "/boot.gif", 0, 0, true, 3600);
-                    Serial.println("Image from SD");
-                } else if (boot_img == 4) {
-                    drawImg(LittleFS, "/boot.gif", 0, 0, true, 3600);
-                    Serial.println("Image from LittleFS");
-                }
-                tft.drawPixel(0, 0, 0); // Forces back communication with TFT, to avoid ghosting
-            }
-            drawn = true;
+    if (boot_img > 0) {
+        // Éteindre avant de dessiner l'image de boot
+        _setBrightness(0);
+        currentScreenBrightness = 0;
+        tft.fillScreen(bruceConfig.bgColor);
+        if      (boot_img == 5) drawImg(*bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_img), 0, 0, true, 3600);
+        else if (boot_img == 1) drawImg(SD, "/boot.jpg", 0, 0, true);
+        else if (boot_img == 2) drawImg(LittleFS, "/boot.jpg", 0, 0, true);
+        else if (boot_img == 3) drawImg(SD, "/boot.gif", 0, 0, true, 3600);
+        else if (boot_img == 4) drawImg(LittleFS, "/boot.gif", 0, 0, true, 3600);
+        // Fade-in de l'image de boot (ultra-fluide)
+        for (int b = 0; b <= bruceConfig.bright; b++) {
+            _setBrightness(b);
+            delay(3);
         }
-#if !defined(LITE_VERSION)
-        if (!boot_img && (millis() - i > 2200) && (millis() - i) < 2700)
-            tft.drawRect(2 * tftWidth / 3, tftHeight / 2, 2, 2, bruceConfig.priColor);
-        if (!boot_img && (millis() - i > 2700) && (millis() - i) < 2900)
-            tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
-        if (!boot_img && (millis() - i > 2900) && (millis() - i) < 3400)
-            tft.drawXBitmap(
-                2 * tftWidth / 3 - 30,
-                5 + tftHeight / 2,
-                bruce_small_bits,
-                bruce_small_width,
-                bruce_small_height,
-                bruceConfig.bgColor,
-                bruceConfig.priColor
-            );
-        if (!boot_img && (millis() - i > 3400) && (millis() - i) < 3600) tft.fillScreen(bruceConfig.bgColor);
-        if (!boot_img && (millis() - i > 3600))
-            tft.drawXBitmap(
-                (tftWidth - 238) / 2,
-                (tftHeight - 133) / 2,
-                bits,
-                bits_width,
-                bits_height,
-                bruceConfig.bgColor,
-                bruceConfig.priColor
-            );
-#endif
-        if (check(AnyKeyPress)) // If any key or M5 key is pressed, it'll jump the boot screen
-        {
-            tft.fillScreen(bruceConfig.bgColor);
-            delay(10);
-            return;
+        currentScreenBrightness = bruceConfig.bright;
+        unsigned long t0 = millis();
+        while (millis() - t0 < 4000) {
+            if (check(AnyKeyPress)) break;
+            delay(20);
+        }
+        // Fade-out de l'image vers le menu (ultra-fluide)
+        for (int b = bruceConfig.bright; b >= 0; b--) {
+            _setBrightness(b);
+            delay(3);
+        }
+        currentScreenBrightness = 0;
+        return;
+    }
+
+#if defined(LITE_VERSION)
+    tft.fillScreen(bruceConfig.bgColor);
+    _setBrightness(bruceConfig.bright);
+    currentScreenBrightness = bruceConfig.bright;
+    return;
+#else
+
+    uint16_t pri = bruceConfig.priColor;
+    uint16_t bg  = bruceConfig.bgColor;
+
+    // ── 1. Draw splash while backlight is OFF ─────────────────────────
+    // This runs blind — no flicker at all.
+    _boot_draw_splash();
+
+    // ── 2. Fade backlight in (0 → bruceConfig.bright, 12ms delay like screensaver) ──────
+    int target = bruceConfig.bright;
+    bool skipped = false;
+    for (int b = 0; b <= target && !skipped; b++) {
+        _setBrightness(b);
+        delay(12);
+        if (check(AnyKeyPress)) { _setBrightness(target); skipped = true; }// Use _setBrightness directly
+    }
+    currentScreenBrightness = target;
+
+    // ── 3. Accent line pulse (3 slow beats, ~1200 ms) ──────────────
+    // Fixed: use secColor for visible pulsation effect
+    if (!skipped) {
+        int lineY  = (tftHeight / 2 - FM * 6 - 8) + FM * 14 + 4;
+        const int M = 8, L = 18;
+        int lineX1 = M + L + 4, lineW = tftWidth - 2 * (M + L + 4);
+
+        // Use secColor as pulse target for better visual contrast
+        uint16_t pulseTarget = bruceConfig.secColor;
+
+        for (int beat = 0; beat < 3 && !skipped; beat++) {
+            for (int s = 0; s <= 255 && !skipped; s += 8) {
+                tft.drawFastHLine(lineX1, lineY, lineW,
+                    lerpColor565(pri, pulseTarget, (uint8_t)s));
+                delay(5);
+                if (check(AnyKeyPress)) skipped = true;
+            }
+            for (int s = 255; s >= 0 && !skipped; s -= 8) {
+                tft.drawFastHLine(lineX1, lineY, lineW,
+                    lerpColor565(pri, pulseTarget, (uint8_t)s));
+                delay(5);
+                if (check(AnyKeyPress)) skipped = true;
+            }
         }
     }
 
-    // Clear splashscreen
-    tft.fillScreen(bruceConfig.bgColor);
+    // ── 4. Scanline wipe-out downward (~300 ms) ──────────────────────
+    // Fixed: proper scanline wipe without visual artifacts
+    for (int y = 0; y <= tftHeight; y += 2) {
+        tft.drawFastHLine(0, y,     tftWidth, pri);
+        tft.drawFastHLine(0, y + 1, tftWidth, pri);
+        // Fill cleared area above the current scanline position
+        if (y > 2) tft.fillRect(0, 0, tftWidth, y - 1, bg);
+        delay(3);
+    }
+
+    tft.fillScreen(bg);
+#endif // LITE_VERSION
+}
+
+/*********************************************************************
+ **  Function: menu_entry_anim
+ **
+ **  Animation fade-out/fade-in smooth (12ms) lors de l'affichage du menu principal
+ **  S'exécute uniquement au premier démarrage (cold boot depuis deep sleep)
+ *********************************************************************/
+void menu_entry_anim() {
+#if !defined(LITE_VERSION)
+    static bool firstEntry = true;
+    bool isColdBoot = firstEntry;
+    firstEntry = false;
+
+    // Sauter uniquement si ce n'est pas un cold boot (retour de sous-menu, etc.)
+    if (!isColdBoot) return;
+
+    int savedBright = (currentScreenBrightness > 0) ? currentScreenBrightness : bruceConfig.bright;
+
+    // Fade-out smooth 12ms
+    for (int b = savedBright; b >= 0; b--) {
+        _setBrightness(b);
+        delay(12);
+    }
+    // Fade-in smooth 12ms
+    for (int b = 0; b <= savedBright; b++) {
+        _setBrightness(b);
+        delay(12);
+    }
+    currentScreenBrightness = savedBright;
+#endif
 }
 
 /*********************************************************************
@@ -434,12 +551,16 @@ void setup() {
     bruceConfigPins.rotation = ROTATION;
     setup_gpio();
 #if defined(HAS_SCREEN)
+    // Kill backlight BEFORE tft.init() — prevents random VRAM garbage from
+    // flashing on screen while the display controller initialises.
+#if defined(TFT_BL) && TFT_BL >= 0
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, LOW);
+#endif
     tft.init();
     tft.setRotation(bruceConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
-    // bruceConfig is not read yet.. just to show something on screen due to long boot time
-    tft.setTextColor(TFT_PURPLE, TFT_BLACK);
-    tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    // Backlight is off — screen is dark while storage/config loads
 #else
     tft.begin();
 #endif
@@ -514,21 +635,20 @@ void setup() {
 void loop() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     if (interpreter_state > 0) {
+        vTaskDelete(serialcmdsTaskHandle); // stop serial commands while in interpreter
         vTaskDelay(pdMS_TO_TICKS(10));
         interpreter_state = 2;
         Serial.println("Entering interpreter...");
         while (interpreter_state > 0) { vTaskDelay(pdMS_TO_TICKS(500)); }
-        if (interpreter_state == 0) {
-            Serial.println("Interpreter put to background.");
-        } else {
-            Serial.println("Exiting interpreter...");
-        }
+        Serial.println("Exiting interpreter...");
         if (interpreter_state == -1) { interpreterTaskHandler = NULL; }
+        startSerialCommandsHandlerTask();
         previousMillis = millis(); // ensure that will not dim screen when get back to menu
     }
 #endif
-    tft.fillScreen(bruceConfig.bgColor);
 
+    // Animation fade-in maintenant dans MainMenu::begin()
+    tft.fillScreen(bruceConfig.bgColor);
     mainMenu.begin();
     delay(1);
 }

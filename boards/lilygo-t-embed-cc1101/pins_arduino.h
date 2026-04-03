@@ -25,6 +25,8 @@ static const uint8_t SCL = GROVE_SCL;
 // TFT_eSPI display
 #define ST7789_DRIVER 1
 #define USER_SETUP_LOADED
+// Keep backlight OFF during tft.init() — prevents VRAM garbage flash on cold boot.
+#define TFT_BACKLIGHT_ON 0
 #define USE_HSPI_PORT
 #define SMOOTH_FONT 1
 #define TFT_INVERSION_ON
@@ -197,7 +199,9 @@ static const uint8_t SCL = GROVE_SCL;
 // TFT_eSPI display
 #define ST7789_DRIVER 1
 #define USER_SETUP_LOADED
-#define TFT_BACKLIGHT_ON 1
+// Keep backlight OFF during tft.init() — prevents VRAM garbage flash on cold boot.
+// _setBrightness() uses analogWrite() and takes over after init.
+#define TFT_BACKLIGHT_ON 0
 #define USE_HSPI_PORT
 #define SMOOTH_FONT 1
 #define TFT_WIDTH 170

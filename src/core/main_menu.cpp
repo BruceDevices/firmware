@@ -22,7 +22,6 @@ MainMenu::MainMenu() {
 #if !defined(LITE_VERSION)
 #if !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
-        &appsMenu,
 #endif
         &loraMenu,
 #endif
@@ -41,6 +40,7 @@ MainMenu::~MainMenu() {}
 
 void MainMenu::begin(void) {
     returnToMenu = false;
+    resetMainMenuFadeIn();  // Réinitialise l'animation de fade-in
     options = {};
 
     std::vector<String> l = bruceConfig.disabledMenus;
