@@ -73,6 +73,16 @@ typedef struct {
     uint8_t *frame;
 } ProbeRequest;
 
+typedef struct {
+    char mac[PROBE_MAC_STR_LEN];
+    char ssid[PROBE_SSID_BUF_LEN];
+    int8_t rssi;
+    uint32_t timestamp;
+    uint8_t channel;
+    uint32_t fingerprint;
+    RSNInfo rsn;
+} QueuedProbeEvent;
+
 // Client behavior tracking (keyed by fingerprint, not MAC)
 typedef struct {
     uint32_t fingerprint; // Unique client identifier
@@ -175,6 +185,8 @@ typedef struct {
     uint16_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
+    uint16_t baseDuration;
+    uint16_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure

