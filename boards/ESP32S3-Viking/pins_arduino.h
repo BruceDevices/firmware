@@ -20,20 +20,18 @@
 // ----------+-------+----+------------------
 // GND       |  -    | -> | GND
 // 3V3       |  -    | -> | VCC
-// IO4       |  4    | -> | LCD_RST
-// IO5       |  5    | -> | LCD_CS
-// IO6       |  6    | -> | LCD_DC (RS)
-// IO7       |  7    | -> | LCD_MOSI (SDI)
-// IO15      | 15    | -> | LCD_SCK (CLK)
-// IO16      | 16    | -> | LCD_MISO (SDO) [optional]
-// IO17      | 17    | -> | LCD_BL (LED)
-// IO18      | 18    | -> | T_CS
-// IO8       |  8    | -> | T_IRQ
-// (shared)  |  7    | -> | T_DIN  = LCD_MOSI
-// (shared)  | 15    | -> | T_CLK  = LCD_SCK
-// (shared)  | 16    | -> | T_DO   = LCD_MISO
-//
-// WIRING PN532 SPI (lewa strona KIT B, dolny blok):
+// IO4       |  4  | -> | T_IRQ
+// IO5       |  5  | -> | T_DO = LCD_MISO
+// IO6       |  6  | -> | T_DIN = LCD_MOSI (SDI)
+// IO7       |  7  | -> | T_CS
+// IO15      | 15  | -> | T_CLK = LCD_SCK (CLK)
+// IO16      | 16  | -> | LCD_BL (LED)
+// IO17      | 17  | -> | LCD_DC (RS)
+// IO18      | 18  | -> | LCD_RST
+// IO8       |  8  | -> | LCD_CS// (shared)  |  7    | -> | T_DIN  = LCD_MOSI
+// (shared)  |  6  | -> | T_DIN = LCD_MOSI (SDI)
+// (shared)  | 15  | -> | T_CLK = LCD_SCK (CLK)
+// (shared)  |  5  | -> | T_DO = LCD_MISO (SDO)// WIRING PN532 SPI (lewa strona KIT B, dolny blok):
 // IO9       |  9    | -> | PN532 SCK
 // IO10      | 10    | -> | PN532 MISO
 // IO11      | 11    | -> | PN532 MOSI
