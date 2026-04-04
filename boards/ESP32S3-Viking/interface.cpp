@@ -13,11 +13,10 @@
  *
  * Wiring TFT (left side of KIT B, top to bottom, no cable crossing):
  *   GND -> GND, 3V3 -> VCC
- *   IO4 -> LCD_RST, IO5 -> LCD_CS, IO6 -> LCD_DC
- *   IO7 -> LCD_MOSI/T_DIN, IO15 -> LCD_SCK/T_CLK
- *   IO16 -> LCD_MISO/T_DO, IO17 -> LCD_BL
- *   IO18 -> T_CS, IO8 -> T_IRQ
- *
+ *   IO4 -> T_IRQ, IO5 -> T_DO/LCD_MISO, IO6 -> T_DIN/LCD_MOSI
+ *   IO7 -> T_CS, IO15 -> T_CLK/LCD_SCK
+ *   IO16 -> LCD_BL, IO17 -> LCD_DC
+ *   IO18 -> LCD_RST, IO8 -> LCD_CS *
  * Wiring PN532 SPI (left side of KIT B, lower block):
  *   IO9  -> PN532 SCK
  *   IO10 -> PN532 MISO
