@@ -185,6 +185,8 @@ typedef struct {
     uint16_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
+    uint16_t baseDuration;
+    uint16_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure
