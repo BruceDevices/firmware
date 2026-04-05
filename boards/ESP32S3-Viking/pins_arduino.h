@@ -118,8 +118,8 @@ static const uint8_t MISO = TFT_MISO_PIN;
 #define CC1101_MISO_PIN  40   // IO40 -> MISO
 
 #define USE_NRF24_VIA_SPI
-#define NRF24_CE_PIN      42
-#define NRF24_SS_PIN      40
+#define NRF24_CE_PIN      -1
+#define NRF24_SS_PIN      -1
 #define NRF24_MOSI_PIN    SPI_MOSI_PIN
 #define NRF24_SCK_PIN     SPI_SCK_PIN
 #define NRF24_MISO_PIN    SPI_MISO_PIN
