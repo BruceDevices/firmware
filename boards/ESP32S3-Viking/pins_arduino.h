@@ -75,8 +75,7 @@ static const uint8_t SCL = GROVE_SCL;
 // =============================================
 #define TFT_MOSI_PIN  7   // IO7  -> LCD_MOSI / T_DIN
 #define TFT_SCLK_PIN 15   // IO15 -> LCD_SCK  / T_CLK
-#define TFT_MISO_PIN 16   // IO16 -> LCD_MISO / T_DO
-
+#define TFT_MISO_PIN 5   // IO5 -> LCD_MISO / T_DO
 static const uint8_t SS   = 5;
 static const uint8_t MOSI = TFT_MOSI_PIN;
 static const uint8_t SCK  = TFT_SCLK_PIN;
@@ -144,11 +143,10 @@ static const uint8_t MISO = TFT_MISO_PIN;
 #define TFT_MISO  TFT_MISO_PIN  // IO16
 #define TFT_MOSI  TFT_MOSI_PIN  // IO7
 #define TFT_SCLK  TFT_SCLK_PIN  // IO15
-#define TFT_CS    5              // IO5 -> LCD_CS
-#define TFT_DC    6              // IO6 -> LCD_DC
-#define TFT_RST   4              // IO4 -> LCD_RST
-#define TFT_BL   17              // IO17 -> LCD_BL (backlight)
-#define TFT_BACKLIGHT_ON HIGH
+#define TFT_DC  17    // IO17 -> LCD_DC#define TFT_RST   4              // IO4 -> LCD_RST
+#define TFT_DC  17    // IO17 -> LCD_DC
+#define TFT_RST  18   // IO18 -> LCD_RST#define TFT_BACKLIGHT_ON HIGH
+#define TFT_BL  16    // IO16 -> LCD_BL (backlight)
 #define SMOOTH_FONT 1
 
 #define SPI_FREQUENCY       40000000
