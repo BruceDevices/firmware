@@ -1194,7 +1194,71 @@ int gsetRfRxPin(bool set) {
     returnToMenu = true;
     return bruceConfigPins.rfRx;
 }
+/*********************************************************************
+** Function: pinnedAppsMenu
+** Manage dynamic JS apps pinned to the main menu
+**********************************************************************/
+void pinnedAppsMenu() {
+    while (true) {
+        std::vector<Option> localOptions;
 
+        // 1. Add App to Pin
+        localOptions.push_back({"Add App to Pin", []() {
+                                    FS *fs = &LittleFS;
+                                    setupSdCard();
+                                    if (sdcardMounted) {
+                                        std::vector<Option> fsOpt = {
+                                            {"SD Card",  [&]() { fs = &SD; }      },
+                                            {"LittleFS", [&]() { fs = &LittleFS; }},
+                                        };
+                                        loopOptions(fsOpt, MENU_TYPE_SUBMENU, "Select Storage");
+                                    }
+
+                                    String filename = loopSD(*fs, true, "BJS|JS", "/BruceJS");
+                                    vTaskDelay(pdMS_TO_TICKS(200));
+
+                                    if (filename != "") { bruceConfig.addPinnedScript(filename); }
+                                }});
+
+        localOptions.push_back(
+            {"Unpin App", []() {
+                 while (true) {
+                     std::vector<Option> unpinOptions;
+
+                     if (bruceConfig.pinnedScripts.empty()) {
+                         unpinOptions.push_back({"No apps pinned", []() {}});
+                     } else {
+                         for (String path : bruceConfig.pinnedScripts) {
+                             String nameOnly = path.substring(path.lastIndexOf("/") + 1);
+                             unpinOptions.push_back(
+                                 {nameOnly, [path]() {
+                                      bruceConfig.removePinnedScript(path);
+
+                                      tft.fillScreen(TFT_BLACK);
+                                      tft.setTextColor(TFT_ORANGE);
+                                      tft.drawCentreString("Unpinned!", tftWidth / 2, tftHeight / 2, 1);
+                                      vTaskDelay(pdMS_TO_TICKS(800));
+                                  }}
+                             );
+                         }
+                     }
+
+                     unpinOptions.push_back({"Back", []() {}});
+
+                     int unpinSelected = loopOptions(unpinOptions, MENU_TYPE_SUBMENU, "Select to Unpin");
+
+                     if (unpinSelected == -1 || unpinSelected == unpinOptions.size() - 1) { break; }
+                 }
+             }}
+        );
+
+        localOptions.push_back({"Back", []() {}});
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Pinned Apps");
+
+        if (selected == -1 || selected == localOptions.size() - 1) { return; }
+    }
+}
 /*********************************************************************
 **  Function: setStartupApp
 **  Handles Menu to set startup app

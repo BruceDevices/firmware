@@ -69,6 +69,9 @@ JsonDocument BruceConfig::toJson() const {
     setting["badUSBBLEKeyDelay"] = badUSBBLEKeyDelay;
     setting["badUSBBLEShowOutput"] = badUSBBLEShowOutput;
 
+    JsonArray pinned = setting["pinnedScripts"].to<JsonArray>();
+    for (int i = 0; i < pinnedScripts.size(); i++) { pinned.add(pinnedScripts[i]); }
+
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
 
@@ -346,7 +349,14 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
-
+    if (!setting["pinnedScripts"].isNull()) {
+        pinnedScripts.clear();
+        JsonArray pinned = setting["pinnedScripts"].as<JsonArray>();
+        for (JsonVariant e : pinned) { pinnedScripts.push_back(e.as<String>()); }
+    } else {
+        count++;
+        log_e("Fail");
+    }
     if (!setting["wigleBasicToken"].isNull()) {
         wigleBasicToken = setting["wigleBasicToken"].as<String>();
     } else {
@@ -716,6 +726,25 @@ void BruceConfig::setStartupApp(String value) {
 void BruceConfig::setStartupAppJSInterpreterFile(String value) {
     startupAppJSInterpreterFile = value;
     saveFile();
+}
+
+void BruceConfig::addPinnedScript(String path) {
+    if (!isScriptPinned(path)) {
+        pinnedScripts.push_back(path);
+        saveFile();
+    }
+}
+
+void BruceConfig::removePinnedScript(String path) {
+    auto it = std::find(pinnedScripts.begin(), pinnedScripts.end(), path);
+    if (it != pinnedScripts.end()) {
+        pinnedScripts.erase(it);
+        saveFile();
+    }
+}
+
+bool BruceConfig::isScriptPinned(String path) {
+    return std::find(pinnedScripts.begin(), pinnedScripts.end(), path) != pinnedScripts.end();
 }
 
 void BruceConfig::setWigleBasicToken(String value) {

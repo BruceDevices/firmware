@@ -82,6 +82,12 @@ public:
     String startupApp = "";
     String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
+    std::vector<String> pinnedScripts;
+
+    void addPinnedScript(String path);
+    void removePinnedScript(String path);
+    bool isScriptPinned(String path);
+
     int devMode = 0;
     int colorInverted = 1;
     int badUSBBLEKeyboardLayout = 0;
