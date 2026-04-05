@@ -117,6 +117,7 @@ void _post_setup_gpio() {
     }
 
     // ---- Backlight on ----
+      if (TFT_BL >= 0) pinMode(TFT_BL, OUTPUT);
     if (TFT_BL >= 0) analogWrite(TFT_BL, 255);
 
     // ---- LED off ----
