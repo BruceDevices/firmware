@@ -14,7 +14,7 @@
 //   - XPT2046 Resistive Touch (shared SPI bus)
 //   - PN532 NFC/RFID (SPI - osobna magistrala)
 //   - 433MHz ASK RF TX+RX modules (prawa strona KIT B)
-//
+//   - CC1101 433MHz RF (SPI - niezależna magistrala, prawa strona KIT B)
 // WIRING TFT (lewa strona KIT B, od gory do dolu):
 // KIT B pin | GPIO  | -> | Screen pin
 // ----------+-------+----+------------------
@@ -42,6 +42,7 @@
 // WIRING RF 433MHz (prawa strona KIT B):
 // IO19      | 19    | -> | RF TX DATA (nadajnik)
 // IO20      | 20    | -> | RF RX DATA (odbiornik)
+
 // =============================================================
 
 #ifndef DEVICE_NAME
@@ -104,17 +105,17 @@ static const uint8_t MISO = TFT_MISO_PIN;
 // External SPI modules (CC1101, NRF24, W5500)
 // Using right side of KIT B: IO40/IO41/IO42
 // =============================================
-#define SPI_SCK_PIN  15
-#define SPI_MOSI_PIN  7
-#define SPI_MISO_PIN 16
-#define SPI_SS_PIN   40
+#define SPI_SCK_PIN   38   // IO38 -> CC1101 SCK (prawa strona KIT B)
+#define SPI_MOSI_PIN  39   // IO39 -> CC1101 MOSI  
+#define SPI_MISO_PIN  40   // IO40 -> CC1101 MISO
+#define SPI_SS_PIN    41   // IO41 -> CC1101 CS
 
 #define USE_CC1101_VIA_SPI
-#define CC1101_GDO0_PIN   41
-#define CC1101_SS_PIN     40
-#define CC1101_MOSI_PIN   SPI_MOSI_PIN
-#define CC1101_SCK_PIN    SPI_SCK_PIN
-#define CC1101_MISO_PIN   SPI_MISO_PIN
+#define CC1101_GDO0_PIN  42   // IO42 -> GDO0
+#define CC1101_SS_PIN    41   // IO41 -> CS  
+#define CC1101_MOSI_PIN  39   // IO39 -> MOSI
+#define CC1101_SCK_PIN   38   // IO38 -> SCK
+#define CC1101_MISO_PIN  40   // IO40 -> MISO
 
 #define USE_NRF24_VIA_SPI
 #define NRF24_CE_PIN      42
