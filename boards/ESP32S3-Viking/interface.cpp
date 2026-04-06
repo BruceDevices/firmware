@@ -39,8 +39,8 @@
 #include <interface.h>
 
 /******************************************************************************
- ** Function name:      _setup_gpio()
- ** Description:        Initial GPIO setup for the device
+ ** Function name:       _setup_gpio()
+ ** Description:         Initial GPIO setup for the device
  ******************************************************************************/
 void _setup_gpio() {
     // ---- WS2812 LED off at startup ----
@@ -54,16 +54,22 @@ void _setup_gpio() {
     pinMode(BTN_PIN, INPUT);
 
     // ---- Default module config ----
-    bruceConfigPins.rfModule    = CC1101_SPI_MODULE;
-    bruceConfigPins.rfidModule  = PN532_SPI_MODULE;
-    bruceConfigPins.irRx        = RXLED;
-    bruceConfigPins.irTx        = TXLED;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_SPI_MODULE;
+    bruceConfigPins.irRx = RXLED;
+    bruceConfigPins.irTx = TXLED;
+
+    // ---- CC1101 GDO0 pull-down (essential for TX/emulation) ----
+#ifdef USE_CC1101_VIA_SPI
+    pinMode(CC1101_GDO0_PIN, INPUT_PULLDOWN); // GPIO42 pull-down
+#endif
+
     Serial.begin(115200);
 }
 
 /******************************************************************************
- ** Function name:      _post_setup_gpio()
- ** Description:        Second stage GPIO setup - runs after TFT init
+ ** Function name:       _post_setup_gpio()
+ ** Description:         Second stage GPIO setup - runs after TFT init
  ******************************************************************************/
 void _post_setup_gpio() {
     // ---- Touch calibration via TFT_eSPI built-in ----
@@ -103,30 +109,30 @@ void _post_setup_gpio() {
         tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 10);
         caldata = LittleFS.open("/calData", "w");
         if (caldata) {
-            caldata.printf("%d\n%d\n%d\n%d\n%d\n",
-                calData[0], calData[1], calData[2], calData[3], calData[4]);
+            caldata.printf(
+                "%d\n%d\n%d\n%d\n%d\n", calData[0], calData[1], calData[2], calData[3], calData[4]
+            );
             caldata.close();
         }
     } else {
         // Load saved calibration data
-        for (int i = 0; i < 5; i++) {
-            calData[i] = caldata.parseInt();
-        }
+        for (int i = 0; i < 5; i++) { calData[i] = caldata.parseInt(); }
         caldata.close();
         tft.setTouch(calData);
     }
 
     // ---- Backlight on ----
-      if (TFT_BL >= 0) pinMode(TFT_BL, OUTPUT);
+    if (TFT_BL >= 0) pinMode(TFT_BL, OUTPUT);
     if (TFT_BL >= 0) analogWrite(TFT_BL, 255);
 
     // ---- LED off ----
     rgbLedWrite(RGB_LED, 0, 0, 0);
 }
 
+// Reszta kodu bez zmian...
 /******************************************************************************
- ** Function name:      _setBrightness()
- ** Description:        Set TFT backlight brightness
+ ** Function name:       _setBrightness()
+ ** Description:         Set TFT backlight brightness
  ******************************************************************************/
 void _setBrightness(uint8_t brightness) {
     int bl = map(brightness, 0, 100, MINBRIGHT, 255);
@@ -134,8 +140,8 @@ void _setBrightness(uint8_t brightness) {
 }
 
 /******************************************************************************
- ** Function name:      InputHandler()
- ** Description:        Handles touch and button input for Bruce UI
+ ** Function name:       InputHandler()
+ ** Description:         Handles touch and button input for Bruce UI
  ******************************************************************************/
 void InputHandler() {
     static unsigned long lastTouch = 0;
@@ -171,7 +177,7 @@ void InputHandler() {
 }
 
 /******************************************************************************
- ** Function name:      powerOff()
+ ** Function name:       powerOff()
  ******************************************************************************/
 void powerOff() {
     rgbLedWrite(RGB_LED, 0, 0, 0);
@@ -184,17 +190,6 @@ void powerOff() {
 void goToDeepSleep() { powerOff(); }
 
 /******************************************************************************
- ** Function name:      checkReboot()
+ ** Function name:       checkReboot()
  ******************************************************************************/
-void checkReboot() {
-    int c = 0;
-    while (digitalRead(BTN_PIN) == BTN_ACT) {
-        delay(100);
-        if (++c > 20) powerOff();
-    }
-}
-
-/******************************************************************************
- ** Function name:      isCharging()
- ******************************************************************************/
-bool isCharging() { return false; }
+void checkReboot()
