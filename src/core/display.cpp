@@ -738,12 +738,24 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     // Previous item
     const char *firstOption =
         index - 1 >= 0 ? options[index - 1].label.c_str() : options[menuSize - 1].label.c_str();
+
+    if ((tftWidth - 18) / (LW * FM) >= strlen(firstOption)) { //Checks if text fits on screen by 
+        tft.setTextSize(FM);                                 //getting a number of characters that
+    } else {                                                 //can fit on screen at the current font size and comparing it to the length of the string
+        tft.setTextSize(FP);
+    }
+
     tft.setTextColor(bruceConfig.secColor);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
     tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
     // Selected item
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
+    int selectedTextSize = FP;
+    if ((tftWidth - 18) / (LW * FG) >= options[index].label.length()) { //Same as above but allows FG font sizing
+        selectedTextSize = FG;
+    } else if ((tftWidth - 18) / (LW * FM) >= options[index].label.length()) {
+        selectedTextSize = FM;
+    }
     tft.setTextSize(selectedTextSize);
     tft.setTextColor(bruceConfig.priColor);
     tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
@@ -755,9 +767,16 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
         bruceConfig.priColor
     );
     // Next Item
+
     const char *thirdOption =
         index + 1 < menuSize ? options[index + 1].label.c_str() : options[0].label.c_str();
-    tft.setTextSize(FM);
+
+    if ((tftWidth - 18) / (LW * FM) >= strlen(thirdOption)) {
+        tft.setTextSize(FM);
+    } else {
+        tft.setTextSize(FP);
+    }
+
     tft.setTextColor(bruceConfig.secColor);
     tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
     tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
