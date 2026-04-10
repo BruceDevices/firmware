@@ -1264,8 +1264,11 @@ bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool ce
 Gif::Gif() : gifPosition(0, 0) {}
 
 Gif::~Gif() {
-    gif->close();
-    delete gif;
+    if (gif != nullptr) {
+        gif->close();
+        delete gif;
+        gif = nullptr;
+    }
 }
 
 FS *Gif::GifFs = NULL;
@@ -1405,14 +1408,11 @@ bool Gif::openGIF(FS *fs, const char *filename) {
 // 0 = no more frames exist, a frame may or may not have been played: use getLastError() and look for
 // GIF_SUCCESS to know if a frame was played -1 = error
 int Gif::playFrame(int x, int y, bool bSync) {
-    if (bSync && ((millis() - lTime) >= *delayMilliseconds)) {
-        lTime = millis();
-        gifPosition.x = x;
-        gifPosition.y = y;
-        return gif->playFrame(false, delayMilliseconds, &gifPosition);
-    }
+    if (gif == nullptr) return -1;
 
-    return 2;
+    gifPosition.x = x;
+    gifPosition.y = y;
+    return gif->playFrame(bSync, nullptr, &gifPosition);
 }
 
 int Gif::getLastError() { return gif->getLastError(); }
