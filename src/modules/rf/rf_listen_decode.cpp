@@ -51,6 +51,8 @@ static volatile float captureFreqMhz = 433.92f;
 // ISR edge-tracking state
 static volatile unsigned long isrLastEdge = 0;
 static volatile bool isrInPulse = false;
+static File file;
+static char line[100];
 
 // ─── ISR ─────────────────────────────────────────────────────────────────────
 /**
@@ -163,12 +165,43 @@ static char decoderMsgBuf[RF_DECODE_MSG_BUF_SIZE];
  * Called by rtl_433_DecoderTask (Core 1) with a JSON string on every decode
  * event, including "undecoded signal" reports when PUBLISH_UNPARSED is defined.
  */
-static void onDecoderResult(char *message) { Serial.println(message); }
+static void onDecoderResult(char *message) { 
+    Serial.println(message);
+    file.write((const uint8_t *)message, strlen(message));
+    file.write((const uint8_t *)"\n", 2);
+}
 
 // ─── Main function ───────────────────────────────────────────────────────────
 void rf_listen_decode() {
     float freq = 433.92f;
     float last_freq = -1.0f;
+
+    FS *fs = nullptr;
+    if (!getFsStorage(fs) || fs == nullptr) {
+        displayError("No space left on device", true);
+
+    }
+
+    char filename[32];
+    int index = 0;
+
+    if (!fs->exists("/BruceRF")) {
+        if (!fs->mkdir("/BruceRF")) {
+            displayError("Error creating directory", true);
+        }
+    }
+
+    do { snprintf(filename, sizeof(filename), "/BruceRF/rtl433_%d.sub", index++); } while (fs->exists(filename));
+
+    file = fs->open(filename, FILE_WRITE, true);
+    if (!file) {
+        displayError("Error creating file", true);
+    }
+
+    file.write((const uint8_t *)"Filetype: RTL433 decoded signal File\n", 38);
+
+    int len = snprintf(line, sizeof(line), "Frequency: %d\n", (int)(freq));
+    file.write((const uint8_t *)line, len);
 
     // ── 1. Frequency selection UI ────────────────────────────────────────────
     while (!check(SelPress) && !check(EscPress)) {
@@ -319,4 +352,6 @@ void rf_listen_decode() {
     // ── 8. Cleanup ───────────────────────────────────────────────────────────
     detachInterrupt(digitalPinToInterrupt(bruceConfigPins.CC1101_bus.io0));
     Serial.println("# RF listen+decode stopped.");
+    file.flush();
+    file.close();
 }
