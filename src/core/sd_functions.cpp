@@ -3,6 +3,7 @@
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/wigle.h"
+#include "modules/gps/wdgwars.h"
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
@@ -350,6 +351,21 @@ String readLineFromFile(File myFile) {
         line += character;
     }
     return line;
+}
+
+/***************************************************************************************
+** Function name: folderExists
+** Description:   check if a folder exists
+***************************************************************************************/
+bool folderExists(FS fs, String path) {
+    if (path == "" || path == "/") return true;
+
+    File dir = fs.open(path);
+    if (!dir) return false;
+
+    bool isDir = dir.isDirectory();
+    dir.close();
+    return isDir;
 }
 
 /***************************************************************************************
@@ -771,6 +787,16 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              delay(200);
                                                              Wigle wigle;
                                                              wigle.upload_all(&fs, Folder);
+                                                         }});
+                        options.insert(options.begin(), {"WDG Upload", [&]() {
+                                                             delay(200);
+                                                             WDGoWars wdg;
+                                                             wdg.upload(&fs, filepath);
+                                                         }});
+                        options.insert(options.begin(), {"WDG Up All", [&]() {
+                                                             delay(200);
+                                                             WDGoWars wdg;
+                                                             wdg.upload_all(&fs, Folder);
                                                          }});
                     }
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)

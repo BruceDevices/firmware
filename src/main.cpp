@@ -466,6 +466,9 @@ void setup() {
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
+    // Some board interfaces initialize or reset the backlight in post-setup,
+    // so re-apply the stored brightness after that stage completes.
+    setBrightness(bruceConfig.bright, false);
     // end of post gpio begin
 
     // #ifndef USE_TFT_eSPI_TOUCH

@@ -99,6 +99,23 @@ size_t BLESerialService::write(uint8_t *str, size_t size) {
     return size;
 }
 
+int BLESerialService::read() {
+    if (!available()) return -1;
+
+    std::string value = serial_char->getValue();
+    if (value.empty()) return -1;
+
+    char firstChar = value[0];
+    // Remove the first character from the buffer
+    if (value.length() > 1) {
+        serial_char->setValue(value.substr(1));
+    } else {
+        serial_char->setValue("");
+    }
+
+    return (int)firstChar;
+}
+
 void BLESerialService::setMTU(uint16_t mtu) { this->mtu = mtu; }
 
 #endif

@@ -62,6 +62,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["startupApp"] = startupApp;
     setting["startupAppJSInterpreterFile"] = startupAppJSInterpreterFile;
     setting["wigleBasicToken"] = wigleBasicToken;
+    setting["wdgwarsApiKey"] = wdgwarsApiKey;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
 
@@ -349,6 +350,12 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["wigleBasicToken"].isNull()) {
         wigleBasicToken = setting["wigleBasicToken"].as<String>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["wdgwarsApiKey"].isNull()) {
+        wdgwarsApiKey = setting["wdgwarsApiKey"].as<String>();
     } else {
         count++;
         log_e("Fail");
@@ -720,6 +727,11 @@ void BruceConfig::setStartupAppJSInterpreterFile(String value) {
 
 void BruceConfig::setWigleBasicToken(String value) {
     wigleBasicToken = value;
+    saveFile();
+}
+
+void BruceConfig::setWdgwarsApiKey(String value) {
+    wdgwarsApiKey = value;
     saveFile();
 }
 

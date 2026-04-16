@@ -64,12 +64,7 @@ public:
     AnimatedGIF *gif;
 
 private:
-    unsigned long lTime = millis();
-
     static FS *GifFs;
-
-    int zero = 0;
-    int *delayMilliseconds = &zero;
 
     GifPosition gifPosition;
 

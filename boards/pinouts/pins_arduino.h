@@ -52,4 +52,6 @@
 #include "../esp-wroom32-ili9341/pins_arduino.h"
 #elif ESP_WROOM32_ST7789
 #include "../esp-wroom32-st7789/pins_arduino.h"
+#elif NM_CYD_ESP32C5
+#include "../nm-cyd-c5/pins_arduino.h"
 #endif
