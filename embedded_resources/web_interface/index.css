@@ -410,8 +410,17 @@ svg > path {
   overflow-wrap: normal;
   overflow: auto;
 }
+.dialog.upload {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 20px);
+  display: flex;
+  flex-direction: column;
+}
 .dialog.upload .dialog-body {
   padding: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
 }
 .dialog.upload .upload-loading {
   width: 350px;

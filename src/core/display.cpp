@@ -468,6 +468,33 @@ void padprintln(double n, int digits, int16_t padx) {
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter
 ) {
+    if (options.empty()) return -1;
+
+    auto findFirstEnabled = [&]() -> int {
+        for (size_t i = 0; i < options.size(); i++) {
+            if (options[i].enabled) return static_cast<int>(i);
+        }
+        return -1;
+    };
+
+    auto findNextEnabled = [&](int start, int step) -> int {
+        if (options.empty()) return -1;
+        int size = static_cast<int>(options.size());
+        int idx = start;
+        for (int i = 0; i < size; i++) {
+            idx = (idx + step + size) % size;
+            if (options[idx].enabled) return idx;
+        }
+        return -1;
+    };
+
+    if (index < 0 || index >= static_cast<int>(options.size())) index = 0;
+    if (!options[index].enabled) {
+        int firstEnabled = findFirstEnabled();
+        if (firstEnabled < 0) return -1;
+        index = firstEnabled;
+    }
+
     Opt_Coord coord;
     bool redraw = true;
     bool exit = false;
@@ -554,8 +581,8 @@ int loopOptions(
             devModeCounter = 0;
 #ifdef HAS_KEYBOARD
             check(PrevPress);
-            if (index == 0) index = options.size() - 1;
-            else if (index > 0) index--;
+            int prevEnabled = findNextEnabled(index, -1);
+            if (prevEnabled >= 0) index = prevEnabled;
             redraw = true;
 #else
             long _tmp = millis();
@@ -585,18 +612,18 @@ int loopOptions(
                 break;
             } else {
                 check(PrevPress);
-                if (index == 0) index = options.size() - 1;
-                else if (index > 0) index--;
+                int prevEnabled = findNextEnabled(index, -1);
+                if (prevEnabled >= 0) index = prevEnabled;
                 redraw = true;
             }
 #endif
         }
         /* DW Btn to next item */
         if (check(NextPress) || check(DownPress)) {
-            index++;
-            if ((index + 1) > options.size()) {
-                if (!bruceConfig.devMode) devModeCounter++;
-                index = 0;
+            int nextEnabled = findNextEnabled(index, +1);
+            if (nextEnabled >= 0) {
+                if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
+                index = nextEnabled;
             }
             redraw = true;
         }
@@ -616,6 +643,7 @@ int loopOptions(
                 forceMenuOption = -1; // reset SerialCommand navigation option
                 Serial.print("Forcely ");
             }
+            if (chosen >= options.size() || !options[chosen].enabled) continue;
             Serial.println("Selected: " + String(options[chosen].label));
             options[chosen].operation();
             break;
@@ -686,6 +714,7 @@ Opt_Coord drawOptions(
         if (i >= init) {
             if (options[i].selected) tft.setTextColor(selcolor, bgcolor); // if selected, change Text color
             else tft.setTextColor(fgcolor, bgcolor);
+            if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
 
             String text = "";
             if (i == index) {
@@ -736,16 +765,16 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
 #endif
     // Previous item
-    const char *firstOption =
-        index - 1 >= 0 ? options[index - 1].label.c_str() : options[menuSize - 1].label.c_str();
-    tft.setTextColor(bruceConfig.secColor);
+    int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
+    const char *firstOption = options[firstIndex].label.c_str();
+    tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
     tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
     // Selected item
     int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
     tft.setTextSize(selectedTextSize);
-    tft.setTextColor(bruceConfig.priColor);
+    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
     tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
     tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
     tft.drawFastHLine(
@@ -755,10 +784,10 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
         bruceConfig.priColor
     );
     // Next Item
-    const char *thirdOption =
-        index + 1 < menuSize ? options[index + 1].label.c_str() : options[0].label.c_str();
+    int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
+    const char *thirdOption = options[thirdIndex].label.c_str();
     tft.setTextSize(FM);
-    tft.setTextColor(bruceConfig.secColor);
+    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
     tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
@@ -851,11 +880,17 @@ void drawMainBorderWithTitle(String title, bool clear) {
 }
 
 void printTitle(String title) {
-    tft.setCursor((tftWidth - (title.length() * FM * LW)) / 2, BORDER_PAD_Y);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FM);
-
     title.toUpperCase();
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+
+    // Scale down title font if it doesn't fit the screen width
+    int titleSize = FM;
+    while (titleSize > FP && (int)(title.length() * titleSize * LW) > tftWidth - 2 * BORDER_PAD_X) {
+        titleSize--;
+    }
+
+    tft.setTextSize(titleSize);
+    tft.setCursor((tftWidth - (title.length() * titleSize * LW)) / 2, BORDER_PAD_Y);
     tft.println(title);
 
     tft.setTextSize(FP);

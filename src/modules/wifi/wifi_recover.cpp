@@ -962,7 +962,6 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
         hs.ap_mac[4],
         hs.ap_mac[5]
     );
-    padprintln("");
 
     if (hs.ssid[0] == '\0') {
         padprintln("SSID not found in PCAP");
@@ -977,7 +976,6 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
         drawMainBorderWithTitle("WiFi Password Recover", true);
         padprintln("");
         padprintf("SSID: %s\n", hs.ssid);
-        padprintln("");
     }
 
     File wf = fs->open(wordlist_path, FILE_READ);
@@ -1082,15 +1080,6 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     vSemaphoreDelete(shared.done_sem);
     reader.deinit();
     wf.close();
-
-    uint64_t total_time = now_us() - start_time;
-    double seconds = total_time / 1000000.0;
-
-    padprintln("");
-    padprintln("");
-    // padprintf("Tested: %u passwords\n", (uint32_t)shared.attempts);
-    // padprintf("Time: %.1f sec (%.1f/sec)\n", seconds, shared.attempts / (seconds > 0 ? seconds : 1.0));
-    padprintln("");
 
     if (shared.found) {
         resetTftDisplay();

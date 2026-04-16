@@ -13,6 +13,7 @@ public:
     virtual size_t print(int n, int format = DEC) = 0;
     virtual size_t print(const String &s) = 0;
     virtual void vprintf(const char *fmt, va_list args) = 0;
+    virtual int read() = 0;
     virtual size_t write(uint8_t *str, size_t size) = 0;
     void printf(const char *fmt, ...) {
         va_list args;
