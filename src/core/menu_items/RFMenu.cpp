@@ -4,6 +4,7 @@
 #include "core/utils.h"
 #include "modules/rf/record.h"
 #include "modules/rf/rf_bruteforce.h"
+#include "modules/rf/rf_chat.h"        // ← RF Chat
 #include "modules/rf/rf_jammer.h"
 #include "modules/rf/rf_listen.h"
 #include "modules/rf/rf_scan.h"
@@ -27,6 +28,7 @@ void RFMenu::optionsMenu() {
         {"Listen",          rf_listen                 }, // dev_eclipse
 #endif
         {"Bruteforce",      rf_bruteforce             }, // dev_eclipse
+        {"RF Chat",         rf_chat                   }, // CC1101 p2p chat
         {"Jammer Itmt",     [=]() { RFJammer(false); }},
 #endif
         {"Jammer Full",     [=]() { RFJammer(true); } },
@@ -36,7 +38,7 @@ void RFMenu::optionsMenu() {
 
     delay(200);
     String txt = "Radio Frequency";
-    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) txt += " (CC1101)"; // Indicates if CC1101 is connected
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) txt += " (CC1101)";
     else txt += " Tx: " + String(bruceConfigPins.rfTx) + " Rx: " + String(bruceConfigPins.rfRx);
 
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
@@ -44,11 +46,13 @@ void RFMenu::optionsMenu() {
 
 void RFMenu::configMenu() {
     options = {
-        {"RF TX Pin", lambdaHelper(gsetRfTxPin, true)},
-        {"RF RX Pin", lambdaHelper(gsetRfRxPin, true)},
-        {"RF Module", setRFModuleMenu},
-        {"RF Frequency", setRFFreqMenu},
-        {"Back", [this]() { optionsMenu(); }},
+        {"RF TX Pin",       lambdaHelper(gsetRfTxPin, true)},
+        {"RF RX Pin",       lambdaHelper(gsetRfRxPin, true)},
+        {"RF Module",       setRFModuleMenu              },
+        {"RF Frequency",    setRFFreqMenu                },
+        {"Chat Username",   rf_chat_change_username      }, // RF Chat nickname
+        {"Chat Frequency",  rf_chat_change_freq          }, // RF Chat frequency
+        {"Back",            [this]() { optionsMenu(); }  },
     };
 
     loopOptions(options, MENU_TYPE_SUBMENU, "RF Config");

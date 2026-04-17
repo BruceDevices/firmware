@@ -6,6 +6,7 @@
 MainMenu::MainMenu() {
     _menuItems = {
         &wifiMenu,
+        &bw16Menu,
         &bleMenu,
 #if !defined(LITE_VERSION)
         &ethernetMenu,
