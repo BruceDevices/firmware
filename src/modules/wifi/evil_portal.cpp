@@ -67,7 +67,8 @@ bool EvilPortal::setup() {
     }
 
     options = {
-        {"Custom Html", [this]() { loadCustomHtml(); }}
+        {"Custom Html", [this]() { loadCustomHtml(); }},
+        {"Meme Portal", [this]() { loadMemeHtml(); }}
     };
     addOptionToMainMenu();
 
@@ -198,6 +199,19 @@ void EvilPortal::setupRoutes() {
         AsyncWebServerResponse *response = request->beginResponse(302);
         response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
         request->send(response);
+    });
+
+    webServer.on("/media/*", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String path = "/portals/media" + request->url().substring(6);
+        if (SD.exists(path)) {
+            String contentType = "image/jpeg";
+            if (path.endsWith(".gif")) contentType = "image/gif";
+            else if (path.endsWith(".png")) contentType = "image/png";
+            else if (path.endsWith(".mp4")) contentType = "video/mp4";
+            request->send(SD, path, contentType);
+        } else {
+            request->send(404, "text/plain", "Not found");
+        }
     });
 
     webServer.on("/", [this](AsyncWebServerRequest *request) { portalController(request); });
@@ -486,6 +500,43 @@ void EvilPortal::loadCustomHtml() {
             }
         }
     }
+}
+
+void EvilPortal::loadMemeHtml() {
+    FS *fs;
+    if (!getFsStorage(fs)) { loadDefaultHtml(); return; }
+
+    if (!fs->exists("/portals/media")) { loadDefaultHtml(); return; }
+
+    apName = "";
+    apName_from_keyboard();
+    if (returnToMenu) return;
+
+    File dir = fs->open("/portals/media");
+    std::vector<String> files;
+    while (true) {
+        File f = dir.openNextFile();
+        if (!f) break;
+        if (!f.isDirectory()) files.push_back(String(f.name()));
+    }
+    dir.close();
+
+    if (files.empty()) { displayTextLine("No files in /portals/media"); loadDefaultHtml(); return; }
+
+    std::vector<Option> fileOptions;
+    for (const auto &name : files) {
+        fileOptions.push_back({name, [this, name]() {
+            String ext = name;
+            ext.toLowerCase();
+            String tag;
+            if (ext.endsWith(".mp4")) tag = "<video autoplay loop src='/media/" + name + "'></video>";
+            else tag = "<img src='/media/" + name + "'>";
+            htmlPage = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh;}img,video{max-width:100%;max-height:100vh;}</style></head><body>" + tag + "</body></html>";
+            outputFile = "meme_creds.csv";
+            isDefaultHtml = true;
+        }});
+    }
+    loopOptions(fileOptions);
 }
 
 String EvilPortal::wifiLoadPage() {

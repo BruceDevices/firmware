@@ -97,6 +97,7 @@ private:
     void printDeauthStatus(void);
     void printLastCapturedCredential(void);
     void loadCustomHtml(void);
+    void loadMemeHtml(void);
     void loadDefaultHtml(void);
     void loadDefaultHtml_one(void);
     String wifiLoadPage(void);
