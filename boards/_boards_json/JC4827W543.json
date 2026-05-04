@@ -24,7 +24,7 @@
       ]
     ],
     "mcu": "esp32s3",
-    "variant": "JC4827W543"
+    "variant": "pinouts"
   },
   "connectivity": [
     "bluetooth",

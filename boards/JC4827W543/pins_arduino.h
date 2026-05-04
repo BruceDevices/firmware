@@ -67,40 +67,15 @@ static const uint8_t A15 = 12;
 #define BTN_PIN 0
 #define BTN_ACT LOW
 
-// IR Transmitter pins
-#define IR_TX_PINS '{{"Pin 22", 22}, {"Pin 27", 27}}'
-#define IR_RX_PINS '{{"Pin 22", 22}, {"Pin 27", 27}, {"Pin 35", 35}}'
+// IR/RF disabled for initial build - can enable later
 #define TXLED 22
 #define LED_ON HIGH
 #define LED_OFF LOW
 
-// RF (CC1101) pins
-#define RF_TX_PINS '{{"Pin 22", 22}, {"Pin 27", 27}}'
-#define RF_RX_PINS '{{"Pin 22", 22}, {"Pin 27", 27}, {"Pin 35", 35}}'
-
-// CC1101 SPI connection
-#define USE_CC1101_VIA_SPI
-#define CC1101_GDO0_PIN 22
-#define CC1101_SS_PIN 27
-#define CC1101_MOSI_PIN SPI_MOSI_PIN
-#define CC1101_SCK_PIN SPI_SCK_PIN
-#define CC1101_MISO_PIN SPI_MISO_PIN
-
-// NRF24L01+ (optional)
-#define USE_NRF24_VIA_SPI
-#define NRF24_CE_PIN 22
-#define NRF24_SS_PIN 27
-#define NRF24_MOSI_PIN SPI_MOSI_PIN
-#define NRF24_SCK_PIN SPI_SCK_PIN
-#define NRF24_MISO_PIN SPI_MISO_PIN
-
-// W5500 Ethernet (optional)
-#define USE_W5500_VIA_SPI
-#define W5500_SS_PIN 27
-#define W5500_MOSI_PIN SPI_MOSI_PIN
-#define W5500_SCK_PIN SPI_SCK_PIN
-#define W5500_MISO_PIN SPI_MISO_PIN
-#define W5500_INT_PIN 22
+// CC1101, NRF24, W5500 - disabled for initial build
+// #define USE_CC1101_VIA_SPI
+// #define USE_NRF24_VIA_SPI
+// #define USE_W5500_VIA_SPI
 
 // Font sizes
 #define FP 1
@@ -112,31 +87,30 @@ static const uint8_t A15 = 12;
 #define ROTATION 1
 #define MINBRIGHT 160
 
-// TFT_eSPI setup for NV3041A via QSPI
+// TFT_eSPI setup for ST7789 display via SPI
 #define USER_SETUP_LOADED 1
-#define NV3041A_DRIVER 1
+#define ST7789_2_DRIVER 1
 #define TFT_WIDTH 480
 #define TFT_HEIGHT 270
 #define TFT_BACKLIGHT_ON 1
 
-// QSPI pins for 4.3" display (based on Arduino example)
-#define TFT_BL 1
-#define TFT_RST -1  // Not connected, using display internal
-
-// TFT QSPI GPIO configuration
-// CS=45, SCK=47, D0=21, D1=48, D2=40, D3=39
+// SPI pins for display
 #define TFT_CS 45
-#define TFT_SCK 47
-#define TFT_D0 21
-#define TFT_D1 48
-#define TFT_D2 40
-#define TFT_D3 39
+#define TFT_DC 48
+#define TFT_RST 40
+#define TFT_BL 1
+#define TFT_MOSI 21
+#define TFT_SCLK 47
+#define TFT_MISO 39
 
-#define USE_QSPI_PORT 1
 #define SPI_FREQUENCY 27000000
+#define SPI_READ_FREQUENCY 16000000
+#define SMOOTH_FONT 1
 
 // Touch controller (XPT2046 for resistive touch)
 #define HAS_TOUCH 1
+#define TOUCH_CS 38
+#define TOUCH_INT 3
 #define USE_TFT_eSPI_TOUCH 1
 #define XPT2046_CS TOUCH_CS
 #define XPT2046_IRQ TOUCH_INT
