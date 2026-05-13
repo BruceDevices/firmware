@@ -94,7 +94,7 @@ static const uint8_t samsung_watch_models[] = {
 // ============================================================================
 static char randomNameBuffer[32];
 
-static void generateRandomMac(uint8_t *mac) {
+void generateRandomMac(uint8_t *mac) {
     esp_fill_random(mac, 6);
     mac[0] = (mac[0] & 0xFE) | 0x02;
 }
