@@ -5,6 +5,8 @@
 #include <NimBLEDevice.h>
 #include <NimBLEServer.h>
 
+bool buildAppleSpamAdvertisement(int payloadIndex, BLEAdvertisementData &advertisementData);
+
 struct ApplePayload {
     const char* name;
     const uint8_t* data;
@@ -12,6 +14,8 @@ struct ApplePayload {
 };
 
 void appleSubMenu();
+void applePairingSubMenu();
+void appleActionSubMenu();
 void startAppleSpam(int payloadIndex);
 void startAppleSpamAll();
 void stopAppleSpam();
