@@ -1,0 +1,30 @@
+# KEYWORD_TOKENTYPE
+###################
+
+# Datatypes (KEYWORD1)
+
+# Methods and Functions (KEYWORD2)
+libssh_begin	KEYWORD2
+
+# Structures (KEYWORD3)
+
+# Constants (LITERAL1)
+
+# Variables (LITERAL2)
+
+# REFERENCE_LINK
+################
+
+# RSYNTAXTEXTAREA_TOKENTYPE
+###########################
+
+# RESERVED_WORD
+libssh_begin	RESERVED_WORD
+
+# RESERVED_WORD_2
+
+# DATA_TYPE
+
+# PREPROCESSOR
+
+# LITERAL_BOOLEAN
