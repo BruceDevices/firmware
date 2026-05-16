@@ -1,0 +1,3 @@
+# exclude binary patch files from language detection
+src/modules/SX126x/patches/*.h linguist-detectable=false
+src/modules/LR11x0/firmware/*.h linguist-detectable=false

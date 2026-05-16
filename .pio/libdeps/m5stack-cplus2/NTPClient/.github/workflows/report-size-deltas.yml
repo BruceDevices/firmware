@@ -1,0 +1,24 @@
+name: Report Size Deltas
+
+# See: https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows
+on:
+  push:
+    paths:
+      - ".github/workflows/report-size-deltas.yml"
+  schedule:
+    # Run at the minimum interval allowed by GitHub Actions.
+    # Note: GitHub Actions periodically has outages which result in workflow failures.
+    # In this event, the workflows will start passing again once the service recovers.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment size deltas reports to PRs
+        uses: arduino/report-size-deltas@v1
+        with:
+          # The name of the workflow artifact created by the sketch compilation workflow
+          sketches-reports-source: sketches-reports

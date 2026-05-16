@@ -1,0 +1,16 @@
+{
+  "name": "FFT",
+  "description": "FFT",
+  "keywords": "FFT",
+  "authors": {
+    "name": "Robin Scheibler",
+    "url": "http://www.robinscheibler.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tinyu-Zhao/FFT.git"
+  },
+  "version": "0.0.1",
+  "framework": "arduino",
+  "platforms": "espressif32"
+}

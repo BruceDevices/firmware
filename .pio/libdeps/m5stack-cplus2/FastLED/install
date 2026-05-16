@@ -1,0 +1,181 @@
+#!/bin/bash
+# Ensure UTF-8 everywhere (console and Python), including on Windows msys/cygwin
+case "$OSTYPE" in
+  msys*|cygwin*)
+    if command -v chcp.com >/dev/null 2>&1; then
+      # Attempt to switch Windows code page to UTF-8 (65001)
+      chcp.com 65001 >NUL 2>NUL || chcp.com 65001 >/dev/null 2>&1
+    fi
+    ;;
+  *)
+    :
+    ;;
+esac
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export PYTHONUTF8=1
+export PYTHONIOENCODING=UTF-8
+
+set -ex
+if [ ! -d ".venv" ]; then
+    echo "Creating Python 3.11 virtual environment..."
+    uv venv --python 3.11
+else
+    echo "Virtual environment already exists. Skipping."
+fi
+uv pip install -e . --refresh-package fastled
+# This is needed to force the installation to finalize.
+uv run python -c "import os; _ = os.getcwd()"
+set +e
+
+# if ./activate exists, remove it
+if [ -f activate ]; then
+    rm activate
+fi
+# symlink activate to .venv/bin/activate on linux/mac and .venv/Scripts/activate on windows
+if [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "darwin"* ]]; then
+    ln -s .venv/bin/activate activate
+else
+    ln -s .venv/Scripts/activate activate
+fi
+
+echo "Setting up C++ development environment..."
+
+# Setup LLVM toolchain on Linux and Windows (msys/cygwin)
+if [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* ]]; then
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "Setting up LLVM toolchain for Linux..."
+    else
+        echo "Setting up LLVM toolchain for Windows..."
+    fi
+    uv run python ci/setup-llvm.py .cache/cc
+else
+    echo "Skipping LLVM setup (this platform is not Linux or Windows/msys)."
+fi
+
+# Build tests to generate compile_commands.json for clangd
+echo "Building C++ tests to generate compile_commands.json..."
+uv run -m ci.compiler.cpp_test_run --compile-only --clang --test test_function
+
+echo "Generating auto complete for VSCode (compile_commands.json)"
+uv run ci/compile-commands.py 
+
+echo "Setting up JavaScript development environment..."
+
+# Install fast JavaScript linter (Node.js + ESLint)
+echo "Installing fast JavaScript linter (Node.js + ESLint)..."
+if uv run ci/setup-js-linting-fast.py; then
+    echo "✅ Fast JavaScript linting enabled - 53x faster than Deno!"
+else
+    echo "⚠️  Warning: JavaScript linter setup failed. You can retry with: uv run ci/setup-js-linting-fast.py"
+fi
+
+# Install TypeScript for JSDoc type checking
+echo "Installing TypeScript for JSDoc type checking..."
+if [ -d ".cache/js-tools" ]; then
+    echo "Installing TypeScript in local js-tools environment..."
+    cd .cache/js-tools
+    # Use the local Node.js installation to run npm
+    if [ -f "node/npm.cmd" ]; then
+        if ./node/npm.cmd install typescript; then
+            echo "✅ TypeScript installed successfully for JSDoc checking!"
+        else
+            echo "⚠️  Warning: TypeScript installation failed. JSDoc checking will be skipped."
+        fi
+    elif [ -f "node/bin/npm" ]; then
+        if ./node/bin/npm install typescript; then
+            echo "✅ TypeScript installed successfully for JSDoc checking!"
+        else
+            echo "⚠️  Warning: TypeScript installation failed. JSDoc checking will be skipped."
+        fi
+    else
+        echo "⚠️  Warning: Local npm not found in js-tools. Trying global installation..."
+        cd ../..
+        if command -v npm >/dev/null 2>&1; then
+            echo "Using global npm to install TypeScript..."
+            if npm install -g typescript; then
+                echo "✅ TypeScript installed globally for JSDoc checking!"
+            else
+                echo "⚠️  Warning: Global TypeScript installation failed. JSDoc checking will be skipped."
+            fi
+        else
+            echo "⚠️  Warning: npm not found. TypeScript cannot be installed. JSDoc checking will be skipped."
+        fi
+    fi
+    cd ../.. 2>/dev/null || true
+elif command -v npm >/dev/null 2>&1; then
+    echo "Using global npm to install TypeScript..."
+    if npm install -g typescript; then
+        echo "✅ TypeScript installed globally for JSDoc checking!"
+    else
+        echo "⚠️  Warning: Global TypeScript installation failed. JSDoc checking will be skipped."
+    fi
+else
+    echo "⚠️  Warning: npm not found. TypeScript cannot be installed. JSDoc checking will be skipped."
+fi
+
+echo "Setting up VSCode extensions..."
+
+# Install Auto Debug extension from local .vsix file
+echo "Installing Auto Debug extension for VSCode..."
+if [ -f .vscode/DarrenLevine.auto-debug-1.0.2.vsix ]; then
+    installed_count=0
+    
+    # Try installing on VSCode
+    if command -v code &> /dev/null; then
+        echo "Installing Auto Debug extension on VSCode..."
+        if code --install-extension .vscode/DarrenLevine.auto-debug-1.0.2.vsix; then
+            echo "✅ Auto Debug extension installed successfully on VSCode!"
+            installed_count=$((installed_count + 1))
+        else
+            echo "⚠️  Warning: Auto Debug extension installation failed on VSCode."
+        fi
+    else
+        echo "ℹ️  VSCode not found (code command not available)."
+    fi
+    
+    # Try installing on Cursor
+    if command -v cursor &> /dev/null; then
+        echo "Installing Auto Debug extension on Cursor..."
+        if cursor --install-extension .vscode/DarrenLevine.auto-debug-1.0.2.vsix; then
+            echo "✅ Auto Debug extension installed successfully on Cursor!"
+            installed_count=$((installed_count + 1))
+        else
+            echo "⚠️  Warning: Auto Debug extension installation failed on Cursor."
+        fi
+    else
+        echo "ℹ️  Cursor not found (cursor command not available)."
+    fi
+    
+    # Summary
+    if [ $installed_count -eq 0 ]; then
+        echo "⚠️  Warning: Auto Debug extension could not be installed automatically."
+        echo "      Please install manually:"
+        echo "      - Open VSCode/Cursor"
+        echo "      - Go to Extensions (Ctrl+Shift+X)"
+        echo "      - Click ... menu → Install from VSIX"
+        echo "      - Select: .vscode/DarrenLevine.auto-debug-1.0.2.vsix"
+    elif [ $installed_count -eq 1 ]; then
+        echo "✅ Auto Debug extension installed on 1 editor."
+    else
+        echo "✅ Auto Debug extension installed on $installed_count editors!"
+    fi
+else
+    echo "⚠️  Warning: Auto Debug extension file not found at .vscode/DarrenLevine.auto-debug-1.0.2.vsix"
+    echo "      Please ensure the extension file is in the correct location."
+fi
+
+# Initialize and update git submodules (including wiki)
+echo "Initializing and updating git submodules..."
+git submodule init
+git submodule update --remote
+echo "✅ Git submodules updated!"
+
+echo "🎉 Installation complete!"
+echo ""
+echo "To use:"
+echo "  - Run tests: bash test"
+echo "  - Run linting: bash lint (Python, C++, and JavaScript with JSDoc type checking)"
+echo "  - Debug in VSCode: Open test file and press F5"
+echo "  - Auto Debug: Use '🎯 Auto Debug (Smart File Detection)' configuration"
+echo "  - clangd IntelliSense: Should work automatically in VSCode"

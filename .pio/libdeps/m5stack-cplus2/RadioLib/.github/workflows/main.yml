@@ -1,0 +1,365 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: The ID of the platform on which the build is run
+        required: true
+        default: arduino:avr:mega
+        type: choice
+        options:
+          - all
+          - none
+          - arduino:avr:mega
+          - arduino:mbed:nano33ble
+          - arduino:mbed:envie_m4
+          - arduino:megaavr:uno2018
+          - arduino:sam:arduino_due_x
+          - arduino:samd:arduino_zero_native
+          - adafruit:samd:adafruit_feather_m0
+          - adafruit:nrf52:feather52832
+          - esp32:esp32:esp32
+          - esp8266:esp8266:generic
+          - Intel:arc32:arduino_101
+          - STMicroelectronics:stm32:GenF3:pnum=BLACKPILL_F303CC
+          - STMicroelectronics:stm32:Nucleo_64:pnum=NUCLEO_WL55JC1
+          - stm32duino:STM32F1:mapleMini
+          - MegaCoreX:megaavr:4809
+          - arduino:mbed_rp2040:pico
+          - rp2040:rp2040:rpipico
+          - CubeCell:CubeCell:CubeCell-Board
+          - MegaCore:avr:1281
+          - teensy:avr:teensy41
+          - arduino:renesas_uno:minima
+          - SiliconLabs:silabs:xg24explorerkit
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # platform-dependent settings - extra board options, board index URLs, skip patterns etc.
+        include:
+          - id: arduino:avr:mega
+            run: |
+              echo "options=':cpu=atmega2560'" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: arduino:mbed:nano33ble
+          - id: arduino:mbed:envie_m4
+          - id: arduino:megaavr:uno2018
+            run: |
+              echo "options=':mode=on'" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LoRaWAN|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: arduino:sam:arduino_due_x
+          - id: arduino:samd:arduino_zero_native
+            run: |
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: adafruit:samd:adafruit_feather_m0
+            run: |
+              echo "options=':usbstack=arduino,debug=off'" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: adafruit:nrf52:feather52832
+            run: |
+              sudo apt-get update
+              sudo apt-get install -y python3 python3-pip python3-setuptools
+              pip3 install wheel
+              pip3 install --user adafruit-nrfutil
+              echo "/home/runner/.local/bin" >> $GITHUB_PATH
+              echo "options=':softdevice=s132v6,debug=l0'" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: esp32:esp32:esp32
+            run: |
+              python -m pip install pyserial
+              echo "version=2.0.17" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json" >> $GITHUB_OUTPUT
+          - id: esp8266:esp8266:generic
+            run: |
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+              echo "options=':xtal=80,ResetMethod=ck,CrystalFreq=26,FlashFreq=40,FlashMode=qio,eesz=512K'" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls http://arduino.esp8266.com/stable/package_esp8266com_index.json" >> $GITHUB_OUTPUT
+          - id: STMicroelectronics:stm32:GenF3
+            run: |
+              echo "options=':pnum=BLACKPILL_F303CC'" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: STMicroelectronics:stm32:Nucleo_64
+            run: |
+              echo "options=':pnum=NUCLEO_WL55JC1'" >> $GITHUB_OUTPUT
+              # Do *not* skip STM32WL examples
+              echo "skip-pattern=(LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json" >> $GITHUB_OUTPUT
+          - id: stm32duino:STM32F1:mapleMini
+            run: |
+              echo "options=':bootloader_version=original,cpu_speed=speed_72mhz'" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls http://dan.drown.org/stm32duino/package_STM32duino_index.json" >> $GITHUB_OUTPUT
+          - id: MegaCoreX:megaavr:4809
+            run: |
+              echo "index-url=--additional-urls https://mcudude.github.io/MegaCoreX/package_MCUdude_MegaCoreX_index.json" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update|LoRaWAN)" >> $GITHUB_OUTPUT
+          - id: arduino:mbed_rp2040:pico
+          - id: rp2040:rp2040:rpipico
+            run: echo "index-url=--additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json" >> $GITHUB_OUTPUT
+          - id: CubeCell:CubeCell:CubeCell-Board
+            run: |
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://resource.heltec.cn/download/package_CubeCell_index.json" >> $GITHUB_OUTPUT
+          - id: MegaCore:avr:1281
+            run: |
+              echo "index-url=--additional-urls https://mcudude.github.io/MegaCore/package_MCUdude_MegaCore_index.json" >> $GITHUB_OUTPUT
+              echo "skip-pattern=(STM32WL|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: teensy:avr:teensy41
+            run: |
+              echo "skip-pattern=(STM32WL|LoRaWAN)" >> $GITHUB_OUTPUT
+              echo "index-url=--additional-urls https://www.pjrc.com/teensy/package_teensy_index.json" >> $GITHUB_OUTPUT
+          - id: arduino:renesas_uno:minima
+            run: |
+              echo "skip-pattern=(STM32WL|LoRaWAN|LR11x0_Firmware_Update)" >> $GITHUB_OUTPUT
+          - id: SiliconLabs:silabs:xg24explorerkit
+            run: | 
+              echo "index-url=--additional-urls https://siliconlabs.github.io/arduino/package_arduinosilabs_index.json" >> $GITHUB_OUTPUT
+
+    runs-on: ubuntu-latest
+    name: ${{ matrix.id }}
+    env:
+      run-build: ${{ (inputs.id != 'none' && matrix.id == 'arduino:avr:mega') || contains(github.event.head_commit.message, 'CI_BUILD_ALL') || contains(github.event.head_commit.message, 'Bump version to') || contains(github.event.head_commit.message, format('{0}', matrix.id)) || inputs.id == 'all' || inputs.id == matrix.id }}
+
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+
+      - name: Install arduino-cli
+        if: ${{ env.run-build == 'true' }}
+        run:
+          |
+          mkdir -p ~/.local/bin
+          echo "~/.local/bin" >> $GITHUB_PATH
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=~/.local/bin sh
+
+      - name: Get platform name
+        if: ${{ env.run-build == 'true' }}
+        uses: jungwinter/split@v1
+        id: split
+        with:
+          msg: ${{ matrix.id }}
+          seperator: ':'
+
+      - name: Prepare platform-specific settings
+        if: ${{ env.run-build == 'true' }}
+        id: prep
+        run:
+          |
+          # common settings - no extra options, skip STM32WL examples, all warnings
+          echo "options=''" >> $GITHUB_OUTPUT
+          echo "skip-pattern=STM32WL" >> $GITHUB_OUTPUT
+          echo "warnings=all" >> $GITHUB_OUTPUT
+
+          # run platform-dependent scripts defined in matrix
+          ${{ matrix.run }}
+
+      - name: Install platform
+        if: ${{ env.run-build == 'true' }}
+        run:
+          |
+          arduino-cli core update-index ${{ format('{0}', steps.prep.outputs.index-url) }}
+          if [ -z '${{ steps.prep.outputs.version }}' ]; then
+            arduino-cli core install ${{ format('{0}:{1} {2}', steps.split.outputs._0, steps.split.outputs._1, steps.prep.outputs.index-url) }}
+          else
+            arduino-cli core install ${{ format('{0}:{1}@{3} {2}', steps.split.outputs._0, steps.split.outputs._1, steps.prep.outputs.index-url, steps.prep.outputs.version) }}
+          fi
+
+      - name: Checkout repository
+        if: ${{ env.run-build == 'true' }}
+        uses: actions/checkout@v4
+
+      - name: Build examples
+        if: ${{ env.run-build == 'true' }}
+        run:
+          |
+          cd $PWD/extras/test/ci
+          ./build_examples.sh ${{ matrix.id }} "${{ steps.prep.outputs.skip-pattern }}" ${{ steps.prep.outputs.options }}
+      
+      - name: Extract short commit hash
+        id: short-hash
+        run: echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
+      
+      - name: Parse sizes
+        if: ${{ env.run-build == 'true' }}
+        run:
+          |
+          cd $PWD/extras/test/ci
+          ./parse_size.sh ${{ matrix.id }}
+          cat size_${{ steps.short-hash.outputs.short_sha }}_${{ steps.split.outputs._0 }}-${{ steps.split.outputs._1 }}-${{ steps.split.outputs._2 }}.csv
+      
+      - name: Upload size report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-file-${{ steps.split.outputs._0 }}-${{ steps.split.outputs._1 }}-${{ steps.split.outputs._2 }}
+          path: extras/test/ci/size_${{ steps.short-hash.outputs.short_sha }}_${{ steps.split.outputs._0 }}-${{ steps.split.outputs._1 }}-${{ steps.split.outputs._2 }}.csv
+
+  metrics:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ACTIONS_METRICS_DEPLOY_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Clone artifact repo
+        run:
+          |
+          cd $PWD/..
+          git clone git@github.com:radiolib-org/artifacts.git
+          cd artifacts
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+      
+      - name: Download size artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: aggregated-sizes
+      
+      - name: Push size files
+        run:
+          |
+          ls -R aggregated-sizes
+          mkdir -p $PWD/../artifacts/radiolib-ci/l0
+          cp aggregated-sizes/*/size_*.csv $PWD/../artifacts/radiolib-ci/l0/.
+          cd $PWD/../artifacts/radiolib-ci
+          git add .
+          COMMIT_URL="https://github.com/jgromes/RadioLib/commit/$GITHUB_SHA"
+          git commit -m "Push artifacts from $COMMIT_URL"
+          git push origin main
+
+  esp-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+
+      - name: Clone ESP-IDF
+        run: |
+          rm -rf ~/esp
+          mkdir -p ~/esp
+          cd ~/esp
+          git clone https://github.com/espressif/esp-idf.git
+          cd esp-idf
+          git checkout v5.4.3
+          git submodule update --init --recursive
+      
+      - name: Install ESP-IDF
+        run: |
+          cd ~/esp/esp-idf
+          ./install.sh esp32
+      
+      - name: Build the example
+        run: |
+          cd $PWD/examples/NonArduino/ESP-IDF
+          . ~/esp/esp-idf/export.sh
+          idf.py build
+
+  tock-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi gcc-riscv64-unknown-elf
+          cargo install elf2tab
+
+      - name: Build the example
+        run: |
+          cd $PWD/examples/NonArduino/Tock
+          git clone https://github.com/tock/libtock-c.git
+          cd libtock-c; git checkout c0202f9ab78da4a6e95f136cf5250701e3778f63; cd ../
+          LIBTOCK_C_DIRECTORY="$(pwd)/libtock-c" ./build.sh
+
+  rpi-build:
+    if: false # self-hosted runner temporarily disabled
+    runs-on: [self-hosted, ARM64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake wget swig python-dev python3-dev python-setuptools python3-setuptools
+          wget http://abyz.me.uk/lg/lg.zip
+          unzip lg.zip
+          cd lg
+          make
+          sudo make install
+          cd ..
+          sudo rm -rf lg
+      
+      - name: Install the library
+        run: |
+          cd $PWD
+          mkdir build
+          cd build
+          cmake ..
+          sudo make install
+      
+      - name: Build the example
+        run: |
+          cd $PWD/examples/NonArduino/Raspberry
+          ./build.sh
+
+  rpi-test:
+    if: false # self-hosted runner temporarily disabled
+    needs: rpi-build
+    runs-on: [self-hosted, ARM64]
+    steps:
+      - name: SX126x test
+        run: |
+          cd $PWD/extras/test/SX126x
+          ./clean.sh
+          ./build.sh
+          sudo ./build/rpi-sx1261
+
+  rpi-pico-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install git cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+        
+      - name: Clone the SDK
+        run: |
+          mkdir -p ~/rpi-pico
+          cd ~/rpi-pico
+          git clone https://github.com/raspberrypi/pico-sdk.git
+          cd pico-sdk && git checkout 2.2.0
+      
+      - name: Build the example
+        run: |
+          export PICO_SDK_PATH=~/rpi-pico/pico-sdk
+          cd $PWD/examples/NonArduino/Pico
+          ./build.sh
