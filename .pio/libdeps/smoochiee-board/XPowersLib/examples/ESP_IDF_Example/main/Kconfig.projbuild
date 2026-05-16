@@ -1,0 +1,59 @@
+menu "XPowersLib Configuration"
+
+    choice PMU_Type
+        prompt "XPowers chip type"
+        default XPOWERS_CHIP_AXP2101 if IDF_TARGET_ESP32
+        default XPOWERS_CHIP_AXP192
+        help
+            Defines the default peripheral for xpowers example
+
+        config XPOWERS_CHIP_AXP2101
+            bool "Xpowers AXP2101"
+        config XPOWERS_CHIP_AXP192
+            bool "Xpowers AXP192"
+    endchoice
+
+    choice I2C_COMMUNICATION_METHOD
+        prompt "XPowersLIb read and write methods"
+        default I2C_COMMUNICATION_METHOD_BUILTIN_RW
+        help
+            Define XPowersLIb read and write methods
+
+        config I2C_COMMUNICATION_METHOD_BUILTIN_RW
+            bool "Implemented using built-in read and write methods"
+        config I2C_COMMUNICATION_METHOD_CALLBACK_RW
+            bool "Implemented using read and write callback methods"
+    endchoice
+
+    config I2C_MASTER_PORT_NUM
+        int "PMU I2C Port Number"
+        default 1
+        help
+            Port number for I2C Master device.
+
+    config I2C_MASTER_FREQUENCY
+        int "Master Frequency"
+        default 100000
+        help
+            I2C Speed of Master device.
+
+    config PMU_I2C_SCL
+        int "PMU SCL GPIO Num"
+        default 22
+        help
+            GPIO number for I2C PMU clock line.
+
+    config PMU_I2C_SDA
+        int "PMU SDA GPIO Num"
+        default 21
+        help
+            GPIO number for I2C PMU data line.
+
+    config PMU_INTERRUPT_PIN
+        int "PMU Interrupt Pin"
+        default 35
+        help
+            PMU interrupt pin.
+
+
+endmenu

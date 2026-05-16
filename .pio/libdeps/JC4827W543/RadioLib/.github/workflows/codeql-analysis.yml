@@ -1,0 +1,60 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['cpp']
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+         languages: ${{ matrix.language }}
+
+    - name: Install arduino-cli
+      run:
+        |
+        mkdir -p ~/.local/bin
+        echo "~/.local/bin" >> $GITHUB_PATH
+        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=~/.local/bin sh
+
+    - name: Install platform
+      run:
+        |
+        arduino-cli core update-index
+        arduino-cli core install arduino:avr
+
+    - name: Static link
+      run:
+        |
+        # static link fix from https://github.com/github/securitylab/discussions/171
+        for i in ~/.arduino*/packages/arduino/tools/avr-gcc/*/bin/*; do
+          mv "$i" "$i.real";
+          printf '#!/bin/bash\nexec "'"$i"'.real" ${1+"$@"}\n' > "$i";
+          chmod +x "$i";
+        done
+
+    - name: Build example
+      run:
+        arduino-cli compile --libraries /home/runner/work/RadioLib --fqbn arduino:avr:uno $PWD/examples/SX123x/SX123x_Transmit_Blocking/SX123x_Transmit_Blocking.ino --warnings=all
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3

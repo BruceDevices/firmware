@@ -1,0 +1,33 @@
+# .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+build:
+  os: "ubuntu-22.04"
+  apt_packages:
+    - libclang1-12
+    - libclang-cpp12
+  tools:
+    python: "3"
+  commands:
+    # Install doxygen from source distributions (conda forge does not keep up-to-date doxygen releases)
+    - >
+      DOXYGEN_VERSION="1.12.0" &&
+      mkdir .doxygen && cd .doxygen &&
+      echo $(pwd) &&
+      echo "https://sourceforge.net/projects/doxygen/files/rel-$DOXYGEN_VERSION/doxygen-$DOXYGEN_VERSION.linux.bin.tar.gz" &&
+      curl -L https://sourceforge.net/projects/doxygen/files/rel-$DOXYGEN_VERSION/doxygen-$DOXYGEN_VERSION.linux.bin.tar.gz > doxygen.tar.gz &&
+      gunzip doxygen.tar.gz &&
+      tar xf doxygen.tar &&
+      mv doxygen-$DOXYGEN_VERSION/bin/doxygen ./
+    # get lib version & overwrite Doxyfile values
+    - python3 .github/doxygen.py
+    # run doxygen
+    - cd docs && ../.doxygen/doxygen
+    # copy output to RTD output path for HTML files
+    - ls -R docs/html/
+    - mkdir -p ${READTHEDOCS_OUTPUT}
+    - mv docs/html/ "${READTHEDOCS_OUTPUT}"

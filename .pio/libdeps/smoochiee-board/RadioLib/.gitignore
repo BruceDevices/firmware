@@ -1,0 +1,21 @@
+# Arduino Library Development file
+.development
+
+# Atom
+*.tags
+*.tags1
+
+# VS Code
+.vscode
+
+# Jetbrain IDEs
+.idea
+
+# PlatformIO
+.pio*
+
+# cmake
+build/
+
+# Compote build output
+dist

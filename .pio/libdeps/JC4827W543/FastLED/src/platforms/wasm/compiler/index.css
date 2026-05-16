@@ -1,0 +1,1669 @@
+/* Import JSON Inspector CSS */
+@import url('./modules/json_inspector.css');
+
+body {
+    background-color: #121212;
+    /* Dark gray background */
+    color: #E0E0E0;
+    /* Light gray text */
+    margin: 0;
+    padding: 60px 0 0 0; /* Add padding-top for fixed menu bar */
+    font-family: 'Roboto Condensed', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    opacity: 0;
+    /* Initially hide the content */
+    transition: opacity 0.5s ease-in;
+    /* Fade-in effect */
+}
+
+#ui-controls {
+    flex: 0 0 auto;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 640px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    
+    /* Grid layout support for multi-column */
+    grid-auto-flow: column dense;
+    grid-auto-columns: minmax(var(--ui-column-width, 320px), 1fr);
+}
+
+#ui-controls.active {
+    display: flex;
+}
+
+/* Multi-column grid layout when CSS custom properties are set */
+#ui-controls[style*="--ui-columns"] {
+    display: grid !important;
+}
+
+/* UI Group Styling - Enhanced for multi-column and space utilization */
+.ui-group {
+    width: 100%;
+    margin: 10px 0;
+    background-color: #1A1A1A;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    
+    /* Grid layout support */
+    grid-column: span 1;
+    align-self: start;
+    
+    /* Allow groups to expand to full width of their container */
+    min-width: 280px;
+    max-width: none; /* Remove max-width constraint */
+}
+
+/* In multi-column layouts, reduce vertical margins and optimize spacing */
+#ui-controls[style*="grid-template-columns"] .ui-group,
+.ultrawide-layout .ui-group {
+    margin: 10px 0;
+}
+
+/* Ultra-wide specific optimizations */
+.ultrawide-layout .ui-group {
+    margin: 10px 0; /* Consistent with 20px total spacing */
+}
+
+/* Special handling for groups that might need more space */
+.ui-group.wide-group {
+    grid-column: span 2;
+    max-width: none;
+}
+
+.ui-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.ui-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: #2A2A2A;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid #333;
+    transition: background-color 0.2s ease;
+}
+
+.ui-group-header:hover {
+    background-color: #333;
+}
+
+.ui-group-title {
+    font-weight: 600;
+    font-size: 1.1em;
+    color: #E0E0E0;
+    text-transform: capitalize;
+    letter-spacing: 0.5px;
+}
+
+.ui-group-toggle {
+    font-size: 1.2em;
+    color: #B0B0B0;
+    transition: transform 0.3s ease;
+}
+
+.ui-group.collapsed .ui-group-toggle {
+    transform: rotate(-90deg);
+}
+
+.ui-group-content {
+    padding: 16px;
+    transition: all 0.3s ease;
+    max-height: 1000px;
+    overflow: hidden;
+}
+
+.ui-group.collapsed .ui-group-content {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Ungrouped items container - Enhanced for multi-column */
+.ui-ungrouped {
+    width: 100%;
+    display: contents; /* Allow children to participate in parent grid */
+}
+
+/* In single column mode, restore normal display */
+#ui-controls:not([style*="grid-template-columns"]) .ui-ungrouped {
+    display: block;
+}
+
+.ui-control {
+    margin: 0; /* Remove default margin that causes misalignment */
+    padding: 8px 0; /* Use padding for consistent spacing */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Ultra-wide specific control optimizations */
+.ultrawide-layout .ui-control {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px; /* Consistent spacing between label and input */
+}
+
+/* Special styling for controls within groups - optimized for space usage */
+.ui-group .ui-control {
+    margin: 8px 0;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    grid-column: unset; /* Reset grid behavior inside groups */
+    width: 100%; /* Ensure full width within groups */
+}
+
+.ui-group .ui-control:last-child {
+    border-bottom: none;
+}
+
+/* Help controls should span only one column */
+.ui-help-container {
+    grid-column: span 1;
+    width: 100%;
+}
+
+/* Wide controls that might benefit from spanning multiple columns */
+.ui-control.wide-control {
+    grid-column: span 2;
+}
+
+.ui-control.full-width-control {
+    grid-column: 1 / -1;
+}
+
+/* Enhanced input styling for better space utilization */
+.ui-control input[type="range"] {
+    width: 100%;
+    margin: 0;
+    flex: 1; /* Allow range inputs to expand */
+    min-width: 100px; /* Minimum usable width */
+}
+
+.ui-control input[type="number"] {
+    flex: 1;
+    min-width: 80px;
+    max-width: 120px;
+}
+
+.ui-control select {
+    flex: 1;
+    min-width: 100px;
+}
+
+.ui-control button {
+    flex: 1;
+    min-width: 80px;
+}
+
+.ui-control label {
+    margin: 0; /* Remove margin that causes misalignment */
+    padding-right: 10px; /* Use padding instead */
+    flex-shrink: 0;
+    min-width: 120px; /* Consistent label width */
+    font-weight: 500;
+    color: #E0E0E0;
+}
+
+/* Audio controls optimizations */
+.audio-control {
+    width: 100%;
+}
+
+.audio-upload-button,
+.audio-player {
+    width: 100%;
+}
+
+h1 {
+    font-size: 6em;
+    margin-top: 10vh;
+    margin-bottom: 40px;
+    text-align: center;
+    font-weight: 300;
+    letter-spacing: 1px;
+    line-height: 1.2;
+    position: relative;
+    animation: continuousGlow 4s ease-in-out infinite;
+    width: 100%;
+}
+
+@keyframes continuousGlow {
+    0% {
+        text-shadow: 0 0 5px rgba(224, 224, 224, 0.1);
+    }
+
+    25% {
+        text-shadow: 0 0 20px rgba(224, 224, 224, 0.3);
+    }
+
+    50% {
+        text-shadow: 0 0 30px rgba(224, 224, 224, 0.5);
+    }
+
+    75% {
+        text-shadow: 0 0 20px rgba(224, 224, 224, 0.3);
+    }
+
+    100% {
+        text-shadow: 0 0 5px rgba(224, 224, 224, 0.1);
+    }
+}
+
+/* Description row - always full width */
+.studio-link {
+    text-align: center;
+    margin-bottom: 40px;
+    width: 100%;
+}
+
+.studio-link a {
+    color: #e0e0e0;
+    text-decoration: none;
+    font-size: 1.2em;
+    transition: color 0.3s ease;
+}
+
+.studio-link a:hover {
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(224, 224, 224, 0.5);
+}
+
+#main-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    
+    /* Enhanced for dynamic sizing */
+    transition: max-width 0.3s ease;
+}
+
+#content-grid {
+    display: grid;
+    width: 100%;
+    gap: 20px 40px;
+    justify-content: center;
+    align-items: start;
+    transition: grid-template-columns 0.3s ease, grid-template-areas 0.3s ease;
+    
+    /* Default: 1×N grid (mobile-first) */
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas: 
+        "canvas"
+        "ui";
+}
+
+/* Layout-specific styles - Enhanced responsive grid system */
+
+/* Mobile layout styles - 1×N grid - Enhanced for pixel-perfect alignment */
+.mobile-layout#main-container {
+    max-width: calc(100vw - 40px);
+    padding: 20px; /* Consistent with other layouts */
+    margin: 0 auto;
+}
+
+.mobile-layout#content-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas: 
+        "canvas"
+        "ui";
+    gap: 20px;
+    justify-items: center; /* Center both canvas and UI containers */
+    align-items: start;
+}
+
+.mobile-layout .ui-group {
+    margin: 10px 0; /* Reduced from 15px for tighter alignment */
+    width: 100%; /* Ensure full width for consistent alignment */
+}
+
+/* Mobile-specific UI controls alignment */
+.mobile-layout #ui-controls {
+    gap: 20px;
+    align-items: center; /* Center items within the container */
+    width: 100%;
+    max-width: 400px; /* Match canvas max width for alignment */
+    justify-content: center; /* Center the flex container itself */
+}
+
+/* Mobile-specific canvas container alignment */
+.mobile-layout #canvas-container {
+    justify-self: center;
+    align-self: start;
+    width: 100%;
+    max-width: 400px; /* Match UI controls max width */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Mobile-specific UI control alignment */
+.mobile-layout .ui-control {
+    margin: 0; /* Remove margins that cause misalignment */
+    padding: 8px 0; /* Use padding instead of margin for consistent spacing */
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+/* Mobile-specific label alignment */
+.mobile-layout .ui-control label {
+    margin: 0; /* Remove margin that causes misalignment */
+    padding-right: 10px; /* Use padding instead */
+    flex-shrink: 0;
+    min-width: 120px; /* Consistent label width */
+}
+
+/* Mobile-specific input alignment */
+.mobile-layout .ui-control input[type="range"],
+.mobile-layout .ui-control input[type="number"],
+.mobile-layout .ui-control select,
+.mobile-layout .ui-control button {
+    margin: 0; /* Remove all margins */
+    flex: 1;
+    min-width: 0; /* Allow shrinking */
+}
+
+/* Remove conflicting mobile canvas styles - let JavaScript handle sizing */
+/* .mobile-layout #myCanvas {
+    width: 100%;
+    height: auto;
+    max-width: 400px;
+    max-height: 400px;
+} */
+
+/* Tablet layout styles - 2×N grid */
+.tablet-layout#main-container {
+    max-width: 1200px;
+}
+
+.tablet-layout#content-grid {
+    grid-template-areas: "canvas ui";
+    gap: 20px 30px;
+}
+
+.tablet-layout .ui-group {
+    margin: 12px 0;
+}
+
+/* Desktop layout styles - 2×N grid */
+.desktop-layout#main-container {
+    max-width: 1400px;
+}
+
+.desktop-layout#content-grid {
+    grid-template-areas: "canvas ui";
+    gap: 20px 40px;
+}
+
+.desktop-layout .ui-group {
+    margin: 10px 0;
+}
+
+/* Ultrawide layout styles - 3×N grid */
+.ultrawide-layout#main-container {
+    max-width: 2000px;
+}
+
+.ultrawide-layout#content-grid {
+    grid-template-areas: "canvas ui ui2";
+    gap: 20px 50px;
+}
+
+.ultrawide-layout .ui-group {
+    margin: 8px 0;
+}
+
+.ultrawide-layout #ui-controls,
+.ultrawide-layout #ui-controls-2 {
+    min-width: 280px;
+    /* Remove max-width constraint to allow full expansion in ultra-wide mode */
+}
+
+/* Canvas responsive behavior */
+#canvas-container {
+    position: relative;
+    transition: all 0.3s ease;
+    grid-area: canvas;
+    justify-self: center;
+}
+
+#myCanvas {
+    background-color: #1E1E1E;
+    width: 320px;
+    height: 320px;
+    image-rendering: pixelated;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    transition: width 0.3s ease, height 0.3s ease;
+    
+    /* Ensure pixel-perfect scaling */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* UI Controls Grid Areas */
+#ui-controls {
+    grid-area: ui;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    width: 100%;
+}
+
+#ui-controls-2 {
+    grid-area: ui2;
+    display: none; /* Hidden by default, shown in ultra-wide */
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    width: 100%;
+}
+
+/* Responsive CSS Media Queries - Provide fallback when JavaScript isn't available */
+
+/* Tablet and Desktop: 2×N grid (768px - 1599px) */
+@media (min-width: 768px) and (max-width: 1599px) {
+    #content-grid {
+        grid-template-columns: minmax(320px, 800px) minmax(280px, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas: "canvas ui";
+        gap: 20px 40px;
+    }
+    
+    #ui-controls {
+        gap: 20px;
+        align-items: stretch;
+    }
+    
+    #ui-controls-2 {
+        display: none !important;
+    }
+    
+    #main-container {
+        max-width: 1400px;
+    }
+}
+
+/* Ultra-wide: 3×N grid (1600px+) */
+@media (min-width: 1600px) {
+    #content-grid {
+        grid-template-columns: minmax(320px, 800px) minmax(280px, 1fr) minmax(280px, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas: "canvas ui ui2";
+        gap: 20px 50px;
+    }
+    
+    #ui-controls,
+    #ui-controls-2 {
+        gap: 20px;
+        align-items: stretch;
+    }
+    
+    #ui-controls-2 {
+        display: flex !important;
+        flex-direction: column;
+        gap: 20px;
+        align-items: stretch;
+        grid-area: ui2;
+        width: 100%;
+    }
+    
+    #main-container {
+        max-width: 2000px;
+    }
+}
+
+/* Mobile-specific overrides */
+@media (max-width: 767px) {
+    #content-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto;
+        grid-template-areas: 
+            "canvas"
+            "ui";
+        gap: 20px;
+        justify-items: center; /* Center both canvas and UI containers */
+        align-items: start;
+    }
+    
+    #ui-controls {
+        gap: 20px;
+        align-items: center; /* Center items within the container */
+        width: 100%;
+        max-width: 400px; /* Match canvas max width for alignment */
+        justify-content: center; /* Center the flex container itself */
+    }
+    
+    #ui-controls-2 {
+        display: none !important;
+    }
+    
+    #main-container {
+        max-width: calc(100vw - 40px);
+        padding: 20px; /* Consistent with other layouts */
+        margin: 0 auto;
+    }
+    
+    /* Ensure canvas container is properly centered */
+    #canvas-container {
+        justify-self: center;
+        align-self: start;
+        width: 100%;
+        max-width: 400px; /* Match UI controls max width */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+#fastled-description {
+    width: 100%;
+    max-width: 1000px; /* Match the max-width of main-container */
+    box-sizing: border-box;
+    text-align: left;
+    margin: 10px auto; /* Center horizontally */
+    padding: 0 20px;
+    color: #B0B0B0;  /* Changed from #666 to a lighter gray for better contrast */
+    font-size: 1.1em;
+}
+
+#output {
+    font-size: 1em;
+    padding: 20px;
+    white-space: pre-wrap;
+    width: 100%;
+    background-color: #1E1E1E;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    margin: 0;  /* Add this line to remove margins */
+}
+
+.ui-control input[type="checkbox"] {
+    cursor: pointer;
+    transform: scale(1.5);
+    /* Optionally, scale the checkbox for better visibility */
+}
+
+.ui-control button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #1E90FF;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.ui-control button:active,
+.ui-control button.active {
+    background-color: #0066CC;
+}
+
+.ui-control input[type="number"] {
+    width: 100%;
+    padding: 5px;
+    margin: 0;
+    font-size: 16px;
+    background-color: #2E2E2E;
+    color: #E0E0E0;
+    border: 1px solid #444;
+    border-radius: 4px;
+}
+
+/* Dropdown (Select) Styling */
+.ui-control select {
+    width: 100%;
+    padding: 8px 12px;
+    margin: 0;
+    font-size: 16px;
+    font-family: 'Roboto Condensed', sans-serif;
+    background-color: #2E2E2E;
+    color: #E0E0E0;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    
+    /* Custom arrow styling */
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E0E0E0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpath d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px;
+    padding-right: 32px;
+}
+
+.ui-control select:hover {
+    border-color: #666;
+    background-color: #333;
+}
+
+.ui-control select:focus {
+    outline: none;
+    border-color: #1E90FF;
+    box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.2);
+}
+
+.ui-control select:active {
+    background-color: #333;
+}
+
+/* Option styling for dark theme */
+.ui-control select option {
+    background-color: #2E2E2E;
+    color: #E0E0E0;
+    padding: 8px 12px;
+}
+
+.ui-control select option:hover {
+    background-color: #1E90FF;
+}
+
+.ui-control select option:checked {
+    background-color: #1E90FF;
+    color: white;
+}
+
+/* Firefox-specific option styling */
+@-moz-document url-prefix() {
+    .ui-control select option {
+        background-color: #2E2E2E;
+        color: #E0E0E0;
+    }
+    
+    .ui-control select option:checked {
+        background-color: #1E90FF;
+    }
+}
+
+.ui-control button {
+    width: 100%;
+    margin: 0;
+}
+
+.popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #1E1E1E;
+    padding: 30px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    max-height: 80vh;
+    width: 80%;
+    max-width: 800px;
+    overflow-y: auto;
+}
+
+.popup-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+    z-index: 999;
+    transition: opacity 0.2s ease;
+}
+
+#output-popup {
+    /* disable scroll bars */
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+}
+#output {
+    margin: 0;
+    padding: 10px;
+}
+
+.toast-notification {
+    position: fixed;
+    top: 33vh;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(50, 50, 50, 0.9);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.toast-notification-show {
+    opacity: 1;
+    transition: opacity 0.1s ease-in;
+}
+
+.toast-notification-hide {
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+}
+
+/* Audio Control Styling */
+.audio-control {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.audio-upload-button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #1E90FF;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.2s ease-in-out;
+    width: 100%;
+    margin: 5px 0;
+    font-family: 'Roboto Condensed', sans-serif;
+}
+
+.audio-upload-button:hover {
+    background-color: #0066CC;
+}
+
+.audio-player {
+    width: 100%;
+    height: 36px;
+    margin-top: 10px;
+    background-color: #2E2E2E;
+    border-radius: 4px;
+    outline: none;
+    border: 1px solid #444;
+}
+
+/* Custom styling for audio controls */
+audio::-webkit-media-controls-panel {
+    background-color: #2E2E2E;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+    color: #E0E0E0;
+}
+
+audio::-webkit-media-controls-play-button,
+audio::-webkit-media-controls-mute-button {
+    filter: invert(100%);
+}
+
+#canvas-container {
+    position: relative;
+}
+
+/* Recording Button Styles */
+.record-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: rgba(128, 128, 128, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 10;
+    color: #888;
+}
+
+.record-button:hover {
+    background: rgba(128, 128, 128, 0.5);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: scale(1.1);
+}
+
+.record-button.recording {
+    background: rgba(255, 0, 0, 0.3);
+    border-color: rgba(255, 0, 0, 0.8);
+    color: #ff0000;
+    animation: pulse 1.5s infinite;
+}
+
+.record-button.recording:hover {
+    background: rgba(255, 0, 0, 0.5);
+    border-color: rgba(255, 0, 0, 1);
+}
+
+.record-button svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Toggle record/stop icons */
+.record-button .stop-icon {
+    display: none;
+}
+
+.record-button.recording .record-icon {
+    display: none;
+}
+
+.record-button.recording .stop-icon {
+    display: block;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 0, 0, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+    }
+}
+
+@keyframes labelFade {
+    0% { opacity: 0; }
+    3% { opacity: 0; }  /* Quick fade in (0.25s) */
+    10% { opacity: 1; } /* Hold for 0.5s */
+    80% { opacity: 1; }  /* Hold for 1s */
+    100% { opacity: 0; } /* Slow fade out (2s) */
+}
+
+#canvas-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(50, 50, 50, .5);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-family: 'Roboto Condensed', sans-serif;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0;  /* Start hidden */
+    z-index: 10;
+    min-width: 80px;
+    text-align: center;
+}
+
+/* When record button is hidden, center the canvas label */
+.record-button[style*="display: none"] ~ #canvas-label {
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Add a new class for when we want to trigger the animation */
+#canvas-label.show-animation {
+    animation: labelFade 10s ease-out forwards;
+    animation-delay: 0;  /* Delay animation start */
+}
+
+/* Menu Bar Styling */
+#menu-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px; /* Appropriate height for h2-sized text */
+    background: linear-gradient(135deg, 
+        rgba(30, 30, 30, 0.95) 0%, 
+        rgba(40, 40, 40, 0.95) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+}
+
+.menu-item {
+    position: relative;
+    margin-right: 35px; /* Appropriate spacing for h2-sized text */
+}
+
+.menu-label {
+    color: #E0E0E0;
+    font-family: 'Roboto Condensed', sans-serif;
+    font-size: 1.5em; /* Match h2 size */
+    font-weight: 600;
+    padding: 10px 18px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: block;
+    user-select: none;
+    letter-spacing: 0.5px;
+}
+
+.menu-label:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #FFFFFF;
+}
+
+.menu-item.active .menu-label {
+    background-color: rgba(30, 144, 255, 0.2);
+    color: #1E90FF;
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px; /* Appropriate width for h2-sized items */
+    background: linear-gradient(135deg, 
+        rgba(20, 20, 20, 0.98) 0%, 
+        rgba(30, 30, 30, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.6),
+        0 4px 16px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    z-index: 1001;
+}
+
+.menu-item:hover .menu-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.menu-dropdown-item {
+    padding: 14px 20px;
+    color: #E0E0E0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Roboto Condensed', sans-serif;
+    font-size: 1.5em; /* Match h2 size */
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    letter-spacing: 0.5px;
+}
+
+.menu-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.menu-dropdown-item:hover {
+    background-color: rgba(30, 144, 255, 0.15);
+    color: #1E90FF;
+}
+
+.menu-dropdown-item:first-child {
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+}
+
+.menu-dropdown-item:last-child {
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+/* Inspector button styles */
+.inspector-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #E0E0E0;
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 8px;
+    transition: all 0.2s ease;
+}
+
+.inspector-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+
+
+/* Markdown styling for descriptions */
+#fastled-description h1,
+#fastled-description h2,
+#fastled-description h3 {
+    color: #E0E0E0;
+    margin: 1.2em 0 0.6em 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+#fastled-description h1 {
+    font-size: 1.8em;
+    border-bottom: 2px solid #333;
+    padding-bottom: 0.3em;
+}
+
+#fastled-description h2 {
+    font-size: 1.5em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.2em;
+}
+
+#fastled-description h3 {
+    font-size: 1.3em;
+}
+
+#fastled-description p {
+    margin: 0.8em 0;
+    line-height: 1.6;
+    color: #B0B0B0;
+}
+
+#fastled-description strong {
+    color: #E0E0E0;
+    font-weight: 600;
+}
+
+#fastled-description em {
+    color: #D0D0D0;
+    font-style: italic;
+}
+
+#fastled-description code {
+    background-color: #2A2A2A;
+    color: #F0F0F0;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+    border: 1px solid #444;
+}
+
+#fastled-description pre {
+    background-color: #1A1A1A;
+    color: #E0E0E0;
+    padding: 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1em 0;
+    border: 1px solid #333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#fastled-description pre code {
+    background: none;
+    padding: 0;
+    border: none;
+    font-size: 0.9em;
+    color: inherit;
+}
+
+#fastled-description a {
+    color: #1E90FF;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+#fastled-description a:hover {
+    color: #66B3FF;
+    border-bottom-color: #66B3FF;
+}
+
+#fastled-description ul,
+#fastled-description ol {
+    margin: 0.8em 0;
+    padding-left: 2em;
+    color: #B0B0B0;
+}
+
+#fastled-description li {
+    margin: 0.4em 0;
+    line-height: 1.5;
+}
+
+#fastled-description ul li {
+    list-style-type: disc;
+}
+
+#fastled-description ol li {
+    list-style-type: decimal;
+}
+
+/* Add some breathing room between elements */
+#fastled-description > *:first-child {
+    margin-top: 0;
+}
+
+#fastled-description > *:last-child {
+    margin-bottom: 0;
+}
+
+/* Ultra-wide specific optimizations for better space utilization */
+.ultrawide-layout .ui-control input[type="range"] {
+    width: 100%;
+    flex: 1;
+    min-width: 150px; /* Increased minimum for ultra-wide */
+    max-width: none; /* Remove any max-width constraints */
+}
+
+.ultrawide-layout .ui-control input[type="number"] {
+    width: 100%;
+    flex: 1;
+    min-width: 100px;
+    max-width: 150px; /* Reasonable max for number inputs */
+}
+
+.ultrawide-layout .ui-control select {
+    width: 100%;
+    flex: 1;
+    min-width: 120px;
+    max-width: none; /* Remove any max-width constraints */
+}
+
+.ultrawide-layout .ui-control button {
+    width: 100%;
+    flex: 1;
+    min-width: 100px;
+    max-width: none; /* Remove any max-width constraints */
+}
+
+/* Sleek Slider Widget - Overlay label design */
+.ui-control.slider-control {
+    display: block;
+    width: 100%;
+    margin: 12px 0;
+    padding: 8px 0;
+    position: relative;
+}
+
+.ui-control.slider-control .slider-container {
+    width: 100%;
+    position: relative;
+    display: block;
+}
+
+.ui-control.slider-control .slider-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    font-weight: 500;
+    color: #E0E0E0;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    text-align: center;
+    font-size: 0.9em;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.ui-control.slider-control .slider-label .label-text {
+    margin-right: 8px;
+}
+
+.ui-control.slider-control .slider-label .slider-value {
+    font-weight: 600;
+    color: #1E90FF;
+    min-width: 40px;
+    text-align: right;
+}
+
+.ui-control.slider-control input[type="range"] {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #333;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 2;
+}
+
+/* Custom slider thumb styling - CD player style oval */
+.ui-control.slider-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 14px;
+    border-radius: 7px;
+    background: #1E90FF;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(30, 144, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+.ui-control.slider-control input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 14px;
+    border-radius: 7px;
+    background: #1E90FF;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 6px rgba(30, 144, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+/* Hover and focus states */
+.ui-control.slider-control:hover .slider-label,
+.ui-control.slider-control input[type="range"]:focus + .slider-label {
+    opacity: 0.4;
+}
+
+.ui-control.slider-control input[type="range"]:hover {
+    background: #444;
+}
+
+.ui-control.slider-control input[type="range"]:hover::-webkit-slider-thumb {
+    background: #4DA6FF;
+    box-shadow: 0 3px 8px rgba(30, 144, 255, 0.4);
+    transform: scale(1.1);
+}
+
+.ui-control.slider-control input[type="range"]:hover::-moz-range-thumb {
+    background: #4DA6FF;
+    box-shadow: 0 3px 8px rgba(30, 144, 255, 0.4);
+    transform: scale(1.1);
+}
+
+/* Active state (when dragging) */
+.ui-control.slider-control input[type="range"]:active {
+    background: #555;
+}
+
+.ui-control.slider-control input[type="range"]:active::-webkit-slider-thumb {
+    background: #0066CC;
+    box-shadow: 0 4px 12px rgba(30, 144, 255, 0.5);
+    transform: scale(1.2);
+}
+
+.ui-control.slider-control input[type="range"]:active::-moz-range-thumb {
+    background: #0066CC;
+    box-shadow: 0 4px 12px rgba(30, 144, 255, 0.5);
+    transform: scale(1.2);
+}
+
+/* Ultra-wide optimizations for slider widget */
+.ultrawide-layout .ui-control.slider-control {
+    margin: 16px 0;
+    padding: 12px 0;
+}
+
+.ultrawide-layout .ui-control.slider-control .slider-label {
+    font-size: 1em;
+    margin-bottom: 12px;
+}
+
+.ultrawide-layout .ui-control.slider-control input[type="range"] {
+    height: 8px;
+}
+
+.ultrawide-layout .ui-control.slider-control input[type="range"]::-webkit-slider-thumb {
+    width: 28px;
+    height: 16px;
+    border-radius: 8px;
+}
+
+.ultrawide-layout .ui-control.slider-control input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 16px;
+    border-radius: 8px;
+}
+
+/* Number control specific styling - block layout instead of flexbox */
+.ui-control.number-control {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+}
+
+.ui-control.number-control label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+    color: #E0E0E0;
+    min-width: auto;
+    padding-right: 0;
+}
+
+.ui-control.number-control input[type="number"] {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    flex: none;
+    min-width: auto;
+    max-width: none;
+}
+
+/* Ultra-wide specific number control styling */
+.ultrawide-layout .ui-control.number-control {
+    margin: 8px 0;
+}
+
+.ultrawide-layout .ui-control.number-control input[type="number"] {
+    width: 100%;
+    min-width: auto;
+    max-width: none;
+}
+
+/* Inline row number control: label and input on the same row, no flex */
+.ui-control.number-control.inline-row {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    /* Remove flex or grid for this variant */
+}
+
+.ui-control.number-control.inline-row label,
+.ui-control.number-control.inline-row input[type="number"] {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.ui-control.number-control.inline-row label {
+    margin-right: 10px;
+    min-width: 0;
+    padding-right: 0;
+}
+
+.ui-control.number-control.inline-row input[type="number"] {
+    width: 80px;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+    display: inline-block;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+/* Paired number field styling - Enhanced space utilization */
+.ui-control.number-pair-control {
+    display: flex !important;
+    gap: 20px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    margin: 8px 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.ui-control.number-pair-control .single-number-field {
+    flex: 1;
+    max-width: calc(50% - 10px);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ui-control.number-pair-control .single-number-field label {
+    font-size: 0.9em;
+    margin-right: 8px;
+    padding-right: 0;
+    min-width: 80px;
+    flex-shrink: 0;
+    color: #E0E0E0;
+    font-weight: 500;
+}
+
+.ui-control.number-pair-control .single-number-field input[type="number"] {
+    width: 55px;
+    min-width: 50px;
+    max-width: 65px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+/* Mobile optimizations for paired number fields */
+.mobile-layout .ui-control.number-pair-control {
+    gap: 15px;
+}
+
+.mobile-layout .ui-control.number-pair-control .single-number-field label {
+    font-size: 0.85em;
+    min-width: 70px;
+}
+
+.mobile-layout .ui-control.number-pair-control .single-number-field input[type="number"] {
+    width: 50px;
+    min-width: 45px;
+    max-width: 60px;
+}
+
+/* Ultra-wide optimizations for paired number fields */
+.ultrawide-layout .ui-control.number-pair-control {
+    gap: 25px;
+}
+
+.ultrawide-layout .ui-control.number-pair-control .single-number-field label {
+    min-width: 90px;
+}
+
+.ultrawide-layout .ui-control.number-pair-control .single-number-field input[type="number"] {
+    width: 65px;
+    min-width: 55px;
+    max-width: 75px;
+}
+
+/* Overlay label for slider - hovers over the slider widget */
+.slider-label-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+    background: transparent;
+    z-index: 2;
+    font-size: 0.95em;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.slider-label-overlay .label-text,
+.slider-label-overlay .slider-value {
+    color: #fff;
+    text-shadow:
+        0 0 2px #000,
+        0 0 4px #000,
+        1px 1px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        0 2px 8px #000;
+    font-weight: 600;
+    margin: 0 4px;
+}
+
+.slider-label-overlay .slider-value {
+    color: #fff;
+    text-shadow:
+        0 0 2px #000,
+        0 0 4px #000,
+        1px 1px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        0 2px 8px #000;
+    font-weight: 700;
+    min-width: 40px;
+    text-align: right;
+}
+
+.ui-control.slider-control .slider-label-overlay {
+    transition: opacity 0.2s ease;
+}
+
+.ui-control.slider-control:hover .slider-label-overlay,
+.ui-control.slider-control input[type="range"]:hover + .slider-label-overlay {
+    opacity: 0.3;
+}
+
+/* Video Settings Popup Styles */
+.video-settings-popup {
+    width: 500px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.video-settings-popup h3 {
+    margin: 0 0 20px 0;
+    color: #fff;
+    font-size: 1.4em;
+    border-bottom: 2px solid #333;
+    padding-bottom: 10px;
+}
+
+.settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setting-group label {
+    color: #ccc;
+    font-size: 0.95em;
+    font-weight: 500;
+}
+
+.setting-group select,
+.setting-group input[type="number"] {
+    background-color: #2a2a2a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.setting-group select:hover,
+.setting-group input[type="number"]:hover {
+    border-color: #666;
+    background-color: #333;
+}
+
+.setting-group select:focus,
+.setting-group input[type="number"]:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.setting-group input[type="number"] {
+    width: 120px;
+}
+
+.bitrate-display {
+    display: inline-block;
+    margin-left: 10px;
+    color: #888;
+    font-size: 0.9em;
+    min-width: 80px;
+}
+
+.popup-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.popup-buttons button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-apply {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-apply:hover {
+    background-color: #45a049;
+}
+
+.btn-cancel {
+    background-color: #555;
+    color: white;
+}
+
+.btn-cancel:hover {
+    background-color: #666;
+}
+
+.btn-reset {
+    background-color: #ff9800;
+    color: white;
+}
+
+.btn-reset:hover {
+    background-color: #e68900;
+}
+
+#video-settings-overlay {
+    z-index: 1098;
+}
+
+#video-settings-popup {
+    z-index: 1099;
+}

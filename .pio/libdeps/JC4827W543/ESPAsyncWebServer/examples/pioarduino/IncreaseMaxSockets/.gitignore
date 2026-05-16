@@ -1,0 +1,12 @@
+.DS_Store
+.lh
+/.pio
+/.vscode
+/logs
+
+/sdkconfig.*
+/CMakeLists.txt
+/dependencies.lock
+/.dummy
+/managed_components
+/src/idf_component.yml

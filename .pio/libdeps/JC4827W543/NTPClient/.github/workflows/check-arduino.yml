@@ -1,0 +1,28 @@
+name: Check Arduino
+
+# See: https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows
+on:
+  push:
+  pull_request:
+  schedule:
+    # Run every Tuesday at 8 AM UTC to catch breakage caused by new rules added to Arduino Lint.
+    - cron: "0 8 * * TUE"
+  workflow_dispatch:
+  repository_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Arduino Lint
+        uses: arduino/arduino-lint-action@v1
+        with:
+          compliance: specification
+          library-manager: update
+          # Always use this setting for official repositories. Remove for 3rd party projects.
+          official: true
+          project-type: library

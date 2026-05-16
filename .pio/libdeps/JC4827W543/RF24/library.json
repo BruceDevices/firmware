@@ -1,0 +1,43 @@
+{
+    "name": "RF24",
+    "keywords": "rf, radio, wireless, spi",
+    "description": "Radio driver, OSI layer 2 library for nRF24L01(+) transceiver modules.",
+    "license": "GPL-2.0-only",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nRF24/RF24.git"
+    },
+    "version": "1.4.11",
+    "export": {
+        "exclude": [
+            "datasheets",
+            ".github/*",
+            "keywords.txt",
+            "configure",
+            "examples_pico/*",
+            "examples_linux/*",
+            "pyRF24/*",
+            "cmake/*",
+            "CMakeLists.txt",
+            "Makefile",
+            "utility/CMakeLists.txt",
+            "utility/wiringPi/*",
+            "utility/MRAA/*",
+            "utility/LittleWire/*",
+            "utility/RPi/*",
+            "utility/SPIDEV/*",
+            "utility/rp2/*",
+            "utility/ATXMegaD3/*"
+        ]
+    },
+    "frameworks": "arduino",
+    "platforms": [
+        "atmelavr",
+        "atmelsam",
+        "teensy",
+        "atmelmegaavr",
+        "espressif32",
+        "espressif8266",
+        "ststm32"
+    ]
+}

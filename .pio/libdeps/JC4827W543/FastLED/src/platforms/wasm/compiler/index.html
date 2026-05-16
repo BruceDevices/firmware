@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>FastLED</title>
+
+    <link rel="stylesheet" href="index.css">
+    <!-- Include Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Menu Bar -->
+    <div id="menu-bar">
+        <div class="menu-item">
+            <span class="menu-label">File</span>
+            <div class="menu-dropdown">
+                <div class="menu-dropdown-item" data-action="save">Save</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <span class="menu-label">Settings</span>
+            <div class="menu-dropdown">
+                <div class="menu-dropdown-item" data-value="gfx-simple">gfx 0</div>
+                <div class="menu-dropdown-item" data-value="gfx-bloom">gfx 1</div>
+                <div class="menu-dropdown-item" data-value="video-settings">Video Settings</div>
+            </div>
+        </div>
+        <div class="menu-item">
+            <span class="menu-label">Tools</span>
+            <div class="menu-dropdown">
+                <div class="menu-dropdown-item" data-value="ui-events">UI Events</div>
+                <div class="menu-dropdown-item" data-action="video-mapper">FastLED Video Mapper</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 1: Title (always full width) -->
+    <h1>FastLED</h1>
+
+    <!-- Row 2: Responsive Grid (1×N, 2×N, 3×N) -->
+    <div id="main-container">
+        <div id="content-grid">
+            <div id="canvas-container">
+                <canvas id="myCanvas" width="16" height="16"></canvas>
+                <div id="canvas-label">stdout</div>
+                <!-- Video Recording Button -->
+                <button id="record-btn" class="record-button" title="Start/Stop Recording">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <circle class="record-icon" cx="12" cy="12" r="8"/>
+                        <rect class="stop-icon" x="8" y="8" width="8" height="8" style="display: none;"/>
+                    </svg>
+                </button>
+                <!-- JSON Inspector Button - Removed, now in gear menu -->
+            </div>
+            <div id="ui-controls"></div>
+            <div id="ui-controls-2" style="display: none;"></div>
+            <!-- FastLED Async Controls -->
+            <div id="fastled-async-controls" style="margin-top: 10px; padding: 10px; border: 1px solid #333; border-radius: 5px; background: rgba(0,0,0,0.1);">
+                <div style="margin-bottom: 5px; font-weight: bold; color: #fff;">FastLED Async Controls:</div>
+                <button id="start-btn" style="margin-right: 5px; padding: 5px 10px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Start</button>
+                <button id="stop-btn" style="margin-right: 5px; padding: 5px 10px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Stop</button>
+                <button id="toggle-btn" style="margin-right: 10px; padding: 5px 10px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer;">Toggle</button>
+                <span id="fps-display" style="color: #fff; font-family: monospace;">FPS: --</span>
+                <div id="error-display" style="color: #ff6b6b; margin-top: 5px; font-size: 12px;"></div>
+            </div>
+        </div>
+        
+        <div id="container"></div>
+        <div class="popup-overlay" id="popup-overlay"></div>
+        <div class="popup" id="output-popup">
+            <pre id="output">stdout:</pre>
+        </div>
+
+        <!-- Video Settings Popup -->
+        <div class="popup-overlay" id="video-settings-overlay"></div>
+        <div class="popup video-settings-popup" id="video-settings-popup">
+            <h3>Video Recording Settings</h3>
+            <div class="settings-content">
+                <div class="setting-group">
+                    <label for="video-codec">Video Codec:</label>
+                    <select id="video-codec">
+                        <option value="video/webm;codecs=vp9">VP9 (WebM) - Recommended</option>
+                        <option value="video/webm;codecs=vp8">VP8 (WebM)</option>
+                        <option value="video/webm;codecs=h264">H.264 (WebM)</option>
+                        <option value="video/webm;codecs=av1">AV1 (WebM)</option>
+                        <option value="video/mp4;codecs=h264">H.264 (MP4)</option>
+                        <option value="video/mp4;codecs=avc1">AVC1 (MP4)</option>
+                        <option value="video/webm">WebM (Auto)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="video-bitrate">Video Bitrate (Mbps):</label>
+                    <input type="number" id="video-bitrate" min="1" max="50" value="10" step="0.5">
+                    <span class="bitrate-display">10 Mbps</span>
+                </div>
+
+                <div class="setting-group">
+                    <label for="audio-codec">Audio Codec:</label>
+                    <select id="audio-codec">
+                        <option value="opus">Opus (Recommended)</option>
+                        <option value="vorbis">Vorbis</option>
+                        <option value="aac">AAC</option>
+                        <option value="mp3">MP3</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="audio-bitrate">Audio Bitrate (kbps):</label>
+                    <input type="number" id="audio-bitrate" min="32" max="320" value="128" step="16">
+                    <span class="bitrate-display">128 kbps</span>
+                </div>
+
+                <div class="setting-group">
+                    <label for="video-fps">Frame Rate (FPS):</label>
+                    <select id="video-fps">
+                        <option value="30">30 FPS</option>
+                        <option value="60">60 FPS</option>
+                        <option value="24">24 FPS</option>
+                        <option value="25">25 FPS</option>
+                        <option value="50">50 FPS</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="popup-buttons">
+                <button id="video-settings-apply" class="btn-apply">Apply</button>
+                <button id="video-settings-cancel" class="btn-cancel">Cancel</button>
+                <button id="video-settings-reset" class="btn-reset">Reset to Defaults</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://threejs.org/build/three.module.js",
+                "three/addons/": "https://threejs.org/examples/jsm/"
+            }
+        }
+    </script>
+
+</body>
+
+<script type="module">
+    import * as THREE from 'https://threejs.org/build/three.module.js';
+
+    import Stats from 'three/addons/libs/stats.module.js';
+    import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    // import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+    import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+
+    window.threeJsModules = { THREE, Stats, GUI, OrbitControls, GLTFLoader, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, BufferGeometryUtils };
+</script>
+
+
+<!-- Include the FastLED script -->
+<script src="fastled.js"></script>
+<script type="module">
+    import { loadFastLED } from './index.js';
+    
+    document.getElementById('myCanvas').addEventListener('click', function() {
+        const output = document.getElementById('output');
+        const popup = document.getElementById('output-popup');
+        const overlay = document.getElementById('popup-overlay');
+        
+        // Move the output element to the popup
+        popup.appendChild(output);
+        
+        // Show the popup and overlay with animation
+        overlay.style.opacity = '0';
+        overlay.style.display = 'block';
+        popup.style.display = 'block';
+        
+        // Trigger reflow
+        void overlay.offsetWidth;
+        
+        // Fade in
+        overlay.style.opacity = '1';
+        
+        // Close popup when clicking overlay
+        overlay.onclick = function() {
+            // Fade out
+            overlay.style.opacity = '0';
+            
+            setTimeout(() => {
+                popup.style.display = 'none';
+                overlay.style.display = 'none';
+                
+                // Remove and re-add the animation class to trigger it again
+                const label = document.getElementById('canvas-label');
+                label.classList.remove('show-animation');
+                // Force reflow to ensure animation restarts
+                void label.offsetWidth;
+                label.classList.add('show-animation');
+            }, 200); // Match the transition duration
+        };
+    });
+
+    document.getElementById('output').addEventListener('click', function() {
+        if (document.querySelector('.toast-notification')) {
+            return; // We are already showing a toast notification
+        }
+
+        const text = this.textContent;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.textContent = 'Copied to clipboard';
+            document.body.appendChild(toast);
+            
+            // Force reflow
+            void toast.offsetHeight;
+            
+            toast.classList.add('toast-notification-show');
+            
+            setTimeout(() => {
+                toast.classList.add('toast-notification-hide');
+                toast.addEventListener('transitionend', () => {
+                    if (toast.parentElement) {
+                        document.body.removeChild(toast);
+                    }
+                }, {once: true});
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+        });
+    });
+
+    // Menu bar functionality
+    const menuItems = document.querySelectorAll('.menu-item');
+    
+    // Handle File menu items
+    const fileMenuItems = document.querySelectorAll('.menu-item:first-child .menu-dropdown-item');
+    fileMenuItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const action = this.getAttribute('data-action');
+            console.log('File action selected:', action);
+            
+            // Handle file actions
+            handleFileAction(action);
+        });
+    });
+
+    // Handle Tools menu items
+    const toolsMenuItems = document.querySelectorAll('.menu-item:nth-child(3) .menu-dropdown-item');
+    toolsMenuItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const selectedValue = this.getAttribute('data-value');
+            const selectedAction = this.getAttribute('data-action');
+
+            if (selectedValue) {
+                console.log('Tools option selected:', selectedValue);
+                handleToolsOptionChange(selectedValue);
+            } else if (selectedAction) {
+                console.log('Tools action selected:', selectedAction);
+                handleToolsActionChange(selectedAction);
+            }
+        });
+    });
+
+    // Handle file actions
+    function handleFileAction(action) {
+        if (action === 'save') {
+            console.log('Save action triggered - forwarding to /save endpoint');
+            // Forward to /save endpoint on the server
+            window.location.href = '/save';
+        }
+    }
+
+    // Handle tool actions
+    function handleToolAction(action) {
+        if (action === 'placeholder') {
+            console.log('Placeholder tool action triggered');
+            // Add tool functionality here
+        }
+    }
+
+    // Handle tools option changes
+    function handleToolsOptionChange(option) {
+        if (option === 'ui-events') {
+            // Handle UI Events (JSON Inspector) without page reload
+            if (window.jsonInspector) {
+                window.jsonInspector.toggle();
+            } else {
+                console.warn('JSON Inspector not available yet');
+            }
+            return;
+        }
+    }
+
+    // Handle tools action changes
+    function handleToolsActionChange(action) {
+        if (action === 'video-mapper') {
+            // Open FastLED Video Mapper in new tab
+            window.open('https://ledmapper.com', '_blank');
+            return;
+        }
+    }
+
+    // Handle graphics option changes
+    function handleGraphicsOptionChange(option) {
+        if (option === 'video-settings') {
+            // Show video settings popup
+            showVideoSettingsPopup();
+            return;
+        }
+        
+        // Determine URL parameter based on selection
+        let gfxParam = '';
+        if (option === 'gfx-simple') {
+            gfxParam = '0'; // Force fast renderer
+        } else if (option === 'gfx-bloom') {
+            gfxParam = '1'; // Force ThreeJS renderer with bloom
+        }
+        
+        // Update URL and reload page with new graphics setting
+        const url = new URL(window.location);
+        if (gfxParam) {
+            url.searchParams.set('gfx', gfxParam);
+        } else {
+            url.searchParams.delete('gfx');
+        }
+        
+        // Show a brief notification before reloading
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = `Switching to ${option.replace('-', ' ')}...`;
+        document.body.appendChild(toast);
+        
+        // Force reflow
+        void toast.offsetHeight;
+        toast.classList.add('toast-notification-show');
+        
+        // Reload with new graphics setting after brief delay
+        setTimeout(() => {
+            window.location.href = url.toString();
+        }, 500);
+    }
+
+    // Video Settings Popup Functions
+    const videoSettingsDefaults = {
+        videoCodec: 'video/webm;codecs=vp9',
+        videoBitrate: 10,
+        audioCodec: 'opus',
+        audioBitrate: 128,
+        fps: 30
+    };
+
+    let videoSettings = { ...videoSettingsDefaults };
+
+    // Load saved settings from localStorage
+    function loadVideoSettings() {
+        const saved = localStorage.getItem('videoRecordingSettings');
+        if (saved) {
+            try {
+                videoSettings = { ...videoSettingsDefaults, ...JSON.parse(saved) };
+            } catch (e) {
+                console.error('Failed to load video settings:', e);
+            }
+        }
+        return videoSettings;
+    }
+
+    // Save settings to localStorage
+    function saveVideoSettings() {
+        localStorage.setItem('videoRecordingSettings', JSON.stringify(videoSettings));
+    }
+
+    // Show video settings popup
+    function showVideoSettingsPopup() {
+        const overlay = document.getElementById('video-settings-overlay');
+        const popup = document.getElementById('video-settings-popup');
+
+        // Load current settings
+        loadVideoSettings();
+
+        // Set form values
+        document.getElementById('video-codec').value = videoSettings.videoCodec;
+        document.getElementById('video-bitrate').value = videoSettings.videoBitrate;
+        document.getElementById('audio-codec').value = videoSettings.audioCodec;
+        document.getElementById('audio-bitrate').value = videoSettings.audioBitrate;
+        document.getElementById('video-fps').value = videoSettings.fps;
+
+        // Update bitrate displays
+        updateBitrateDisplays();
+
+        // Show popup
+        overlay.style.display = 'block';
+        popup.style.display = 'block';
+        overlay.style.opacity = '0';
+        void overlay.offsetWidth;
+        overlay.style.opacity = '1';
+    }
+
+    // Hide video settings popup
+    function hideVideoSettingsPopup() {
+        const overlay = document.getElementById('video-settings-overlay');
+        const popup = document.getElementById('video-settings-popup');
+
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            popup.style.display = 'none';
+        }, 200);
+    }
+
+    // Update bitrate display labels
+    function updateBitrateDisplays() {
+        const videoBitrate = document.getElementById('video-bitrate');
+        const audioBitrate = document.getElementById('audio-bitrate');
+
+        videoBitrate.nextElementSibling.textContent = `${videoBitrate.value} Mbps`;
+        audioBitrate.nextElementSibling.textContent = `${audioBitrate.value} kbps`;
+    }
+
+    // Setup video settings event handlers
+    document.getElementById('video-bitrate').addEventListener('input', updateBitrateDisplays);
+    document.getElementById('audio-bitrate').addEventListener('input', updateBitrateDisplays);
+
+    document.getElementById('video-settings-apply').addEventListener('click', () => {
+        // Collect settings
+        videoSettings.videoCodec = document.getElementById('video-codec').value;
+        videoSettings.videoBitrate = parseFloat(document.getElementById('video-bitrate').value);
+        videoSettings.audioCodec = document.getElementById('audio-codec').value;
+        videoSettings.audioBitrate = parseInt(document.getElementById('audio-bitrate').value);
+        videoSettings.fps = parseInt(document.getElementById('video-fps').value);
+
+        // Save settings
+        saveVideoSettings();
+
+        // Apply to video recorder if it exists
+        if (window.videoRecorder) {
+            window.videoRecorder.updateSettings(videoSettings);
+        }
+
+        // Show confirmation toast
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = 'Video settings saved';
+        document.body.appendChild(toast);
+        void toast.offsetHeight;
+        toast.classList.add('toast-notification-show');
+        setTimeout(() => {
+            toast.classList.add('toast-notification-hide');
+            toast.addEventListener('transitionend', () => {
+                if (toast.parentElement) {
+                    document.body.removeChild(toast);
+                }
+            }, {once: true});
+        }, 2000);
+
+        hideVideoSettingsPopup();
+    });
+
+    document.getElementById('video-settings-cancel').addEventListener('click', hideVideoSettingsPopup);
+
+    document.getElementById('video-settings-reset').addEventListener('click', () => {
+        // Reset to defaults
+        document.getElementById('video-codec').value = videoSettingsDefaults.videoCodec;
+        document.getElementById('video-bitrate').value = videoSettingsDefaults.videoBitrate;
+        document.getElementById('audio-codec').value = videoSettingsDefaults.audioCodec;
+        document.getElementById('audio-bitrate').value = videoSettingsDefaults.audioBitrate;
+        document.getElementById('video-fps').value = videoSettingsDefaults.fps;
+        updateBitrateDisplays();
+    });
+
+    document.getElementById('video-settings-overlay').addEventListener('click', hideVideoSettingsPopup);
+
+    // Expose functions globally
+    window.showVideoSettingsPopup = showVideoSettingsPopup;
+    window.getVideoSettings = loadVideoSettings;
+
+    async function loadThreeJs() {
+        console.log('Using ThreeJS modules:', window.threeJsModules);
+        return {
+            containerId: "container",
+            modules: window.threeJsModules,
+        };
+    }
+
+    // load fastled when the window is loaded.
+    async function runFastLED() {
+        // Load the FastLED module.
+        const threeJs = await loadThreeJs();
+        const options = {
+            canvasId: "myCanvas",
+            uiControlsId: "ui-controls",
+            printId: "output",
+            frameRate: 60,
+            fastled: fastled,
+            threeJs: threeJs,
+        }
+        await loadFastLED(options);
+        
+        // Trigger the animation (it will start after the delay)
+        const label = document.getElementById('canvas-label');
+        label.classList.add('show-animation');
+    }
+
+    // Wait for fonts to load before showing content
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () {
+            document.body.style.opacity = 1;
+        });
+    } else {
+        // Fallback for browsers that do not support document.fonts
+        window.onload = function () {
+            document.body.style.opacity = 1;
+        };
+    }
+
+    let loaded = false;
+    let loadFastLedOnce = () => {
+        if (loaded) return;
+        runFastLED();
+        loaded = true;
+    }
+
+    window.addEventListener('load', loadFastLedOnce);
+    setTimeout(loadFastLedOnce, 100);
+</script>
+
+<!-- JSON Inspector Popup -->
+<div class="inspector-popup-overlay" id="inspector-popup-overlay"></div>
+<div class="inspector-popup" id="json-inspector-popup">
+    <div class="inspector-header">
+        <span class="inspector-title">JSON UI Inspector</span>
+        <button class="inspector-close" id="inspector-close-btn">&times;</button>
+    </div>
+    <div class="inspector-content">
+        <div class="inspector-controls">
+            <button id="inspector-clear">Clear</button>
+            <button id="inspector-pause">Pause</button>
+            <span class="event-counter">Events: <span id="event-count">0</span></span>
+        </div>
+        <div class="inspector-log" id="inspector-log"></div>
+    </div>
+</div>
+
+</html>

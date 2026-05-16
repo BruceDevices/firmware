@@ -1,0 +1,138 @@
+# Source: https://github.com/arduino/tooling-project-assets/blob/main/workflow-templates/sync-labels.md
+name: Sync Labels
+
+# See: https://docs.github.com/en/actions/reference/events-that-trigger-workflows
+on:
+  push:
+    paths:
+      - ".github/workflows/sync-labels.ya?ml"
+      - ".github/label-configuration-files/*.ya?ml"
+  pull_request:
+    paths:
+      - ".github/workflows/sync-labels.ya?ml"
+      - ".github/label-configuration-files/*.ya?ml"
+  schedule:
+    # Run daily at 8 AM UTC to sync with changes to shared label configurations.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+
+env:
+  CONFIGURATIONS_FOLDER: .github/label-configuration-files
+  CONFIGURATIONS_ARTIFACT: label-configuration-files
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download JSON schema for labels configuration file
+        id: download-schema
+        uses: carlosperate/download-file-action@v1
+        with:
+          file-url: https://raw.githubusercontent.com/arduino/tooling-project-assets/main/workflow-templates/assets/sync-labels/arduino-tooling-gh-label-configuration-schema.json
+          location: ${{ runner.temp }}/label-configuration-schema
+
+      - name: Install JSON schema validator
+        run: |
+          sudo npm install \
+            --global \
+            ajv-cli \
+            ajv-formats
+
+      - name: Validate local labels configuration
+        run: |
+          # See: https://github.com/ajv-validator/ajv-cli#readme
+          ajv validate \
+            --all-errors \
+            -c ajv-formats \
+            -s "${{ steps.download-schema.outputs.file-path }}" \
+            -d "${{ env.CONFIGURATIONS_FOLDER }}/*.{yml,yaml}"
+
+  download:
+    needs: check
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        filename:
+          # Filenames of the shared configurations to apply to the repository in addition to the local configuration.
+          # https://github.com/arduino/tooling-project-assets/blob/main/workflow-templates/assets/sync-labels
+          - universal.yml
+
+    steps:
+      - name: Download
+        uses: carlosperate/download-file-action@v1
+        with:
+          file-url: https://raw.githubusercontent.com/arduino/tooling-project-assets/main/workflow-templates/assets/sync-labels/${{ matrix.filename }}
+
+      - name: Pass configuration files to next job via workflow artifact
+        uses: actions/upload-artifact@v3
+        with:
+          path: |
+            *.yaml
+            *.yml
+          if-no-files-found: error
+          name: ${{ env.CONFIGURATIONS_ARTIFACT }}
+
+  sync:
+    needs: download
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set environment variables
+        run: |
+          # See: https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-an-environment-variable
+          echo "MERGED_CONFIGURATION_PATH=${{ runner.temp }}/labels.yml" >> "$GITHUB_ENV"
+
+      - name: Determine whether to dry run
+        id: dry-run
+        if: >
+          github.event_name == 'pull_request' ||
+          (
+            (
+              github.event_name == 'push' ||
+              github.event_name == 'workflow_dispatch'
+            ) &&
+            github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+          )
+        run: |
+          # Use of this flag in the github-label-sync command will cause it to only check the validity of the
+          # configuration.
+          echo "::set-output name=flag::--dry-run"
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download configuration files artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.CONFIGURATIONS_ARTIFACT }}
+          path: ${{ env.CONFIGURATIONS_FOLDER }}
+
+      - name: Remove unneeded artifact
+        uses: geekyeggo/delete-artifact@v1
+        with:
+          name: ${{ env.CONFIGURATIONS_ARTIFACT }}
+
+      - name: Merge label configuration files
+        run: |
+          # Merge all configuration files
+          shopt -s extglob
+          cat "${{ env.CONFIGURATIONS_FOLDER }}"/*.@(yml|yaml) > "${{ env.MERGED_CONFIGURATION_PATH }}"
+
+      - name: Install github-label-sync
+        run: sudo npm install --global github-label-sync
+
+      - name: Sync labels
+        env:
+          GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # See: https://github.com/Financial-Times/github-label-sync
+          github-label-sync \
+            --labels "${{ env.MERGED_CONFIGURATION_PATH }}" \
+            ${{ steps.dry-run.outputs.flag }} \
+            ${{ github.repository }}

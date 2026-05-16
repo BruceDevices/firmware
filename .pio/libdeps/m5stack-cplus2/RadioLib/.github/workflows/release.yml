@@ -1,0 +1,37 @@
+name: "Release"
+
+on: workflow_dispatch
+
+jobs:
+  release:
+    name: Release RadioLib update
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Checkout latest tag
+        run: git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install PlatformIO and ESP-IDF
+        run: | 
+          pip install --upgrade platformio
+          pip install --upgrade idf-component-manager
+      
+      - name: PlatformIO publish
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: pio pkg publish --no-interactive
+      
+      - name: ESP-IDF publish
+        env:
+          IDF_COMPONENT_API_TOKEN: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
+        run: compote component upload --name RadioLib --namespace jgromes

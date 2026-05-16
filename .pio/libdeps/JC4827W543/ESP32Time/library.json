@@ -1,0 +1,21 @@
+{
+  "name": "ESP32Time",
+  "version": "2.0.6",
+  "keywords": "Arduino, ESP32, Time, Internal RTC",
+  "description": "An Arduino library for setting and retrieving internal RTC time on ESP32 boards",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/fbiego/ESP32Time"
+  },
+  "authors":
+  [
+    {
+        "name": "fbiego",
+        "email": "fbiego.fb@gmail.com",
+        "maintainer": true
+    }
+  ],
+  "frameworks": "arduino",
+  "platforms": "espressif8266, espressif32"
+}

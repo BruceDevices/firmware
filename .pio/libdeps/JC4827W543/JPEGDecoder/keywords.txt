@@ -1,0 +1,35 @@
+#######################################
+# Syntax Coloring Map
+#######################################
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+JPEGDecoder	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+JpegDec	KEYWORD2
+pImage	KEYWORD2
+width	KEYWORD2
+height	KEYWORD2
+comps	KEYWORD2
+MCUSPerRow	KEYWORD2
+MCUSPerCol	KEYWORD2
+scanType	KEYWORD2
+MCUWidth	KEYWORD2
+MCUHeight	KEYWORD2
+MCUx	KEYWORD2
+MCUy	KEYWORD2
+JPEGDecoder	KEYWORD2
+decode	KEYWORD2
+decodeFile	KEYWORD2
+decodeSdFile	KEYWORD2
+decodeFsFile	KEYWORD2
+decodeArray	KEYWORD2
+available	KEYWORD2
+abort	KEYWORD2
+read	KEYWORD2
+readSwappedBytes	KEYWORD2

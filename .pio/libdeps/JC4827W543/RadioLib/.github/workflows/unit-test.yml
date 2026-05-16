@@ -1,0 +1,48 @@
+name: "Unit test"
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  unit-test:
+    name: Build and run unit test
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libboost-all-dev libfmt-dev lcov
+
+    - name: Run unit test
+      run: |
+        cd extras/test/unit
+        ./test.sh
+
+    - name: Measure test coverage
+      run: |
+        cd extras/test/unit
+        ./coverage.sh
+    
+    - name: Upload coverage report as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage_report
+        path: extras/test/unit/lcov.report
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/master'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_branch: gh-pages
+        publish_dir: extras/test/unit/lcov.report
+        destination_dir: coverage
+        keep_files: true

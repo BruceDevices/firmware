@@ -1,0 +1,6 @@
+## IDF Component Manager Manifest File
+dependencies:
+  esp32async/espasyncwebserver:
+    version: "*"
+    override_path: "../../../../"
+    pre_release: true

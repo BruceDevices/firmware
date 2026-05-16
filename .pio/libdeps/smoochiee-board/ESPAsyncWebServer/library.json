@@ -1,0 +1,64 @@
+{
+  "name": "ESPAsyncWebServer",
+  "version": "3.11.0",
+  "description": "Asynchronous HTTP and WebSocket Server Library for ESP32, ESP8266 and RP2040. Supports: WebSocket, SSE, Authentication, Arduino Json 7, File Upload, Static File serving, URL Rewrite, URL Redirect, etc.",
+  "keywords": "http,async,websocket,webserver",
+  "homepage": "https://github.com/ESP32Async/ESPAsyncWebServer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ESP32Async/ESPAsyncWebServer.git"
+  },
+  "authors":
+  {
+    "name": "ESP32Async",
+    "maintainer": true
+  },
+  "license": "LGPL-3.0",
+  "frameworks": "arduino",
+  "platforms": [
+    "espressif32",
+    "espressif8266",
+    "raspberrypi",
+    "libretiny"
+  ],
+  "dependencies": [
+    {
+      "owner": "ESP32Async",
+      "name": "AsyncTCP",
+      "version": "^3.4.10",
+      "platforms": [
+        "espressif32",
+        "libretiny"
+      ]
+    },
+    {
+      "owner": "ESP32Async",
+      "name": "ESPAsyncTCP",
+      "version": "^2.0.0",
+      "platforms": "espressif8266"
+    },
+    {
+      "name": "Hash",
+      "platforms": [
+        "espressif8266",
+        "raspberrypi"
+      ]
+    },
+    {
+      "owner": "ayushsharma82",
+      "name": "RPAsyncTCP",
+      "version": "^1.3.2",
+      "platforms": "raspberrypi"
+    }
+  ],
+  "export": {
+    "include": [
+      "examples",
+      "src",
+      "library.json",
+      "library.properties",
+      "LICENSE",
+      "README.md"
+    ]
+  }
+}

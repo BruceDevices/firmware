@@ -1,0 +1,6 @@
+[submodule "lib/opus"]
+	path = lib/opus
+	url = https://gitlab.xiph.org/xiph/opus.git
+[submodule "lib/TinySoundFont"]
+	path = lib/TinySoundFont
+	url = https://github.com/earlephilhower/TinySoundFont.git
