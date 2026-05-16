@@ -1,0 +1,37 @@
+https://github.com/bmorcelli/SmartRC-CC1101-Driver-Lib/
+https://github.com/whywilson/ESP-PN532Killer
+fastled/FastLED @^3.10.3
+https://github.com/rennancockles/SimpleCLI
+https://github.com/whywilson/ESP-PN532BLE
+Adafruit BusIO=https://github.com/emericklaw/Adafruit-BusIO_Bruce@1.17.2-bruce.1
+earlephilhower/ESP8266SAM@^1.1.0
+https://github.com/sayacom/WireGuard-ESP32-Arduino#feature/esp-netif
+bitbank2/PNGdec @ ^1.1.2
+bblanchon/ArduinoJson
+https://github.com/whywilson/ESP-PN532-UART
+FFat
+nrf24/RF24 @ 1.4.11
+ESP32Async/ESPAsyncWebServer
+Bodmer/JPEGDecoder
+bitbank2/AnimatedGIF
+ESP8266Audio@^2.4.1
+https://github.com/bmorcelli/ESP-ChameleonUltra
+https://github.com/rennancockles/Arduino_MFRC522v2.git
+NTPClient@3.2.1
+ESP32Time@2.0.6
+https://github.com/bmorcelli/OneWire#patch-1
+tinyu-zhao/FFT@^0.0.1
+paulstoffregen/Time@1.6.1
+https://github.com/bmorcelli/ESP-Amiibolink
+https://github.com/bmorcelli/rc-switch
+Adafruit Si4713 Library@1.2.3
+h2zero/NimBLE-Arduino@^2.3.9
+lewisxhe/XPowersLib @0.3.0
+Adafruit PN532=https://github.com/emericklaw/Adafruit-PN532_Bruce@1.3.3-bruce.1
+https://github.com/huckor/BER-TLV.git
+mikalhart/TinyGPSPlus
+https://github.com/bmorcelli/IRremoteESP8266
+jgromes/RadioLib @ ^7.4.0
+mquickjs=https://github.com/BruceDevices/mquickjs#0.0.6
+https://github.com/bmorcelli/ESP32-PsRamFS#patch-1
+LibSSH-ESP32

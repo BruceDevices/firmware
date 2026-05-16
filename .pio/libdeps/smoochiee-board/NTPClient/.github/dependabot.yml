@@ -1,0 +1,10 @@
+# See: https://docs.github.com/en/github/administering-a-repository/configuration-options-for-dependency-updates#about-the-dependabotyml-file
+version: 2
+
+updates:
+  # Configure check for outdated GitHub Actions actions in workflows.
+  # See: https://docs.github.com/en/github/administering-a-repository/keeping-your-actions-up-to-date-with-dependabot
+  - package-ecosystem: github-actions
+    directory: / # Check the repository's workflows under /.github/workflows/
+    schedule:
+      interval: daily

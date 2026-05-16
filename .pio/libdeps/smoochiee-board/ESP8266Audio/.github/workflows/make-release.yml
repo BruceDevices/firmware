@@ -1,0 +1,25 @@
+name: Build all and make release on tag
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+    - '*'
+
+jobs:
+  make-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Drafting release
+      uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
+      with:
+        draft: true
+        generateReleaseNotes: true

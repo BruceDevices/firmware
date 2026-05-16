@@ -1,0 +1,184 @@
+[project]
+name = "ci"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "platformio==6.1.18",
+    "python-dateutil",
+    "ruff",
+    "pyright>=1.1.373",
+    "types-python-dateutil",
+    "clang-format",
+    "pip",
+    "pytest",
+    "pytest-xdist",
+    "fpvgcc",
+    "uv",
+    "ziglang",
+    "ninja",
+    "cmake",
+    "download",
+    "playwright",
+    "download",
+    "httpx",
+    "pytest-xdist",
+    "sccache>=0.10.0",
+    "psutil",
+    "toml>=0.10.2",
+    "typeguard>=4.4.4",
+    "mcp>=1.12.2",
+    "compiledb>=0.10.7",
+    "pathspec>=0.12.1",
+    "rich>=14.1.0",
+    "emoji>=2.14.1",
+    "pydantic[email]>=2.0.0",
+    "dirsync>=2.2.6",
+    "llvm-installer>=1.4.10",
+    "sys-detection>=1.3.4",
+    "fastled>=1.4.38",
+    "fasteners>=0.20",
+    "esptool>=5.0.2",
+    "docker",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+[tool.hatch.build.targets.wheel]
+
+[tool.hatch.build]
+packages = ["ci"]
+
+[tool.ruff]
+exclude = ["ci/tmp", "ci/wasm", "scripts", "native"]
+
+[tool.ruff.lint]
+# Enable import sorting (replaces isort)
+select = ["I"]
+
+[tool.ruff.lint.isort]
+# Configure import sorting to match isort's black profile
+force-single-line = false
+force-sort-within-sections = false
+lines-after-imports = 2
+
+[tool.ruff.format]
+# Enable formatting (replaces black)
+# Use black-compatible settings
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pyright]
+include = ["ci", "ci/compiler"]
+exclude = [
+    "ci/tmp/",
+    "ci/wasm/",
+    "ci/native/",
+    "native/",
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "**/node_modules",
+    "**/.git",
+    "**/.venv",
+    "**/.build",
+    "**/.pio",
+    "**/.pio_cache",
+    "**/build",
+    "**/dist",
+    "**/*.egg-info",
+    "tmp.py"
+]
+
+# Type checking configuration
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+pythonPlatform = "All"
+useLibraryCodeForTypes = true
+analyzeUnannotatedFunctions = true
+strictParameterNoneValue = true
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+
+# Report settings
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = false
+reportUnusedClass = false
+reportUnusedFunction = false
+reportUnusedVariable = false
+reportDuplicateImport = true
+reportWildcardImportFromLibrary = true
+reportOptionalSubscript = false
+reportOptionalMemberAccess = false
+reportOptionalCall = false
+reportOptionalIterable = false
+reportOptionalContextManager = false
+reportOptionalOperand = false
+reportGeneralTypeIssues = true
+reportPropertyTypeMismatch = true
+reportFunctionMemberAccess = true
+reportPrivateUsage = false
+reportConstantRedefinition = false
+reportIncompatibleMethodOverride = true
+reportIncompatibleVariableOverride = true
+reportInconsistentConstructor = true
+reportOverlappingOverload = true
+reportMissingSuperCall = false
+reportUninitializedInstanceVariable = false
+reportInvalidStringEscapeSequence = true
+reportUnknownParameterType = "error"
+reportUnknownArgumentType = "error" 
+reportUnknownLambdaType = "error"
+reportUnknownVariableType = "error"
+reportUnknownMemberType = "error"
+reportMissingParameterType = "error"
+reportMissingTypeArgument = "error"
+reportMissingReturnType = "error"
+reportUntypedFunctionDecorator = "error"
+reportUntypedClassDecorator = "error"
+reportUntypedBaseClass = "error"
+reportUntypedNamedTuple = "error"
+reportInvalidTypeVarUse = true
+reportCallInDefaultInitializer = false
+reportUnnecessaryIsInstance = false
+reportUnnecessaryCast = false
+reportUnnecessaryComparison = false
+reportUnnecessaryContains = false
+reportAssertAlwaysTrue = false
+reportSelfClsParameterName = true
+reportImplicitStringConcatenation = false
+reportUndefinedVariable = true
+reportUnboundVariable = true
+reportInvalidStubStatement = true
+reportIncompleteStub = true
+reportUnsupportedDunderAll = true
+reportUnusedCallResult = false
+reportUnusedCoroutine = true
+reportUnusedExpression = false
+reportUnnecessaryTypeIgnoreComment = false
+reportMatchNotExhaustive = true
+
+# Display settings
+verboseOutput = false
+autoImportCompletions = false
+indexing = false
+functionSignatureDisplay = "compact"
+
+# Task list tokens
+taskListTokens = ["TODO", "FIXME", "BUG", "HACK", "NOTE"]
+
+[tool.pytest.ini_options]
+markers = [
+    "full: marks tests as requiring the full test suite (deselected during quick Python-only runs)",
+]
+
+[[tool.pyright.executionEnvironments]]
+root = "."
+pythonVersion = "3.11"
+pythonPlatform = "All"

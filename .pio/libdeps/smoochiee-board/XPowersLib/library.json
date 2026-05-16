@@ -1,0 +1,145 @@
+{
+  "name": "XPowersLib",
+  "version": "0.3.0",
+  "description": "Arduino, CircuitPython, MicroPython, esp-idf and other frameworks power management series library",
+  "keywords": "AXP192,AXP202,AXP2101,SY6970,BQ25896,HUSB238",
+  "authors": [
+    {
+      "name": "LewisHe",
+      "url": "https://github.com/lewisxhe",
+      "maintainer": true
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lewisxhe/XPowersLib.git"
+  },
+  "homepage": "https://github.com/lewisxhe/XPowersLib",
+  "export": {
+    "include": [
+      "LICENSE",
+      "library.json",
+      "library.properties",
+      "README.md",
+      "keywords.txt",
+      "src/*",
+      "examples/*"
+    ]
+  },
+  "examples": [
+    {
+      "name": "AXP192_Example",
+      "base": "examples/AXP192_Example",
+      "files": ["AXP192_Example.ino"]
+    },
+    {
+      "name": "AXP202_Example",
+      "base": "examples/AXP202_Example",
+      "files": ["AXP202_Example.ino"]
+    },
+    {
+      "name": "AXP2101_Charge_Example",
+      "base": "examples/AXP2101_Charge_Example",
+      "files": ["AXP2101_Charge_Example.ino"]
+    },
+    {
+      "name": "AXP2101_Example",
+      "base": "examples/AXP2101_Example",
+      "files": ["AXP2101_Example.ino"]
+    },
+    {
+      "name": "AXP2101_InterruptExample",
+      "base": "examples/AXP2101_InterruptExample",
+      "files": ["AXP2101_InterruptExample.ino"]
+    },
+    {
+      "name": "AXP2101_Voltage_Example",
+      "base": "examples/AXP2101_Voltage_Example",
+      "files": ["AXP2101_Voltage_Example.ino"]
+    },
+    {
+      "name": "AXP2101_ADC_Example",
+      "base": "examples/AXP2101_ADC_Example",
+      "files": ["AXP2101_ADC_Example.ino"]
+    },
+    {
+      "name": "AXP2101_Sleep_Example",
+      "base": "examples/AXP2101_Sleep_Example",
+      "files": ["AXP2101_Sleep_Example.ino"]
+    },
+    {
+      "name": "AXP2101_Charge_Current_Setting",
+      "base": "examples/AXP2101_Charge_Current_Setting",
+      "files": ["AXP2101_Charge_Current_Setting.ino"]
+    },
+    {
+      "name": "AXP2101_LowBatteryWarningExample",
+      "base": "examples/AXP2101_LowBatteryWarningExample",
+      "files": ["AXP2101_LowBatteryWarningExample.ino"]
+    },
+    {
+      "name": "ESP_IDF_Example",
+      "base": "examples/ESP_IDF_Example/main",
+      "files": [
+        "main.cpp",
+        "port_axp192.cpp",
+        "port_axp2101.cpp",
+        "port_i2c.cpp"
+      ]
+    },
+    {
+      "name": "XPowersLibInterface_Example",
+      "base": "examples/XPowersLibInterface_Example",
+      "files": ["XPowersLibInterface_Example.ino"]
+    },
+    {
+      "name": "SY6970_Example",
+      "base": "examples/SY6970_Example",
+      "files": ["SY6970_Example.ino"]
+    },
+    {
+      "name": "SY6970_Watchdog_Example",
+      "base": "examples/SY6970_Watchdog_Example",
+      "files": ["SY6970_Watchdog_Example.ino"]
+    },
+    {
+      "name": "SY6970_Shutdown_Example",
+      "base": "examples/SY6970_Shutdown_Example",
+      "files": ["SY6970_Shutdown_Example.ino"]
+    },
+    {
+      "name": "BQ25896_Example",
+      "base": "examples/BQ25896_Example",
+      "files": ["BQ25896_Example.ino"]
+    },
+    {
+      "name": "BQ25896_Shutdown_Example",
+      "base": "examples/BQ25896_Shutdown_Example",
+      "files": ["BQ25896_Shutdown_Example.ino"]
+    },
+    {
+      "name": "FastCharging_BleUartDebug",
+      "base": "examples/FastCharging_BleUartDebug",
+      "files": ["FastCharging_BleUartDebug.ino"]
+    },
+    {
+      "name": "PowerDeliveryHUSB238_BleUart",
+      "base": "examples/PowerDeliveryHUSB238_BleUart",
+      "files": ["PowerDeliveryHUSB238_BleUart.ino"]
+    },
+    {
+      "name": "PowerDeliveryHUSB238_Example",
+      "base": "examples/PowerDeliveryHUSB238_Example",
+      "files": ["PowerDeliveryHUSB238_Example.ino"]
+    },
+    {
+      "name": "XPowersLibInterface_Linux",
+      "base": "examples/XPowersLibInterface_Linux",
+      "files": ["main.cpp"]
+    }
+  ],
+  "frameworks": ["arduino", "espidf"],
+  "platforms": "ststm32,espressif32,nordicnrf52",
+  "headers": "XPowersLib.h",
+  "license": "MIT"
+} 

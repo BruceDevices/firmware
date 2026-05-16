@@ -1,0 +1,36 @@
+
+Arduino JPEGDecoder library
+===========================
+
+The original picojpeg.c and picojepeg.h code used in this Arduino library is hosted here:
+https://code.google.com/archive/p/picojpeg/
+
+The JPEGDecoder library has been developed from the Arduino library by Makoto Kurauchi here:
+https://github.com/MakotoKurauchi/JPEGDecoder
+
+The library has been developed and debugged by Bodmer and is hosted here:
+https://github.com/Bodmer/JPEGDecoder
+
+The picojpeg code and the developed library is dual licensed as both public domain and
+(where public domain is not acceptable) the MIT license:
+
+
+picojeg code: Copyright 2013 Rich Geldreich
+Arduino JPEGDecoder library: Copyright 2019  Makoto Kurauchi, Bodmer
+
+MIT license:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

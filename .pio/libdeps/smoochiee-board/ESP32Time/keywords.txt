@@ -1,0 +1,22 @@
+ESP32Time		KEYWORD1
+
+setTime			KEYWORD2
+getTime			KEYWORD2
+setTimeStruct	KEYWORD2
+getTimeStruct	KEYWORD2
+getDateTime		KEYWORD2
+getTimeDate		KEYWORD2
+getDate			KEYWORD2
+getAmPm			KEYWORD2
+getMillis		KEYWORD2
+getMicros   KEYWORD2
+getEpoch    KEYWORD2
+getLocalEpoch    KEYWORD2
+getSecond		KEYWORD2
+getMinute		KEYWORD2
+getHour			KEYWORD2
+getDay			KEYWORD2
+getDayofWeek	KEYWORD2
+getDayofYear	KEYWORD2
+getMonth		KEYWORD2
+getYear			KEYWORD2

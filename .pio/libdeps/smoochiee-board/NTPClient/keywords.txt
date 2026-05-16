@@ -1,0 +1,24 @@
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+NTPClient	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+end	KEYWORD2
+update	KEYWORD2
+forceUpdate	KEYWORD2
+isTimeSet	KEYWORD2
+getDay	KEYWORD2
+getHours	KEYWORD2
+getMinutes	KEYWORD2
+getSeconds	KEYWORD2
+getFormattedTime	KEYWORD2
+getEpochTime	KEYWORD2
+setTimeOffset	KEYWORD2
+setUpdateInterval	KEYWORD2
+setPoolServerName	KEYWORD2
