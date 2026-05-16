@@ -56,7 +56,7 @@ jobs:
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
-          - { env: "jc4827w543",                    family: "ESP32-S3",}
+          - { env: "JC4827W543",                    family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
