@@ -15,6 +15,7 @@
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/gps_tracker.h"
 #include "modules/gps/wardriving.h"
+#include "modules/others/companion_app.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/rf/rf_send.h"
 #include "modules/rfid/PN532KillerTools.h"
@@ -39,6 +40,10 @@ StartupApp::StartupApp() {
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(); };
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
+    _startupApps["Companion App"] = []() { companion_app_setup(); };
+#ifndef LITE_VERSION
+    _startupApps["CompanionService"] = []() { companion_service_setup(); };
+#endif
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs;

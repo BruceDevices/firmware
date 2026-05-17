@@ -1,3 +1,4 @@
+#include "modules/others/companion_app.h"
 #include "core/main_menu.h"
 #include <globals.h>
 
@@ -528,6 +529,7 @@ void loop() {
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);
+    checkCompanionToast();
 
     mainMenu.begin();
     delay(1);

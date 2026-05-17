@@ -1650,6 +1650,16 @@ static void run_spam(SpamProtocol type, const String &customName = "") {
     ble_spam_start(type, customName);
 }
 
+// ===== Public API (called from CLI / BLE terminal) =====
+
+void bleSpamStart(int protocol) {
+    ble_spam_start(static_cast<SpamProtocol>(protocol), "");
+}
+
+void bleSpamStop() {
+    ble_spam_stop();
+}
+
 // ============================================================================
 // FastPair Brand / Device selection menus
 // ============================================================================

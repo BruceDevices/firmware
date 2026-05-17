@@ -10,6 +10,7 @@
 #include "modules/others/qrcode_menu.h"
 #include "modules/others/tururururu.h"
 #include "modules/others/u2f.h"
+#include "modules/others/companion_app.h"
 // Removed: #include "modules/others/timer.h"
 
 void OthersMenu::optionsMenu() {
@@ -31,6 +32,8 @@ void OthersMenu::optionsMenu() {
 #ifndef LITE_VERSION
         {"iButton",      setup_ibutton                },
 #endif
+
+        {String("Companion App") + (companionActive ? " [Active]" : ""), companion_app_setup},
 
         // Timer removed - moved to another "Clock"
     };
