@@ -14,6 +14,10 @@ JSValue native_badusbHold(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 JSValue native_badusbRelease(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_badusbReleaseAll(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_badusbPressRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbMouseMove(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbMouseClick(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbMousePress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbMouseRelease(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 }
 
 #endif

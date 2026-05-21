@@ -473,13 +473,18 @@ void setup() {
 
     // #ifndef USE_TFT_eSPI_TOUCH
     // This task keeps running all the time, will never stop
-    xTaskCreate(
+    xTaskCreatePinnedToCore(
         taskInputHandler,              // Task function
         "InputHandler",                // Task Name
         INPUT_HANDLER_TASK_STACK_SIZE, // Stack size
         NULL,                          // Task parameters
         2,                             // Task priority (0 to 3), loopTask has priority 2.
-        &xHandle                       // Task handle (not used)
+        &xHandle,                      // Task handle
+#if SOC_CPU_CORES_NUM > 1
+        1 // Pin to Core 1 (Interface Core)
+#else
+        0
+#endif
     );
     // #endif
 #if defined(HAS_SCREEN)
@@ -490,13 +495,18 @@ void setup() {
     }
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
-        xTaskCreate(
+        xTaskCreatePinnedToCore(
             wifiConnectTask,   // Task function
             "wifiConnectTask", // Task Name
             4096,              // Stack size
             NULL,              // Task parameters
             2,                 // Task priority (0 to 3), loopTask has priority 2.
-            NULL               // Task handle (not used)
+            NULL,              // Task handle
+#if SOC_CPU_CORES_NUM > 1
+            0 // Pin to Core 0 (Processing Core)
+#else
+            0
+#endif
         );
     }
 #endif

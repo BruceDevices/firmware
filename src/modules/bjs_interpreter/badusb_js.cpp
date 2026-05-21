@@ -103,6 +103,56 @@ JSValue native_badusbRelease(JSContext *ctx, JSValue *this_val, int argc, JSValu
     return JS_UNDEFINED;
 }
 
+JSValue native_badusbMouseMove(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(USB_as_HID)
+    int x = 0, y = 0, w = 0;
+    if (argc > 0) JS_ToInt32(ctx, &x, argv[0]);
+    if (argc > 1) JS_ToInt32(ctx, &y, argv[1]);
+    if (argc > 2) JS_ToInt32(ctx, &w, argv[2]);
+    mouse.move(x, y, w);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_badusbMouseClick(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(USB_as_HID)
+    int b = MOUSE_LEFT;
+    if (argc > 0) {
+        int val;
+        JS_ToInt32(ctx, &val, argv[0]);
+        b = val;
+    }
+    mouse.click(b);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_badusbMousePress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(USB_as_HID)
+    int b = MOUSE_LEFT;
+    if (argc > 0) {
+        int val;
+        JS_ToInt32(ctx, &val, argv[0]);
+        b = val;
+    }
+    mouse.press(b);
+#endif
+    return JS_UNDEFINED;
+}
+
+JSValue native_badusbMouseRelease(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+#if defined(USB_as_HID)
+    int b = MOUSE_LEFT;
+    if (argc > 0) {
+        int val;
+        JS_ToInt32(ctx, &val, argv[0]);
+        b = val;
+    }
+    mouse.release(b);
+#endif
+    return JS_UNDEFINED;
+}
+
 JSValue native_badusbReleaseAll(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(USB_as_HID)
     if (hid_usb != nullptr) hid_usb->releaseAll();

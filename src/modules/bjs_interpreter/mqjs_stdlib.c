@@ -384,6 +384,10 @@ static const JSPropDef js_badusb[] = {
     JS_CFUNC_DEF("releaseAll", 0, native_badusbReleaseAll),
     JS_CFUNC_DEF("pressRaw", 1, native_badusbPressRaw),
     JS_CFUNC_DEF("runFile", 1, native_badusbRunFile),
+    JS_CFUNC_DEF("mouseMove", 3, native_badusbMouseMove),
+    JS_CFUNC_DEF("mouseClick", 1, native_badusbMouseClick),
+    JS_CFUNC_DEF("mousePress", 1, native_badusbMousePress),
+    JS_CFUNC_DEF("mouseRelease", 1, native_badusbMouseRelease),
     JS_PROP_END,
 };
 
@@ -425,6 +429,7 @@ const JSPropDef js_subghz[] = {
     JS_CFUNC_DEF("read", 1, native_subghzRead),
     JS_CFUNC_DEF("readRaw", 1, native_subghzReadRaw),
     JS_CFUNC_DEF("setFrequency", 1, native_subghzSetFrequency),
+    JS_CFUNC_DEF("setPreamble", 1, native_subghzSetPreamble),
     JS_CFUNC_DEF("txSetup", 1, native_subghzTxSetup),
     JS_CFUNC_DEF("txPulses", 1, native_subghzTxPulses),
     JS_CFUNC_DEF("txEnd", 0, native_subghzTxEnd),
@@ -519,6 +524,8 @@ static const JSPropDef js_wifi[] = {
     JS_CFUNC_DEF("connect", 3, native_wifiConnect),
     JS_CFUNC_DEF("scan", 0, native_wifiScan),
     JS_CFUNC_DEF("disconnect", 0, native_wifiDisconnect),
+    JS_CFUNC_DEF("sendRawFrame", 1, native_wifiSendRawFrame),
+    JS_CFUNC_DEF("setPromiscuous", 1, native_wifiSetPromiscuous),
     JS_CFUNC_DEF("httpFetch", 2, native_httpFetch),
     JS_CFUNC_DEF("getMACAddress", 0, native_wifiMACAddress),
     JS_CFUNC_DEF("getIPAddress", 0, native_ipAddress),

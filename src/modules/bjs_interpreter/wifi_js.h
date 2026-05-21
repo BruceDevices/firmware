@@ -10,6 +10,8 @@ JSValue native_wifiConnectDialog(JSContext *ctx, JSValue *this_val, int argc, JS
 JSValue native_wifiConnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_wifiScan(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_wifiDisconnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_wifiSendRawFrame(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_wifiSetPromiscuous(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_wifiMACAddress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_ipAddress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);

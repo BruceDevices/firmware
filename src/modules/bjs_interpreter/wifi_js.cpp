@@ -97,6 +97,33 @@ JSValue native_wifiDisconnect(JSContext *ctx, JSValue *this_val, int argc, JSVal
     return JS_UNDEFINED;
 }
 
+JSValue native_wifiSendRawFrame(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "wifiSendRawFrame(buffer:Uint8Array) required");
+
+    size_t len = 0;
+    uint8_t *buf = nullptr;
+
+    if (JS_IsTypedArray(ctx, argv[0])) {
+        buf = (uint8_t *)JS_GetTypedArrayBuffer(ctx, &len, argv[0]);
+    } else {
+        JSValue data = JS_GetPropertyStr(ctx, argv[0], "_data");
+        if (JS_IsTypedArray(ctx, data)) { buf = (uint8_t *)JS_GetTypedArrayBuffer(ctx, &len, data); }
+    }
+
+    if (!buf) return JS_ThrowTypeError(ctx, "Invalid buffer");
+
+    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_STA, buf, len, false);
+    return JS_NewInt32(ctx, err);
+}
+
+JSValue native_wifiSetPromiscuous(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "wifiSetPromiscuous(enable:bool) required");
+
+    bool enable = JS_ToBool(ctx, argv[0]);
+    esp_wifi_set_promiscuous(enable);
+    return JS_UNDEFINED;
+}
+
 JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     HTTPClient http;
     http.setReuse(false);

@@ -372,6 +372,15 @@ void initCC1101once(SPIClass *SSPI) {
     return;
 }
 
+void setCC1101Preamble(uint8_t count) {
+    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+        // MDMCFG1 (0x14) bits 6:4 are NUM_PREAMBLE
+        // 0=2, 1=3, 2=4, 3=6, 4=8, 5=12, 6=16, 7=24 bytes
+        uint8_t val = count & 0x07;
+        ELECHOUSE_cc1101.SpiWriteReg(0x14, (ELECHOUSE_cc1101.SpiReadReg(0x14) & 0x8F) | (val << 4));
+    }
+}
+
 void setMHZ(float frequency) {
     if (frequency > 928 || frequency < 280) {
         frequency = 433.92;

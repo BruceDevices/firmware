@@ -42,6 +42,7 @@ void deinitRfModule();
 void initCC1101once(SPIClass *SSPI);
 
 void setMHZ(float frequency);
+void setCC1101Preamble(uint8_t count);
 int find_pulse_index(const std::vector<int> &indexed_durations, int duration);
 uint64_t crc64_ecma(const std::vector<int> &data);
 

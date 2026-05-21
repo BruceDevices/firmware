@@ -5,6 +5,8 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #if defined(USB_as_HID)
+#include "USBHIDKeyboard.h"
+#include "USBHIDMouse.h"
 #include "tusb.h"
 #endif
 
@@ -19,6 +21,11 @@ HardwareSerial mySerial(1);
 
 HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
+
+#if defined(USB_as_HID)
+USBHIDKeyboard kb;
+USBHIDRelativeMouse mouse;
+#endif
 
 enum DuckyCommandType {
     DuckyCommandType_Cmd,
@@ -410,7 +417,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
         } else {
 #if defined(USB_as_HID)
-            hid = new USBHIDKeyboard();
+            hid = &kb;
             USB.begin();
 
             // Wait for USB subsystem to be ready

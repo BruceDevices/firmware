@@ -15,6 +15,14 @@
 
 extern HIDInterface *hid_usb;
 extern HIDInterface *hid_ble;
+
+#if defined(USB_as_HID)
+#include <USBHIDKeyboard.h>
+#include <USBHIDMouse.h>
+extern USBHIDKeyboard kb;
+extern USBHIDRelativeMouse mouse;
+#endif
+
 extern uint8_t _Ask_for_restart;
 
 struct DuckyCommand;

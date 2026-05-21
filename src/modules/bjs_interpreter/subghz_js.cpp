@@ -99,7 +99,19 @@ JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, J
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
         double v;
         JS_ToNumber(ctx, &v, argv[0]);
-        bruceConfigPins.rfFreq = v; // float global var
+        bruceConfigPins.rfFreq = (float)v; // float global var
+        setMHZ((float)v);
+    }
+    return JS_UNDEFINED;
+}
+
+JSValue native_subghzSetPreamble(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: subghzSetPreamble(count);
+    // count: 0=2, 1=3, 2=4, 3=6, 4=8, 5=12, 6=16, 7=24 bytes
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
+        int v;
+        JS_ToInt32(ctx, &v, argv[0]);
+        setCC1101Preamble((uint8_t)v);
     }
     return JS_UNDEFINED;
 }
