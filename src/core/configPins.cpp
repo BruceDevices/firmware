@@ -154,8 +154,8 @@ void BruceConfigPins::fromJson(JsonObject obj) {
             count++;
         }
     } else {
-        count++;
-        log_e("Fail");
+        // Backward compatibility: keep existing/default PN532 pins when the
+        // key is absent in older configuration files.
     }
 
     if (!root["SDCard_Pins"].isNull()) {
