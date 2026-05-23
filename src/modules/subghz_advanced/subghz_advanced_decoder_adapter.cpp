@@ -255,6 +255,19 @@ static bool parseRawDurations(const String& text, std::vector<int32_t>& out) {
 
 static constexpr size_t kMinUsefulDurations = 8;
 static constexpr size_t kMaxDurationsForDecode = 1024;
+static constexpr size_t kMaxDurationsForVerboseString = 768;
+
+static bool shouldExtractDecoderString(const char* protocol_name, size_t pulse_count) {
+    if(!protocol_name || protocol_name[0] == '\0') return false;
+
+    // Known unstable text formatter on ESP32 in live RX path.
+    if(strcmp(protocol_name, SUBGHZ_PROTOCOL_DICKERT_MAHS_NAME) == 0) return false;
+
+    // Avoid heavy protocol string formatters on long/noisy captures.
+    if(pulse_count > kMaxDurationsForVerboseString) return false;
+
+    return true;
+}
 
 static int frameScore(const SubGhzAdvancedFrame& frame) {
     int score = 0;
@@ -294,13 +307,15 @@ static void subghzRxCallback(
     current.frequency_hz = ctx->frequency_hz;
     current.raw_summary = String((uint32_t)ctx->pulse_count) + " pulses";
 
-    FuriString* s = furi_string_alloc();
-    if(s) {
-        if(subghz_protocol_decoder_base_get_string(decoder_base, s)) {
-            const char* decoded = furi_string_get_cstr(s);
-            if(decoded) parseDecoderString(String(decoded), current);
+    if(shouldExtractDecoderString(protocol_name, ctx->pulse_count)) {
+        FuriString* s = furi_string_alloc();
+        if(s) {
+            if(subghz_protocol_decoder_base_get_string(decoder_base, s)) {
+                const char* decoded = furi_string_get_cstr(s);
+                if(decoded) parseDecoderString(String(decoded), current);
+            }
+            furi_string_free(s);
         }
-        furi_string_free(s);
     }
 
     const int score = frameScore(current);
