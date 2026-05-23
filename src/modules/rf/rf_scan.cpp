@@ -43,7 +43,36 @@ static uint32_t parseFlexibleU32(String value) {
     return strtoul(value.c_str(), NULL, treatAsHex ? 16 : 10);
 }
 
-static String buildLegacyCaptureText(const RfCodes &received, bool rawMode) {
+static String truncateRawDataTokens(const String &rawData, size_t maxTokens) {
+    if (maxTokens == 0 || rawData.length() == 0) return rawData;
+
+    String out = "";
+    out.reserve(rawData.length());
+
+    size_t tokens = 0;
+    bool inToken = false;
+    for (size_t i = 0; i < rawData.length(); i++) {
+        const char c = rawData[i];
+        const bool isSpace = (c == ' ' || c == '\t' || c == '\r' || c == '\n');
+        if (isSpace) {
+            if (inToken) inToken = false;
+            out += c;
+            continue;
+        }
+
+        if (!inToken) {
+            if (tokens >= maxTokens) break;
+            tokens++;
+            inToken = true;
+        }
+        out += c;
+    }
+
+    out.trim();
+    return out;
+}
+
+static String buildLegacyCaptureText(const RfCodes &received, bool rawMode, size_t rawTokenLimit = 0) {
     String out = "Filetype: Bruce SubGhz File\nVersion 1\n";
     uint32_t frequencyHz = received.frequency ? received.frequency : uint32_t(bruceConfigPins.rfFreq * 1000000);
     out += "Frequency: " + String(frequencyHz) + "\n";
@@ -57,7 +86,10 @@ static String buildLegacyCaptureText(const RfCodes &received, bool rawMode) {
         out += "Key: " + String(keyHex) + "\n";
     }
     if (received.te > 0) out += "TE: " + String(received.te) + "\n";
-    if (received.data.length()) out += "RAW_Data: " + received.data + "\n";
+    if (received.data.length()) {
+        String rawData = truncateRawDataTokens(received.data, rawTokenLimit);
+        if (rawData.length()) out += "RAW_Data: " + rawData + "\n";
+    }
 
     return out;
 }
@@ -74,12 +106,21 @@ static void enrichLegacyWithAdvancedDecoder(RfCodes &received, bool rawMode) {
     clearDetectedMetadata(received);
 
 #ifdef SUBGHZ_ADV_PROFILE_FULL
-    const bool fullProfile = true;
+    bool fullProfile = true;
 #else
-    const bool fullProfile = false;
+    bool fullProfile = false;
 #endif
 
-    String capture = buildLegacyCaptureText(received, rawMode);
+    // Safety hardening for legacy RAW flow:
+    // - use CORE registry in legacy RAW to avoid unstable FULL-only decoders on noisy captures
+    // - cap token count so malformed long captures don't stress protocol state machines
+    size_t rawTokenLimit = 0;
+    if (rawMode) {
+        fullProfile = false;
+        rawTokenLimit = 256;
+    }
+
+    String capture = buildLegacyCaptureText(received, rawMode, rawTokenLimit);
     SubGhzAdvancedFrame frame =
         SubGhzAdvancedDecoderAdapter::decodeBruceCapture(capture, "legacy-rf-scan", fullProfile);
     if (!frame.valid) return;

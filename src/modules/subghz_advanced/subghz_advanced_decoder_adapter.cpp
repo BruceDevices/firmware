@@ -253,6 +253,9 @@ static bool parseRawDurations(const String& text, std::vector<int32_t>& out) {
     return !out.empty();
 }
 
+static constexpr size_t kMinUsefulDurations = 8;
+static constexpr size_t kMaxDurationsForDecode = 1024;
+
 static int frameScore(const SubGhzAdvancedFrame& frame) {
     int score = 0;
     if(frame.protocol_name.length() && frame.protocol_name != "Unknown" && frame.protocol_name != "RAW")
@@ -280,18 +283,22 @@ static void subghzRxCallback(
     UNUSED(receiver);
     DecodeContext* ctx = (DecodeContext*)context;
     if(!ctx || !decoder_base || !decoder_base->protocol) return;
-    if(ctx->protocol_filter.length() && ctx->protocol_filter != decoder_base->protocol->name) return;
+
+    const char* protocol_name = decoder_base->protocol->name;
+    if(!protocol_name || protocol_name[0] == '\0') return;
+    if(ctx->protocol_filter.length() && ctx->protocol_filter != protocol_name) return;
 
     SubGhzAdvancedFrame current;
     current.valid = true;
-    current.protocol_name = decoder_base->protocol->name ? decoder_base->protocol->name : "Unknown";
+    current.protocol_name = protocol_name;
     current.frequency_hz = ctx->frequency_hz;
     current.raw_summary = String((uint32_t)ctx->pulse_count) + " pulses";
 
     FuriString* s = furi_string_alloc();
     if(s) {
         if(subghz_protocol_decoder_base_get_string(decoder_base, s)) {
-            parseDecoderString(String(furi_string_get_cstr(s)), current);
+            const char* decoded = furi_string_get_cstr(s);
+            if(decoded) parseDecoderString(String(decoded), current);
         }
         furi_string_free(s);
     }
@@ -347,6 +354,8 @@ bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
     const String* protocol_filter) {
     std::vector<int32_t> durations;
     if(!parseRawDurations(text, durations)) return false;
+    if(durations.size() < kMinUsefulDurations) return false;
+    if(durations.size() > kMaxDurationsForDecode) durations.resize(kMaxDurationsForDecode);
 
     SubGhzEnvironment* env = subghz_environment_alloc();
     if(!env) return false;
