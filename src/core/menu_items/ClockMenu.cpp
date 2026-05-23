@@ -20,9 +20,11 @@ void ClockMenu::optionsMenu() {
 
 void ClockMenu::showSubMenu() {
     options = {
-        {"Timer",         [=]() { Timer(); }            },
-        {"Back to Clock", [=]() {}                      },
-        {"Exit",          [=]() { returnToMenu = true; }}
+        {"Timer",         [=]() { Timer(); }                                                     },
+        {"Pomodoro 25m",  [=]() { Timer(TIMER_POMODORO_DURATION_MS, "Pomodoro", "Focus complete!"); }},
+        {"Break 5m",      [=]() { Timer(TIMER_SHORT_BREAK_DURATION_MS, "Short break", "Break complete!"); }},
+        {"Back to Clock", [=]() {}                                                               },
+        {"Exit",          [=]() { returnToMenu = true; }                                         }
         // Add more options here
     };
 

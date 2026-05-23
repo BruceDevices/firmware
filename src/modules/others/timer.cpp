@@ -30,6 +30,13 @@ enum SettingMode {
 
 Timer::Timer() { setup(); }
 
+Timer::Timer(unsigned long presetDurationMs, const char *title, const char *doneTitle) {
+    duration = presetDurationMs;
+    countdownTitle = title;
+    finishedTitle = doneTitle ? doneTitle : "Timer finished!";
+    loop();
+}
+
 Timer::~Timer() {
     tft.fillScreen(bruceConfig.bgColor);
     backToMenu();
@@ -113,7 +120,7 @@ void Timer::setup() {
             // If completed all fields and timer is valid, start countdown
             if (settingMode >= SETTING_COMPLETE) {
                 if (hours > 0 || minutes > 0 || seconds > 0) {
-                    duration = (hours * 3600 + minutes * 60 + seconds) * 1000;
+                    duration = (hours * 3600UL + minutes * 60UL + seconds) * 1000UL;
                     break; // Exit setup, proceed to loop()
                 }
                 // If timer is 0:0:0, reset to first field
@@ -186,7 +193,11 @@ void Timer::loop() {
                     }
                 }
 
-                drawMainBorder(false);
+                if (countdownTitle) {
+                    drawMainBorderWithTitle(countdownTitle, false);
+                } else {
+                    drawMainBorder(false);
+                }
                 tft.setTextSize(f_size);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 tft.drawCentreString(timeString, timerX, timerY, 1);
@@ -204,7 +215,7 @@ void Timer::loop() {
 void Timer::playAlarmPattern() {
     // Display "TIME'S UP!" message
     tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorderWithTitle("Timer finished!", false);
+    drawMainBorderWithTitle(finishedTitle, false);
 
     tft.setTextSize(2);
     tft.setTextColor(TFT_RED, bruceConfig.bgColor);

@@ -11,14 +11,19 @@
 
 #include <globals.h>
 
+constexpr unsigned long TIMER_POMODORO_DURATION_MS = 25UL * 60UL * 1000UL;
+constexpr unsigned long TIMER_SHORT_BREAK_DURATION_MS = 5UL * 60UL * 1000UL;
+
 class Timer {
 private:
     int fontSize = 4;
-    int duration = 0;
+    unsigned long duration = 0;
     int timerX = tftWidth / 2;
     int timerY = tftHeight / 2;
     int underlineY = timerY + (fontSize + 1) * LH;
     bool playSoundOnFinish = true; // Sound option
+    const char *countdownTitle = nullptr;
+    const char *finishedTitle = "Timer finished!";
 
     void clearUnderline();
     void underlineHours();
@@ -30,6 +35,7 @@ private:
 
 public:
     Timer();
+    Timer(unsigned long presetDurationMs, const char *countdownTitle, const char *finishedTitle);
     ~Timer();
 
     void setup();
