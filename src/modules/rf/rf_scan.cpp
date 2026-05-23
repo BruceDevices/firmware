@@ -2,9 +2,101 @@
 #include "core/led_control.h"
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
+#include "modules/subghz_advanced/subghz_advanced_decoder_adapter.h"
 #include "rf_send.h"
 #include <globals.h>
+#include <stdlib.h>
 #include <sstream>
+
+static void clearDetectedMetadata(RfCodes &code) {
+    code.detected_protocol = "";
+    code.detected_key_hex = "";
+    code.detected_counter = "";
+    code.detected_button = "";
+    code.detected_serial = "";
+}
+
+static uint64_t parseHexU64(String value) {
+    value.trim();
+    value.replace(" ", "");
+    if (value.startsWith("0x") || value.startsWith("0X")) value = value.substring(2);
+    if (value.length() == 0) return 0;
+    return strtoull(value.c_str(), NULL, 16);
+}
+
+static uint32_t parseFlexibleU32(String value) {
+    value.trim();
+    if (value.length() == 0) return 0;
+
+    bool treatAsHex = value.startsWith("0x") || value.startsWith("0X");
+    if (!treatAsHex) {
+        for (size_t i = 0; i < value.length(); i++) {
+            char c = value[i];
+            if ((c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) {
+                treatAsHex = true;
+                break;
+            }
+        }
+    }
+
+    if (treatAsHex && (value.startsWith("0x") || value.startsWith("0X"))) value = value.substring(2);
+    return strtoul(value.c_str(), NULL, treatAsHex ? 16 : 10);
+}
+
+static String buildLegacyCaptureText(const RfCodes &received, bool rawMode) {
+    String out = "Filetype: Bruce SubGhz File\nVersion 1\n";
+    uint32_t frequencyHz = received.frequency ? received.frequency : uint32_t(bruceConfigPins.rfFreq * 1000000);
+    out += "Frequency: " + String(frequencyHz) + "\n";
+    out += "Preset: " + String(received.preset) + "\n";
+    out += "Protocol: " + String(rawMode ? "RAW" : "RcSwitch") + "\n";
+
+    if (received.Bit > 0) out += "Bit: " + String(received.Bit) + "\n";
+    if (received.key > 0) {
+        char keyHex[64] = {0};
+        decimalToHexString(received.key, keyHex);
+        out += "Key: " + String(keyHex) + "\n";
+    }
+    if (received.te > 0) out += "TE: " + String(received.te) + "\n";
+    if (received.data.length()) out += "RAW_Data: " + received.data + "\n";
+
+    return out;
+}
+
+static void appendDetectedMetadata(String &subfileOut, const RfCodes &codes) {
+    if (codes.detected_protocol.length()) subfileOut += "Detected_Protocol: " + codes.detected_protocol + "\n";
+    if (codes.detected_key_hex.length()) subfileOut += "Detected_Key: " + codes.detected_key_hex + "\n";
+    if (codes.detected_serial.length()) subfileOut += "Detected_Serial: " + codes.detected_serial + "\n";
+    if (codes.detected_button.length()) subfileOut += "Detected_Button: " + codes.detected_button + "\n";
+    if (codes.detected_counter.length()) subfileOut += "Detected_Counter: " + codes.detected_counter + "\n";
+}
+
+static void enrichLegacyWithAdvancedDecoder(RfCodes &received, bool rawMode) {
+    clearDetectedMetadata(received);
+
+#ifdef SUBGHZ_ADV_PROFILE_FULL
+    const bool fullProfile = true;
+#else
+    const bool fullProfile = false;
+#endif
+
+    String capture = buildLegacyCaptureText(received, rawMode);
+    SubGhzAdvancedFrame frame =
+        SubGhzAdvancedDecoderAdapter::decodeBruceCapture(capture, "legacy-rf-scan", fullProfile);
+    if (!frame.valid) return;
+
+    if (frame.protocol_name.length() && frame.protocol_name != "Unknown" && frame.protocol_name != "RAW")
+        received.detected_protocol = frame.protocol_name;
+    if (frame.key_hex.length()) received.detected_key_hex = frame.key_hex;
+    if (frame.serial.length()) received.detected_serial = frame.serial;
+    if (frame.button.length()) received.detected_button = frame.button;
+    if (frame.counter.length()) received.detected_counter = frame.counter;
+
+    if (!received.key && frame.key_hex.length()) received.key = parseHexU64(frame.key_hex);
+    if (!received.serial && frame.serial.length()) received.serial = uint32_t(parseHexU64(frame.serial));
+    if (!received.btn && frame.button.length()) received.btn = uint8_t(parseFlexibleU32(frame.button));
+    if (!received.cnt && frame.counter.length()) received.cnt = uint16_t(parseFlexibleU32(frame.counter));
+    if (!received.Bit && frame.bit_count > 0) received.Bit = frame.bit_count;
+}
 
 RFScan::RFScan() { setup(); }
 
@@ -203,6 +295,9 @@ void RFScan::read_rcswitch() {
             keeloq_identify(received);
         }
 
+        // Keep legacy replay/transmit semantics while attaching real protocol metadata.
+        enrichLegacyWithAdvancedDecoder(received, false);
+
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -279,6 +374,8 @@ void RFScan::read_raw() {
             keeloq_identify(received);
         }
 
+        enrichLegacyWithAdvancedDecoder(received, true);
+
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -292,6 +389,7 @@ void RFScan::read_raw() {
         received.key = crc64_ecma(durations); // Calculate CRC-64
         received.indexed_durations = indexed_durations;
         received.Bit = durations.size();
+        enrichLegacyWithAdvancedDecoder(received, true);
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -305,6 +403,7 @@ void RFScan::read_raw() {
         received.key = 0;
         received.indexed_durations = {};
         received.Bit = 0;
+        enrichLegacyWithAdvancedDecoder(received, true);
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -420,6 +519,7 @@ void RFScan::reset_signals() {
     received.key = 0;
     received.preset = "";
     received.protocol = "";
+    clearDetectedMetadata(received);
     signals = 0;
     received.fix = 0;
     received.hop = 0;
@@ -484,7 +584,7 @@ void display_info(RfCodes received, int signals, bool ReadRAW, bool codesOnly, b
 
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
 
-    if (!ReadRAW) padprintln("Recording: Only RCSwitch codes.");
+    if (!ReadRAW) padprintln("Recording: RCSwitch + advanced identify.");
     else if (codesOnly) padprintln("Recording: RAW with CRC or RCSwitch.");
     else padprintln("Recording: Any RAW signal.");
 
@@ -509,6 +609,8 @@ void display_signal_data(RfCodes received) {
     char hexString[64];
 
     while (ss >> palavra) transitions++;
+
+    if (received.detected_protocol.length()) padprintln("Detected: " + received.detected_protocol);
 
     if (received.preset != "") {
         if (received.fix != 0) {
@@ -563,6 +665,11 @@ void display_signal_data(RfCodes received) {
         }
     }
 
+    if (received.detected_key_hex.length()) padprintln("Detected Key: " + received.detected_key_hex);
+    if (received.detected_serial.length()) padprintln("Detected Sn: " + received.detected_serial);
+    if (received.detected_button.length()) padprintln("Detected Btn: " + received.detected_button);
+    if (received.detected_counter.length()) padprintln("Detected Cnt: " + received.detected_counter);
+
     // if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
     //     int rssi = ELECHOUSE_cc1101.getRssi();
     //     tft.drawPixel(0, 0, 0);
@@ -616,6 +723,7 @@ bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bo
             subfile_out += "Key: " + String(key) + "\n";
         }
         subfile_out += "TE: " + String(codes.te) + "\n";
+        appendDetectedMetadata(subfile_out, codes);
         filename = "rcs.sub";
         // subfile_out += "RAW_Data: " + codes.data;
     } else {
@@ -628,7 +736,8 @@ bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bo
 
         subfile_out += "Preset: " + String(codes.preset) + "\n";
         subfile_out += "Protocol: RAW\n";
-        subfile_out += "RAW_Data: " + codes.data;
+        subfile_out += "RAW_Data: " + codes.data + "\n";
+        appendDetectedMetadata(subfile_out, codes);
         filename = "raw.sub";
     }
 
@@ -767,6 +876,8 @@ RestartRec:
                 // Serial.println(received.data);
                 decimalToHexString(received.key, hexString);
 
+                enrichLegacyWithAdvancedDecoder(received, false);
+
                 if (!headless) display_info(received, 1, raw);
             }
             rcswitch.resetAvailable();
@@ -792,6 +903,7 @@ RestartRec:
                 received.preset = "0";
                 received.filepath = "unsaved";
                 // NOTE: do NOT clear received.data here - it was just built above
+                enrichLegacyWithAdvancedDecoder(received, true);
                 if (!headless) display_info(received, 1, raw);
             } else {
                 received.data = ""; // too few transitions - discard
@@ -810,6 +922,7 @@ RestartRec:
                 // TODO: show a dialog/warning?
                 // raw = yesNoDialog("decoding failed, save as RAW?");
             }
+            enrichLegacyWithAdvancedDecoder(received, raw || received.protocol == "RAW");
             String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
             subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
             if (!raw) {
@@ -818,13 +931,15 @@ RestartRec:
                 subfile_out += "Bit: " + String(received.Bit) + "\n";
                 subfile_out += "Key: " + String(hexString) + "\n";
                 subfile_out += "TE: " + String(received.te) + "\n";
+                appendDetectedMetadata(subfile_out, received);
             } else {
                 // save as raw
                 if (received.preset == "1") received.preset = "FuriHalSubGhzPresetOok270Async";
                 else if (received.preset == "2") received.preset = "FuriHalSubGhzPresetOok650Async";
                 subfile_out += "Preset: " + String(received.preset) + "\n";
                 subfile_out += "Protocol: RAW\n";
-                subfile_out += "RAW_Data: " + received.data;
+                subfile_out += "RAW_Data: " + received.data + "\n";
+                appendDetectedMetadata(subfile_out, received);
             }
             // headless mode
             return subfile_out;
