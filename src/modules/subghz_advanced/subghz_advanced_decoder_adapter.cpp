@@ -270,6 +270,7 @@ struct DecodeContext {
     int best_score = -1;
     uint32_t frequency_hz = 0;
     size_t pulse_count = 0;
+    String protocol_filter = "";
 };
 
 static void subghzRxCallback(
@@ -279,6 +280,7 @@ static void subghzRxCallback(
     UNUSED(receiver);
     DecodeContext* ctx = (DecodeContext*)context;
     if(!ctx || !decoder_base || !decoder_base->protocol) return;
+    if(ctx->protocol_filter.length() && ctx->protocol_filter != decoder_base->protocol->name) return;
 
     SubGhzAdvancedFrame current;
     current.valid = true;
@@ -321,11 +323,28 @@ size_t SubGhzAdvancedDecoderAdapter::getEnabledProtocolCount(bool full_profile) 
     return registry ? registry->size : 0;
 }
 
+const SubGhzProtocolRegistry* SubGhzAdvancedDecoderAdapter::getProtocolRegistry(bool full_profile) {
+    return selectRegistry(full_profile);
+}
+
+bool SubGhzAdvancedDecoderAdapter::isProtocolEnabled(const String& protocol_name, bool full_profile) {
+    const SubGhzProtocolRegistry* registry = selectRegistry(full_profile);
+    if(!registry || !registry->items || registry->size == 0) return false;
+
+    for(size_t i = 0; i < registry->size; i++) {
+        const SubGhzProtocol* protocol = registry->items[i];
+        if(!protocol || !protocol->name) continue;
+        if(protocol_name == protocol->name) return true;
+    }
+    return false;
+}
+
 bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
     const String& text,
     uint32_t frequency_hz,
     bool full_profile,
-    SubGhzAdvancedFrame& frame) {
+    SubGhzAdvancedFrame& frame,
+    const String* protocol_filter) {
     std::vector<int32_t> durations;
     if(!parseRawDurations(text, durations)) return false;
 
@@ -344,9 +363,16 @@ bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
     DecodeContext ctx;
     ctx.frequency_hz = frequency_hz;
     ctx.pulse_count = durations.size();
+    if(protocol_filter) {
+        ctx.protocol_filter = *protocol_filter;
+        ctx.protocol_filter.trim();
+    }
 
     subghz_receiver_set_rx_callback(rx, subghzRxCallback, &ctx);
     subghz_receiver_set_filter(rx, (SubGhzProtocolFlag)0xFFFFFFFFu);
+    // Decoder instances are allocated from raw malloc in vendor code.
+    // Ensure every decoder state machine starts from a known state before feeding pulses.
+    subghz_receiver_reset(rx);
 
     for(const int32_t d : durations) {
         if(d == 0) continue;
@@ -367,11 +393,12 @@ bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
 SubGhzAdvancedFrame SubGhzAdvancedDecoderAdapter::decodeBruceCapture(
     const String& capture,
     const String& source,
-    bool full_profile) {
+    bool full_profile,
+    const String* protocol_filter) {
     SubGhzAdvancedFrame parsed = SubGhzAdvancedSubFileCodec::parse(capture, source);
     SubGhzAdvancedFrame decoded;
 
-    if(decodeRawSubText(capture, parsed.frequency_hz, full_profile, decoded)) {
+    if(decodeRawSubText(capture, parsed.frequency_hz, full_profile, decoded, protocol_filter)) {
         decoded.source = source;
         if(decoded.frequency_hz == 0) decoded.frequency_hz = parsed.frequency_hz;
         if(decoded.bit_count == 0) decoded.bit_count = parsed.bit_count;

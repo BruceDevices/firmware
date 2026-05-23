@@ -5,10 +5,21 @@
 #include "modules/rf/rf_send.h"
 #include "subghz_advanced_decoder_adapter.h"
 #include "subghz_advanced_subfile_codec.h"
+#include "subghz_advanced_transmitter_adapter.h"
 
 static void normalizePath(String& p) {
     p.trim();
     if(!p.startsWith("/")) p = "/" + p;
+}
+
+static bool readFileText(FS* fs, const String& path, String& out_text) {
+    out_text = "";
+    if(fs == nullptr || !fs->exists(path)) return false;
+    File f = fs->open(path, FILE_READ);
+    if(!f) return false;
+    while(f.available()) out_text += f.readStringUntil('\n') + "\n";
+    f.close();
+    return out_text.length() > 0;
 }
 
 SubGhzAdvancedEngine& SubGhzAdvancedEngine::instance() {
@@ -46,12 +57,22 @@ String SubGhzAdvancedEngine::getProfileName() const {
     return m_profile == SubGhzAdvancedProfile::FULL ? "FULL" : "CORE";
 }
 
+void SubGhzAdvancedEngine::setProtocolFilter(const String& protocol_name) {
+    m_protocolFilter = protocol_name;
+    m_protocolFilter.trim();
+}
+
+void SubGhzAdvancedEngine::clearProtocolFilter() { m_protocolFilter = ""; }
+
+String SubGhzAdvancedEngine::getProtocolFilter() const { return m_protocolFilter; }
+
 SubGhzAdvancedFrame
 SubGhzAdvancedEngine::analyzeSubFileText(const String& text, const String& source) {
     begin();
     const bool full_profile = (m_profile == SubGhzAdvancedProfile::FULL);
+    const String* protocol_filter = m_protocolFilter.length() ? &m_protocolFilter : nullptr;
     SubGhzAdvancedFrame frame =
-        SubGhzAdvancedDecoderAdapter::decodeBruceCapture(text, source, full_profile);
+        SubGhzAdvancedDecoderAdapter::decodeBruceCapture(text, source, full_profile, protocol_filter);
     if(frame.valid) pushRecent(frame);
     return frame;
 }
@@ -98,6 +119,16 @@ bool SubGhzAdvancedEngine::transmitSubFile(FS* fs, const String& path, bool hide
     SubGhzAdvancedFrame frame;
     analyzeSubFile(fs, path, frame);
 
+    // Advanced TX path: use protocol-native encoders from vendored Unleashed when applicable.
+    String content = "";
+    if(readFileText(fs, path, content)) {
+        const bool full_profile = (m_profile == SubGhzAdvancedProfile::FULL);
+        if(SubGhzAdvancedTransmitterAdapter::canHandleCapture(content, full_profile)) {
+            return SubGhzAdvancedTransmitterAdapter::transmitCapture(
+                content, full_profile, hideDefaultUI);
+        }
+    }
+
     RfCodes data{};
     return readSubFile(fs, path, data) && txSubFile(data, hideDefaultUI);
 }
@@ -116,16 +147,23 @@ bool SubGhzAdvancedEngine::transmitPathAuto(const String& inputPath, bool hideDe
     return false;
 }
 
-bool SubGhzAdvancedEngine::readAndDecode(float freqMHz, int timeoutSec, SubGhzAdvancedFrame& frame) {
+bool SubGhzAdvancedEngine::readAndDecode(
+    float freqMHz,
+    int timeoutSec,
+    SubGhzAdvancedFrame& frame,
+    String* capture_text) {
     begin();
     if(freqMHz <= 0.0f) freqMHz = bruceConfigPins.rfFreq;
     if(timeoutSec <= 0) timeoutSec = 10;
 
     String capture = RCSwitch_Read(freqMHz, timeoutSec, true, true);
     if(capture.length() == 0) return false;
+    if(capture_text) *capture_text = capture;
 
     const bool full_profile = (m_profile == SubGhzAdvancedProfile::FULL);
-    frame = SubGhzAdvancedDecoderAdapter::decodeBruceCapture(capture, "live-rx", full_profile);
+    const String* protocol_filter = m_protocolFilter.length() ? &m_protocolFilter : nullptr;
+    frame =
+        SubGhzAdvancedDecoderAdapter::decodeBruceCapture(capture, "live-rx", full_profile, protocol_filter);
     if(frame.valid) pushRecent(frame);
     return frame.valid;
 }

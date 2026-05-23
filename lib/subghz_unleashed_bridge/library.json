@@ -12,6 +12,7 @@
       "+<subghz/registry.c>",
       "+<subghz/environment.c>",
       "+<subghz/receiver.c>",
+      "+<subghz/transmitter.c>",
       "+<subghz/blocks/decoder.c>",
       "+<subghz/blocks/encoder.c>",
       "+<subghz/blocks/math.c>",

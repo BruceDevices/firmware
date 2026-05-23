@@ -2,11 +2,19 @@
 
 #include "core/display.h"
 #include "core/sd_functions.h"
+#include "core/settings.h"
 #include "core/utils.h"
+#include "modules/rf/record.h"
+#include "modules/rf/rf_bruteforce.h"
+#include "modules/rf/rf_jammer.h"
+#include "modules/rf/rf_listen.h"
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_send.h"
+#include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_utils.h"
+#include "modules/rf/rf_waterfall.h"
 #include "subghz_advanced_engine.h"
+#include "subghz_advanced_transmitter_adapter.h"
 
 #include <globals.h>
 
@@ -85,6 +93,11 @@ static void showFrame(const SubGhzAdvancedFrame& f, const String& title) {
 static bool transmitCaptureText(const String& capture, bool hideDefaultUI = false) {
     if(capture.length() == 0) return false;
 
+    const bool full_profile = (eng.getProfile() == SubGhzAdvancedProfile::FULL);
+    if(SubGhzAdvancedTransmitterAdapter::canHandleCapture(capture, full_profile)) {
+        return SubGhzAdvancedTransmitterAdapter::transmitCapture(capture, full_profile, hideDefaultUI);
+    }
+
     const char* tmpPath = "/.subghz_adv_scan_copy_tmp.sub";
     File out = LittleFS.open(tmpPath, FILE_WRITE, true);
     if(!out) return false;
@@ -98,11 +111,10 @@ static bool transmitCaptureText(const String& capture, bool hideDefaultUI = fals
 }
 
 static bool captureAndDecodeAdvanced(int timeoutSec = 10) {
-    String capture = RCSwitch_Read(bruceConfigPins.rfFreq, timeoutSec, true, true);
+    String capture = "";
+    SubGhzAdvancedFrame frame;
+    if(!eng.readAndDecode(bruceConfigPins.rfFreq, timeoutSec, frame, &capture)) return false;
     if(capture.length() == 0) return false;
-
-    SubGhzAdvancedFrame frame = eng.analyzeSubFileText(capture, "scan-copy");
-    if(!frame.valid) return false;
 
     hasLastCapturedFrame = true;
     hasLastCapturedText = true;
@@ -208,6 +220,36 @@ static bool chooseSubFile(FS*& fs, String& path) {
     return path.length() > 0;
 }
 
+static bool chooseStorage(FS*& fs) {
+    fs = &LittleFS;
+    options = {
+        {"LittleFS", [&]() { fs = &LittleFS; }},
+    };
+    if(setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { fs = &SD; }});
+    loopOptions(options);
+    return fs != nullptr;
+}
+
+static bool saveCaptureTextAsSub(const String& capture, String& savedPath) {
+    savedPath = "";
+    if(capture.length() == 0) return false;
+
+    FS* fs = nullptr;
+    if(!chooseStorage(fs) || fs == nullptr) return false;
+
+    File file = createNewFile(fs, "/BruceRF/SubGHz", "scan_copy.sub");
+    if(!file) return false;
+    file.print(capture);
+    file.close();
+
+    savedPath = file.path();
+    if(savedPath.length()) {
+        lastTxPath = savedPath;
+        lastTxOnSd = (fs == &SD);
+    }
+    return true;
+}
+
 static bool getLastTxFs(FS*& fs) {
     if(lastTxOnSd) {
         if(!setupSdCard()) return false;
@@ -219,14 +261,17 @@ static bool getLastTxFs(FS*& fs) {
 }
 
 static void actionScanAndIdentify() {
+    String capture = "";
     SubGhzAdvancedFrame frame;
-    bool ok = eng.readAndDecode(bruceConfigPins.rfFreq, 10, frame);
+    bool ok = eng.readAndDecode(bruceConfigPins.rfFreq, 10, frame, &capture);
     if(!ok) {
         displayError("No signal decoded", true);
         return;
     }
     hasLastCapturedFrame = true;
+    hasLastCapturedText = (capture.length() > 0);
     lastCapturedFrame = frame;
+    if(hasLastCapturedText) lastCapturedText = capture;
     showFrame(frame, "SubGHz Identify");
 }
 
@@ -238,6 +283,14 @@ static void actionScanCopy() {
 
     std::vector<Option> copy = {
         {"View Decode", []() { showFrame(lastCapturedFrame, "Scan/Copy"); }},
+        {"Save Capture", []() {
+             String path = "";
+             if(!hasLastCapturedText || !saveCaptureTextAsSub(lastCapturedText, path)) {
+                 displayError("Save failed", true);
+                 return;
+             }
+             displaySuccess(path);
+         }},
         {"Replay Capture", []() {
              if(!hasLastCapturedText || !transmitCaptureText(lastCapturedText, false)) {
                  displayError("Replay failed", true);
@@ -315,6 +368,30 @@ static void actionTransmitLastSubFile() {
     }
 }
 
+static void actionReplayLastCapture() {
+    if(!hasLastCapturedText) {
+        displayInfo("No last RX capture", true);
+        return;
+    }
+    if(!transmitCaptureText(lastCapturedText, false)) {
+        displayError("Replay failed", true);
+    }
+}
+
+static void showRecentActions(const SubGhzAdvancedFrame& frame) {
+    std::vector<Option> actions = {
+        {"View", [frame]() { showFrame(frame, "Recent"); }},
+        {"Rolling Tools", [frame]() { rollingToolsForFrame(frame); }},
+        {"Set As Last Decode", [frame]() {
+             hasLastCapturedFrame = true;
+             lastCapturedFrame = frame;
+             displaySuccess("Last decode updated");
+         }},
+    };
+    addOptionToMainMenu();
+    loopOptions(actions, MENU_TYPE_SUBMENU, "Recent Action");
+}
+
 static void actionRecent() {
     const auto& recent = eng.getRecent();
     if(recent.empty()) {
@@ -322,13 +399,15 @@ static void actionRecent() {
         return;
     }
 
+    size_t selected = SIZE_MAX;
     std::vector<Option> opts;
     for(size_t i = 0; i < recent.size(); i++) {
         String label = String(i + 1) + ") " + recent[i].protocol_name;
-        opts.emplace_back(label, [i, &recent]() { showFrame(recent[i], "Recent"); });
+        opts.emplace_back(label, [i, &selected]() { selected = i; });
     }
     addOptionToMainMenu();
     loopOptions(opts, MENU_TYPE_SUBMENU, "SubGHz Recent");
+    if(selected != SIZE_MAX && selected < recent.size()) showRecentActions(recent[selected]);
 }
 
 static void actionDecoderRegistry() {
@@ -387,15 +466,80 @@ static void actionRollingMenu() {
 
 static void actionSettings() {
     int idx = eng.getProfile() == SubGhzAdvancedProfile::FULL ? 1 : 0;
+    String currentFilter = eng.getProtocolFilter();
+    if(currentFilter.length() == 0) currentFilter = "Any";
+    String filterLabel = "Protocol Filter: " + currentFilter;
 
     std::vector<Option> settings = {
         {"Profile: CORE", [&]() { eng.setProfile(SubGhzAdvancedProfile::CORE); }},
         {"Profile: FULL", [&]() { eng.setProfile(SubGhzAdvancedProfile::FULL); }},
+        {filterLabel, []() {
+             String selected = "";
+             bool changed = false;
+             std::vector<Option> filterOptions = {
+                 {"Any", [&]() {
+                      selected = "";
+                      changed = true;
+                  }},
+             };
+
+             const auto& protocols = eng.getEnabledProtocolNames();
+             for(const auto& protocol : protocols) {
+                 filterOptions.emplace_back(protocol, [&, protocol]() {
+                     selected = protocol;
+                     changed = true;
+                 });
+             }
+
+             addOptionToMainMenu();
+             loopOptions(filterOptions, MENU_TYPE_SUBMENU, "Protocol Filter");
+
+             if(!changed) return;
+             if(selected.length() == 0)
+                 eng.clearProtocolFilter();
+             else
+                 eng.setProtocolFilter(selected);
+         }},
         {"Set Frequency", []() { setMHZMenu(); }},
         {"Set Range", []() { rf_range_selection(bruceConfigPins.rfFreq); }},
     };
     addOptionToMainMenu();
     loopOptions(settings, MENU_TYPE_SUBMENU, "SubGHz Settings", idx);
+}
+
+static void actionLegacyConfig() {
+    std::vector<Option> cfg = {
+        {"RF TX Pin", lambdaHelper(gsetRfTxPin, true)},
+        {"RF RX Pin", lambdaHelper(gsetRfRxPin, true)},
+        {"RF Module", setRFModuleMenu},
+        {"RF Frequency", setRFFreqMenu},
+    };
+    addOptionToMainMenu();
+    loopOptions(cfg, MENU_TYPE_SUBMENU, "RF Config");
+}
+
+static void actionLegacyTools() {
+    std::vector<Option> legacy = {
+        {"Scan/copy (Legacy+)", []() { RFScan(); }},
+#if !defined(LITE_VERSION)
+        {"Record RAW", rf_raw_record},
+        {"Custom SubGhz", sendCustomRF},
+#endif
+        {"Spectrum", rf_spectrum},
+#if !defined(LITE_VERSION)
+        {"RSSI Spectrum", rf_CC1101_rssi},
+        {"SquareWave Spec", rf_SquareWave},
+        {"Spectogram", rf_waterfall},
+#if defined(BUZZ_PIN) || (defined(HAS_NS4168_SPKR) && defined(RF_LISTEN_H))
+        {"Listen", rf_listen},
+#endif
+        {"Bruteforce", rf_bruteforce},
+        {"Jammer", []() { RFJammer(true); }},
+#endif
+        {"RF Config", actionLegacyConfig},
+    };
+    addOptionToMainMenu();
+    loopOptions(legacy, MENU_TYPE_SUBMENU, "SubGHz Legacy+");
 }
 
 static void actionRxMenu() {
@@ -411,6 +555,7 @@ static void actionRxMenu() {
 
 static void actionTxMenu() {
     std::vector<Option> tx = {
+        {"Replay Last RX", actionReplayLastCapture},
         {"Transmit .sub", actionTransmitSubFile},
         {"Transmit Last", actionTransmitLastSubFile},
     };
@@ -431,14 +576,17 @@ void subghz_advanced_menu() {
     eng.begin();
 
     options = {
-        {"RX", actionRxMenu},
-        {"TX", actionTxMenu},
-        {"Analyze", actionAnalyzeMenu},
+        {"RX (Advanced)", actionRxMenu},
+        {"TX (Advanced)", actionTxMenu},
+        {"Analyze (Advanced)", actionAnalyzeMenu},
         {"Recent", actionRecent},
+        {"Legacy+ Tools", actionLegacyTools},
         {"Settings", actionSettings},
     };
 
     addOptionToMainMenu();
-    String title = "SubGHz Advanced [" + eng.getProfileName() + "]";
+    String title = "SubGHz Unified [" + eng.getProfileName() + "]";
+    String filter = eng.getProtocolFilter();
+    if(filter.length()) title += " {" + filter + "}";
     loopOptions(options, MENU_TYPE_SUBMENU, title.c_str());
 }

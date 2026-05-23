@@ -82,6 +82,11 @@ SubGhzAdvancedFrame SubGhzAdvancedSubFileCodec::parse(const String& text, const 
     String protocol = "";
     String key = "";
     String rawData = "";
+    String detectedProtocol = "";
+    String detectedKey = "";
+    String detectedSerial = "";
+    String detectedButton = "";
+    String detectedCounter = "";
 
     int lineStart = 0;
     while(lineStart <= (int)text.length()) {
@@ -108,7 +113,17 @@ SubGhzAdvancedFrame SubGhzAdvancedSubFileCodec::parse(const String& text, const 
             else if(k == "RAW_Data" || k == "Data_RAW") {
                 if(rawData.length()) rawData += " ";
                 rawData += v;
-            } else if(k == "Preset") {
+            } else if(k == "Detected_Protocol")
+                detectedProtocol = v;
+            else if(k == "Detected_Key")
+                detectedKey = v;
+            else if(k == "Detected_Serial")
+                detectedSerial = v;
+            else if(k == "Detected_Button")
+                detectedButton = v;
+            else if(k == "Detected_Counter")
+                detectedCounter = v;
+            else if(k == "Preset") {
                 if(frame.notes.length()) frame.notes += "; ";
                 frame.notes += "Preset=" + v;
             } else if(k == "Manufacturer") {
@@ -122,6 +137,15 @@ SubGhzAdvancedFrame SubGhzAdvancedSubFileCodec::parse(const String& text, const 
     }
 
     frame.protocol_name = protocol.length() ? protocol : "Unknown";
+    if(detectedProtocol.length()) {
+        if(frame.protocol_name == "RcSwitch" || frame.protocol_name == "RAW" || frame.protocol_name == "Unknown") {
+            frame.protocol_name = detectedProtocol;
+        } else if(frame.notes.length()) {
+            frame.notes += "; Detected=" + detectedProtocol;
+        } else {
+            frame.notes = "Detected=" + detectedProtocol;
+        }
+    }
 
     key = normalizeHexLike(key);
     if(key.length() == 0 && frame.protocol_name == "RcSwitch") {
@@ -141,6 +165,15 @@ SubGhzAdvancedFrame SubGhzAdvancedSubFileCodec::parse(const String& text, const 
     frame.key_hex = normalizeHexLike(frame.key_hex);
 
     frame.serial = normalizeHexLike(frame.serial);
+    detectedKey = normalizeHexLike(detectedKey);
+    detectedSerial = normalizeHexLike(detectedSerial);
+    detectedButton = normalizeHexLike(detectedButton);
+    detectedCounter = normalizeHexLike(detectedCounter);
+
+    if(frame.key_hex.length() == 0 && detectedKey.length()) frame.key_hex = detectedKey;
+    if(frame.serial.length() == 0 && detectedSerial.length()) frame.serial = detectedSerial;
+    if(frame.button.length() == 0 && detectedButton.length()) frame.button = detectedButton;
+    if(frame.counter.length() == 0 && detectedCounter.length()) frame.counter = detectedCounter;
 
     frame.valid = frame.filetype.length() > 0 || protocol.length() > 0 || key.length() > 0 ||
                   rawData.length() > 0;

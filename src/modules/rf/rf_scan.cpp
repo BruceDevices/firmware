@@ -823,7 +823,7 @@ String rf_scan(float start_freq, float stop_freq, int max_loops) {
 
 String RCSwitch_Read(float frequency, int max_loops, bool raw, bool headless) {
     RCSwitch rcswitch = RCSwitch();
-    RfCodes received;
+    RfCodes received = {};
 
     if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
 
@@ -876,7 +876,9 @@ RestartRec:
                 // Serial.println(received.data);
                 decimalToHexString(received.key, hexString);
 
-                enrichLegacyWithAdvancedDecoder(received, false);
+                // Headless callers (CLI/JS/advanced engine) decode again in their own pipeline.
+                // Skipping legacy enrich here avoids running two decoder stacks on the same capture.
+                if (!headless) enrichLegacyWithAdvancedDecoder(received, false);
 
                 if (!headless) display_info(received, 1, raw);
             }
@@ -903,7 +905,7 @@ RestartRec:
                 received.preset = "0";
                 received.filepath = "unsaved";
                 // NOTE: do NOT clear received.data here - it was just built above
-                enrichLegacyWithAdvancedDecoder(received, true);
+                if (!headless) enrichLegacyWithAdvancedDecoder(received, true);
                 if (!headless) display_info(received, 1, raw);
             } else {
                 received.data = ""; // too few transitions - discard
@@ -922,7 +924,7 @@ RestartRec:
                 // TODO: show a dialog/warning?
                 // raw = yesNoDialog("decoding failed, save as RAW?");
             }
-            enrichLegacyWithAdvancedDecoder(received, raw || received.protocol == "RAW");
+            if (!headless) enrichLegacyWithAdvancedDecoder(received, raw || received.protocol == "RAW");
             String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
             subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
             if (!raw) {

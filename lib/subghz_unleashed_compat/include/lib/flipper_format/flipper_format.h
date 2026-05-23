@@ -11,6 +11,7 @@
 
 typedef struct FlipperFormat {
     Stream* raw;
+    void* compat_ctx;
 } FlipperFormat;
 
 #ifdef __cplusplus
@@ -45,6 +46,9 @@ bool flipper_format_insert_or_update_hex(FlipperFormat* ff, const char* key, con
 bool flipper_format_update_string_cstr(FlipperFormat* ff, const char* key, const char* in);
 
 Stream* flipper_format_get_raw_stream(FlipperFormat* ff);
+
+// Bruce compat extension: load key/value content directly from text.
+bool flipper_format_load_from_string(FlipperFormat* ff, const char* text);
 
 #ifdef __cplusplus
 }

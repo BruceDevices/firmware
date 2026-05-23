@@ -117,6 +117,53 @@ static uint32_t subghzAdvProtocolsCallback(cmd* c) {
     return true;
 }
 
+static uint32_t subghzAdvProfileCallback(cmd* c) {
+    Command cmd(c);
+    Argument profileArg = cmd.getArgument("profile");
+    if(!profileArg.isSet()) return false;
+
+    String profile = profileArg.getValue();
+    profile.trim();
+    profile.toUpperCase();
+
+    SubGhzAdvancedEngine& engine = SubGhzAdvancedEngine::instance();
+    engine.begin();
+
+    if(profile == "CORE")
+        engine.setProfile(SubGhzAdvancedProfile::CORE);
+    else if(profile == "FULL")
+        engine.setProfile(SubGhzAdvancedProfile::FULL);
+    else
+        return false;
+
+    serialDevice->println(engine.getProfileName());
+    return true;
+}
+
+static uint32_t subghzAdvFilterCallback(cmd* c) {
+    Command cmd(c);
+    Argument filterArg = cmd.getArgument("protocol");
+    if(!filterArg.isSet()) return false;
+
+    String value = filterArg.getValue();
+    value.trim();
+
+    SubGhzAdvancedEngine& engine = SubGhzAdvancedEngine::instance();
+    engine.begin();
+
+    String lower = value;
+    lower.toLowerCase();
+    if(lower.length() == 0 || lower == "any" || lower == "none" || lower == "off" || lower == "*")
+        engine.clearProtocolFilter();
+    else
+        engine.setProtocolFilter(value);
+
+    String active = engine.getProtocolFilter();
+    if(active.length() == 0) active = "Any";
+    serialDevice->println(active);
+    return true;
+}
+
 void createSubGhzAdvancedCommands(SimpleCLI* cli) {
     Command root = cli->addCompositeCmd("subghz_adv");
 
@@ -133,4 +180,10 @@ void createSubGhzAdvancedCommands(SimpleCLI* cli) {
 
     Command protocols = root.addCommand("protocols", subghzAdvProtocolsCallback);
     protocols.addPosArg("profile", "current");
+
+    Command profile = root.addCommand("profile", subghzAdvProfileCallback);
+    profile.addPosArg("profile");
+
+    Command filter = root.addCommand("filter", subghzAdvFilterCallback);
+    filter.addPosArg("protocol", "any");
 }

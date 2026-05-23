@@ -2,6 +2,7 @@
 #include "core/led_control.h"
 #include "core/type_convertion.h"
 #include "rf_utils.h"
+#include "modules/subghz_advanced/subghz_advanced_transmitter_adapter.h"
 #include <RCSwitch.h>
 
 #define CLOSE_MENU 3
@@ -16,6 +17,39 @@ uint16_t num_steps_keeloq = 1;
 uint8_t num_signal_repeat = 4;
 String filepath = "";
 FS *filesystem = NULL;
+
+static void clearParsedCodeBuffers() {
+    bitList.clear();
+    bitRawList.clear();
+    keyList.clear();
+    rawDataList.clear();
+}
+
+static bool readSubFileText(FS *fs, const String &path, String &outText) {
+    outText = "";
+    if (!fs || !fs->exists(path)) return false;
+
+    File f = fs->open(path, FILE_READ);
+    if (!f) return false;
+
+    while (f.available()) {
+        outText += f.readStringUntil('\n');
+        outText += "\n";
+    }
+    f.close();
+    return outText.length() > 0;
+}
+
+static bool tryAdvancedTxFromSubText(const String &capture, bool hideDefaultUI) {
+    if (capture.length() == 0) return false;
+#ifdef SUBGHZ_ADV_PROFILE_FULL
+    const bool fullProfile = true;
+#else
+    const bool fullProfile = false;
+#endif
+    if (!SubGhzAdvancedTransmitterAdapter::canHandleCapture(capture, fullProfile)) return false;
+    return SubGhzAdvancedTransmitterAdapter::transmitCapture(capture, fullProfile, hideDefaultUI);
+}
 
 void sendCustomRF() {
     // interactive menu part only
@@ -48,12 +82,20 @@ void sendCustomRF() {
         if (filepath == "" || check(EscPress)) return; //  cancelled
 
         RfCodes data{};
+        clearParsedCodeBuffers();
 
         if (!readSubFile(filesystem, filepath, data)) continue;
 
-        if (data.protocol == "RcSwitch") {
-            loopEmulate(data);
-        } else {
+        String captureText = "";
+        if (readSubFileText(filesystem, filepath, captureText) &&
+            tryAdvancedTxFromSubText(captureText, false)) {
+            clearParsedCodeBuffers();
+            delay(200);
+            continue;
+        }
+
+        if (data.protocol == "RcSwitch") loopEmulate(data);
+        else {
             txSubFile(data);
             delay(200);
         }
@@ -273,6 +315,17 @@ bool readSubFile(FS *fs, String filepath, RfCodes &data) {
     return true;
 }
 
+bool txSubFilePath(FS *fs, const String &filepath, bool hideDefaultUI) {
+    String captureText = "";
+    if (readSubFileText(fs, filepath, captureText) && tryAdvancedTxFromSubText(captureText, hideDefaultUI)) {
+        return true;
+    }
+
+    RfCodes data{};
+    clearParsedCodeBuffers();
+    return readSubFile(fs, filepath, data) && txSubFile(data, hideDefaultUI);
+}
+
 bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
     int sent = 0;
 
@@ -325,10 +378,7 @@ bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
     if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), true); }
 
     // Reset vectors
-    bitList.clear();
-    bitRawList.clear();
-    keyList.clear();
-    rawDataList.clear();
+    clearParsedCodeBuffers();
 
     delay(1000);
     deinitRfModule();

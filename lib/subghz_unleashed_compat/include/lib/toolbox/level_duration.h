@@ -31,4 +31,14 @@ static inline LevelDuration level_duration_wait(void) {
 
 static inline bool level_duration_get_level(LevelDuration ld) { return ld.level; }
 
+static inline uint32_t level_duration_get_duration(LevelDuration ld) { return ld.duration; }
+
+static inline bool level_duration_is_reset(LevelDuration ld) {
+    return ld.duration == LEVEL_DURATION_RESET;
+}
+
+static inline bool level_duration_is_wait(LevelDuration ld) {
+    return ld.duration == LEVEL_DURATION_WAIT;
+}
+
 #endif
