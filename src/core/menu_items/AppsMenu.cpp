@@ -33,16 +33,29 @@ void AppsMenu::optionsMenu() {
 void AppsMenu::drawIcon(float scale) {
     clearIconArea();
 
-    int size = scale * 14;
-    int gap = scale * 4;
-    int totalW = size * 2 + gap;
+    int iconW = scale * 60;
+    int iconH = scale * 60;
+    if (iconW % 2 != 0) iconW++;
+    if (iconH % 2 != 0) iconH++;
 
-    int startX = iconCenterX - totalW / 2;
-    int startY = iconCenterY - totalW / 2;
+    int cx = iconCenterX;
+    int cy = iconCenterY;
+    int half = iconW / 2;
 
-    // Draw a 2x2 grid of rounded squares (app grid icon)
-    tft.drawRoundRect(startX, startY, size, size, 2, bruceConfig.priColor);
-    tft.drawRoundRect(startX + size + gap, startY, size, size, 2, bruceConfig.priColor);
-    tft.drawRoundRect(startX, startY + size + gap, size, size, 2, bruceConfig.priColor);
-    tft.drawRoundRect(startX + size + gap, startY + size + gap, size, size, 2, bruceConfig.priColor);
+    tft.drawRoundRect(cx - half, cy - half, iconW, iconH, half / 4, bruceConfig.priColor);
+    tft.drawLine(cx - half, cy - half + iconH / 4, cx + half, cy - half + iconH / 4, bruceConfig.priColor);
+
+    int gridW = iconW / 5;
+    int gridGap = iconW / 8;
+
+    int gridCenterY = cy + iconH / 8;
+    int gx1 = cx - gridW - gridGap / 2;
+    int gy1 = gridCenterY - gridW - gridGap / 2;
+    int gx2 = cx + gridGap / 2;
+    int gy2 = gridCenterY + gridGap / 2;
+
+    tft.fillRect(gx1, gy1, gridW, gridW, bruceConfig.priColor);
+    tft.drawRect(gx2, gy1, gridW, gridW, bruceConfig.priColor);
+    tft.drawRect(gx1, gy2, gridW, gridW, bruceConfig.priColor);
+    tft.fillRect(gx2, gy2, gridW, gridW, bruceConfig.priColor);
 }

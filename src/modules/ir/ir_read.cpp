@@ -12,18 +12,17 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/settings.h"
+#include "custom_ir.h"
 #include "ir_utils.h"
 #include <IRrecv.h>
 #include <IRutils.h>
 #include <globals.h>
 
-/* Dont touch this */
-// #define MAX_RAWBUF_SIZE 300
 #define IR_FREQUENCY 38000
 #define DUTY_CYCLE 0.330000
 
 String uint32ToString(uint32_t value) {
-    char buffer[12] = {0}; // 8 hex digits + 3 spaces + 1 null terminator
+    char buffer[12] = {0};
     snprintf(
         buffer,
         sizeof(buffer),
@@ -37,7 +36,7 @@ String uint32ToString(uint32_t value) {
 }
 
 String uint32ToStringInverted(uint32_t value) {
-    char buffer[12] = {0}; // 8 hex digits + 3 spaces + 1 null terminator
+    char buffer[12] = {0};
     snprintf(
         buffer,
         sizeof(buffer),
@@ -57,24 +56,46 @@ IrRead::IrRead(bool headless_mode, bool raw_mode) {
 }
 bool quickloop = false;
 
+static String getParsedProtocolName(const decode_results &r) {
+    switch (r.decode_type) {
+        case decode_type_t::RC5:
+            return (r.command > 0x3F) ? "RC5X" : "RC5";
+        case decode_type_t::RC6:
+            return "RC6";
+        case decode_type_t::SAMSUNG:
+            return "Samsung32";
+        case decode_type_t::SONY:
+            if (r.address > 0xFF) return "SIRC20";
+            if (r.address > 0x1F) return "SIRC15";
+            return "SIRC";
+        case decode_type_t::NEC:
+            if (r.address > 0xFFFF) return "NEC42ext";
+            if (r.address > 0xFF1F) return "NECext";
+            if (r.address > 0xFF) return "NEC42";
+            return "NEC";
+        case decode_type_t::UNKNOWN:
+            return "";
+        default:
+            return typeToString(r.decode_type, r.repeat);
+    }
+}
+
 void IrRead::setup() {
     irrecv.enableIRIn();
 
-#ifdef USE_BOOST /// ENABLE 5V OUTPUT
+#ifdef USE_BOOST
     PPM.enableOTG();
 #endif
-    // Checks if irRx pin is properly set
     const std::vector<std::pair<String, int>> pins = IR_RX_PINS;
     int count = 0;
     for (auto pin : pins) {
         if (pin.second == bruceConfigPins.irRx) count++;
     }
-    if (count == 0) gsetIrRxPin(true); // Open dialog to choose irRx pin
+    if (count == 0) gsetIrRxPin(true);
 
     setup_ir_pin(bruceConfigPins.irRx, INPUT_PULLUP);
     if (headless) return;
-    // else
-    returnToMenu = true; // make sure menu is redrawn when quitting in any point
+    returnToMenu = true;
     std::vector<Option> quickRemoteOptions = {
         {"TV",
          [&]() {
@@ -128,17 +149,26 @@ void IrRead::loop() {
             returnToMenu = true;
             button_pos = 0;
             quickloop = false;
-#ifdef USE_BOOST /// DISABLE 5V OUTPUT
+#ifdef USE_BOOST
             PPM.disableOTG();
 #endif
             break;
         }
-        if (check(NextPress)) save_signal();
-        if (quickloop && button_pos == quickButtons.size()) save_device();
-        if (check(SelPress)) save_device();
-        if (check(PrevPress)) discard_signal();
 
-        read_signal();
+        if (_emulate_mode) {
+            if (check(SelPress)) emulate_signal();
+            if (check(NextPress)) { _emulate_mode = false; discard_signal(); }
+            if (check(PrevPress)) { _emulate_mode = false; save_signal(); }
+        } else {
+            if (check(NextPress)) save_signal();
+            if (quickloop && button_pos == quickButtons.size()) save_device();
+            if (check(SelPress)) {
+                if (_read_signal) emulate_signal();
+                else save_device();
+            }
+            if (check(PrevPress)) discard_signal();
+            read_signal();
+        }
     }
 }
 
@@ -178,11 +208,17 @@ void IrRead::display_banner() {
 void IrRead::display_btn_options() {
     tft.println("");
     tft.println("");
-    if (_read_signal) {
-        padprintln("Press [PREV] to discard signal");
+    if (_emulate_mode) {
+        padprintln("Press [OK]   to send again");
+        padprintln("Press [NEXT] for new signal");
+        padprintln("Press [PREV] to save signal");
+    } else if (_read_signal) {
+        padprintln("Press [OK]   to emulate signal");
         padprintln("Press [NEXT] to save signal");
+        padprintln("Press [PREV] to discard");
+    } else {
+        if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     }
-    if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     padprintln("Press [ESC]  to exit");
 }
 
@@ -191,17 +227,22 @@ void IrRead::read_signal() {
 
     _read_signal = true;
 
-    // Always switches to RAW data, regardless of the decoding result
-    raw = true;
+    raw = (results.decode_type == decode_type_t::UNKNOWN) || hasACState(results.decode_type);
 
     display_banner();
 
-    // Dump of signal details
+    if (!raw) {
+        String proto = getParsedProtocolName(results);
+        padprintln("Protocol: " + (proto.length() ? proto : "UNKNOWN"));
+        padprintln("Bits: " + String(results.bits));
+    }
+
     padprint("RAW Data Captured:");
     String raw_signal = parse_raw_signal();
+    _captured_raw_signal = raw_signal;
     tft.println(
         raw_signal.substring(0, 45) + (raw_signal.length() > 45 ? "..." : "")
-    ); // Shows the RAW signal on the display
+    );
 
     display_btn_options();
     delay(500);
@@ -209,8 +250,42 @@ void IrRead::read_signal() {
 
 void IrRead::discard_signal() {
     if (!_read_signal) return;
+    _emulate_mode = false;
+    _captured_raw_signal = "";
     irrecv.resume();
     begin();
+}
+
+void IrRead::emulate_signal() {
+    IRCode code;
+    if (raw) {
+        code.type = "raw";
+        code.frequency = IR_FREQUENCY;
+        code.data = _captured_raw_signal;
+    } else {
+        code.type = "parsed";
+        code.protocol = getParsedProtocolName(results);
+        code.address = uint32ToString(results.address);
+        code.command = uint32ToString(results.command);
+        code.bits = results.bits;
+        code.data = resultToHexidecimal(&results);
+        if (code.protocol == "") {
+            code.type = "raw";
+            code.frequency = IR_FREQUENCY;
+            code.data = _captured_raw_signal;
+        }
+    }
+    sendIRCommand(&code);
+    if (code.type == "parsed" &&
+        (code.protocol == "RC5" || code.protocol == "RC5X" || code.protocol == "RC6")) {
+        delay(35);
+        sendIRCommand(&code);
+    }
+    _emulate_mode = true;
+    display_banner();
+    tft.setTextSize(FP);
+    padprintln("Signal emulated!");
+    display_btn_options();
 }
 
 void IrRead::save_signal() {
@@ -231,8 +306,7 @@ String IrRead::parse_state_signal() {
     String r = "";
     uint16_t state_len = (results.bits) / 8;
     for (uint16_t i = 0; i < state_len; i++) {
-        // r += uint64ToString(results.state[i], 16) + " ";
-        r += ((results.state[i] < 0x10) ? "0" : ""); // adds 0 padding if necessary
+        r += ((results.state[i] < 0x10) ? "0" : "");
         r += String(results.state[i], HEX) + " ";
     }
     r.toUpperCase();
@@ -264,7 +338,6 @@ void IrRead::append_to_file_str(String btn_name) {
         strDeviceContent += "duty_cycle: " + String(DUTY_CYCLE) + "\n";
         strDeviceContent += "data: " + parse_raw_signal() + "\n";
     } else {
-        // parsed signal  https://github.com/jamisonderek/flipper-zero-tutorials/wiki/Infrared
         strDeviceContent += "type: parsed\n";
         switch (results.decode_type) {
             case decode_type_t::RC5: {
@@ -281,14 +354,12 @@ void IrRead::append_to_file_str(String btn_name) {
                 break;
             }
             case decode_type_t::SONY: {
-                // check address and command ranges to find the exact protocol
                 if (results.address > 0xFF) strDeviceContent += "protocol: SIRC20\n";
                 else if (results.address > 0x1F) strDeviceContent += "protocol: SIRC15\n";
                 else strDeviceContent += "protocol: SIRC\n";
                 break;
             }
             case decode_type_t::NEC: {
-                // check address and command ranges to find the exact protocol
                 if (results.address > 0xFFFF) strDeviceContent += "protocol: NEC42ext\n";
                 else if (results.address > 0xFF1F) strDeviceContent += "protocol: NECext\n";
                 else if (results.address > 0xFF) strDeviceContent += "protocol: NEC42\n";
@@ -308,31 +379,12 @@ void IrRead::append_to_file_str(String btn_name) {
         strDeviceContent += "address: " + uint32ToString(results.address) + "\n";
         strDeviceContent += "command: " + uint32ToString(results.command) + "\n";
 
-        // extra fields not supported on flipper
         strDeviceContent += "bits: " + String(results.bits) + "\n";
         if (hasACState(results.decode_type)) strDeviceContent += "state: " + parse_state_signal() + "\n";
         else if (results.bits > 32)
             strDeviceContent += "value: " + uint32ToString(results.value) + " " +
-                                uint32ToString(results.value >> 32) + "\n"; // MEMO: from uint64_t
+                                uint32ToString(results.value >> 32) + "\n";
         else strDeviceContent += "value: " + uint32ToStringInverted(results.value) + "\n";
-
-        /*
-        Serial.println(results.bits);
-        Serial.println(results.address);
-        Serial.println(results.command);
-        Serial.println(results.overflow);
-        Serial.println(results.repeat);
-        Serial.println("value:");
-        serialPrintUint64(results.address, HEX);
-        serialPrintUint64(results.command, HEX);
-        Serial.print("resultToHexidecimal: ");
-        Serial.println(resultToHexidecimal(&results));
-        Serial.println(results.value);
-        String value = uint32ToString(results.value ) + " " + uint32ToString(results.value>> 32);
-        value.replace(" ", "");
-        uint64_t value_int = strtoull(value.c_str(), nullptr, 16);
-        Serial.println(value_int);
-        */
     }
     strDeviceContent += "#\n";
 }
@@ -350,7 +402,6 @@ void IrRead::save_device() {
     bool littleFsAvailable = checkLittleFsSize();
 
     if (sdCardAvailable && littleFsAvailable) {
-        // ask to choose one
         options = {
             {"SD Card",  [&]() { fs = &SD; }      },
             {"LittleFS", [&]() { fs = &LittleFS; }},
@@ -377,14 +428,13 @@ void IrRead::save_device() {
 
 String IrRead::loop_headless(int max_loops) {
 
-    while (!irrecv.decode(&results)) { // MEMO: default timeout is 15ms
+    while (!irrecv.decode(&results)) {
         max_loops -= 1;
         if (max_loops <= 0) {
             Serial.println("timeout");
-            return ""; // nothing received
+            return "";
         }
         delay(1000);
-        // delay(50);
     }
 
     irrecv.disableIRIn();
@@ -395,7 +445,6 @@ String IrRead::loop_headless(int max_loops) {
     }
 
     if (results.overflow) displayWarning("buffer overflow, data may be truncated", true);
-    // TODO: check results.repeat
 
     String r = "Filetype: IR signals file\n";
     r += "Version: 1\n";
@@ -403,7 +452,7 @@ String IrRead::loop_headless(int max_loops) {
     r += "#\n";
 
     strDeviceContent = "";
-    append_to_file_str("Unknown"); // writes on strDeviceContent
+    append_to_file_str("Unknown");
     r += strDeviceContent;
 
     return r;
@@ -421,7 +470,6 @@ bool IrRead::write_file(String filename, FS *fs) {
         displayWarning("File \"" + String(filename) + "\" already exists", true);
         display_banner();
 
-        // ask to choose one
         options = {
             {"Append number", [&]() { ch = 1; }},
             {"Overwrite ",    [&]() { ch = 2; }},
@@ -443,17 +491,6 @@ bool IrRead::write_file(String filename, FS *fs) {
                 break;
         }
     }
-
-    /*
-    /Old "Add num index" solution
-
-    if ((*fs).exists("/BruceIR/" + filename + ".ir")) {
-        int i = 1;
-        filename += "_";
-        while((*fs).exists("/BruceIR/" + filename + String(i) + ".ir")) i++;
-        filename += String(i);
-    }
-    */
 
     File file = (*fs).open("/BruceIR/" + filename + ".ir", FILE_WRITE);
 

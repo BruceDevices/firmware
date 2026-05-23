@@ -259,7 +259,13 @@ PN532::PN532(CONNECTION_TYPE connection_type) {
 #ifdef M5STICK
     else if (connection_type == CONNECTION_TYPE::I2C_SPI) nfc.setInterface(GPIO_NUM_26, GPIO_NUM_25);
 #endif
-    else nfc.setInterface(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_SS_PIN);
+    else
+        nfc.setInterface(
+            bruceConfigPins.PN532_bus.sck,
+            bruceConfigPins.PN532_bus.miso,
+            bruceConfigPins.PN532_bus.mosi,
+            bruceConfigPins.PN532_bus.cs
+        );
 }
 
 bool PN532::begin() {
@@ -483,9 +489,10 @@ int PN532::emulate() {
             if (p1 == ApduCommand::C_APDU_P1_SELECT_BY_ID) {
                 if (p2 != 0x0C) {
                     response = kSwOk;
-                } else if (lc == 2 && apdu.size() >= 7 && apdu[ApduCommand::C_APDU_DATA] == 0xE1 &&
-                           (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03 ||
-                            apdu[ApduCommand::C_APDU_DATA + 1] == 0x04)) {
+                } else if (
+                    lc == 2 && apdu.size() >= 7 && apdu[ApduCommand::C_APDU_DATA] == 0xE1 &&
+                    (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03 || apdu[ApduCommand::C_APDU_DATA + 1] == 0x04)
+                ) {
                     currentFile = (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03) ? TagFile::CC : TagFile::NDEF;
                     response = kSwOk;
                 } else {

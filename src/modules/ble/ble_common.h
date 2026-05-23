@@ -23,8 +23,15 @@ extern int scanTime;
 
 void ble_test();
 
+#ifdef BOARD_HAS_PSRAM
+constexpr bool FORCE_RADIO_TEARDOWN_ON_SWITCH = false;
+#else
+constexpr bool FORCE_RADIO_TEARDOWN_ON_SWITCH = true;
+#endif
+
 void ble_scan_setup();
 void ble_scan();
+void stopBLEStack();
 
 void disPlayBLESend();
 

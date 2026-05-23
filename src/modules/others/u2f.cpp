@@ -574,20 +574,13 @@ private:
 
         auto isSelectPressedRaw = []() -> bool {
             bool pressed = false;
-#ifdef SEL_BTN
-            if (SEL_BTN >= 0 && digitalRead(SEL_BTN) == BTN_ACT) pressed = true;
-#endif
-#ifdef ENCODER_KEY
-            if (ENCODER_KEY >= 0 && digitalRead(ENCODER_KEY) == BTN_ACT) pressed = true;
-#endif
+            if (SelPress) pressed = true; // Don't reset the variable
             return pressed;
         };
 
         auto isEscPressedRaw = []() -> bool {
             bool pressed = false;
-#ifdef BK_BTN
-            if (BK_BTN >= 0 && digitalRead(BK_BTN) == BTN_ACT) pressed = true;
-#endif
+            if (EscPress) pressed = true; // Don't reset the variable
             return pressed;
         };
 

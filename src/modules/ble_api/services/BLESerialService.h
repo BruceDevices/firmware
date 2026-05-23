@@ -26,6 +26,7 @@ public:
     void vprintf(const char *str, va_list args) override;
     size_t println(uint32_t n) override;
     size_t write(uint8_t *str, size_t size) override;
+    int read() override;
     void flush() override {}
     String readStringUntil(char terminator) override;
     int available() override;

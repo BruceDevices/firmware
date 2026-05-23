@@ -195,43 +195,43 @@ String readUTF16(uint8_t *pkt, uint32_t offset, uint16_t len) {
 
 void updateHashUI() {
     // auto& d = M5Cardputer.Display;
-    // tft.fillScreen(bruceConfig.bgColor);
+    // drawMainBorderWithTitle("RESPONDER", true); // clear
 
     // 1) NTLM count
-    tft.setTextSize(1.0);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(5, 5);
+    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
     tft.print("NTLM: ");
     tft.setTextSize(2);
-    tft.print(hashCount);
+    tft.println(hashCount);
 
     // 2) User
-    tft.setTextSize(1.3);
-    tft.setCursor(5, 30);
+    tft.setTextSize(FP);
+    tft.setCursor(10, tft.getCursorY());
     tft.print("User: ");
     tft.setTextSize(2);
-    tft.print(lastUser);
+    tft.println(lastUser);
 
     // 3) Domain
-    tft.setTextSize(1.3);
-    tft.setCursor(5, 55);
+    tft.setTextSize(FP);
+    tft.setCursor(10, tft.getCursorY());
     tft.print("Domain: ");
     tft.setTextSize(2);
-    tft.print(lastDomain);
+    tft.println(lastDomain);
 
     // 4) Client (hostname)
-    tft.setTextSize(1.3);
-    tft.setCursor(5, 80);
+    tft.setTextSize(FP);
+    tft.setCursor(10, tft.getCursorY());
     tft.print("Client: ");
     tft.setTextSize(2);
-    tft.print(lastClient);
+    tft.println(lastClient);
 
     // 5) Query (NBNS/LLMNR + name)
-    tft.setTextSize(1.3);
-    tft.setCursor(5, 105);
+    tft.setTextSize(FP);
+    tft.setCursor(10, tft.getCursorY());
     tft.print(lastQueryProtocol + ": ");
     tft.setTextSize(2);
-    tft.print(lastQueryName);
+    tft.println(lastQueryName);
 }
 
 void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
@@ -564,8 +564,8 @@ void decodeNetBIOSLabel(const uint8_t *enc32, char *out, size_t outSize) {
 ***************************************************************************************/
 void responder() {
 
-    tft.fillScreen(bruceConfig.bgColor);
-    // M5Cardputer.Display.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    drawMainBorderWithTitle("RESPONDER");
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     if (!wifiConnected) wifiConnectMenu();
 
     netbiosname_str = keyboard("Bruce", 20);
@@ -574,6 +574,9 @@ void responder() {
     netbiosDomain = stringTochar(netbiosdomain_str);
     dnsdomain_str = keyboard("Bruce.Local", 20);
     dnsDomain = stringTochar(dnsdomain_str);
+
+    drawMainBorderWithTitle("RESPONDER"); // draw again after keyboard
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     hashCount = 0;
     // Démarrer l'écoute NBNS (UDP 137)
@@ -595,18 +598,18 @@ void responder() {
         //  Choix de la fonction selon le count
         if (hashCount == 0) {
             // showWaitingAnimation();
-            tft.setCursor(0, 0);
-            tft.setTextSize(0);
-            tft.println("Waiting\nLLMNR Interact...");
+            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+            tft.setTextSize(FP);
+            tft.println("Waiting LLMNR Interact");
         } else if (hashCount == 1) {
-
-            tft.setCursor(60, 90);
-            tft.setTextSize(0);
-            tft.println("Found Interaction!\n\nthanks 7h30th3r0n3");
-
+            drawMainBorderWithTitle("RESPONDER", true);
+            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+            tft.setTextSize(FP);
+            tft.println("Found Interaction!\nthanks 7h30th3r0n3");
         } else {
-
-            tft.setCursor(60, 90);
+            drawMainBorderWithTitle("RESPONDER", true);
+            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+            tft.setTextSize(FP);
             tft.println("End");
         }
         // lastAnim = now;

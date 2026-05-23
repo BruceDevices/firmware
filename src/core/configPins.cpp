@@ -7,7 +7,17 @@ String getMacAddress() {
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
     char macStr[18];
-    sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(
+        macStr,
+        sizeof(macStr),
+        "%02X:%02X:%02X:%02X:%02X:%02X",
+        mac[0],
+        mac[1],
+        mac[2],
+        mac[3],
+        mac[4],
+        mac[5]
+    );
 
     return String(macStr);
 }
@@ -136,6 +146,17 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         count++;
         log_e("Fail");
     }
+    if (!root["PN532_Pins"].isNull()) {
+        SPIPins def = PN532_bus;
+        PN532_bus.fromJson(root["PN532_Pins"].as<JsonObject>());
+        if (PN532_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
+            PN532_bus = def;
+            count++;
+        }
+    } else {
+        count++;
+        log_e("Fail");
+    }
 
     if (!root["SDCard_Pins"].isNull()) {
         SPIPins def = SDCARD_bus;
@@ -219,6 +240,9 @@ void BruceConfigPins::toJson(JsonObject obj) const {
 
     JsonObject _NRF = root["NRF24_Pins"].to<JsonObject>();
     NRF24_bus.toJson(_NRF);
+
+    JsonObject _PN532 = root["PN532_Pins"].to<JsonObject>();
+    PN532_bus.toJson(_PN532);
 
     JsonObject _SD = root["SDCard_Pins"].to<JsonObject>();
     SDCARD_bus.toJson(_SD);
@@ -346,6 +370,7 @@ void BruceConfigPins::validateConfig() {
 #endif
     validateSpiPins(CC1101_bus);
     validateSpiPins(NRF24_bus);
+    validateSpiPins(PN532_bus);
     validateSpiPins(SDCARD_bus);
     validateI2CPins(i2c_bus);
     validateUARTPins(uart_bus);
@@ -372,6 +397,12 @@ void BruceConfigPins::setCC1101Pins(SPIPins value) {
 void BruceConfigPins::setNrf24Pins(SPIPins value) {
     NRF24_bus = value;
     validateSpiPins(NRF24_bus);
+    saveFile();
+}
+
+void BruceConfigPins::setPn532Pins(SPIPins value) {
+    PN532_bus = value;
+    validateSpiPins(PN532_bus);
     saveFile();
 }
 

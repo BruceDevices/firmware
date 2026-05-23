@@ -1,6 +1,10 @@
 #include "audio.h"
 #include "core/mykeyboard.h"
 
+#if __has_include(<M5Unified.h>)
+#include <M5Unified.h>
+#endif
+
 #if defined(HAS_NS4168_SPKR)
 #include "AudioFileSourceFunction.h"
 #include "AudioGeneratorAAC.h"
@@ -654,6 +658,9 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
+        if (frequency == 0 && duration > 0) {
+            delay(duration);
+        }
         _setup_codec_speaker(false);
         return;
     }
@@ -726,6 +733,17 @@ void _tone(unsigned int frequency, unsigned long duration) {
 #if defined(BUZZ_PIN)
     tone(BUZZ_PIN, frequency, duration);
 #elif defined(HAS_NS4168_SPKR)
+#if __has_include(<M5Unified.h>)
+    if (frequency == 0) {
+        if (duration > 0) delay(duration);
+    } else {
+        uint8_t m5vol = (bruceConfig.soundVolume * 255) / AUDIO_VOLUME_MAX;
+        M5.Speaker.setVolume(m5vol);
+        M5.Speaker.tone(frequency, duration);
+        if (duration > 0) delay(duration);
+    }
+#else
     playTone(frequency, duration, 0);
+#endif
 #endif
 }

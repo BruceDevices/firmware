@@ -221,10 +221,45 @@ bool isCharging() {
 ** location: modules/others/audio.cpp
 ** Handles audio CODEC to enable/disable speaker
 **********************************************************************/
+static TimerHandle_t speaker_off_timer = NULL;
+
+static void speaker_off_timer_cb(TimerHandle_t xTimer) {
+    if (!speaker_off_timer) return;
+    static constexpr const uint8_t disabled_bulk_data[] = {0};
+    i2c_bulk_write(&Wire1, ES8311_ADDR, disabled_bulk_data); // Shutdown ES8311
+    M5.In_I2C.bitOff(0x6E, 0x11, 1 << 3, 100000); // Set gpio3 output low (turn off PA)
+}
+
 void _setup_codec_speaker(bool enable) {
-    M5.Speaker.setVolume(bruceConfig.soundVolume);
-    if (enable) M5.Speaker.begin();
-    else M5.Speaker.end();
+
+    static constexpr const uint8_t enabled_bulk_data[] = {
+        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
+        2, 0x01, 0xB5, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
+        2, 0x12, 0x00, // 0x12 SYSTEM/ power-up DAC - NOT default
+        2, 0x13, 0x10, // 0x13 SYSTEM/ Enable output to HP drive - NOT default
+        2, 0x32, 0xBF, // 0x32 DAC/ DAC volume (0xBF == +-0 dB )
+        2, 0x37, 0x08, // 0x37 DAC/ Bypass DAC equalizer - NOT default
+        0
+    };
+
+    if (speaker_off_timer == NULL) {
+        speaker_off_timer = xTimerCreate("SpkOffTimer", pdMS_TO_TICKS(100), pdFALSE, (void *)0, speaker_off_timer_cb);
+    }
+
+    if (enable) {
+        if (speaker_off_timer != NULL && xTimerIsTimerActive(speaker_off_timer)) {
+            xTimerStop(speaker_off_timer, 0); // Cancel pending shutdown
+        } else {
+            i2c_bulk_write(&Wire1, ES8311_ADDR, enabled_bulk_data);
+            M5.In_I2C.bitOn(0x6E, 0x11, 1 << 3, 100000); // Set gpio3 output high (turn on PA)
+        }
+    } else {
+        if (speaker_off_timer != NULL) {
+            xTimerReset(speaker_off_timer, 0); // Start/reset shutdown timeout for 100ms
+        }
+    }
 }
 
 /*********************************************************************
@@ -233,8 +268,32 @@ void _setup_codec_speaker(bool enable) {
 ** Handles audio CODEC to enable/disable microphone
 **********************************************************************/
 void _setup_codec_mic(bool enable) {
-    if (enable) M5.Mic.begin();
-    else M5.Mic.end();
-
+    // Set microfone pin for ADV
     mic_bclk_pin = (gpio_num_t)17;
+
+    static constexpr const uint8_t enabled_bulk_data[] = {
+        2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
+        2, 0x01, 0xBA, // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+        2, 0x02, 0x18, // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+        2, 0x0D, 0x01, // 0x0D SYSTEM/ Power up analog circuitry
+        2, 0x0E, 0x02, // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
+        2, 0x14, 0x10, // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
+        2, 0x17, 0xBF, // ES8311_ADC_REG17 : ADC_VOLUME 0xBF == +- 0 dB
+        2, 0x1C, 0x6A, // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
+        0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+        2,
+        0x0D,
+        0xFC, // 0x0D SYSTEM/ Power down analog circuitry
+        2,
+        0x0E,
+        0x6A, // 0x0E SYSTEM
+        2,
+        0x00,
+        0x00, // 0x00 RESET/  CSM POWER DOWN
+        0
+    };
+
+    i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
 }

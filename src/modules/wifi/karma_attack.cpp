@@ -172,6 +172,7 @@ const uint8_t ht_cap[] PROGMEM = {0xef, 0x09, 0x1b, 0xff, 0xff, 0xff, 0x00, 0x00
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 const uint8_t rotate_channels[] PROGMEM = {1, 6, 11, 3, 8, 2, 7, 12, 4, 9, 5, 10, 13, 14};
 
+
 String SSIDDatabase::currentFilename = "/ssid_list.txt";
 bool SSIDDatabase::useLittleFS = false;
 
@@ -1709,19 +1710,19 @@ void checkPortals() {
 
     if (activePortal->instance != nullptr) {
         activePortal->instance->checkAndExtendDuration();
-        
+
         unsigned long portalAge = now - activePortal->launchTime;
-        
+
         // If we got credentials, terminate immediately
         if (activePortal->instance->hasCredentials()) {
             destroyActivePortal();
             lastPortalHeartbeat = now;
             return;
         }
-        
+
         // Check if target is engaged (viewed portal recently)
         bool targetEngaged = activePortal->instance->hasRecentPageView();
-        
+
         if (targetEngaged) {
             // Target is actively viewing the portal - keep alive
             // 3 minute absolute safety cap (180,000 ms)
@@ -2094,8 +2095,6 @@ void checkPendingPortals() {
     );
     executeTieredAttackStrategy();
 }
-
-static bool __attribute__((unused)) portalIsActive() { return activePortal != nullptr; }
 
 void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd) {
     (void)verifyPwd;
@@ -2569,15 +2568,15 @@ void karma_setup() {
 
     wifi_mode_t mode;
     esp_err_t err = esp_wifi_get_mode(&mode);
-    
+
     if (err == ESP_ERR_WIFI_NOT_INIT) {
         drawMainBorderWithTitle("ENHANCED KARMA ATK");
         displayTextLine("Starting WiFi...");
         delay(500);
-        
+
         WiFi.mode(WIFI_MODE_APSTA);
         delay(100);
-        
+
         displayTextLine("WiFi started!");
         delay(500);
     } else if (err == ESP_OK) {
@@ -2753,13 +2752,11 @@ void karma_setup() {
         }
         if (attackConfig.enableBeaconing && !karmaPaused) sendBeaconFrames();
         if (!karmaPaused) {
-            {
                 processQueuedProbeEvents();
                 processResponseQueue();
                 checkCloneAttackOpportunities();
                 checkPendingPortals();
                 checkForAssociations();
-            }
             checkPortals();
         }
         if (broadcastAttack.isActive() && (karmaMode == MODE_BROADCAST || karmaMode == MODE_FULL) &&

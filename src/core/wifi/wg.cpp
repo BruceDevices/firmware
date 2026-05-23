@@ -2,6 +2,7 @@ bool isConnectedWireguard = false;
 #ifndef LITE_VERSION
 #include "wg.h"
 #include "core/display.h"
+#include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
 #include <WireGuard-ESP32.h>
@@ -94,15 +95,8 @@ void read_and_parse_file() {
 
     File file = SD.open("/wg.conf");
     if (!file) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.setCursor(0, 0);
-
-        tft.setTextColor(TFT_RED, bruceConfig.bgColor);
         Serial.println("Failed to open wg.conf file");
-        // tft.println("No wg.conf file\nfound on\nthe SD");
-        displayRedStripe("No wg.conf file", TFT_RED, bruceConfig.priColor);
-        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        delay(6000);
+        displayError("No wg.conf file on SD", true);
         return;
     }
 
@@ -121,34 +115,37 @@ void wg_setup() {
 
     read_and_parse_file();
 
-    Serial.println("Adjusting system time...");
+    drawMainBorderWithTitle("WIREGUARD");
+    printSubtitle("Connecting...");
+    tft.setTextSize(FP);
+    padprintln("");
+    padprintln("Syncing time...");
+
     configTime(9 * 60 * 60, 0, "ntp.jst.mfeed.ad.jp", "ntp.nict.jp");
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setCursor(0, 0);
 
-    Serial.println("Connected. Initializing WireGuard...");
-    // tft.println("Connecting to\nwireguard...");
+    padprintln("Initializing tunnel...");
     wg.begin(local_ip, private_key, endpoint_address, public_key, endpoint_port);
-    Serial.println(local_ip);
-    Serial.println(private_key);
-    Serial.println(endpoint_address);
-    Serial.println(public_key);
-    Serial.println(endpoint_port);
 
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setCursor(0, 0);
-    tft.setTextSize(FG);
-
+    drawMainBorderWithTitle("WIREGUARD");
+    printSubtitle("Connected");
+    tft.setTextSize(FP);
+    padprintln("");
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-    tft.println("Connected!");
+    padprintln("Status: Connected");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.println("IP on tunnel:");
+    padprintln("");
+    padprintln("Tunnel IP:");
     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.println(local_ip);
+    padprintln(local_ip.toString());
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    Serial.println(local_ip);
-    delay(7000);
+    padprintln("");
+    padprintln("Endpoint: " + String(endpoint_address));
+    padprintln("Port: " + String(endpoint_port));
+    padprintln("");
+    printFootnote("Press any key to return");
+
     isConnectedWireguard = true;
-    tft.fillScreen(bruceConfig.bgColor);
+
+    while (!check(AnyKeyPress)) { delay(100); }
 }
 #endif

@@ -883,7 +883,7 @@ void setClock() {
         updateClockTimezone();
 
     } else {
-        int hr, mn, am;
+        int hr, mn, am = 0; // Initialize am to default value
         options = {};
         for (int i = 0; i < 12; i++) {
             String tmp = String(i < 10 ? "0" : "") + String(i);
@@ -1426,8 +1426,9 @@ void setMacAddressMenu() {
              uint8_t randomMac[6];
              for (int i = 0; i < 6; i++) randomMac[i] = random(0x00, 0xFF);
              char buf[18];
-             sprintf(
+             snprintf(
                  buf,
+                 sizeof(buf),
                  "%02X:%02X:%02X:%02X:%02X:%02X",
                  randomMac[0],
                  randomMac[1],

@@ -15,6 +15,8 @@
 #include "modules/wifi/scan_hosts.h"
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/wifi_atks.h"
+#include "modules/wifi/netcut.h" 
+
 
 
 
@@ -62,6 +64,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Evil Portal", [=]() {
                            // WebUI cleanup now handled automatically inside EvilPortal constructor
                            EvilPortal();
+                       }});
+    options.push_back({"NetCut", [=]() {
+                           netcutMenu();
                        }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION

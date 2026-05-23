@@ -57,10 +57,10 @@ private:
     bool _verifyPwd;
     bool _autoMode;
     bool _backgroundMode;
-    
+
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
-    
+
     AsyncWebServer webServer;
 
     DNSServer dnsServer;

@@ -30,7 +30,7 @@ static const uint8_t JAM_FLOOD_DATA[32] = {0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0
 
 // ── Config persistence ──────────────────────────────────────────
 static const char *NRF_JAM_CFG_PATH = "/nrf_jam_cfg.bin";
-#define NRF_JAM_CFG_VERSION 3
+#define NRF_JAM_CFG_VERSION 4
 
 // ── Per-mode default configs ────────────────────────────────────
 // Tuned for E01-ML01SP2 (PA+LNA): PA=3 → chip 0dBm → ~+20dBm at antenna
@@ -47,27 +47,18 @@ static const char *NRF_JAM_CFG_PATH = "/nrf_jam_cfg.bin";
 // CW: unmodulated carrier saturates receiver AGC → proven & fast
 // Flooding: packet collisions via writeFast → optional, enable in config
 //
-//                                        PA  DR  dwell  flood
+//                                        PA  DR  dwell strat burst rand _res
 static NrfJamConfig jamConfigs[NRF_JAM_MODE_COUNT] = {
-    /* FULL       */ {3, 1, 0, 0}, // CW: rapid sweep all 125ch (like original)
-                                   /* WIFI       */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* BLE        */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* BLE_ADV    */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* BLUETOOTH  */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep (like original)
-                                   /* USB        */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* VIDEO      */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* RC         */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* ZIGBEE     */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
-                                   /* DRONE      */
-    {3, 1, 0, 0}, // CW: no delay, fast sweep
+    /* FULL       */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood, max burst, random
+    /* WIFI       */ {3, 1, 0, 2, 20, 0, 0}, // Turbo flood WiFi channels
+    /* BLE        */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood, random hop
+    /* BLE_ADV    */ {3, 1, 0, 2, 20, 0, 0}, // Turbo flood adv channels
+    /* BLUETOOTH  */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood + random (FHSS)
+    /* USB        */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood + random
+    /* VIDEO      */ {3, 1, 0, 2, 20, 0, 0}, // Turbo flood video band
+    /* RC         */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood + random (FHSS)
+    /* ZIGBEE     */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood + random
+    /* DRONE      */ {3, 1, 0, 2, 20, 1, 0}, // Turbo flood + random (FHSS)
 };
 
 // ── Mode information table ──────────────────────────────────────
@@ -108,14 +99,24 @@ static const uint8_t CH_BLUETOOTH[] = {2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 1
                                        50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
                                        66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80};
 
-// USB wireless dongles
-static const uint8_t CH_USB[] = {40, 50, 60};
+// USB wireless dongles: expanded range covering common dongle frequencies
+static const uint8_t CH_USB[] = {
+    32, 34, 36, 38, 40, 42, 44, 46, 48, 50,
+    52, 54, 56, 58, 60, 62, 64, 66, 68, 70
+};
 
-// Video streaming (upper ISM band)
-static const uint8_t CH_VIDEO[] = {70, 75, 80};
+// Video streaming: expanded FPV + baby monitor range (upper ISM band)
+static const uint8_t CH_VIDEO[] = {
+    60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
+    80, 82, 84, 86, 88, 90, 92, 94, 96, 98,
+    100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124
+};
 
-// RC controllers (low channels)
-static const uint8_t CH_RC[] = {1, 3, 5, 7};
+// RC controllers: expanded to cover main RC frequency allocations
+static const uint8_t CH_RC[] = {
+    1, 3, 5, 7, 9, 11, 13, 15, 17, 19,
+    21, 23, 25, 27, 29, 31, 33, 35, 37, 39
+};
 
 // Zigbee ch 11-26: 3 nRF sub-channels per Zigbee channel (±1MHz)
 static const uint8_t CH_ZIGBEE[] = {
@@ -177,7 +178,9 @@ static void loadJamConfigs() {
         if (jamConfigs[i].paLevel > 3) jamConfigs[i].paLevel = 3;
         if (jamConfigs[i].dataRate > 2) jamConfigs[i].dataRate = 1;
         if (jamConfigs[i].dwellTimeMs > 200) jamConfigs[i].dwellTimeMs = 200;
-        if (jamConfigs[i].useFlooding > 1) jamConfigs[i].useFlooding = 1;
+        if (jamConfigs[i].strategy > 2) jamConfigs[i].strategy = 0;
+        if (jamConfigs[i].burstCount < 1 || jamConfigs[i].burstCount > 20) jamConfigs[i].burstCount = 6;
+        if (jamConfigs[i].randomHop > 1) jamConfigs[i].randomHop = 0;
     }
     Serial.println("[JAM] Configs loaded from flash");
 }
@@ -217,24 +220,83 @@ static void applyJamConfig(const NrfJamConfig &cfg, bool flooding) {
 
 // ── Data flooding on a channel ──────────────────────────────────
 // Safely switch channel (CE LOW → configure → CE HIGH) then burst.
-static void floodChannel(uint8_t ch, uint16_t dwellMs) {
+static void floodChannel(uint8_t ch, uint16_t dwellMs, uint8_t burstCount) {
     // CE LOW to safely change channel mid-flight
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
     NRFradio.flush_tx();
     NRFradio.setChannel(ch);
 
     if (dwellMs == 0) {
-        // Turbo: fill FIFO (3 packets) and fire
-        NRFradio.writeFast(JAM_FLOOD_DATA, 32, true);
-        NRFradio.writeFast(JAM_FLOOD_DATA, 32, true);
-        NRFradio.writeFast(JAM_FLOOD_DATA, 32, true);
-        delayMicroseconds(500);
+        // Turbo: fill FIFO with burstCount packets for maximum TX duty
+        for (int i = 0; i < burstCount; i++) {
+            if (!NRFradio.writeFast(JAM_FLOOD_DATA, 32, true)) {
+                NRFradio.flush_tx();
+                delayMicroseconds(3);
+            }
+        }
+        delayMicroseconds(200);
         return;
     }
 
     unsigned long startMs = millis();
     while ((millis() - startMs) < dwellMs) {
-        if (!NRFradio.writeFast(JAM_FLOOD_DATA, 32, true)) { delayMicroseconds(10); }
+        for (int i = 0; i < burstCount && (millis() - startMs) < dwellMs; i++) {
+            if (!NRFradio.writeFast(JAM_FLOOD_DATA, 32, true)) {
+                NRFradio.flush_tx();
+                delayMicroseconds(5);
+            }
+        }
+    }
+}
+
+// ── Turbo flooding: maximum throughput with varied data ─────────
+// Multi-payload pattern: sends different data patterns on rapid rotation
+// to defeat CRC filters and create maximum spectral pollution.
+// Also cycles address width (3→5) to hit varied receiver configs.
+static void turboFloodChannel(uint8_t ch, uint8_t burstCount) {
+    static uint8_t xorSeed = 0xA5;
+
+    digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+    NRFradio.flush_tx();
+    NRFradio.setChannel(ch);
+
+    // Phase 1: Standard burst with XOR-varied payload
+    uint8_t data[32];
+    for (int i = 0; i < 32; i++) {
+        xorSeed ^= (xorSeed << 5);
+        xorSeed ^= (xorSeed >> 3);
+        data[i] = JAM_FLOOD_DATA[i] ^ xorSeed;
+    }
+    for (int i = 0; i < burstCount; i++) {
+        if (!NRFradio.writeFast(data, 32, true)) {
+            NRFradio.flush_tx();
+        }
+    }
+
+    // Phase 2: All-ones payload (max RF energy per bit at 2Mbps)
+    memset(data, 0xFF, 32);
+    for (int i = 0; i < burstCount; i++) {
+        if (!NRFradio.writeFast(data, 32, true)) {
+            NRFradio.flush_tx();
+        }
+    }
+
+    // Phase 3: Alternating 0x55/0xAA for maximum bit transitions
+    for (int i = 0; i < 32; i++) data[i] = (i & 1) ? 0xAA : 0x55;
+    for (int i = 0; i < burstCount; i++) {
+        if (!NRFradio.writeFast(data, 32, true)) {
+            NRFradio.flush_tx();
+        }
+    }
+}
+
+// ── Fisher-Yates shuffle for random channel hopping ─────────────
+static void shuffleChannels(uint8_t *arr, size_t count) {
+    for (size_t i = count - 1; i > 0; i--) {
+        size_t j = esp_random() % (i + 1);
+        uint8_t tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
     }
 }
 
@@ -277,11 +339,13 @@ static void editModeConfig(NrfJamMode mode) {
     NrfJamConfig &cfg = jamConfigs[(uint8_t)mode];
     const char *paLabels[] = {"MIN (-18dBm)", "LOW (-12dBm)", "HIGH (-6dBm)", "MAX (0/+20dBm)"};
     const char *drLabels[] = {"1 Mbps", "2 Mbps", "250 Kbps"};
-    const char *stratLabels[] = {"Constant Carrier", "Data Flooding"};
+    const char *stratLabels[] = {"Constant Carrier", "Data Flooding", "Turbo Flood"};
+    const char *hopLabels[] = {"Sequential", "Random"};
 
     int menuIdx = 0;
     bool editing = false;
     bool redraw = true;
+    const int ITEM_COUNT = 7;
 
     while (true) {
         if (check(EscPress)) {
@@ -295,19 +359,20 @@ static void editModeConfig(NrfJamMode mode) {
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
             int y = BORDER_PAD_Y + FM * LH + 4;
-            int lineH = max(14, tftHeight / 10);
+            int lineH = max(12, tftHeight / (ITEM_COUNT + 3));
 
-            // Items
-            const char *items[] = {"PA Level", "Data Rate", "Dwell (ms)", "Strategy", "Save & Back"};
+            const char *items[] = {"PA Level", "Data Rate", "Dwell (ms)", "Strategy", "Burst Pkts", "Hop Order", "Save & Back"};
             String values[] = {
                 paLabels[cfg.paLevel & 3],
                 drLabels[cfg.dataRate <= 2 ? cfg.dataRate : 1],
                 String(cfg.dwellTimeMs),
-                stratLabels[cfg.useFlooding & 1],
+                stratLabels[cfg.strategy <= 2 ? cfg.strategy : 0],
+                String(cfg.burstCount),
+                hopLabels[cfg.randomHop & 1],
                 ""
             };
 
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < ITEM_COUNT; i++) {
                 int itemY = y + i * lineH;
                 uint16_t fg = (i == menuIdx) ? bruceConfig.bgColor : bruceConfig.priColor;
                 uint16_t bg = (i == menuIdx) ? bruceConfig.priColor : bruceConfig.bgColor;
@@ -318,7 +383,7 @@ static void editModeConfig(NrfJamMode mode) {
                 if (values[i].length() > 0) { line += ": " + values[i]; }
                 tft.drawString(line, 12, itemY + 2, 1);
 
-                if (editing && i == menuIdx && i < 4) {
+                if (editing && i == menuIdx && i < ITEM_COUNT - 1) {
                     tft.setTextColor(TFT_YELLOW, bg);
                     tft.drawRightString("<>", tftWidth - 12, itemY + 2, 1);
                 }
@@ -332,10 +397,12 @@ static void editModeConfig(NrfJamMode mode) {
                     case 0: cfg.paLevel = (cfg.paLevel + 1) % 4; break;
                     case 1: cfg.dataRate = (cfg.dataRate + 1) % 3; break;
                     case 2: cfg.dwellTimeMs = min(200, (int)cfg.dwellTimeMs + 1); break;
-                    case 3: cfg.useFlooding = !cfg.useFlooding; break;
+                    case 3: cfg.strategy = (cfg.strategy + 1) % 3; break;
+                    case 4: cfg.burstCount = min((uint8_t)20, (uint8_t)(cfg.burstCount + 1)); break;
+                    case 5: cfg.randomHop = !cfg.randomHop; break;
                 }
             } else {
-                menuIdx = (menuIdx + 1) % 5;
+                menuIdx = (menuIdx + 1) % ITEM_COUNT;
             }
             redraw = true;
         }
@@ -346,16 +413,18 @@ static void editModeConfig(NrfJamMode mode) {
                     case 0: cfg.paLevel = (cfg.paLevel + 3) % 4; break;
                     case 1: cfg.dataRate = (cfg.dataRate + 2) % 3; break;
                     case 2: cfg.dwellTimeMs = max(0, (int)cfg.dwellTimeMs - 1); break;
-                    case 3: cfg.useFlooding = !cfg.useFlooding; break;
+                    case 3: cfg.strategy = (cfg.strategy + 2) % 3; break;
+                    case 4: cfg.burstCount = max((uint8_t)1, (uint8_t)(cfg.burstCount - 1)); break;
+                    case 5: cfg.randomHop = !cfg.randomHop; break;
                 }
             } else {
-                menuIdx = (menuIdx + 4) % 5;
+                menuIdx = (menuIdx + ITEM_COUNT - 1) % ITEM_COUNT;
             }
             redraw = true;
         }
 
         if (check(SelPress)) {
-            if (menuIdx == 4) {
+            if (menuIdx == ITEM_COUNT - 1) {
                 saveJamConfigs();
                 break;
             }
@@ -371,51 +440,103 @@ static void editModeConfig(NrfJamMode mode) {
 // ═══════════════ JAMMER STATUS UI ═════════════════════════════
 // ══════════════════════════════════════════════════════════════════
 
-static void drawJammerStatus(NrfJamMode mode, int currentCh, uint8_t nrfOnline, bool initial) {
+static void drawJammerStatus(NrfJamMode mode, int currentCh, uint8_t nrfOnline, bool initial,
+                             unsigned long elapsedMs = 0, unsigned long totalCh = 0, unsigned long sweeps = 0) {
     const NrfJamConfig &cfg = jamConfigs[(uint8_t)mode];
+    const char *paLabels[] = {"MIN", "LOW", "HIGH", "MAX"};
+    const char *drLabels[] = {"1M", "2M", "250K"};
+    const char *stratNames[] = {"CW", "FLOOD", "TURBO"};
 
     if (initial) { drawMainBorderWithTitle("NRF JAMMER"); }
 
     int y = BORDER_PAD_Y + FM * LH + 4;
     int lineH = max(14, tftHeight / 10);
+    char buf[48];
 
     tft.setTextSize(FP);
 
-    // Mode name
+    // Line 1: Mode name + Strategy badge
     tft.fillRect(7, y, tftWidth - 14, lineH, bruceConfig.bgColor);
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-    tft.drawString(MODE_INFO[(uint8_t)mode].shortName, 12, y + 2, 1);
-
+    tft.drawString(MODE_INFO[(uint8_t)mode].name, 12, y + 2, 1);
+    const char *strat = stratNames[cfg.strategy <= 2 ? cfg.strategy : 0];
+    uint16_t badgeClr = (cfg.strategy == 2) ? TFT_RED : (cfg.strategy == 1) ? TFT_ORANGE : TFT_CYAN;
+    int bw = strlen(strat) * 6 + 8;
+    int bx = tftWidth - 12 - bw;
+    tft.fillRoundRect(bx, y + 1, bw, lineH - 3, 3, badgeClr);
+    tft.setTextColor(TFT_BLACK, badgeClr);
+    tft.drawCentreString(strat, bx + bw / 2, y + 2, 1);
     y += lineH;
 
-    // Status
+    // Line 2: Timer + Speed + Sweeps
     tft.fillRect(7, y, tftWidth - 14, lineH, bruceConfig.bgColor);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    char buf[40];
-    snprintf(buf, sizeof(buf), "Status: %d ACTIVE", nrfOnline);
+    unsigned long secs = elapsedMs / 1000;
+    unsigned long mins = secs / 60;
+    secs %= 60;
+    unsigned long chPerSec = (elapsedMs > 500) ? (totalCh * 1000UL / elapsedMs) : 0;
+    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    snprintf(buf, sizeof(buf), "%02lu:%02lu", mins, secs);
     tft.drawString(buf, 12, y + 2, 1);
-
+    tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+    snprintf(buf, sizeof(buf), "%lu ch/s  S:%lu", chPerSec, sweeps);
+    tft.drawRightString(buf, tftWidth - 12, y + 2, 1);
     y += lineH;
 
-    // Channel / Frequency
+    // Line 3: Channel + Frequency + Radios + Hop mode
     tft.fillRect(7, y, tftWidth - 14, lineH, bruceConfig.bgColor);
-    tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
     int freq = 2400 + currentCh;
-    snprintf(buf, sizeof(buf), "CH:%d  %dMHz", currentCh, freq);
-    tft.drawString(buf, 12, y + 2, 1);
-
+    tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+    snprintf(buf, sizeof(buf), "CH:%d %dMHz x%d%s", currentCh, freq, nrfOnline,
+             cfg.randomHop ? " RND" : "");
+    tft.drawCentreString(buf, tftWidth / 2, y + 2, 1);
     y += lineH;
 
-    // Config summary
+    // Line 4: 2.4GHz Band visualization strip
+    {
+        int sX = 12, sW = tftWidth - 24;
+        int sH = max(6, lineH - 4);
+        int sY = y + (lineH - sH) / 2;
+        tft.fillRect(sX, sY, sW, sH, TFT_DARKGREY);
+        size_t chCount = 0;
+        const uint8_t *chList = getChannelList(mode, chCount);
+        if (mode == NRF_JAM_FULL || mode == NRF_JAM_DRONE) {
+            for (int c = 0; c < 125; c++) {
+                int px = sX + (c * sW) / 125;
+                int pw = max(1, sX + ((c + 1) * sW) / 125 - px);
+                uint16_t col = (c > 83) ? TFT_RED : (c > 42) ? TFT_YELLOW : TFT_GREEN;
+                tft.fillRect(px, sY + 1, pw, sH - 2, col);
+            }
+        } else if (chCount > 0 && chList) {
+            for (size_t ci = 0; ci < chCount; ci++) {
+                int c = chList[ci];
+                if (c >= 125) continue;
+                int px = sX + (c * sW) / 125;
+                int pw = max(1, sX + ((c + 1) * sW) / 125 - px);
+                tft.fillRect(px, sY + 1, pw, sH - 2, TFT_GREEN);
+            }
+        }
+        if (currentCh < 125) {
+            int mx = sX + (currentCh * sW) / 125;
+            tft.fillRect(mx, sY, 2, sH, TFT_WHITE);
+        }
+        tft.drawRect(sX, sY, sW, sH, bruceConfig.priColor);
+    }
+    y += lineH;
+
+    // Line 5: Config summary
     tft.fillRect(7, y, tftWidth - 14, lineH, bruceConfig.bgColor);
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
-    snprintf(buf, sizeof(buf), "%s dwell:%dms", cfg.useFlooding ? "FLOOD" : "CW", cfg.dwellTimeMs);
-    tft.drawString(buf, 12, y + 2, 1);
+    snprintf(buf, sizeof(buf), "PA:%s %s B:%d %s",
+             paLabels[cfg.paLevel & 3],
+             drLabels[cfg.dataRate <= 2 ? cfg.dataRate : 1],
+             cfg.burstCount,
+             cfg.randomHop ? "RND" : "SEQ");
+    tft.drawCentreString(buf, tftWidth / 2, y + 2, 1);
 
     // Footer
-    tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
     int footerY = tftHeight - BORDER_PAD_X - FP * LH - 2;
     tft.fillRect(7, footerY, tftWidth - 14, FP * LH, bruceConfig.bgColor);
+    tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
     tft.drawCentreString("[ESC]Stop [<>]Mode [OK]Cfg", tftWidth / 2, footerY, 1);
 }
 
@@ -430,10 +551,38 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
     NrfJamMode currentMode = jamMode;
     int channel = 0;
     int hopIndex = 0;
+    unsigned long jamStartMs = millis();
+    unsigned long totalCh = 0;
+    unsigned long sweepCount = 0;
+    unsigned long lastDrawMs = 0;
+
+    // Shuffled channel buffer for random hop
+    uint8_t shuffledCh[128];
+    size_t shuffledCount = 0;
+
+    auto prepareChannels = [&](NrfJamMode m) {
+        size_t count = 0;
+        const uint8_t *chList = getChannelList(m, count);
+        NrfJamConfig &c = jamConfigs[(uint8_t)m];
+        if (m == NRF_JAM_FULL || m == NRF_JAM_DRONE) {
+            shuffledCount = 125;
+            for (int i = 0; i < 125; i++) shuffledCh[i] = i;
+        } else if (count > 0 && chList) {
+            shuffledCount = count;
+            memcpy(shuffledCh, chList, count);
+        } else {
+            shuffledCount = 0;
+        }
+        if (c.randomHop && shuffledCount > 1) {
+            shuffleChannels(shuffledCh, shuffledCount);
+        }
+    };
+
+    prepareChannels(currentMode);
 
     if (CHECK_NRF_SPI(nrfMode)) {
         NrfJamConfig &cfg = jamConfigs[(uint8_t)currentMode];
-        bool flooding = cfg.useFlooding;
+        bool flooding = (cfg.strategy >= 1);
 
         if (flooding) {
             applyJamConfig(cfg, true);
@@ -443,7 +592,7 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
         NRFSPI = 1;
     }
 
-    drawJammerStatus(currentMode, channel, NRFOnline, true);
+    drawJammerStatus(currentMode, channel, NRFOnline, true, 0, 0, 0);
 
     if (CHECK_NRF_UART(nrfMode) || CHECK_NRF_BOTH(nrfMode)) {
         NRFSerial.println("RADIOS");
@@ -483,17 +632,17 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
             if (CHECK_NRF_SPI(nrfMode)) NRFradio.stopConstCarrier();
             editModeConfig(currentMode);
 
-            // Re-apply config after edit — must use initCW() because
-            // stopConstCarrier() → powerDown() clears internal PWR_UP,
-            // and bare startConstCarrier() never restores it.
+            // Re-apply config after edit
             if (CHECK_NRF_SPI(nrfMode)) {
                 NrfJamConfig &cfg = jamConfigs[(uint8_t)currentMode];
-                if (cfg.useFlooding) {
+                if (cfg.strategy >= 1) {
                     applyJamConfig(cfg, true);
                 } else {
                     initCW(channel);
                 }
             }
+            prepareChannels(currentMode);
+            hopIndex = 0;
             redraw = true;
         }
 
@@ -502,12 +651,15 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
             NrfJamMode prevMode = currentMode;
             currentMode = (NrfJamMode)(((uint8_t)currentMode + 1) % NRF_JAM_MODE_COUNT);
             hopIndex = 0;
+            prepareChannels(currentMode);
             if (CHECK_NRF_SPI(nrfMode)) {
                 NrfJamConfig &prevCfg = jamConfigs[(uint8_t)prevMode];
                 NrfJamConfig &cfg = jamConfigs[(uint8_t)currentMode];
-                if (prevCfg.useFlooding != cfg.useFlooding) {
+                bool prevFlood = (prevCfg.strategy >= 1);
+                bool nowFlood = (cfg.strategy >= 1);
+                if (prevFlood != nowFlood) {
                     NRFradio.stopConstCarrier();
-                    if (cfg.useFlooding) {
+                    if (nowFlood) {
                         applyJamConfig(cfg, true);
                     } else {
                         initCW(channel);
@@ -523,12 +675,15 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
             NrfJamMode prevMode = currentMode;
             currentMode = (NrfJamMode)(((uint8_t)currentMode + NRF_JAM_MODE_COUNT - 1) % NRF_JAM_MODE_COUNT);
             hopIndex = 0;
+            prepareChannels(currentMode);
             if (CHECK_NRF_SPI(nrfMode)) {
                 NrfJamConfig &prevCfg = jamConfigs[(uint8_t)prevMode];
                 NrfJamConfig &cfg = jamConfigs[(uint8_t)currentMode];
-                if (prevCfg.useFlooding != cfg.useFlooding) {
+                bool prevFlood = (prevCfg.strategy >= 1);
+                bool nowFlood = (cfg.strategy >= 1);
+                if (prevFlood != nowFlood) {
                     NRFradio.stopConstCarrier();
-                    if (cfg.useFlooding) {
+                    if (nowFlood) {
                         applyJamConfig(cfg, true);
                     } else {
                         initCW(channel);
@@ -538,10 +693,14 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
             redraw = true;
         }
 
-        // ── Redraw on state changes only (no periodic redraw) ───
-        if (redraw) {
-            drawJammerStatus(currentMode, channel, NRFOnline, true);
-            redraw = false;
+        // ── Periodic display update (every 200ms) ────────────
+        {
+            unsigned long nowMs = millis();
+            if (nowMs - lastDrawMs >= 200 || redraw) {
+                drawJammerStatus(currentMode, channel, NRFOnline, true, nowMs - jamStartMs, totalCh, sweepCount);
+                lastDrawMs = nowMs;
+                redraw = false;
+            }
         }
 
         // ── Jamming logic (SPI mode) ────────────────────────────
@@ -551,37 +710,32 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
         }
 
         NrfJamConfig &cfg = jamConfigs[(uint8_t)currentMode];
-        bool flooding = cfg.useFlooding;
+        uint8_t strategy = cfg.strategy;
         uint16_t dwellMs = cfg.dwellTimeMs;
+        uint8_t burst = cfg.burstCount;
 
-        switch (currentMode) {
-            case NRF_JAM_FULL:
-            case NRF_JAM_DRONE: {
-                // Full sweep 0-124 (like original)
-                if (flooding) floodChannel(hopIndex, dwellMs);
-                else cwChannel(hopIndex, dwellMs);
-                channel = hopIndex;
-                hopIndex = (hopIndex + 1) % 125;
-                break;
+        if (shuffledCount > 0) {
+            uint8_t ch = shuffledCh[hopIndex % shuffledCount];
+
+            switch (strategy) {
+                case 0: cwChannel(ch, dwellMs); break;
+                case 1: floodChannel(ch, dwellMs, burst); break;
+                case 2: turboFloodChannel(ch, burst); break;
             }
 
-            default: {
-                // All preset channel list modes: sequential hopping
-                // (BLE, BLE_ADV, WiFi, Bluetooth, USB, Video, RC, Zigbee)
-                size_t count;
-                const uint8_t *channels = getChannelList(currentMode, count);
-                if (count > 0 && channels) {
-                    uint8_t ch = channels[hopIndex % count];
-                    if (flooding) floodChannel(ch, dwellMs);
-                    else cwChannel(ch, dwellMs);
-                    channel = ch;
-                    hopIndex++;
-                    if (hopIndex >= (int)count) hopIndex = 0;
-                } else {
-                    delay(1);
+            channel = ch;
+            totalCh++;
+            hopIndex++;
+            if (hopIndex >= (int)shuffledCount) {
+                hopIndex = 0;
+                sweepCount++;
+                // Re-shuffle for next sweep if random hop
+                if (cfg.randomHop && shuffledCount > 1) {
+                    shuffleChannels(shuffledCh, shuffledCount);
                 }
-                break;
             }
+        } else {
+            delay(1);
         }
     }
 

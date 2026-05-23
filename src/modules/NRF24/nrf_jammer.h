@@ -41,7 +41,10 @@ struct NrfJamConfig {
     uint8_t paLevel;      // 0-3 (MIN..MAX, PA+LNA: 0dBm→+20dBm)
     uint8_t dataRate;     // 0=1Mbps, 1=2Mbps, 2=250Kbps
     uint16_t dwellTimeMs; // Time on each channel (0=turbo, max 200ms)
-    uint8_t useFlooding;  // 0=Constant Carrier, 1=Data Flooding
+    uint8_t strategy;     // 0=CW, 1=Flood, 2=Turbo Flood
+    uint8_t burstCount;   // Packets per flood burst (1-20, default 6)
+    uint8_t randomHop;    // 0=sequential, 1=randomized hop order
+    uint8_t _reserved;    // alignment padding
 };
 
 // ── Hopper config ───────────────────────────────────────────────
