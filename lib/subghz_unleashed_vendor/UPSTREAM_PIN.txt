@@ -1,0 +1,5 @@
+source_repo: https://github.com/DarkFlippers/unleashed-firmware
+source_path: lib/subghz
+source_commit: 8236079122d9
+snapshot_date: 2026-05-23
+policy: vendor_files_are_immutable

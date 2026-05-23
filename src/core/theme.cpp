@@ -45,6 +45,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         {"ble",         &theme.ble,         theme.paths.ble        },
         {"ethernet",    &theme.ethernet,    theme.paths.ethernet   },
         {"rf",          &theme.rf,          theme.paths.rf         },
+        {"subghz",      &theme.subghz,      theme.paths.subghz     },
         {"rfid",        &theme.rfid,        theme.paths.rfid       },
         {"fm",          &theme.fm,          theme.paths.fm         },
         {"ir",          &theme.ir,          theme.paths.ir         },

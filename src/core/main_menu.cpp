@@ -11,6 +11,7 @@ MainMenu::MainMenu() {
         &ethernetMenu,
 #endif
         &rfMenu,
+        &subGhzMenu,
         &rfidMenu,
         &irMenu,
 #if defined(FM_SI4713) && !defined(LITE_VERSION)
