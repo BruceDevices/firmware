@@ -72,7 +72,10 @@
       "+<subghz/protocols/smc5326.c>",
       "+<subghz/protocols/somfy_keytis.c>",
       "+<subghz/protocols/somfy_telis.c>",
-      "+<subghz/protocols/treadmill37.c>"
+      "+<subghz/protocols/treadmill37.c>",
+      "+<subghz/protocols/keyfinder.c>",
+      "+<subghz/protocols/nord_ice.c>",
+      "+<subghz/protocols/allstar_firefly.c>"
     ]
   }
 }

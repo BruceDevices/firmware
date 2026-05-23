@@ -37,6 +37,7 @@ public:
 private:
     SubGhzAdvancedEngine() = default;
 
+    bool m_initialized = false;
     SubGhzAdvancedProfile m_profile = SubGhzAdvancedProfile::CORE;
     std::vector<SubGhzAdvancedFrame> m_recent;
 

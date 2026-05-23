@@ -90,6 +90,33 @@ static uint32_t subghzAdvAnalyzeFileCallback(cmd* c) {
     return true;
 }
 
+static uint32_t subghzAdvProtocolsCallback(cmd* c) {
+    Command cmd(c);
+    Argument profileArg = cmd.getArgument("profile");
+
+    SubGhzAdvancedEngine& engine = SubGhzAdvancedEngine::instance();
+    engine.begin();
+
+    if(profileArg.isSet()) {
+        String profile = profileArg.getValue();
+        profile.trim();
+        profile.toUpperCase();
+        if(profile == "CORE") engine.setProfile(SubGhzAdvancedProfile::CORE);
+        else if(profile == "FULL")
+            engine.setProfile(SubGhzAdvancedProfile::FULL);
+    }
+
+    const auto& protocols = engine.getEnabledProtocolNames();
+    serialDevice->println(
+        "{\"profile\":\"" + engine.getProfileName() + "\",\"count\":" + String((int)protocols.size()) +
+        "}");
+    for(const auto& protocol : protocols) {
+        serialDevice->println(protocol);
+    }
+
+    return true;
+}
+
 void createSubGhzAdvancedCommands(SimpleCLI* cli) {
     Command root = cli->addCompositeCmd("subghz_adv");
 
@@ -103,4 +130,7 @@ void createSubGhzAdvancedCommands(SimpleCLI* cli) {
 
     Command analyze = root.addCommand("analyze_file", subghzAdvAnalyzeFileCallback);
     analyze.addPosArg("filepath");
+
+    Command protocols = root.addCommand("protocols", subghzAdvProtocolsCallback);
+    protocols.addPosArg("profile", "current");
 }

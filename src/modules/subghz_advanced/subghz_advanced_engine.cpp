@@ -17,33 +17,25 @@ SubGhzAdvancedEngine& SubGhzAdvancedEngine::instance() {
 }
 
 void SubGhzAdvancedEngine::begin() {
+    if(m_initialized) return;
     initProtocolTables();
 #ifdef SUBGHZ_ADV_PROFILE_FULL
     m_profile = SubGhzAdvancedProfile::FULL;
 #else
     m_profile = SubGhzAdvancedProfile::CORE;
 #endif
+    m_initialized = true;
 }
 
 void SubGhzAdvancedEngine::initProtocolTables() {
-    if(!m_coreProtocols.empty()) return;
+    if(!m_coreProtocols.empty() || !m_fullProtocols.empty()) return;
 
-    m_coreProtocols = {
-        "Keeloq", "CAME", "CAME Twee", "CAME Atomo", "Nice FLO", "Nice FloR-S", "FAAC SLH",
-        "Princeton", "Linear", "LinearDelta3", "Security+ 1.0", "Security+ 2.0", "Holtek",
-        "Holtek_HT12X", "Doitrand", "Megacode", "Power Smart", "RAW", "BinRAW"};
+    SubGhzAdvancedDecoderAdapter::getEnabledProtocolNames(false, m_coreProtocols);
+    SubGhzAdvancedDecoderAdapter::getEnabledProtocolNames(true, m_fullProtocols);
 
-    // FULL profile placeholder for all protocols from upstream registry.
-    m_fullProtocols = m_coreProtocols;
-    m_fullProtocols.push_back("Nice One");
-    m_fullProtocols.push_back("Nero Sketch");
-    m_fullProtocols.push_back("Nero Radio");
-    m_fullProtocols.push_back("Mastercode");
-    m_fullProtocols.push_back("Marantec");
-    m_fullProtocols.push_back("Marantec24");
-    m_fullProtocols.push_back("Dooya");
-    m_fullProtocols.push_back("Bett");
-    m_fullProtocols.push_back("Intertechno_V3");
+    // Safety fallback: never expose an empty list to UI.
+    if(m_coreProtocols.empty()) m_coreProtocols = {"Keeloq", "CAME", "Princeton", "RAW"};
+    if(m_fullProtocols.empty()) m_fullProtocols = m_coreProtocols;
 }
 
 void SubGhzAdvancedEngine::setProfile(SubGhzAdvancedProfile profile) { m_profile = profile; }

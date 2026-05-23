@@ -10,6 +10,7 @@
 #include <subghz/receiver.h>
 
 #include <subghz/protocols/alutech_at_4n.h>
+#include <subghz/protocols/allstar_firefly.h>
 #include <subghz/protocols/ansonic.h>
 #include <subghz/protocols/beninca_arc.h>
 #include <subghz/protocols/bett.h>
@@ -39,6 +40,7 @@
 #include <subghz/protocols/jarolift.h>
 #include <subghz/protocols/keeloq.h>
 #include <subghz/protocols/kinggates_stylo_4k.h>
+#include <subghz/protocols/keyfinder.h>
 #include <subghz/protocols/legrand.h>
 #include <subghz/protocols/linear.h>
 #include <subghz/protocols/linear_delta3.h>
@@ -51,6 +53,7 @@
 #include <subghz/protocols/nero_sketch.h>
 #include <subghz/protocols/nice_flo.h>
 #include <subghz/protocols/nice_flor_s.h>
+#include <subghz/protocols/nord_ice.h>
 #include <subghz/protocols/phoenix_v2.h>
 #include <subghz/protocols/power_smart.h>
 #include <subghz/protocols/princeton.h>
@@ -98,13 +101,18 @@ static const SubGhzProtocol* const kFullProtocols[] = {
     &subghz_protocol_hollarm,    &subghz_protocol_hay21,      &subghz_protocol_revers_rb2,
     &subghz_protocol_feron,      &subghz_protocol_roger,      &subghz_protocol_elplast,
     &subghz_protocol_treadmill37, &subghz_protocol_beninca_arc, &subghz_protocol_jarolift,
-    &subghz_protocol_ditec_gol4,
+    &subghz_protocol_ditec_gol4, &subghz_protocol_keyfinder, &subghz_protocol_nord_ice,
+    &subghz_protocol_allstar_firefly,
 };
 
 static const SubGhzProtocolRegistry kFullRegistry = {
     .items = kFullProtocols,
     .size = sizeof(kFullProtocols) / sizeof(kFullProtocols[0]),
 };
+
+static const SubGhzProtocolRegistry* selectRegistry(bool full_profile) {
+    return full_profile ? &kFullRegistry : &kCoreRegistry;
+}
 
 static bool splitLineKV(const String& line, String& key, String& value) {
     const int idx = line.indexOf(':');
@@ -187,6 +195,8 @@ static void parseDecoderString(String text, SubGhzAdvancedFrame& frame) {
             }
             if(frame.button.length() == 0 && line.indexOf("Btn:") >= 0) {
                 frame.button = normalizeHexLike(extractTokenAfter(line, "Btn:"));
+            } else if(frame.button.length() == 0 && line.indexOf("ID:") >= 0) {
+                frame.button = normalizeHexLike(extractTokenAfter(line, "ID:"));
             }
             if(frame.serial.length() == 0) {
                 if(line.indexOf("Sn:") >= 0) frame.serial = normalizeHexLike(extractTokenAfter(line, "Sn:"));
@@ -291,6 +301,26 @@ static void subghzRxCallback(
     }
 }
 
+void SubGhzAdvancedDecoderAdapter::getEnabledProtocolNames(
+    bool full_profile,
+    std::vector<String>& out) {
+    out.clear();
+
+    const SubGhzProtocolRegistry* registry = selectRegistry(full_profile);
+    if(!registry || !registry->items || registry->size == 0) return;
+
+    out.reserve(registry->size);
+    for(size_t i = 0; i < registry->size; i++) {
+        const SubGhzProtocol* protocol = registry->items[i];
+        if(protocol && protocol->name) out.emplace_back(protocol->name);
+    }
+}
+
+size_t SubGhzAdvancedDecoderAdapter::getEnabledProtocolCount(bool full_profile) {
+    const SubGhzProtocolRegistry* registry = selectRegistry(full_profile);
+    return registry ? registry->size : 0;
+}
+
 bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
     const String& text,
     uint32_t frequency_hz,
@@ -302,7 +332,7 @@ bool SubGhzAdvancedDecoderAdapter::decodeRawSubText(
     SubGhzEnvironment* env = subghz_environment_alloc();
     if(!env) return false;
 
-    subghz_environment_set_protocol_registry(env, full_profile ? &kFullRegistry : &kCoreRegistry);
+    subghz_environment_set_protocol_registry(env, selectRegistry(full_profile));
     (void)subghz_environment_load_keystore(env, "/mfcodes");
 
     SubGhzReceiver* rx = subghz_receiver_alloc_init(env);
