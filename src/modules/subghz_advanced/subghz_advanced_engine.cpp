@@ -2,6 +2,7 @@
 
 #include "core/sd_functions.h"
 #include "modules/rf/rf_scan.h"
+#include "modules/rf/rf_send.h"
 #include "subghz_advanced_decoder_adapter.h"
 #include "subghz_advanced_subfile_codec.h"
 
@@ -92,6 +93,33 @@ bool SubGhzAdvancedEngine::analyzePathAuto(const String& inputPath, SubGhzAdvanc
     }
     if(LittleFS.exists(path)) {
         return analyzeSubFile(&LittleFS, path, frame);
+    }
+    return false;
+}
+
+bool SubGhzAdvancedEngine::transmitSubFile(FS* fs, const String& path, bool hideDefaultUI) {
+    begin();
+    if(fs == nullptr) return false;
+    if(!fs->exists(path)) return false;
+
+    // Keep the frame history aligned with TX actions whenever the file is parseable.
+    SubGhzAdvancedFrame frame;
+    analyzeSubFile(fs, path, frame);
+
+    RfCodes data{};
+    return readSubFile(fs, path, data) && txSubFile(data, hideDefaultUI);
+}
+
+bool SubGhzAdvancedEngine::transmitPathAuto(const String& inputPath, bool hideDefaultUI) {
+    begin();
+    String path = inputPath;
+    normalizePath(path);
+
+    if(setupSdCard() && SD.exists(path)) {
+        return transmitSubFile(&SD, path, hideDefaultUI);
+    }
+    if(LittleFS.exists(path)) {
+        return transmitSubFile(&LittleFS, path, hideDefaultUI);
     }
     return false;
 }

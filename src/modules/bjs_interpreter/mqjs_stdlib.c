@@ -436,6 +436,7 @@ const JSClassDef js_subghz_obj = JS_OBJECT_DEF("SubGHz", js_subghz);
 const JSPropDef js_subghz_advanced[] = {
     JS_CFUNC_DEF("read", 1, native_subghzAdvancedRead),
     JS_CFUNC_DEF("analyzeFile", 1, native_subghzAdvancedAnalyzeFile),
+    JS_CFUNC_DEF("transmitFile", 2, native_subghzAdvancedTransmitFile),
     JS_PROP_END,
 };
 

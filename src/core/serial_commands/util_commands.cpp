@@ -175,6 +175,15 @@ uint32_t helpCallback(cmd *c) {
         "  subghz tx_from_file <sub file path> [hide default UI true/false] - Send an RF signal "
         "saved in storage. Optionally hide the default UI."
     );
+    serialDevice->println(
+        "  subghz_adv rx [frequency] [timeout] - Advanced RX decode with protocol/key metadata (JSON)."
+    );
+    serialDevice->println(
+        "  subghz_adv analyze_file <sub file path> - Analyze a .sub capture offline (JSON)."
+    );
+    serialDevice->println(
+        "  subghz_adv tx_file <sub file path> [hide default UI true/false] - TX via advanced adapter."
+    );
 
     serialDevice->println("\nAudio Commands:");
     serialDevice->println("  music_player <audio file path>  - Play an audio file.");

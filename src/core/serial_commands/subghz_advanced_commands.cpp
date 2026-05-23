@@ -4,6 +4,17 @@
 
 #include <globals.h>
 
+static bool parseBoolArg(const Argument& arg, bool defaultValue) {
+    if(!arg.isSet()) return defaultValue;
+    String s = arg.getValue();
+    s.trim();
+    s.toLowerCase();
+    if(s.length() == 0) return defaultValue;
+    if(s == "1" || s == "true" || s == "yes" || s == "on") return true;
+    if(s == "0" || s == "false" || s == "no" || s == "off") return false;
+    return defaultValue;
+}
+
 static uint32_t subghzAdvRxCallback(cmd* c) {
     Command cmd(c);
 
@@ -43,6 +54,19 @@ static uint32_t subghzAdvRxCallback(cmd* c) {
     return true;
 }
 
+static uint32_t subghzAdvTxFileCallback(cmd* c) {
+    Command cmd(c);
+    Argument pathArg = cmd.getArgument("filepath");
+    Argument hideArg = cmd.getArgument("hideDefaultUI");
+
+    String path = pathArg.getValue();
+    path.trim();
+    if(path.length() == 0) return false;
+
+    bool hideDefaultUI = parseBoolArg(hideArg, true);
+    return SubGhzAdvancedEngine::instance().transmitPathAuto(path, hideDefaultUI);
+}
+
 static uint32_t subghzAdvAnalyzeFileCallback(cmd* c) {
     Command cmd(c);
     Argument pathArg = cmd.getArgument("filepath");
@@ -72,6 +96,10 @@ void createSubGhzAdvancedCommands(SimpleCLI* cli) {
     Command rx = root.addCommand("rx", subghzAdvRxCallback);
     rx.addPosArg("frequency", String((uint32_t)(bruceConfigPins.rfFreq * 1000000.0f)).c_str());
     rx.addPosArg("timeout", "10");
+
+    Command txFile = root.addCommand("tx_file", subghzAdvTxFileCallback);
+    txFile.addPosArg("filepath");
+    txFile.addPosArg("hideDefaultUI", "true");
 
     Command analyze = root.addCommand("analyze_file", subghzAdvAnalyzeFileCallback);
     analyze.addPosArg("filepath");

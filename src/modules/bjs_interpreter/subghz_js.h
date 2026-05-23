@@ -22,6 +22,7 @@ JSValue native_subghzTxEnd(JSContext *ctx, JSValue *this_val, int argc, JSValue 
 // Advanced SubGHz API
 JSValue native_subghzAdvancedRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_subghzAdvancedAnalyzeFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_subghzAdvancedTransmitFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
 #ifdef __cplusplus
 }

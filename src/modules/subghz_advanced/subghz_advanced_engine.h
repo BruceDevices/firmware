@@ -24,6 +24,8 @@ public:
     SubGhzAdvancedFrame analyzeSubFileText(const String& text, const String& source = "");
     bool analyzeSubFile(FS* fs, const String& path, SubGhzAdvancedFrame& frame);
     bool analyzePathAuto(const String& path, SubGhzAdvancedFrame& frame);
+    bool transmitSubFile(FS* fs, const String& path, bool hideDefaultUI = false);
+    bool transmitPathAuto(const String& path, bool hideDefaultUI = false);
 
     bool readAndDecode(float freqMHz, int timeoutSec, SubGhzAdvancedFrame& frame);
 

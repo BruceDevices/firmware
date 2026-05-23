@@ -206,4 +206,17 @@ JSValue native_subghzAdvancedAnalyzeFile(JSContext *ctx, JSValue *this_val, int 
     return JS_NewString(ctx, frame.toJson().c_str());
 }
 
+JSValue native_subghzAdvancedTransmitFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    const char *filepath = NULL;
+    JSCStringBuf filepath_buf;
+    if (argc > 0 && JS_IsString(ctx, argv[0])) filepath = JS_ToCString(ctx, argv[0], &filepath_buf);
+    if (filepath == NULL) return JS_NewBool(false);
+
+    bool hideDefaultUI = true;
+    if (argc > 1 && JS_IsBool(argv[1])) hideDefaultUI = JS_ToBool(ctx, argv[1]);
+
+    bool ok = SubGhzAdvancedEngine::instance().transmitPathAuto(String(filepath), hideDefaultUI);
+    return JS_NewBool(ok);
+}
+
 #endif

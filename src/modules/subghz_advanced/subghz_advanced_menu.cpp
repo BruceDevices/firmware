@@ -9,6 +9,8 @@
 #include <globals.h>
 
 static SubGhzAdvancedEngine& eng = SubGhzAdvancedEngine::instance();
+static String lastTxPath = "";
+static bool lastTxOnSd = false;
 
 static void showFrame(const SubGhzAdvancedFrame& f, const String& title) {
     drawMainBorderWithTitle(title);
@@ -28,6 +30,28 @@ static void showFrame(const SubGhzAdvancedFrame& f, const String& title) {
     while(check(AnyKeyPress)) delay(20);
 }
 
+static bool chooseSubFile(FS*& fs, String& path) {
+    fs = &LittleFS;
+    options = {
+        {"LittleFS", [&]() { fs = &LittleFS; }},
+    };
+    if(setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { fs = &SD; }});
+    loopOptions(options);
+
+    path = loopSD(*fs, true, "SUB", "/BruceRF");
+    return path.length() > 0;
+}
+
+static bool getLastTxFs(FS*& fs) {
+    if(lastTxOnSd) {
+        if(!setupSdCard()) return false;
+        fs = &SD;
+        return true;
+    }
+    fs = &LittleFS;
+    return true;
+}
+
 static void actionScanAndIdentify() {
     SubGhzAdvancedFrame frame;
     bool ok = eng.readAndDecode(bruceConfigPins.rfFreq, 10, frame);
@@ -39,15 +63,9 @@ static void actionScanAndIdentify() {
 }
 
 static void actionAnalyzeSubFile() {
-    FS* fs = &LittleFS;
-    options = {
-        {"LittleFS", [&]() { fs = &LittleFS; }},
-    };
-    if(setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { fs = &SD; }});
-    loopOptions(options);
-
-    String path = loopSD(*fs, true, "SUB", "/BruceRF");
-    if(path.length() == 0) return;
+    FS* fs = nullptr;
+    String path = "";
+    if(!chooseSubFile(fs, path)) return;
 
     SubGhzAdvancedFrame frame;
     if(!eng.analyzeSubFile(fs, path, frame)) {
@@ -56,6 +74,58 @@ static void actionAnalyzeSubFile() {
     }
 
     showFrame(frame, "Analyze .sub");
+}
+
+static void actionAnalyzeLastTxFile() {
+    if(lastTxPath.length() == 0) {
+        displayInfo("No last TX file", true);
+        return;
+    }
+
+    FS* fs = nullptr;
+    if(!getLastTxFs(fs) || !fs->exists(lastTxPath)) {
+        displayError("Last TX file unavailable", true);
+        return;
+    }
+
+    SubGhzAdvancedFrame frame;
+    if(!eng.analyzeSubFile(fs, lastTxPath, frame)) {
+        displayError("Unable to parse last TX file", true);
+        return;
+    }
+
+    showFrame(frame, "Analyze Last TX");
+}
+
+static void actionTransmitSubFile() {
+    FS* fs = nullptr;
+    String path = "";
+    if(!chooseSubFile(fs, path)) return;
+
+    if(!eng.transmitSubFile(fs, path, false)) {
+        displayError("Unable to transmit .sub", true);
+        return;
+    }
+
+    lastTxPath = path;
+    lastTxOnSd = (fs == &SD);
+}
+
+static void actionTransmitLastSubFile() {
+    if(lastTxPath.length() == 0) {
+        displayInfo("No last TX file", true);
+        return;
+    }
+
+    FS* fs = nullptr;
+    if(!getLastTxFs(fs) || !fs->exists(lastTxPath)) {
+        displayError("Last TX file unavailable", true);
+        return;
+    }
+
+    if(!eng.transmitSubFile(fs, lastTxPath, false)) {
+        displayError("Unable to transmit last file", true);
+    }
 }
 
 static void actionRecent() {
@@ -87,12 +157,39 @@ static void actionSettings() {
     loopOptions(settings, MENU_TYPE_SUBMENU, "SubGHz Settings", idx);
 }
 
+static void actionRxMenu() {
+    std::vector<Option> rx = {
+        {"Scan & Identify", actionScanAndIdentify},
+    };
+    addOptionToMainMenu();
+    loopOptions(rx, MENU_TYPE_SUBMENU, "SubGHz RX");
+}
+
+static void actionTxMenu() {
+    std::vector<Option> tx = {
+        {"Transmit .sub", actionTransmitSubFile},
+        {"Transmit Last", actionTransmitLastSubFile},
+    };
+    addOptionToMainMenu();
+    loopOptions(tx, MENU_TYPE_SUBMENU, "SubGHz TX");
+}
+
+static void actionAnalyzeMenu() {
+    std::vector<Option> analyze = {
+        {"Analyze .sub", actionAnalyzeSubFile},
+        {"Analyze Last TX", actionAnalyzeLastTxFile},
+    };
+    addOptionToMainMenu();
+    loopOptions(analyze, MENU_TYPE_SUBMENU, "SubGHz Analyze");
+}
+
 void subghz_advanced_menu() {
     eng.begin();
 
     options = {
-        {"Scan & Identify", actionScanAndIdentify},
-        {"Analyze .sub", actionAnalyzeSubFile},
+        {"RX", actionRxMenu},
+        {"TX", actionTxMenu},
+        {"Analyze", actionAnalyzeMenu},
         {"Recent", actionRecent},
         {"Settings", actionSettings},
     };
