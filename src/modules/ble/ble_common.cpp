@@ -87,7 +87,7 @@ void ble_scan_setup() {
     BLEDevice::init("");
     pBLEScan = BLEDevice::getScan();
 #ifdef NIMBLE_V2_PLUS
-    pBLEScan->setScanCallbacks(new NimBLEScanCallbacks());
+    pBLEScan->setScanCallbacks(new AdvertisedDeviceCallbacks());
 #else
     pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
 #endif
@@ -173,7 +173,7 @@ bool initBLEServer() {
     pTxCharacteristic = pService->createCharacteristic(CHARACTERISTIC_RX_UUID, NIMBLE_PROPERTY::NOTIFY);
 
     pTxCharacteristic->addDescriptor(new NimBLE2904());
-    BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
+    pRxCharacteristic = pService->createCharacteristic(
         CHARACTERISTIC_TX_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
     );
     pRxCharacteristic->setCallbacks(new MyCallbacks());
@@ -250,7 +250,6 @@ void disPlayBLESend() {
     }
 
     tft.setTextColor(TFT_WHITE);
-    pService->~NimBLEService();
     pServer->getAdvertising()->stop();
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();

@@ -3644,7 +3644,7 @@ String selectTargetFromScan(const char *title) {
 
     const int ACTIVE_SCAN_TIME = 15, PASSIVE_SCAN_TIME = 15;
 
-    tft.setCursor(20, 120);
+    tft.setCursor(20, tftHeight - 30);
     tft.print("Active scan (15s)...");
 
 #ifdef NIMBLE_V2_PLUS
@@ -3653,7 +3653,7 @@ String selectTargetFromScan(const char *title) {
     NimBLEScanResults results = pBLEScan->start(ACTIVE_SCAN_TIME, false);
 #endif
 
-    tft.setCursor(20, 140);
+    tft.setCursor(20, tftHeight - 15);
     tft.print("Passive scan (15s)...");
     pBLEScan->setActiveScan(false);
 
@@ -3720,7 +3720,7 @@ String selectTargetFromScan(const char *title) {
     size_t deviceCount = scannerData.size();
 
     if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size() - 1; i++) {
+        for (size_t i = 0; scannerData.deviceAddresses.size() > 1 && i < scannerData.deviceAddresses.size() - 1; i++) {
             for (size_t j = i + 1; j < scannerData.deviceAddresses.size(); j++) {
                 bool swapNeeded = false;
                 if (scannerData.deviceFastPair[j] && !scannerData.deviceFastPair[i]) swapNeeded = true;
