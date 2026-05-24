@@ -17,6 +17,11 @@ static const uint8_t RX = 44;
 static const uint8_t TXD2 = 1;
 static const uint8_t RXD2 = 2;
 
+// Grove HY2.0-4P port I2C pins (GPIO1=SCL, GPIO2=SDA)
+#define GROVE_SDA 2
+#define GROVE_SCL 1
+
+// EXT header I2C (also used for GPS cap on Cardputer ADV)
 static const uint8_t SDA = 13;
 static const uint8_t SCL = 15;
 

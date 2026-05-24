@@ -4,6 +4,7 @@
 #include <Keyboard.h>
 #include <Wire.h>
 #include <interface.h>
+#include "glass2.h"
 
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
@@ -121,6 +122,8 @@ void _post_setup_gpio() {
         Serial.println("Probable standard Cardputer detected, switching to Keyboard library");
         Wire1.end();
         Keyboard.begin();
+        glass2Init();
+        glass2Show("Bruce", "Cardputer", "", "");
         return;
     }
     bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
@@ -132,6 +135,10 @@ void _post_setup_gpio() {
     pinMode(11, INPUT);
     attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, &kb_interrupt, CHANGE);
     tca.enableInterrupts();
+
+    // Glass2 secondary OLED on Grove port (GPIO2=SDA, GPIO1=SCL)
+    glass2Init();
+    glass2Show("Bruce", "Cardputer ADV", "Grove OK", "");
 }
 
 /*********************************************************************
