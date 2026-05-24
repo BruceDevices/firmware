@@ -167,8 +167,13 @@ bool run_bjs_script_headless(FS fs, String filename) {
     if (script == NULL) { return false; }
 
     int slash = filename.lastIndexOf('/');
-    scriptName = strdup(filename.c_str() + slash + 1);
-    scriptDirpath = strndup(filename.c_str(), slash);
+    if (slash < 0) {
+        scriptDirpath = strdup("/");
+        scriptName = strdup(filename.c_str());
+    } else {
+        scriptName = strdup(filename.c_str() + slash + 1);
+        scriptDirpath = strndup(filename.c_str(), slash == 0 ? 1 : slash);
+    }
     returnToMenu = true;
     interpreter_state = 1;
     startInterpreterTask();
