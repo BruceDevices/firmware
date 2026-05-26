@@ -1,6 +1,7 @@
 #include "ClockMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
+#include "modules/others/pomodoro.h"
 #include "modules/others/timer.h"
 
 void ClockMenu::optionsMenu() {
@@ -21,6 +22,7 @@ void ClockMenu::optionsMenu() {
 void ClockMenu::showSubMenu() {
     options = {
         {"Timer",         [=]() { Timer(); }            },
+        {"Pomodoro",      [=]() { Pomodoro(); }         },
         {"Back to Clock", [=]() {}                      },
         {"Exit",          [=]() { returnToMenu = true; }}
         // Add more options here

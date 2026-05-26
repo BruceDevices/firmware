@@ -121,8 +121,14 @@ static void initAudioPlayer() {
 }
 
 // Internal helper - unified audio output creation
+// Some boards (T-Embed CC1101) need the speaker on I2S port 1 because the PDM
+// mic uses port 0; sharing the port produces silence.
+#ifndef I2S_AUDIO_PORT
+#define I2S_AUDIO_PORT 0
+#endif
+
 static AudioOutputI2S *createConfiguredAudioOutput() {
-    AudioOutputI2S *audioout = new AudioOutputI2S();
+    AudioOutputI2S *audioout = new AudioOutputI2S(I2S_AUDIO_PORT);
 
     if (!audioout) {
         Serial.println("ERROR: AudioOutputI2S allocation failed");

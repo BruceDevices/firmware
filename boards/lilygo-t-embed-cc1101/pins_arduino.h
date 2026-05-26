@@ -97,6 +97,9 @@ static const uint8_t SCL = GROVE_SCL;
 #define WCLK 40
 #define DOUT 7
 #define MCLK PIN_CLK
+// Mic uses I2S_NUM_0 (PDM); speaker must run on I2S_NUM_1 to avoid silent
+// driver-install conflict — matches LilyGo factory_test.
+#define I2S_AUDIO_PORT 1
 
 // Serial
 #define SERIAL_TX 43
