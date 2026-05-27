@@ -275,12 +275,12 @@ void Pomodoro::runSession() {
         bool isLong = (round % roundsBeforeLong == 0);
 
         if (!runPhase(PHASE_WORK, workMin * 60)) return;
-        if (!playPhaseEndAlarm(PHASE_WORK)) return;
+        if (!phaseSkipped && !playPhaseEndAlarm(PHASE_WORK)) return;
 
         Phase brk = isLong ? PHASE_LONG_BREAK : PHASE_SHORT_BREAK;
         int brkSec = (isLong ? longMin : shortMin) * 60;
         if (!runPhase(brk, brkSec)) return;
-        if (!playPhaseEndAlarm(brk)) return;
+        if (!phaseSkipped && !playPhaseEndAlarm(brk)) return;
 
         round++;
         if (round > 99) round = 1;
@@ -289,6 +289,7 @@ void Pomodoro::runSession() {
 
 bool Pomodoro::runPhase(Phase p, int durationSec) {
     phase = p;
+    phaseSkipped = false;
     unsigned long startMs = millis();
     unsigned long lastUpdate = 0;
     unsigned long lastLedUpdate = 0;
@@ -321,6 +322,7 @@ bool Pomodoro::runPhase(Phase p, int durationSec) {
         }
 
         if (check(NextPress)) {
+            phaseSkipped = true;
             return true;
         }
 
@@ -410,8 +412,8 @@ void Pomodoro::drawRunFrame(Phase p, int remainingSec, int phaseDurationSec) {
 
     drawRoundDots(p);
 
-    char foot[40];
-    snprintf(foot, sizeof(foot), "Round %d  -  SEL pause  NEXT skip", round);
+    char foot[24];
+    snprintf(foot, sizeof(foot), "SEL pause  NEXT skip");
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
     tft.setTextDatum(MC_DATUM);
     tft.drawString(foot, centerX, tftHeight - BORDER_PAD_X - LH, 1);

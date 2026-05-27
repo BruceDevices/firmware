@@ -36,6 +36,7 @@ private:
 
     int round = 1;
     Phase phase = PHASE_WORK;
+    bool phaseSkipped = false;
 
     int centerX = tftWidth / 2;
     int centerY = tftHeight / 2;
