@@ -34,7 +34,7 @@ enum DuckyCommandType {
     DuckyCommandType_DefaultStringDelay
 };
 
-struct DuckyCommand {
+struct DuckyCommandLookup {
     const char *command;
     char key;
     DuckyCommandType type;
@@ -62,7 +62,7 @@ const DuckyCombination duckyComb[]{
     {"SYSREQ",         KEY_LEFT_ALT,  KEY_PRINT_SCREEN, 0             }
 };
 
-const DuckyCommand duckyCmds[]{
+const DuckyCommandLookup duckyCmds[]{
     {"REM",                   0,                DuckyCommandType_Comment           },
     {"//",                    0,                DuckyCommandType_Comment           },
     {"STRING",                0,                DuckyCommandType_Print             },
@@ -634,8 +634,8 @@ void key_input(FS fs, String bad_script, HIDInterface *_hid) {
         uint16_t i;
         uint16_t repeatCount = RepeatTmp.toInt();
         for (i = 0; i < repeatCount; i++) {
-            DuckyCommand *PriCmd = findDuckyCommand(Cmd);
-            DuckyCommand *ArgCmd = findDuckyCommand(Argument.c_str());
+            DuckyCommandLookup *PriCmd = findDuckyCommand(Cmd);
+            DuckyCommandLookup *ArgCmd = findDuckyCommand(Argument.c_str());
 
             if (PriCmd != nullptr) {
                 // REM comment lines are processed here
@@ -986,9 +986,9 @@ void MediaCommands(HIDInterface *hid, bool ble) {
     returnToMenu = true;
 }
 
-DuckyCommand *findDuckyCommand(const char *cmd) {
+DuckyCommandLookup *findDuckyCommand(const char *cmd) {
     for (auto &cmds : duckyCmds) {
-        if (strcmp(cmd, cmds.command) == 0) { return const_cast<DuckyCommand *>(&cmds); }
+        if (strcmp(cmd, cmds.command) == 0) { return const_cast<DuckyCommandLookup *>(&cmds); }
     }
     return nullptr;
 }
