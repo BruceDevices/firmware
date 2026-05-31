@@ -195,43 +195,43 @@ String readUTF16(uint8_t *pkt, uint32_t offset, uint16_t len) {
 
 void updateHashUI() {
     // auto& d = M5Cardputer.Display;
-    // drawMainBorderWithTitle("RESPONDER", true); // clear
+    // tft.fillScreen(bruceConfig.bgColor);
 
     // 1) NTLM count
-    tft.setTextSize(FP);
+    tft.setTextSize(1.0);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+    tft.setCursor(5, 5);
     tft.print("NTLM: ");
     tft.setTextSize(2);
-    tft.println(hashCount);
+    tft.print(hashCount);
 
     // 2) User
-    tft.setTextSize(FP);
-    tft.setCursor(10, tft.getCursorY());
+    tft.setTextSize(1.3);
+    tft.setCursor(5, 30);
     tft.print("User: ");
     tft.setTextSize(2);
-    tft.println(lastUser);
+    tft.print(lastUser);
 
     // 3) Domain
-    tft.setTextSize(FP);
-    tft.setCursor(10, tft.getCursorY());
+    tft.setTextSize(1.3);
+    tft.setCursor(5, 55);
     tft.print("Domain: ");
     tft.setTextSize(2);
-    tft.println(lastDomain);
+    tft.print(lastDomain);
 
     // 4) Client (hostname)
-    tft.setTextSize(FP);
-    tft.setCursor(10, tft.getCursorY());
+    tft.setTextSize(1.3);
+    tft.setCursor(5, 80);
     tft.print("Client: ");
     tft.setTextSize(2);
-    tft.println(lastClient);
+    tft.print(lastClient);
 
     // 5) Query (NBNS/LLMNR + name)
-    tft.setTextSize(FP);
-    tft.setCursor(10, tft.getCursorY());
+    tft.setTextSize(1.3);
+    tft.setCursor(5, 105);
     tft.print(lastQueryProtocol + ": ");
     tft.setTextSize(2);
-    tft.println(lastQueryName);
+    tft.print(lastQueryName);
 }
 
 void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
@@ -564,22 +564,16 @@ void decodeNetBIOSLabel(const uint8_t *enc32, char *out, size_t outSize) {
 ***************************************************************************************/
 void responder() {
 
-    drawMainBorderWithTitle("RESPONDER");
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.fillScreen(bruceConfig.bgColor);
+    // M5Cardputer.Display.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     if (!wifiConnected) wifiConnectMenu();
 
     netbiosname_str = keyboard("Bruce", 20);
-    if (netbiosname_str == "\x1B") return;
     netbiosName = stringTochar(netbiosname_str);
     netbiosdomain_str = keyboard("BRUCEGROUP", 20);
-    if (netbiosdomain_str == "\x1B") return;
     netbiosDomain = stringTochar(netbiosdomain_str);
     dnsdomain_str = keyboard("Bruce.Local", 20);
-    if (dnsdomain_str == "\x1B") return;
     dnsDomain = stringTochar(dnsdomain_str);
-
-    drawMainBorderWithTitle("RESPONDER"); // draw again after keyboard
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     hashCount = 0;
     // Démarrer l'écoute NBNS (UDP 137)
@@ -601,18 +595,18 @@ void responder() {
         //  Choix de la fonction selon le count
         if (hashCount == 0) {
             // showWaitingAnimation();
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
-            tft.println("Waiting LLMNR Interact");
+            tft.setCursor(0, 0);
+            tft.setTextSize(0);
+            tft.println("Waiting\nLLMNR Interact...");
         } else if (hashCount == 1) {
-            drawMainBorderWithTitle("RESPONDER", true);
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
-            tft.println("Found Interaction!\nthanks 7h30th3r0n3");
+
+            tft.setCursor(60, 90);
+            tft.setTextSize(0);
+            tft.println("Found Interaction!\n\nthanks 7h30th3r0n3");
+
         } else {
-            drawMainBorderWithTitle("RESPONDER", true);
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
+
+            tft.setCursor(60, 90);
             tft.println("End");
         }
         // lastAnim = now;
@@ -1052,10 +1046,8 @@ void responder() {
                                         smbState.client.stop();
                                         smbState.active = false;
                                     }
-                                } else if (
-                                    packet[0] == 0xFF && packet[1] == 'S' && packet[2] == 'M' &&
-                                    packet[3] == 'B'
-                                ) {
+                                } else if (packet[0] == 0xFF && packet[1] == 'S' && packet[2] == 'M' &&
+                                           packet[3] == 'B') {
                                     Serial.println(F("Paquet SMBv1 received."));
                                     handleSMB1(packet, smbLength);
                                     continue;

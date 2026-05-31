@@ -64,7 +64,12 @@ public:
     AnimatedGIF *gif;
 
 private:
+    unsigned long lTime = millis();
+
     static FS *GifFs;
+
+    int zero = 0;
+    int *delayMilliseconds = &zero;
 
     GifPosition gifPosition;
 
@@ -208,8 +213,6 @@ void drawBLE_beacon(int x, int y, uint16_t color);
 void drawGPS(int x, int y);
 
 void drawGpsSmall(int x, int y);
-
-void drawSdSmall(int x, int y);
 
 void drawCreditCard(int x, int y);
 

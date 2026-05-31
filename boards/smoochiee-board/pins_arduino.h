@@ -56,7 +56,6 @@ static const uint8_t SCK = 18;
 #define FP 1
 #define FM 2
 #define FG 3
-
 #define HAS_SCREEN 1
 #define ROTATION 1
 #define MINBRIGHT (uint8_t)1

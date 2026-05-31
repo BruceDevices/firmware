@@ -104,7 +104,6 @@ struct Option {
     String label;
     std::function<void()> operation;
     bool selected = false;
-    bool enabled = true;
     bool (*hover)(void *hoverPointer, bool shouldRender);
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
@@ -113,9 +112,9 @@ struct Option {
         String lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) =
             nullptr, // hover lambda returns true if it already handled rendering
-        void *ptr = nullptr, bool hvrd = false, bool en = true
+        void *ptr = nullptr, bool hvrd = false
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), hover(hov), hoverPointer(ptr), hovered(hvrd) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!
