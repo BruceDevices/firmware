@@ -259,6 +259,11 @@ public:
     uint32_t textcolor = TFT_WHITE;
     uint32_t textbgcolor = TFT_BLACK;
 
+    uint32_t getTextColor() { return textcolor; };
+    uint32_t getTextBgColor() { return textbgcolor; };
+    uint8_t getTextSize() { return textsize; };
+    uint8_t getRotation() { return rotation; };
+
     void setWaitForAck(bool wait) { waitForAck = wait; }
 
     void setDelay(uint32_t delayMillis) {
@@ -495,15 +500,15 @@ public:
     void text(int x, int y, const char *str, int n) {
         args.xyText.x = x;
         args.xyText.y = y;
-        if (n > VECTOR_DISPLAY_MAX_STRING) n = VECTOR_DISPLAY_MAX_STRING;
+        if (n > VECTOR_DISPLAY_MAX_STRING - 1) n = VECTOR_DISPLAY_MAX_STRING - 1;
         strncpy(args.xyText.text, str, n);
+        args.xyText.text[n] = 0; // Explicit null termination before loop
 
         if (fixCP437) {
             for (int i = 0; i < n; i++) {
                 if ((uint8_t)args.xyText.text[i] >= 176) args.xyText.text[i]++;
             }
         }
-        args.xyText.text[n] = 0;
         sendCommand('T', &args, 4 + strlen(args.xyText.text) + 1);
     }
 
@@ -515,15 +520,15 @@ public:
 
     void addButton(uint8_t command, const char *str) {
         args.charText.c = command;
-        strncpy(args.charText.text, str, VECTOR_DISPLAY_MAX_STRING);
-        args.charText.text[VECTOR_DISPLAY_MAX_STRING] = 0;
+        strncpy(args.charText.text, str, VECTOR_DISPLAY_MAX_STRING - 1);
+        args.charText.text[VECTOR_DISPLAY_MAX_STRING - 1] = 0;
         sendCommand('U', &args, 1 + strlen(args.charText.text) + 1);
     }
 
     void addButton(uint8_t command, String str) { addButton(command, str.c_str()); }
 
     void toast(const char *str, unsigned n) {
-        if (VECTOR_DISPLAY_MAX_STRING < n) n = VECTOR_DISPLAY_MAX_STRING;
+        if (VECTOR_DISPLAY_MAX_STRING - 1 < n) n = VECTOR_DISPLAY_MAX_STRING - 1;
         strncpy(args.text, str, n);
         args.text[n] = 0;
         sendCommand('M', &args, n + 1);
@@ -1198,7 +1203,11 @@ public:
     }
 
     void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data) {};
+    void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint16_t *data) {};
     void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data, uint16_t transparent) {};
+    void pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t *data, bool bpp8, uint16_t *cmap) {};
+    void
+    pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t *data, bool bpp8, uint16_t *cmap) {};
 
     void setAddrWindow(int32_t xs, int32_t ys, int32_t w, int32_t h) {};
     void pushPixels(const void *data_in, uint32_t len) {};

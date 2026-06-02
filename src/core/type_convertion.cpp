@@ -37,7 +37,7 @@ String hexStrToBinStr(const String &hexStr) {
 
 void decimalToHexString(uint64_t decimal, char *output) {
     char hexDigits[] = "0123456789ABCDEF";
-    char temp[65];
+    char temp[66]; // Increased to accommodate null terminator at index 65
     int index = 15;
 
     // Initialize tem string with zeros

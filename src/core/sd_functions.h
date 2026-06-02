@@ -32,11 +32,13 @@ bool pasteFile(FS fs, String path);
 
 bool createFolder(FS fs, String path);
 
+bool folderExists(FS fs, String path);
+
 String readLineFromFile(File myFile);
 
 String readSmallFile(FS &fs, String filepath);
 
-char *readBigFile(FS &fs, String filepath, bool binary = false, size_t *fileSize = NULL);
+char *readBigFile(FS *fs, String filepath, bool binary = false, size_t *fileSize = NULL);
 
 String md5File(FS &fs, String filepath);
 

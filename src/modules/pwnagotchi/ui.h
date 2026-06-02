@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "core/display.h"
 #include "mood.h"
 #include "pwngrid.h"
@@ -21,3 +21,4 @@ void drawFooterData(
 void drawTopCanvas();
 void drawBottomCanvas();
 void updateUi(bool show_toolbars = false);
+#endif

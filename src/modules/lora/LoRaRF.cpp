@@ -93,8 +93,10 @@ SPIClass *selectLoraSPIBus() {
     } else if (bruceConfigPins.SDCARD_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
         selectedSPI = &sdcardSPI;
         Serial.println("Using SDCard SPI for LoRa");
-    } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.LoRa_bus.mosi ||
-               bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
+    } else if (
+        bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.LoRa_bus.mosi ||
+        bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.LoRa_bus.mosi
+    ) {
         selectedSPI = &CC_NRF_SPI;
         CC_NRF_SPI.begin(
             (int8_t)bruceConfigPins.LoRa_bus.sck,
@@ -277,6 +279,7 @@ void sendmsg() {
         return;
     }
     msg = keyboard(msg, 256, "Message:");
+    if (msg == "\x1B") return;
     msg = String(displayName) + ": " + msg;
     if (msg == "") return;
     Serial.println(msg);
@@ -451,7 +454,7 @@ void lorachat() {
 void changeusername() {
     tft.fillScreen(TFT_BLACK);
     String username = keyboard(username, 64, "");
-    if (username == "") return;
+    if (username == "" || username == "\x1B") return;
     File file = LittleFS.open("/lora_settings.json", "r");
     JsonDocument doc;
     deserializeJson(doc, file);
@@ -475,7 +478,7 @@ void chfreq() {
     snprintf(buf, sizeof(buf), "%.3f", dfreq);
     String freq = num_keyboard(buf, 12, "in Mhz");
     dfreq = freq.toDouble();
-    if (dfreq == 0) {
+    if (dfreq == 0 || freq == "\x1B") {
         displayError("Invalid value");
         return;
     } else if (dfreq > 1000) {

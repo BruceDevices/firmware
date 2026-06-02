@@ -5,7 +5,10 @@
 
 extern wifi_ap_record_t ap_record;
 
-// Default Drauth Frame
+// Default target MAC (broadcast)
+extern const uint8_t _default_target[6];
+
+// Default Deauth Frame
 const uint8_t deauth_frame_default[] = {0xc0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff,
                                         0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                         0x00, 0x00, 0x00, 0x00, 0xf0, 0xff, 0x02, 0x00};
@@ -20,21 +23,21 @@ extern uint8_t targetBssid[6];
  * @param frame_buffer
  * @param size size of frame buffer
  */
-static const uint8_t _default_target[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-void wsl_bypasser_send_raw_frame(
-    const wifi_ap_record_t *ap_record, uint8_t chan, const uint8_t target[6] = _default_target
-);
+void send_raw_frame(const uint8_t *frame_buffer, int size);
 
 /**
- * @brief Sends deauthentication frame with forged source AP from given ap_record
+ * @brief Prepare deauthentication frame with forged source AP from given ap_record
  *
  * This will send deauthentication frame acting as frame from given AP, and destination will be broadcast
  * MAC address - \c ff:ff:ff:ff:ff:ff
  *
  * @param ap_record AP record with valid AP information
  * @param chan Channel of the targetted AP
+ * @param target Target MAC address (defaults to broadcast)
  */
-void send_raw_frame(const uint8_t *frame_buffer, int size);
+void wsl_bypasser_send_raw_frame(
+    const wifi_ap_record_t *ap_record, uint8_t chan, const uint8_t target[6] = _default_target
+);
 
 void wifi_atk_info(String tssid, String mac, uint8_t channel);
 

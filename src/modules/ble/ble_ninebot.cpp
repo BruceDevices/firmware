@@ -6,7 +6,7 @@
  * @date 2025-04-26
  * @credits thanks "mr unknown" for the payloads
  */
-
+#if !defined(LITE_VERSION)
 #include "ble_ninebot.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -134,7 +134,7 @@ void BLENinebot::loop() {
         redrawMainBorder();
         displayTextLine("Scanning...");
 #ifdef NIMBLE_V2_PLUS
-        NimBLEScanResults results = pBLEScan->getResults(SCAN_TIME*1000, false);
+        NimBLEScanResults results = pBLEScan->getResults(SCAN_TIME * 1000, false);
 #else
         NimBLEScanResults results = pBLEScan->start(SCAN_TIME, false);
 #endif
@@ -220,3 +220,4 @@ void BLENinebot::loop() {
         pBLEScan->clearResults();
     }
 }
+#endif

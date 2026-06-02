@@ -209,6 +209,7 @@ void Pn532ble::loadNdefEmulateMenu() {
     loopOptions(options);
 
     String ndef_data = keyboard(prefix, 255, "NDEF data:");
+    if (ndef_data == "\x1B") return;
     ndef_data.trim();
     emulationNdefData = ndef_data;
     setMode(HF_TG_INIT_AS_TARGET_MODE);

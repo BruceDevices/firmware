@@ -3,67 +3,57 @@
 #include "helpers.h"
 #include "modules/bjs_interpreter/interpreter.h"
 
-uint32_t jsFileCallback(cmd *c) {
+static uint32_t jsCallback(cmd *c) {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     Command cmd(c);
 
-    Argument arg = cmd.getArgument("filepath");
-    String filepath = arg.getValue();
-    filepath.trim();
+    const int argc = cmd.countArgs();
+    if (argc <= 0) return true;
 
-    /*
-    if(filepath.isEmpty()) {
-        serialDevice->println("Running inline script");
+    String first = cmd.getArgument(0).getValue();
+    first.trim();
+    if (first.length() == 0) return true;
 
-        char *txt = strdup(filepath.c_str());
-        run_bjs_script_headless(txt);
-        // *txt is freed by js interpreter
+    if (first == "exit") {
+        interpreter_state = -1;
         return true;
-    }*/
+    }
 
+    if (first == "run_from_buffer") {
+        int fileSize = 0;
+        if (argc >= 2) {
+            String strFileSize = cmd.getArgument(1).getValue();
+            strFileSize.trim();
+            fileSize = strFileSize.toInt();
+        }
+
+        char *txt = _readFileFromSerial(fileSize + 2);
+        return run_bjs_script_headless(txt);
+    }
+
+    String filepath;
+    if (first == "run_from_file") {
+        if (argc < 2) return false;
+
+        filepath = cmd.getArgument(1).getValue();
+    } else {
+        filepath = first;
+    }
+
+    // Fallback: `js <path>` runs the script file.
+    filepath.trim();
     if (!filepath.startsWith("/")) filepath = "/" + filepath;
 
     FS *fs;
-    if (!getFsStorage(fs)) return false;
+
+    if (sdcardMounted && SD.exists(filepath)) {
+        fs = &SD;
+    } else {
+        fs = &LittleFS;
+    }
 
     run_bjs_script_headless(*fs, filepath);
-
-#endif
     return true;
-}
-
-/*
-uint32_t jsBufferCallback(cmd *c) {
-    Command cmd(c);
-
-    Argument arg = cmd.getArgument("fileSize");
-    String strFileSize = arg.getValue();
-    strFileSize.trim();
-
-    int fileSize = strFileSize.toInt() + 2;
-    if(fileSize < SAFE_STACK_BUFFER_SIZE) fileSize = SAFE_STACK_BUFFER_SIZE;
-    char *txt = _readFileFromSerial( fileSize );
-
-    return run_bjs_script_headless(txt);
-    // *txt is freed by js interpreter
-}*/
-
-uint32_t jsBufferCallback(cmd *c) {
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-    if (!(_setupPsramFs())) return false;
-
-    char *txt = _readFileFromSerial();
-    String tmpfilepath = "/tmpramfile"; // TODO: Change to use char *txt directly
-    File f = PSRamFS.open(tmpfilepath, FILE_WRITE);
-    if (!f) return false;
-
-    f.write((const uint8_t *)txt, strlen(txt));
-    f.close();
-    free(txt);
-
-    bool r = run_bjs_script_headless(PSRamFS, tmpfilepath);
-    PSRamFS.remove(tmpfilepath);
-    return r;
 #else
     return true;
 #endif
@@ -71,15 +61,9 @@ uint32_t jsBufferCallback(cmd *c) {
 
 void createInterpreterCommands(SimpleCLI *cli) {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-    Command jsCmd = cli->addCompositeCmd("js,run,interpret/er");
-
-    Command fileCmd = jsCmd.addCommand(
-        "run_from_file", jsFileCallback
-    ); // TODO: remove "run_from_file" for flipper0-compatiblity
-       // https://docs.flipper.net/development/cli/#GjMyY
-    fileCmd.addPosArg("filepath");
-
-    Command bufferCmd = jsCmd.addCommand("run_from_buffer", jsBufferCallback);
-    bufferCmd.addPosArg("fileSize", "0"); // optional arg
+    // Boundless so we can support both:
+    // - subcommands: `js exit`, `js run_from_file <path>`, `js run_from_buffer <size>`
+    // - fallback: `js <path>` for flipper0-compatiblity https://docs.flipper.net/development/cli/#GjMyY
+    cli->addBoundlessCmd("js,run,interpret/er", jsCallback);
 #endif
 }

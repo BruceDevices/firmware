@@ -38,8 +38,11 @@
 #define EXPANDS_SD_EN 12
 
 #define IO_EXPANDER_PCA9555
+// to make GPS stays turned on all the time
+// making Wardrive start way faster
+// comment the next line
 #define IO_EXP_GPS EXPANDS_GPS_EN
-// Main I2C Bus
+//  Main SPI Bus
 #define SPI_SS_PIN 21
 #define SPI_MOSI_PIN 34
 #define SPI_MISO_PIN 33
@@ -168,6 +171,13 @@ static const uint8_t RX = SERIAL_RX;
 // #define PN532_RF_REST 45
 // #define PN532_IRQ 17
 
+// RTC
+#define HAS_RTC
+#define RTC_SDA GROVE_SDA
+#define RTC_SCL GROVE_SCL
+#define RTC_INTERRUPT_PIN 1
+#define HAS_RTC_PCF85063A
+
 // BadUSB
 #define USB_as_HID 1
 
@@ -180,6 +190,7 @@ static const uint8_t RX = SERIAL_RX;
 #define KEY_FN 0x14
 #define KEY_BACKSPACE 0x08
 #define KEY_ENTER 0x0D
+#define KEY_TAB 0x2b
 
 // Interrupt IO
 #define RTC_INT 1

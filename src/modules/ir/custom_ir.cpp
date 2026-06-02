@@ -219,9 +219,7 @@ bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
 void otherIRcodes() {
     checkIrTxPin();
     resetCodesArray();
-    int total_codes = 0;
     String filepath;
-    File databaseFile;
     FS *fs = NULL;
 
     returnToMenu = true; // make sure menu is redrawn when quitting in any point
@@ -237,107 +235,50 @@ void otherIRcodes() {
 
     if (fs == NULL) { // recent or menu was selected
         return;
-        // no need to proceed, go back
     }
 
     // select a file to tx
     if (!(*fs).exists("/BruceIR")) (*fs).mkdir("/BruceIR");
-    filepath = loopSD(*fs, true, "IR", "/BruceIR");
-    if (filepath == "") return; //  cancelled
 
-    // select mode
-    bool exit = false;
-    bool mode_cmd = true;
-    options = {
-        {"Choose cmd", [&]() { mode_cmd = true; } },
-        {"Spam all",   [&]() { mode_cmd = false; }},
-        {"Menu",       [&]() { exit = true; }     },
-    };
+    // startPath: remember the last visited folder so the user lands back there
+    // after pressing back in the command list
+    String startPath = "/BruceIR";
 
-    loopOptions(options);
+    while (true) {
+        filepath = loopSD(*fs, true, "IR", startPath);
+        if (filepath == "") return; // user cancelled / pressed back at root
 
-    if (exit == true) return;
+        // Remember the folder of the selected file for next loop iteration
+        startPath = filepath.substring(0, filepath.lastIndexOf('/'));
+        if (startPath == "") startPath = "/";
 
-    if (mode_cmd == false) {
-        // Spam all selected
-        txIrFile(fs, filepath);
-        return;
-    }
+        // select mode
+        bool exit = false;
+        bool mode_cmd = true;
+        options = {
+            {"Choose cmd", [&]() { mode_cmd = true; } },
+            {"Spam all",   [&]() { mode_cmd = false; }},
+            {"Menu",       [&]() { exit = true; }     },
+        };
 
-    // else continue and try to parse the file
+        loopOptions(options);
 
-    databaseFile = fs->open(filepath, FILE_READ);
-    drawMainBorder();
+        if (exit) return;
 
-    if (!databaseFile) {
-        Serial.println("Failed to open database file.");
-        // displayError("Fail to open file");
-        // delay(2000);
-        return;
-    }
-    Serial.println("Opened database file.");
-
-    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
-    // digitalWrite(bruceConfigPins.irTx, LED_ON);
-
-    // Mode to choose and send command by command limitted to 100 commands
-    String line;
-    String txt;
-    codes.push_back(new IRCode());
-    while (databaseFile.available() && total_codes < 100) {
-        line = databaseFile.readStringUntil('\n');
-        txt = line.substring(line.indexOf(":") + 1);
-        txt.trim();
-        if (line.startsWith("name:")) {
-            // in case that the separation between codes are not made by "#" line
-            if (codes[total_codes]->name != "") {
-                total_codes++;
-                codes.push_back(new IRCode());
-            }
-            // save signal name
-            codes[total_codes]->name = txt;
-            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
+        if (!mode_cmd) {
+            // Spam all selected
+            txIrFile(fs, filepath);
+            // After spam, loop back to file picker in the same folder
+            continue;
         }
-        if (line.startsWith("type:")) codes[total_codes]->type = txt;
-        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
-        if (line.startsWith("address:")) codes[total_codes]->address = txt;
-        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
-        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
-        if (line.startsWith("command:")) codes[total_codes]->command = txt;
-        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
-            codes[total_codes]->data = txt;
-        }
-        // if there are a line with "#", and the code name isnt't "" (there are a signal saved), go to next
-        // signal
-        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
-            total_codes++;
-            codes.push_back(new IRCode());
-        }
-        // if(line.startsWith("duty_cycle:")) codes[total_codes]->duty_cycle = txt.toFloat();
-    }
-    options = {};
-    for (auto code : codes) {
-        if (code->name != "") {
-            options.push_back({code->name.c_str(), [code]() {
-                                   sendIRCommand(code);
-                                   addToRecentCodes(code);
-                               }});
-        }
-    }
-    options.push_back({"Main Menu", [&]() { exit = true; }});
-    databaseFile.close();
 
-#ifdef USE_BOOST /// DISABLE 5V OUTPUT
-    PPM.disableOTG();
-#endif
-
-    digitalWrite(bruceConfigPins.irTx, LED_OFF);
-    int idx = 0;
-    while (1) {
-        idx = loopOptions(options, idx);
-        if (check(EscPress) || exit) break;
+        // Choose cmd:
+        // chooseCmdIrFile returns false = short back → loop back to file browser
+        //                          true  = long press / Main Menu → exit
+        bool goToMain = chooseCmdIrFile(fs, filepath);
+        if (goToMain) return;
+        // else: loop back to loopSD, starting in the same folder (startPath)
     }
-    options.clear();
 } // end of otherIRcodes
 
 // IR commands
@@ -705,4 +646,124 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
                                   : "")
     );
     digitalWrite(bruceConfigPins.irTx, LED_OFF);
+}
+
+bool chooseCmdIrFile(FS *fs, String filepath) {
+    checkIrTxPin();
+    resetCodesArray();
+    int total_codes = 0;
+    File databaseFile;
+
+    returnToMenu = true;
+
+    databaseFile = fs->open(filepath, FILE_READ);
+    drawMainBorder();
+
+    if (!databaseFile) {
+        Serial.println("Failed to open IR file.");
+        return false;
+    }
+    Serial.println("Opened IR file.");
+
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
+
+    // Mode to choose and send command by command (limitted to 100 commands)
+    String line;
+    String txt;
+    codes.push_back(new IRCode());
+
+    while (databaseFile.available() && total_codes < 100) {
+        line = databaseFile.readStringUntil('\n');
+        txt = line.substring(line.indexOf(":") + 1);
+        txt.trim();
+
+        if (line.startsWith("name:")) {
+            if (codes[total_codes]->name != "") {
+                total_codes++;
+                codes.push_back(new IRCode());
+            }
+            // save signal name
+            codes[total_codes]->name = txt;
+            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
+        }
+
+        if (line.startsWith("type:")) codes[total_codes]->type = txt;
+        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
+        if (line.startsWith("address:")) codes[total_codes]->address = txt;
+        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
+        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
+        if (line.startsWith("command:")) codes[total_codes]->command = txt;
+        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
+            codes[total_codes]->data = txt;
+        }
+
+        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
+            total_codes++;
+            codes.push_back(new IRCode());
+        }
+    }
+
+    options = {};
+    bool exit = false;
+    bool goToMainMenu = false;
+    bool actionTaken = false;
+
+    for (auto code : codes) {
+        if (code->name != "") {
+            options.push_back({code->name.c_str(), [code, &actionTaken]() {
+                               actionTaken = true;
+                               sendIRCommand(code);
+                               addToRecentCodes(code);
+                           }});
+        }
+    }
+    options.push_back({"Main Menu", [&]() { actionTaken = true; exit = true; goToMainMenu = true; }});
+    databaseFile.close();
+
+#ifdef USE_BOOST /// DISABLE 5V OUTPUT
+    PPM.disableOTG();
+#endif
+
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+    int idx = 0;
+    while (1) {
+        actionTaken = false;
+        idx = loopOptions(options, idx);
+
+        if (exit) break;
+
+        // loopOptions returned without any lambda running → EscPress was consumed internally
+        // Treat it like a back button press
+        if (!actionTaken) {
+            // Distinguish short vs long press by checking if button is still held
+            unsigned long pressStart = millis();
+            bool longPress = false;
+            while (check(EscPress)) {           // button still physically held
+                if (millis() - pressStart >= 2000) {
+                    longPress = true;
+                    break;
+                }
+                delay(10);
+            }
+            while (check(EscPress)) delay(10);  // wait for release
+
+            if (longPress) goToMainMenu = true;
+            // Short (or already released): goToMainMenu stays false → back to file browser
+            break;
+        }
+    }
+    options.clear();
+    resetCodesArray();
+    // Flush any residual EscPress
+    delay(100);
+    while (check(EscPress)) delay(10);
+
+    if (!goToMainMenu) {
+        // Short press: going back to file browser, NOT to main menu
+        // Reset returnToMenu so loopOptions chain doesn't cascade-exit everything
+        returnToMenu = false;
+    }
+    // true  = go to main menu (long press or "Main Menu" item selected)
+    // false = go back to file browser (short Esc press)
+    return goToMainMenu;
 }

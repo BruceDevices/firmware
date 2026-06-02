@@ -1,13 +1,13 @@
-#include <TFT_eSPI.h>
+#include <display/tft.h>
 
 class QRcode
 {
 	private:
-		TFT_eSPI *tft;
+		tft_display *tft;
 		void render(int x, int y, int color);
 
 	public:
-		QRcode(TFT_eSPI *display);
+		QRcode(tft_display *display);
 		void init();
 		void create(String message);	
 };

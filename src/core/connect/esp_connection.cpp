@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "esp_connection.h"
 #include "core/display.h"
 #include <WiFi.h>
@@ -169,7 +170,9 @@ void EspConnection::printMessage(Message message) {
 
 String EspConnection::macToString(const uint8_t *mac) {
     char macStr[18];
-    sprintf(macStr, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(
+        macStr, sizeof(macStr), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
     return macStr;
 }
 
@@ -209,3 +212,4 @@ void EspConnection::onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_st
 void EspConnection::onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
     if (instance) instance->onDataRecv(info->src_addr, incomingData, len);
 }
+#endif

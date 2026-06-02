@@ -1,66 +1,49 @@
 #include "rf_bruteforce.h"
-
-#include "protocols/Ansonic.h"
-#include "protocols/Came.h"
-#include "protocols/Chamberlain.h"
-#include "protocols/Holtek.h"
-#include "protocols/Linear.h"
-#include "protocols/NiceFlo.h"
-#include "protocols/protocol.h"
 #include "rf_utils.h"
 
-float brute_frequency = 433.92;
-String brute_protocol = "Nice 12 Bit";
-int brute_repeats = 1;
+static float brute_frequency = 433.92;
+static int brute_protocol_idx = 1; // Default: Nice
+static int brute_repeats = 1;
 
-void rf_brute_frequency() {
+static void rf_brute_frequency() {
     options = {};
     int ind = 0;
     int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
     for (int i = 0; i < arraySize; i++) {
-        String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
+        String tmp = String(subghz_frequency_list[i], 2) + "MHz";
         options.push_back({tmp.c_str(), [=]() { brute_frequency = subghz_frequency_list[i]; }});
+        if (int(brute_frequency * 100) == int(subghz_frequency_list[i] * 100)) ind = i;
     }
     loopOptions(options, ind);
-    options.clear();
 }
 
-void rf_brute_protocol() {
-    const String protocol_list[] = {
-        "Came 12 Bit",
-        "Nice 12 Bit",
-        "Ansonic 12 Bit",
-        "Holtek 12 Bit",
-        "Linear 12 Bit",
-        "Chamberlain 12 Bit",
-    };
-
+static void rf_brute_protocol() {
     options = {};
-    int ind = 0;
-    int arraySize = sizeof(protocol_list) / sizeof(protocol_list[0]);
-    for (int i = 0; i < arraySize; i++) {
-        String tmp = protocol_list[i];
-        options.push_back({tmp.c_str(), [=]() { brute_protocol = protocol_list[i]; }});
+    for (int i = 0; i < BRUTE_PROTOCOL_COUNT; i++) {
+        options.push_back({brute_protocols[i].name, [=]() { brute_protocol_idx = i; }});
     }
-    loopOptions(options, ind);
-    options.clear();
+    loopOptions(options, brute_protocol_idx);
 }
 
-void rf_brute_repeats() {
-    const int protocol_list[] = {1, 2, 3, 4, 5};
-
+static void rf_brute_repeats() {
     options = {};
-    int ind = 0;
-    int arraySize = sizeof(protocol_list) / sizeof(protocol_list[0]);
-    for (int i = 0; i < arraySize; i++) {
-        int tmp = protocol_list[i];
-        options.push_back({String(tmp).c_str(), [=]() { brute_repeats = protocol_list[i]; }});
+    for (int i = 1; i <= 5; i++) {
+        options.push_back({String(i).c_str(), [=]() { brute_repeats = i; }});
     }
-    loopOptions(options, ind);
-    options.clear();
+    loopOptions(options, brute_repeats - 1);
 }
 
-bool rf_brute_start() {
+static inline void sendPulse(int txpin, int duration) {
+    if (duration > 0) {
+        digitalWrite(txpin, HIGH);
+        delayMicroseconds(duration);
+    } else if (duration < 0) {
+        digitalWrite(txpin, LOW);
+        delayMicroseconds(-duration);
+    }
+}
+
+static bool rf_brute_start() {
     int txpin;
 
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
@@ -71,90 +54,70 @@ bool rf_brute_start() {
         if (!initRfModule("tx")) return false;
     }
 
-    c_rf_protocol *protocol = nullptr;
-    int bits = 0;
-
-    if (brute_protocol == "Nice 12 Bit") {
-        protocol = new protocol_nice_flo();
-        bits = 12;
-    } else if (brute_protocol == "Came 12 Bit") {
-        protocol = new protocol_came();
-        bits = 12;
-    } else if (brute_protocol == "Ansonic 12 Bit") {
-        protocol = new protocol_ansonic();
-        bits = 12;
-    } else if (brute_protocol == "Holtek 12 Bit") {
-        protocol = new protocol_holtek();
-        bits = 12;
-    } else if (brute_protocol == "Linear 12 Bit") {
-        protocol = new protocol_linear();
-        bits = 12;
-    } else if (brute_protocol == "Chamberlain 12 Bit") {
-        protocol = new protocol_ansonic();
-        bits = 12;
-    } else {
-        deinitRfModule();
-        return false;
-    }
+    const BruteProtocol &proto = brute_protocols[brute_protocol_idx];
+    const int total = 1 << proto.bits;
 
     pinMode(txpin, OUTPUT);
     setMHZ(brute_frequency);
 
-    auto sendPulse = [&](int duration) {
-        if (duration < 0) {
-            digitalWrite(txpin, LOW);
-            delayMicroseconds(-duration);
-        } else {
-            digitalWrite(txpin, HIGH);
-            delayMicroseconds(duration);
-        }
-    };
-
-    for (int i = 0; i < (1 << bits); ++i) {
+    for (int code = 0; code < total; ++code) {
         for (int r = 0; r < brute_repeats; ++r) {
-            for (const auto &pulse : protocol->pilot_period) { sendPulse(pulse); }
-
-            for (int j = bits - 1; j >= 0; --j) {
-                bool bit = (i >> j) & 1;
-                const std::vector<int> &timings = protocol->transposition_table[bit ? '1' : '0'];
-                for (auto duration : timings) { sendPulse(duration); }
+            // Pilot/sync period
+            if (proto.pilot[0] || proto.pilot[1]) {
+                sendPulse(txpin, proto.pilot[0]);
+                sendPulse(txpin, proto.pilot[1]);
             }
 
-            for (const auto &pulse : protocol->stop_bit) { sendPulse(pulse); }
+            // Data bits (MSB first)
+            for (int j = proto.bits - 1; j >= 0; --j) {
+                const int *timings = ((code >> j) & 1) ? proto.one : proto.zero;
+                sendPulse(txpin, timings[0]);
+                sendPulse(txpin, timings[1]);
+            }
+
+            // Stop bit
+            if (proto.stop[0] || proto.stop[1]) {
+                sendPulse(txpin, proto.stop[0]);
+                sendPulse(txpin, proto.stop[1]);
+            }
         }
 
         if (check(EscPress)) break;
 
-        if (i % 10 == 0) {
+        if (code % 10 == 0) {
             displayRedStripe(
-                String(i) + "/" + String((1 << bits)) + " " + brute_protocol,
+                String(code) + "/" + String(total) + " " + proto.name,
                 getComplementaryColor2(bruceConfig.priColor),
                 bruceConfig.priColor
             );
         }
     }
 
+    digitalWrite(txpin, LOW);
     deinitRfModule();
-    delete protocol;
     return true;
 }
 
 void rf_bruteforce() {
-    int option = 0;
-    options = {
-        {"Frequency", [&]() { option = 1; }},
-        {"Repeats",   [&]() { option = 2; }},
-        {"Protocol",  [&]() { option = 3; }},
-        {"Start",     [&]() { option = 4; }},
-        {"Main Menu", [&]() { option = 5; }},
-    };
-    loopOptions(options);
+    while (true) {
+        const BruteProtocol &proto = brute_protocols[brute_protocol_idx];
+        int option = 0;
+        options = {
+            {"Frequency: " + String(brute_frequency, 2), [&]() { option = 1; }},
+            {String("Protocol: ") + proto.name, [&]() { option = 2; }},
+            {"Repeats: " + String(brute_repeats), [&]() { option = 3; }},
+            {"Start", [&]() { option = 4; }},
+            {"Main Menu", [&]() { option = 5; }},
+        };
+        loopOptions(options);
 
-    switch (option) {
-        case 1: rf_brute_frequency();
-        case 2: rf_brute_repeats();
-        case 3: rf_brute_protocol();
-        case 4: rf_brute_start();
-        case 5: return;
+        switch (option) {
+            case 1: rf_brute_frequency(); break;
+            case 2: rf_brute_protocol(); break;
+            case 3: rf_brute_repeats(); break;
+            case 4: rf_brute_start(); break;
+            case 5: return;
+            default: return; // EscPress
+        }
     }
 }

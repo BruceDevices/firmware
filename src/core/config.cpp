@@ -1,4 +1,5 @@
 #include "config.h"
+#include "mifare_keys_manager.h"
 #include "sd_functions.h"
 
 JsonDocument BruceConfig::toJson() const {
@@ -13,11 +14,15 @@ JsonDocument BruceConfig::toJson() const {
 
     setting["dimmerSet"] = dimmerSet;
     setting["bright"] = bright;
+    setting["automaticTimeUpdateViaNTP"] = automaticTimeUpdateViaNTP;
     setting["tmz"] = tmz;
+    setting["dst"] = dst;
+    setting["clock24hr"] = clock24hr;
     setting["soundEnabled"] = soundEnabled;
     setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
+    setting["keyboardLang"] = keyboardLang;
 
 #ifdef HAS_RGB_LED
     setting["ledBright"] = ledBright;
@@ -38,6 +43,7 @@ JsonDocument BruceConfig::toJson() const {
     _wifiAp["ssid"] = wifiAp.ssid;
     _wifiAp["pwd"] = wifiAp.pwd;
     setting["wifiMAC"] = wifiMAC; //@IncursioHack
+    setting["TerminalLog"] = TerminalLog;
 
     JsonArray _evilWifiNames = setting["evilWifiNames"].to<JsonArray>();
     for (auto key : evilWifiNames) _evilWifiNames.add(key);
@@ -48,22 +54,23 @@ JsonDocument BruceConfig::toJson() const {
     _evilWifiEndpoints["showEndpoints"] = evilPortalEndpoints.showEndpoints;
     _evilWifiEndpoints["allowSetSsid"] = evilPortalEndpoints.allowSetSsid;
     _evilWifiEndpoints["allowGetCreds"] = evilPortalEndpoints.allowGetCreds;
+    _evilWifiEndpoints["gatewayIp"] = evilPortalGatewayIp;
 
     setting["evilWifiPasswordMode"] = evilPortalPasswordMode;
 
     JsonObject _wifi = setting["wifi"].to<JsonObject>();
     for (const auto &pair : wifi) { _wifi[pair.first] = pair.second; }
 
-    JsonArray _mifareKeys = setting["mifareKeys"].to<JsonArray>();
-    for (auto key : mifareKeys) _mifareKeys.add(key);
-
     setting["startupApp"] = startupApp;
+    setting["startupAppJSInterpreterFile"] = startupAppJSInterpreterFile;
     setting["wigleBasicToken"] = wigleBasicToken;
+    setting["wdgwarsApiKey"] = wdgwarsApiKey;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
 
     setting["badUSBBLEKeyboardLayout"] = badUSBBLEKeyboardLayout;
     setting["badUSBBLEKeyDelay"] = badUSBBLEKeyDelay;
+    setting["badUSBBLEShowOutput"] = badUSBBLEShowOutput;
 
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
@@ -157,8 +164,26 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["automaticTimeUpdateViaNTP"].isNull()) {
+        automaticTimeUpdateViaNTP = setting["automaticTimeUpdateViaNTP"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
     if (!setting["tmz"].isNull()) {
         tmz = setting["tmz"].as<float>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["dst"].isNull()) {
+        dst = setting["dst"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["clock24hr"].isNull()) {
+        clock24hr = setting["clock24hr"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -186,6 +211,11 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+    if (!setting["keyboardLang"].isNull()) {
+        keyboardLang = setting["keyboardLang"].as<String>();
+    } else {
+        keyboardLang = "QWERTY";
     }
 
 #ifdef HAS_RGB_LED
@@ -262,6 +292,12 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("wifiMAC not found, using default");
     }
+    if (!setting["TerminalLog"].isNull()) {
+        TerminalLog = setting["TerminalLog"].as<bool>();
+    } else {
+        count++;
+        log_e("TerminalLog not found, using default");
+    }
 
     // Wifi List
     if (!setting["wifi"].isNull()) {
@@ -289,6 +325,11 @@ void BruceConfig::fromFile(bool checkFS) {
         evilPortalEndpoints.showEndpoints = evilPortalEndpointsObj["showEndpoints"].as<bool>();
         evilPortalEndpoints.allowSetSsid = evilPortalEndpointsObj["allowSetSsid"].as<bool>();
         evilPortalEndpoints.allowGetCreds = evilPortalEndpointsObj["allowGetCreds"].as<bool>();
+        if (!evilPortalEndpointsObj["gatewayIp"].isNull()) {
+            evilPortalGatewayIp = evilPortalEndpointsObj["gatewayIp"].as<String>();
+        } else {
+            evilPortalGatewayIp = "172.0.0.1";
+        }
     } else {
         count++;
         log_e("Fail");
@@ -307,23 +348,27 @@ void BruceConfig::fromFile(bool checkFS) {
         log_e("Fail");
     }
 
-    if (!setting["mifareKeys"].isNull()) {
-        mifareKeys.clear();
-        JsonArray _mifareKeys = setting["mifareKeys"].as<JsonArray>();
-        for (JsonVariant key : _mifareKeys) mifareKeys.insert(key.as<String>());
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!setting["startupApp"].isNull()) {
         startupApp = setting["startupApp"].as<String>();
     } else {
         count++;
         log_e("Fail");
     }
+    if (!setting["startupAppJSInterpreterFile"].isNull()) {
+        startupAppJSInterpreterFile = setting["startupAppJSInterpreterFile"].as<String>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
     if (!setting["wigleBasicToken"].isNull()) {
         wigleBasicToken = setting["wigleBasicToken"].as<String>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["wdgwarsApiKey"].isNull()) {
+        wdgwarsApiKey = setting["wdgwarsApiKey"].as<String>();
     } else {
         count++;
         log_e("Fail");
@@ -355,6 +400,13 @@ void BruceConfig::fromFile(bool checkFS) {
         log_e("Fail");
     }
 
+    if (!setting["badUSBBLEShowOutput"].isNull()) {
+        badUSBBLEShowOutput = setting["badUSBBLEShowOutput"].as<bool>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
     if (!setting["disabledMenus"].isNull()) {
         disabledMenus.clear();
         JsonArray dm = setting["disabledMenus"].as<JsonArray>();
@@ -379,6 +431,9 @@ void BruceConfig::fromFile(bool checkFS) {
 
     validateConfig();
     if (count > 0) saveFile();
+
+    // Load MIFARE keys (loading via manager)
+    MifareKeysManager::ensureLoaded(mifareKeys);
 
     log_i("Using config from file");
 }
@@ -435,6 +490,7 @@ void BruceConfig::validateConfig() {
     validateEvilEndpointCreds();
     validateEvilEndpointSsid();
     validateEvilPasswordMode();
+    validateEvilGatewayIp();
 }
 
 void BruceConfig::setUiColor(uint16_t primary, uint16_t *secondary, uint16_t *background) {
@@ -463,6 +519,11 @@ void BruceConfig::validateBrightValue() {
     if (bright > 100) bright = 100;
 }
 
+void BruceConfig::setAutomaticTimeUpdateViaNTP(bool value) {
+    automaticTimeUpdateViaNTP = value;
+    saveFile();
+}
+
 void BruceConfig::setTmz(float value) {
     tmz = value;
     validateTmzValue();
@@ -471,6 +532,16 @@ void BruceConfig::setTmz(float value) {
 
 void BruceConfig::validateTmzValue() {
     if (tmz < -12 || tmz > 14) tmz = 0;
+}
+
+void BruceConfig::setDST(bool value) {
+    dst = value;
+    saveFile();
+}
+
+void BruceConfig::setClock24Hr(bool value) {
+    clock24hr = value;
+    saveFile();
 }
 
 void BruceConfig::setSoundEnabled(int value) {
@@ -539,7 +610,7 @@ void BruceConfig::setLedEffect(int value) {
 }
 
 void BruceConfig::validateLedEffectValue() {
-    if (ledEffect < 0 || ledEffect > 5) ledEffect = 0;
+    if (ledEffect < 0 || ledEffect > 9) ledEffect = 0;
 }
 
 void BruceConfig::setLedEffectSpeed(int value) {
@@ -578,6 +649,11 @@ void BruceConfig::setWebUICreds(const String &usr, const String &pwd) {
 void BruceConfig::setWifiApCreds(const String &ssid, const String &pwd) {
     wifiAp.ssid = ssid;
     wifiAp.pwd = pwd;
+    saveFile();
+}
+
+void BruceConfig::setTerminalLog(bool value) {
+    TerminalLog = value;
     saveFile();
 }
 
@@ -658,18 +734,15 @@ void BruceConfig::validateEvilPasswordMode() {
     if (evilPortalPasswordMode < 0 || evilPortalPasswordMode > 2) evilPortalPasswordMode = FULL_PASSWORD;
 }
 
-void BruceConfig::addMifareKey(String value) {
-    if (value.length() != 12) return;
-    mifareKeys.insert(value);
-    validateMifareKeysItems();
+void BruceConfig::setEvilGatewayIp(String value) {
+    evilPortalGatewayIp = value;
+    validateEvilGatewayIp();
     saveFile();
 }
 
-void BruceConfig::validateMifareKeysItems() {
-    for (auto key = mifareKeys.begin(); key != mifareKeys.end();) {
-        if (key->length() != 12) key = mifareKeys.erase(key);
-        else ++key;
-    }
+void BruceConfig::validateEvilGatewayIp() {
+    IPAddress gatewayIp;
+    if (!gatewayIp.fromString(evilPortalGatewayIp)) evilPortalGatewayIp = "172.0.0.1";
 }
 
 void BruceConfig::setStartupApp(String value) {
@@ -677,8 +750,18 @@ void BruceConfig::setStartupApp(String value) {
     saveFile();
 }
 
+void BruceConfig::setStartupAppJSInterpreterFile(String value) {
+    startupAppJSInterpreterFile = value;
+    saveFile();
+}
+
 void BruceConfig::setWigleBasicToken(String value) {
     wigleBasicToken = value;
+    saveFile();
+}
+
+void BruceConfig::setWdgwarsApiKey(String value) {
+    wdgwarsApiKey = value;
     saveFile();
 }
 
@@ -712,16 +795,24 @@ void BruceConfig::validateBadUSBBLEKeyboardLayout() {
     if (badUSBBLEKeyboardLayout < 0 || badUSBBLEKeyboardLayout > 13) badUSBBLEKeyboardLayout = 0;
 }
 
-void BruceConfig::setBadUSBBLEKeyDelay(int value) {
+void BruceConfig::setBadUSBBLEKeyDelay(uint16_t value) {
     badUSBBLEKeyDelay = value;
     validateBadUSBBLEKeyDelay();
     saveFile();
 }
 
 void BruceConfig::validateBadUSBBLEKeyDelay() {
-    if (badUSBBLEKeyDelay < 20) badUSBBLEKeyDelay = 20;
+    if (badUSBBLEKeyDelay < 0) badUSBBLEKeyDelay = 0;
     if (badUSBBLEKeyDelay > 500) badUSBBLEKeyDelay = 500;
 }
+
+void BruceConfig::setBadUSBBLEShowOutput(bool value) {
+    badUSBBLEShowOutput = value;
+    saveFile();
+}
+void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
+
+void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }
 
 void BruceConfig::addDisabledMenu(String value) {
     // TODO: check if duplicate

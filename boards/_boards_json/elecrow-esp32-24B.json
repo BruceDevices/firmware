@@ -1,0 +1,39 @@
+{
+  "build": {
+    "arduino":{
+      "ldscript": "esp32_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-DELECROW_WROOM32",
+      "-DBOARD_HAS_PSRAM",
+      "-mfix-esp32-psram-cache-issue",
+      "-mfix-esp32-psram-cache-strategy=memw"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "mcu": "esp32",
+    "variant": "pinouts"
+  },
+  "connectivity": [
+    "wifi",
+    "bluetooth",
+    "ethernet",
+    "can"
+  ],
+  "frameworks": [
+    "arduino",
+    "espidf"
+  ],
+  "name": "ELECROW 2.4R",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 4194304,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "url": "https://en.wikipedia.org/wiki/ESP32",
+  "vendor": "ELECROW"
+}

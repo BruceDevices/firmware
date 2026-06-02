@@ -2,20 +2,19 @@
 #ifndef __BADUSB_JS_H__
 #define __BADUSB_JS_H__
 
-#include <duktape.h>
+#include "helpers_js.h"
 
-duk_ret_t putPropBadUSBFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic);
-duk_ret_t registerBadUSB(duk_context *ctx);
-
-duk_ret_t native_badusbRunFile(duk_context *ctx);
-duk_ret_t native_badusbSetup(duk_context *ctx);
-duk_ret_t native_badusbPrint(duk_context *ctx);
-duk_ret_t native_badusbPrintln(duk_context *ctx);
-duk_ret_t native_badusbPress(duk_context *ctx);
-duk_ret_t native_badusbHold(duk_context *ctx);
-duk_ret_t native_badusbRelease(duk_context *ctx);
-duk_ret_t native_badusbReleaseAll(duk_context *ctx);
-duk_ret_t native_badusbPressRaw(duk_context *ctx);
+extern "C" {
+JSValue native_badusbRunFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbPrint(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbPrintln(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbPress(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbHold(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbRelease(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbReleaseAll(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_badusbPressRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+}
 
 #endif
 #endif

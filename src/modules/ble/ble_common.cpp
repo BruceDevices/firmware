@@ -1,19 +1,22 @@
 #include "ble_common.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
+#include "core/wifi/wifi_common.h"
 #include "esp_mac.h"
+#include "modules/badusb_ble/ducky_typer.h"
+#if !defined(LITE_VERSION)
+#include "BLE_Suite.h"
+#endif
 #define SERVICE_UUID "1bc68b2a-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_TX_UUID "1bc68efe-f3e3-11e9-81b4-2a2ae2dbcce4"
 
+BLEScan *pBLEScan = nullptr;
+int scanTime = SCANTIME; // In seconds
+
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
 #endif
-
-#define SCANTIME 5
-#define SCANTYPE ACTIVE
-#define SCAN_INT 100
-#define SCAN_WINDOW 99
 
 #define ENDIAN_CHANGE_U16(x) ((((x) & 0xFF00) >> 8) + (((x) & 0xFF) << 8))
 
@@ -36,9 +39,6 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     NimBLEAttValue data;
     void onWrite(NimBLECharacteristic *pCharacteristic) { data = pCharacteristic->getValue(); }
 };
-
-int scanTime = SCANTIME; // In seconds
-BLEScan *pBLEScan;
 
 uint8_t sta_mac[6];
 char strID[18];
@@ -88,7 +88,50 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
     }
 };
 
+static bool is_ble_inited = false;
+
+void stopBLEStack() {
+    if (pBLEScan) pBLEScan->stop();
+
+#if !defined(LITE_VERSION)
+    if (BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0) {
+        BLEStateManager::deinitBLE(true);
+    } else
+#endif
+        if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
+            BLEDevice::getServer() != nullptr || BLEConnected || is_ble_inited) {
+        BLEDevice::deinit();
+    }
+
+    pBLEScan = nullptr;
+    pServer = nullptr;
+    pService = nullptr;
+    pTxCharacteristic = nullptr;
+    pRxCharacteristic = nullptr;
+    deviceConnected = false;
+    oldDeviceConnected = false;
+    bleDataTransferEnabled = false;
+    is_ble_inited = false;
+    BLEConnected = false;
+#if !defined(LITE_VERSION)
+    if (hid_ble) {
+        delete hid_ble;
+        hid_ble = nullptr;
+    }
+#endif
+}
+
 void ble_scan_setup() {
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+            wifiDisconnect();
+            delay(200);
+        }
+
+        stopBLEStack();
+        delay(100);
+    }
+
     BLEDevice::init("");
     pBLEScan = BLEDevice::getScan();
 #ifdef NIMBLE_V2_PLUS
@@ -264,8 +307,6 @@ void disPlayBLESend() {
 #endif
     BLEConnected = false;
 }
-
-static bool is_ble_inited = false;
 
 void ble_test() {
     printf("ble test\n");

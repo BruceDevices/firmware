@@ -472,6 +472,11 @@ int RFID2::write_data_blocks() {
 
     while (strAllPages.length() > 0) {
         lineBreakIndex = strAllPages.indexOf("\n");
+
+        if (lineBreakIndex < 0) { // ← Added for .JS and Bugfix
+            break;
+        }
+
         pageLine = strAllPages.substring(0, lineBreakIndex);
         strAllPages = strAllPages.substring(lineBreakIndex + 1);
 
@@ -485,12 +490,12 @@ int RFID2::write_data_blocks() {
             case MFRC522::PICC_Type::PICC_TYPE_MIFARE_MINI:
             case MFRC522::PICC_Type::PICC_TYPE_MIFARE_1K:
             case MFRC522::PICC_Type::PICC_TYPE_MIFARE_4K:
-                if (pageIndex == 0 || (pageIndex + 1) % 4 == 0) continue; // Data blocks for MIFARE Classic
+                if (pageIndex == 0 || (pageIndex + 1) % 4 == 0) continue;
                 blockWriteSuccess = write_mifare_classic_data_block(pageIndex, strBytes);
                 break;
 
             case MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL:
-                if (pageIndex < 4 || pageIndex >= dataPages - 5) continue; // Data blocks for NTAG21X
+                if (pageIndex < 4 || pageIndex >= dataPages - 5) continue;
                 blockWriteSuccess = write_mifare_ultralight_data_block(pageIndex, strBytes);
                 break;
 

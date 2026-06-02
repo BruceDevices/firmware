@@ -3,8 +3,8 @@
 #include "modules/NRF24/nrf_common.h"
 #include <RF24.h>
 
-void nrf_spectrum(SPIClass *SSPI);
+void nrf_spectrum();
 
-String scanChannels(SPIClass *SSPI, bool web = false);
+String scanChannels(bool web = false);
 
 #endif

@@ -4,189 +4,198 @@
 
 #include "helpers_js.h"
 #include "keyboard_js.h"
+#include "user_classes_js.h"
 
-duk_ret_t putPropDialogFunctions(duk_context *ctx, duk_idx_t obj_idx, uint8_t magic) {
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "message", native_dialogMessage, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "info", native_dialogNotification, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "success", native_dialogNotification, 2, magic + 1);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "warning", native_dialogNotification, 2, magic + 2);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "error", native_dialogNotification, 2, magic + 3);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "choice", native_dialogChoice, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "prompt", native_keyboard, 3, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "pickFile", native_dialogPickFile, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "viewFile", native_dialogViewFile, 1, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "viewText", native_dialogViewText, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "createTextViewer", native_dialogCreateTextViewer, 2, magic);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "drawStatusBar", native_drawStatusBar, 0, magic);
-    return 0;
-}
+typedef struct {
+    ScrollableTextArea *area;
+} TextViewerData;
 
-duk_ret_t registerDialog(duk_context *ctx) {
-    bduk_register_c_lightfunc(ctx, "dialogMessage", native_dialogNotification, 2, 0);
-    bduk_register_c_lightfunc(ctx, "dialogError", native_dialogNotification, 2, 3);
-    bduk_register_c_lightfunc(ctx, "dialogChoice", native_dialogChoice, 1, 1);
-    bduk_register_c_lightfunc(ctx, "dialogPickFile", native_dialogPickFile, 2);
-    bduk_register_c_lightfunc(ctx, "dialogViewFile", native_dialogViewFile, 1);
-    bduk_register_c_lightfunc(ctx, "keyboard", native_keyboard, 3);
-    return 0;
-}
-
-duk_ret_t native_dialogMessage(duk_context *ctx) {
-    // usage: dialog.message(msg: string, buttons?: { left: string, center:
-    // string, right: string }): string
+JSValue native_dialogMessage(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     const char *leftButton = NULL;
     const char *centerButton = NULL;
     const char *rightButton = NULL;
-    if (duk_is_object(ctx, 1)) {
-        duk_get_prop_string(ctx, 1, "left");
-        leftButton = duk_get_string_default(ctx, -1, NULL);
-        duk_get_prop_string(ctx, 1, "center");
-        centerButton = duk_get_string_default(ctx, -1, NULL);
-        duk_get_prop_string(ctx, 1, "right");
-        rightButton = duk_get_string_default(ctx, -1, NULL);
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue v = JS_GetPropertyStr(ctx, argv[1], "left");
+        if (!JS_IsUndefined(v)) {
+            JSCStringBuf sb;
+            leftButton = JS_ToCString(ctx, v, &sb);
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "center");
+        if (!JS_IsUndefined(v)) {
+            JSCStringBuf sb;
+            centerButton = JS_ToCString(ctx, v, &sb);
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "right");
+        if (!JS_IsUndefined(v)) {
+            JSCStringBuf sb;
+            rightButton = JS_ToCString(ctx, v, &sb);
+        }
     }
-    int8_t selectedButton =
-        displayMessage(duk_to_string(ctx, 0), leftButton, centerButton, rightButton, bruceConfig.priColor);
-    if (selectedButton == 0)
-        duk_push_string(ctx, leftButton != NULL ? "left" : centerButton != NULL ? "center" : "right");
-    else if (selectedButton == 1) duk_push_string(ctx, centerButton != NULL ? "center" : "right");
-    else if (selectedButton == 2) duk_push_string(ctx, "right");
-
-    return 1;
+    if (argc < 1 || !JS_IsString(ctx, argv[0]))
+        return JS_ThrowTypeError(ctx, "dialog.message(msg:string, buttons?:object)");
+    JSCStringBuf msb;
+    const char *msg = JS_ToCString(ctx, argv[0], &msb);
+    int8_t selectedButton = displayMessage(msg, leftButton, centerButton, rightButton, bruceConfig.priColor);
+    if (selectedButton == 0) {
+        return JS_NewString(
+            ctx, leftButton != NULL ? leftButton : (centerButton != NULL ? centerButton : "right")
+        );
+    } else if (selectedButton == 1) {
+        return JS_NewString(ctx, centerButton != NULL ? centerButton : "right");
+    } else {
+        return JS_NewString(ctx, "right");
+    }
 }
 
-duk_ret_t native_dialogNotification(duk_context *ctx) {
-    // usage(legacy): dialogMessage(msg: string, waitKeyPress: boolean)
-    // usage: dialog.info(msg: string, waitKeyPress: boolean)
-    // usage: dialog.success(msg: string, waitKeyPress: boolean)
-    // usage: dialog.warning(msg: string, waitKeyPress: boolean)
-    // usage: dialog.error(msg: string, waitKeyPress: boolean)
-
-    duk_int_t magic = duk_get_current_magic(ctx);
-    auto displayFunction = displayInfo;
-    if (magic == 1) {
-        displayFunction = displaySuccess;
-    } else if (magic == 2) {
-        displayFunction = displayWarning;
-    } else if (magic == 3) {
-        displayFunction = displayError;
-    }
-    displayFunction(duk_get_string(ctx, 0), duk_get_boolean_default(ctx, 1, false));
-
-    return 0;
+JSValue native_dialogInfo(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    bool wait = false;
+    if (argc > 1 && JS_IsBool(argv[1])) wait = JS_ToBool(ctx, argv[1]);
+    displayInfo(s, wait);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogPickFile(duk_context *ctx) {
-    // usage: dialogPickFile(): string
-    // usage: dialogPickFile(path: string | { path: string, filesystem?: string },
-    // extension?: string): string returns: selected file , empty string if
-    // cancelled
+JSValue native_dialogSuccess(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    bool wait = false;
+    if (argc > 1 && JS_IsBool(argv[1])) wait = JS_ToBool(ctx, argv[1]);
+    displaySuccess(s, wait);
+    return JS_UNDEFINED;
+}
+
+JSValue native_dialogWarning(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    bool wait = false;
+    if (argc > 1 && JS_IsBool(argv[1])) wait = JS_ToBool(ctx, argv[1]);
+    displayWarning(s, wait);
+    return JS_UNDEFINED;
+}
+
+JSValue native_dialogError(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    bool wait = false;
+    if (argc > 1 && JS_IsBool(argv[1])) wait = JS_ToBool(ctx, argv[1]);
+    displayError(s, wait);
+    return JS_UNDEFINED;
+}
+
+JSValue native_dialogPickFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     String r = "";
     String filepath = "/";
     String extension = "*";
-    if (duk_is_string(ctx, 0)) {
-        filepath = duk_to_string(ctx, 0);
-        if (!filepath.startsWith("/")) filepath = "/" + filepath; // add "/" if missing
+    if (argc > 0 && JS_IsString(ctx, argv[0])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[0], &sb);
+        if (s) {
+            filepath = String(s);
+            if (!filepath.startsWith("/")) filepath = "/" + filepath;
+        }
     }
-
-    if (duk_is_string(ctx, 1)) { extension = duk_to_string(ctx, 1); }
-
+    if (argc > 1 && JS_IsString(ctx, argv[1])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[1], &sb);
+        if (s) extension = String(s);
+    }
     FS *fs = NULL;
     if (SD.exists(filepath)) fs = &SD;
-    if (LittleFS.exists(filepath)) fs = &LittleFS;
+    else if (LittleFS.exists(filepath)) fs = &LittleFS; // ← added 'else'
     if (fs) { r = loopSD(*fs, true, extension, filepath); }
-    duk_push_string(ctx, r.c_str());
-    return 1;
+    return JS_NewString(ctx, r.c_str());
 }
 
-duk_ret_t native_dialogChoice(duk_context *ctx) {
-    // usage: dialogChoice(choices : string[] | {[key: string]: string})
-    // legacy version dialogChoice takes ["choice1", "return_val1", "choice2",
-    // "return_val2", ...] new version dialog.choice takes ["choice1", "choice2"
-    // ...] or {"choice1": "return_val1", "choice2": "return_val2", ...} returns:
-    // string ("return_val1", "return_val2", ...), or empty string if cancelled
+JSValue native_dialogChoice(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: dialogChoice(choices : string[] | [key: string, value: string][] | {[key: string]: string})
+    // returns: string or empty string
     const char *result = "";
-    duk_int_t legacy = duk_get_current_magic(ctx);
-
-    duk_uint_t arg0Type = duk_get_type_mask(ctx, 0);
-    if (!(arg0Type & (DUK_TYPE_MASK_OBJECT))) {
-        duk_error(ctx, DUK_ERR_TYPE_ERROR, "%s: Choice argument must be object or array.", "dialogChoice");
-        return 1;
+    if (argc < 1 || !JS_IsObject(ctx, argv[0])) {
+        return JS_ThrowTypeError(ctx, "dialogChoice: Choice argument must be object or array.");
     }
-    options = {};
-    bool arg0IsArray = duk_is_array(ctx, 0);
+    options.clear();
 
-    duk_enum(ctx, 0, 0);
-    while (duk_next(ctx, -1, 1)) {
-        const char *choiceKey = NULL;
-        const char *choiceValue = duk_get_string(ctx, -1);
-        if (!arg0IsArray) { // If choice is object
-            choiceKey = duk_get_string(ctx, -2);
-        } else { // If choice is array
-            if (legacy) {
-                choiceKey = duk_get_string(ctx, -1);
-                duk_pop_2(ctx);
-                duk_bool_t isNextValue = duk_next(ctx, -1, 1);
-                if (!isNextValue) break;
-                choiceValue = duk_get_string(ctx, -1);
-            } else if (duk_is_string(ctx, -1)) {
-                choiceKey = duk_get_string(ctx, -1);
-            } else if (duk_is_array(ctx, -1)) {
-                duk_get_prop_index(ctx, -1, 0);
-                choiceKey = duk_get_string(ctx, -1);
-                duk_get_prop_index(ctx, -2, 1);
-                choiceValue = duk_get_string(ctx, -1);
-                if (!duk_is_string(ctx, -1) || !duk_is_string(ctx, -2)) {
-                    duk_error(
-                        ctx, DUK_ERR_TYPE_ERROR, "%s: Choice array elements must be strings.", "dialogChoice"
-                    );
+    if (JS_GetClassID(ctx, argv[0]) == JS_CLASS_ARRAY) {
+        uint32_t arrayLength = 0;
+        JSValue l = JS_GetPropertyStr(ctx, argv[0], "length");
+        if (JS_IsNumber(ctx, l)) { JS_ToUint32(ctx, &arrayLength, l); }
+
+        for (uint32_t i = 0; i < arrayLength; ++i) {
+            JSValue jsvChoice = JS_GetPropertyUint32(ctx, argv[0], i);
+
+            if (JS_IsString(ctx, jsvChoice)) {
+                JSCStringBuf sb;
+                const char *s = JS_ToCString(ctx, jsvChoice, &sb);
+                options.push_back({s, [&result, s]() { result = s; }});
+            } else if (JS_GetClassID(ctx, jsvChoice) == JS_CLASS_ARRAY) {
+                /* element is expected to be [key, value] */
+                JSValue jsvInnerArrayLength = JS_GetPropertyStr(ctx, jsvChoice, "length");
+                uint32_t innerArrayLength = 0;
+                if (JS_IsNumber(ctx, jsvInnerArrayLength)) {
+                    JS_ToUint32(ctx, &innerArrayLength, jsvInnerArrayLength);
                 }
-                duk_pop_2(ctx);
-            } else {
-                duk_error(
-                    ctx, DUK_ERR_TYPE_ERROR, "%s: Choice array elements must be strings.", "dialogChoice"
-                );
+                if (innerArrayLength >= 2) {
+                    JSValue jsvKey = JS_GetPropertyUint32(ctx, jsvChoice, 0);
+                    JSValue jsvValue = JS_GetPropertyUint32(ctx, jsvChoice, 1);
+                    if (JS_IsString(ctx, jsvKey) && JS_IsString(ctx, jsvValue)) {
+                        JSCStringBuf sb;
+                        const char *key = JS_ToCString(ctx, jsvKey, &sb);
+                        const char *value = JS_ToCString(ctx, jsvValue, &sb);
+                        options.push_back({key, [value, &result]() { result = value; }});
+                    }
+                }
             }
         }
-        duk_pop_2(ctx);
-        options.push_back({choiceKey, [choiceValue, &result]() { result = choiceValue; }});
-    }
-
-    if (legacy) {
-        options.push_back({"Cancel", [&]() { result = ""; }});
+    } else if (JS_IsObject(ctx, argv[0])) {
+        /* element is expected to be {key: value} */
+        log_d("element is expected to be {key: value}");
+        uint32_t prop_count = 0;
+        for (uint32_t index = 0;; ++index) {
+            log_d("index: %d", index);
+            const char *key = JS_GetOwnPropertyByIndex(ctx, index, &prop_count, argv[0]);
+            if (key == NULL) break;
+            log_d("key: %s", key);
+            log_d("prop_count: %d", prop_count);
+            JSValue jsvVal = JS_GetPropertyStr(ctx, argv[0], key);
+            if (JS_IsString(ctx, jsvVal)) {
+                JSCStringBuf sb;
+                const char *val = JS_ToCString(ctx, jsvVal, &sb);
+                options.push_back({key, [val, &result]() { result = val; }});
+            }
+        }
     }
 
     loopOptions(options, MENU_TYPE_REGULAR, "", 0, true);
     options.clear();
 
-    duk_push_string(ctx, result);
-    return 1;
+    return JS_NewString(ctx, result);
 }
 
-duk_ret_t native_dialogViewFile(duk_context *ctx) {
-    // usage: dialogViewFile(path: string)
-    // returns: nothing
-    if (!duk_is_string(ctx, 0)) { return 0; }
-
-    String filepath = duk_get_string(ctx, 0);
-    if (!filepath.startsWith("/")) filepath = "/" + filepath; // add "/" if missing
+JSValue native_dialogViewFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
+    JSCStringBuf sb;
+    const char *path = JS_ToCString(ctx, argv[0], &sb);
+    String filepath = String(path);
+    if (!filepath.startsWith("/")) filepath = "/" + filepath;
     FS *fs = NULL;
     if (SD.exists(filepath)) fs = &SD;
-    if (LittleFS.exists(filepath)) fs = &LittleFS;
+    else if (LittleFS.exists(filepath)) fs = &LittleFS; // ← add "else if" for SD Priority
     if (fs) { viewFile(*fs, filepath); }
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogViewText(duk_context *ctx) {
-    // usage: dialogViewText(text: string, title?: string)
-    // returns: nothing
-    if (!duk_is_string(ctx, 0)) { return 0; }
+JSValue native_dialogViewText(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_UNDEFINED;
     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-
     uint8_t padY = 10;
-
-    if (duk_is_string(ctx, 1)) {
-        const char *title = duk_get_string(ctx, 1);
+    if (argc > 1 && JS_IsString(ctx, argv[1])) {
+        JSCStringBuf sb;
+        const char *title = JS_ToCString(ctx, argv[1], &sb);
         tft.setCursor((tftWidth - (strlen(title) * FM * LW)) / 2, padY);
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.setTextSize(FM);
@@ -194,159 +203,199 @@ duk_ret_t native_dialogViewText(duk_context *ctx) {
         padY = tft.getCursorY();
         tft.setTextSize(FP);
     }
-
     ScrollableTextArea area = ScrollableTextArea(
         1, 10, padY, tftWidth - 2 * BORDER_PAD_X, tftHeight - BORDER_PAD_X - padY, false, true
     );
-    area.fromString(duk_get_string_default(ctx, 0, ""));
-
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    area.fromString(s ? s : "");
     area.show(true);
-    return 0;
+    return JS_UNDEFINED;
 }
 
-static ScrollableTextArea *getAreaPointer(duk_context *ctx) {
-    ScrollableTextArea *area = NULL;
-    duk_push_this(ctx);
-    if (duk_get_prop_string(ctx, -1, DUK_HIDDEN_SYMBOL("areaPointer"))) {
-        area = (ScrollableTextArea *)duk_to_pointer(ctx, -1);
-    }
-    return area;
+static ScrollableTextArea *getAreaPointer(JSContext *ctx, JSValue obj) {
+    if (!JS_IsObject(ctx, obj)) return NULL;
+    if (JS_GetClassID(ctx, obj) != JS_CLASS_TEXTVIEWER) return NULL;
+    TextViewerData *d = (TextViewerData *)JS_GetOpaque(ctx, obj);
+    if (!d) return NULL;
+    return d->area;
 }
 
-duk_ret_t native_dialogCreateTextViewerDraw(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
+JSValue native_dialogCreateTextViewerDraw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
     area->draw(true);
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerScrollUp(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
+JSValue native_dialogCreateTextViewerScrollUp(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
     area->scrollUp();
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerScrollDown(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
+JSValue native_dialogCreateTextViewerScrollDown(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
     area->scrollDown();
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerScrollToLine(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
-    area->scrollToLine(duk_get_int(ctx, 0));
-    return 0;
+JSValue
+native_dialogCreateTextViewerScrollToLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
+    int ln = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &ln, argv[0]);
+    area->scrollToLine(ln);
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerGetLine(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
-    duk_push_string(ctx, area->getLine(duk_get_int(ctx, 0)).c_str());
-    return 1;
+JSValue native_dialogCreateTextViewerGetLine(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
+    int ln = 0;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &ln, argv[0]);
+    return JS_NewString(ctx, area->getLine(ln).c_str());
 }
 
-duk_ret_t native_dialogCreateTextViewerGetMaxLines(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
-    duk_push_int(ctx, area->getMaxLines());
-    return 1;
+JSValue native_dialogCreateTextViewerGetMaxLines(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
+    return JS_NewInt32(ctx, area->getMaxLines());
 }
 
-duk_ret_t native_dialogCreateTextViewerGetVisibleText(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
+JSValue
+native_dialogCreateTextViewerGetVisibleText(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
     String visibleText;
     visibleText.reserve(area->getMaxVisibleTextLength());
-
-    for (size_t i = area->firstVisibleLine; i < area->lastVisibleLine - 1; i++) {
+    for (size_t i = area->firstVisibleLine; i < area->lastVisibleLine - 1; i++)
         visibleText += area->linesBuffer[i];
-    }
-    duk_push_string(ctx, visibleText.c_str());
-    return 1;
+    return JS_NewString(ctx, visibleText.c_str());
 }
 
-duk_ret_t native_dialogCreateTextViewerClear(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
+JSValue native_dialogCreateTextViewerClear(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
     area->clear();
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerFromString(duk_context *ctx) {
-    ScrollableTextArea *area = getAreaPointer(ctx);
-    if (area == NULL) { return duk_error(ctx, DUK_ERR_ERROR, "%s: does not exist", "TextViewer"); }
-    area->fromString(duk_get_string(ctx, 0));
-    return 0;
+JSValue native_dialogCreateTextViewerFromString(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    ScrollableTextArea *area = getAreaPointer(ctx, *this_val);
+    if (area == NULL) return JS_ThrowTypeError(ctx, "TextViewer: does not exist");
+    if (argc > 0 && JS_IsString(ctx, argv[0])) {
+        JSCStringBuf sb;
+        const char *s = JS_ToCString(ctx, argv[0], &sb);
+        area->fromString(s ? s : "");
+    }
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewerClose(duk_context *ctx) {
-    ScrollableTextArea *area = NULL;
-
-    if (duk_is_object(ctx, 0)) {
-        duk_to_object(ctx, 0);
-    } else {
-        duk_push_this(ctx);
+JSValue native_dialogCreateTextViewerClose(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    JSValue obj = JS_UNDEFINED;
+    if (argc > 0 && JS_IsObject(ctx, argv[0])) {
+        obj = argv[0];
+    } else if (this_val && JS_IsObject(ctx, *this_val)) {
+        obj = *this_val;
     }
 
-    if (duk_get_prop_string(ctx, -1, DUK_HIDDEN_SYMBOL("areaPointer"))) {
-        area = (ScrollableTextArea *)duk_get_pointer(ctx, -1);
-        duk_pop(ctx);
-        bduk_put_prop(ctx, 0, DUK_HIDDEN_SYMBOL("areaPointer"), duk_push_pointer, NULL);
+    if (!JS_IsObject(ctx, obj) || JS_GetClassID(ctx, obj) != JS_CLASS_TEXTVIEWER) return JS_UNDEFINED;
+
+    void *opaque = JS_GetOpaque(ctx, obj);
+    if (opaque) {
+        native_textviewer_finalizer(ctx, opaque);
+        JS_SetOpaque(ctx, obj, NULL);
     }
-    if (area != NULL) { delete area; }
-    return 0;
+    return JS_UNDEFINED;
 }
 
-duk_ret_t native_dialogCreateTextViewer(duk_context *ctx) {
-    if (!duk_is_string(ctx, 0)) { return 0; }
+JSValue native_dialogCreateTextViewer(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_ThrowTypeError(ctx, "TextViewer requires text");
 
-    duk_get_prop_string(ctx, 1, "fontSize");
-    uint8_t fontSize = duk_get_uint_default(ctx, -1, 1);
-    duk_get_prop_string(ctx, 1, "startX");
-    int16_t startX = duk_get_uint_default(ctx, -1, 10);
-    duk_get_prop_string(ctx, 1, "startY");
-    int16_t startY = duk_get_uint_default(ctx, -1, 10);
-    duk_get_prop_string(ctx, 1, "width");
-    int32_t width = duk_get_uint_default(ctx, -1, tftWidth - 10);
-    duk_get_prop_string(ctx, 1, "height");
-    int32_t height = duk_get_uint_default(ctx, -1, tftHeight - 10);
-    duk_get_prop_string(ctx, 1, "indentWrappedLines");
-    int32_t indentWrappedLines = duk_get_boolean_default(ctx, -1, false);
-    duk_pop_n(ctx, 5);
+    uint8_t fontSize = 1;
+    int16_t startX = 10;
+    int16_t startY = 10;
+    int32_t width = tftWidth - 10;
+    int32_t height = tftHeight - 10;
+    bool indentWrappedLines = false;
+
+    if (argc > 1 && JS_IsObject(ctx, argv[1])) {
+        JSValue v;
+        v = JS_GetPropertyStr(ctx, argv[1], "fontSize");
+        if (!JS_IsUndefined(v) && JS_IsNumber(ctx, v)) {
+            int tmp;
+            JS_ToInt32(ctx, &tmp, v);
+            fontSize = tmp;
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "startX");
+        if (!JS_IsUndefined(v) && JS_IsNumber(ctx, v)) {
+            int tmp;
+            JS_ToInt32(ctx, &tmp, v);
+            startX = tmp;
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "startY");
+        if (!JS_IsUndefined(v) && JS_IsNumber(ctx, v)) {
+            int tmp;
+            JS_ToInt32(ctx, &tmp, v);
+            startY = tmp;
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "width");
+        if (!JS_IsUndefined(v) && JS_IsNumber(ctx, v)) {
+            int tmp;
+            JS_ToInt32(ctx, &tmp, v);
+            width = tmp;
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "height");
+        if (!JS_IsUndefined(v) && JS_IsNumber(ctx, v)) {
+            int tmp;
+            JS_ToInt32(ctx, &tmp, v);
+            height = tmp;
+        }
+        v = JS_GetPropertyStr(ctx, argv[1], "indentWrappedLines");
+        if (!JS_IsUndefined(v) && JS_IsBool(v)) indentWrappedLines = JS_ToBool(ctx, v);
+    }
 
     ScrollableTextArea *area =
         new ScrollableTextArea(fontSize, startX, startY, width, height, false, indentWrappedLines);
-    area->fromString(duk_get_string(ctx, 0));
+    JSCStringBuf sb;
+    const char *s = JS_ToCString(ctx, argv[0], &sb);
+    area->fromString(s ? s : "");
 
-    duk_idx_t obj_idx = duk_push_object(ctx);
-    bduk_put_prop(ctx, obj_idx, DUK_HIDDEN_SYMBOL("areaPointer"), duk_push_pointer, area);
+    JSValue obj = JS_NewObjectClassUser(ctx, JS_CLASS_TEXTVIEWER);
+    if (JS_IsException(obj)) {
+        delete area;
+        return obj;
+    }
 
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "draw", native_dialogCreateTextViewerDraw, 0, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "scrollUp", native_dialogCreateTextViewerScrollUp, 0, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "scrollDown", native_dialogCreateTextViewerScrollDown, 0, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "scrollToLine", native_dialogCreateTextViewerScrollToLine, 1, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getLine", native_dialogCreateTextViewerGetLine, 1, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "getMaxLines", native_dialogCreateTextViewerGetMaxLines, 0, 0);
-    bduk_put_prop_c_lightfunc(
-        ctx, obj_idx, "getVisibleText", native_dialogCreateTextViewerGetVisibleText, 0, 0
-    );
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "clear", native_dialogCreateTextViewerClear, 0, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "setText", native_dialogCreateTextViewerFromString, 1, 0);
-    bduk_put_prop_c_lightfunc(ctx, obj_idx, "close", native_dialogCreateTextViewerClose, 0, 0);
+    TextViewerData *d = (TextViewerData *)malloc(sizeof(TextViewerData));
+    if (!d) {
+        delete area;
+        return JS_ThrowOutOfMemory(ctx);
+    }
+    d->area = area;
+    JS_SetOpaque(ctx, obj, d);
 
-    duk_push_c_lightfunc(ctx, native_dialogCreateTextViewerClose, 1, 1, 0);
-    duk_set_finalizer(ctx, obj_idx);
-
-    return 1;
+    return obj;
 }
 
-duk_ret_t native_drawStatusBar(duk_context *ctx) {
+JSValue native_drawStatusBar(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(HAS_SCREEN)
     drawStatusBar();
 #endif
-    return 0;
+    return JS_UNDEFINED;
+}
+
+void native_textviewer_finalizer(JSContext *ctx, void *opaque) {
+    TextViewerData *d = (TextViewerData *)opaque;
+    if (!d) return;
+    if (d->area) {
+        delete d->area;
+        d->area = NULL;
+    }
+    free(d);
 }
 #endif

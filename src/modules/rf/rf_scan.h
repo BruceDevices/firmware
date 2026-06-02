@@ -7,6 +7,8 @@
 
 #define _MAX_TRIES 5
 
+#define PRESET_KEELOQ 23
+
 class RFScan {
 public:
     enum RFMenuOption {
@@ -86,6 +88,6 @@ void display_signal_data(RfCodes received);
 bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
-String RCSwitch_Read(float frequency = 0, int max_loops = -1, bool raw = false);
+String RCSwitch_Read(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
 
 #endif

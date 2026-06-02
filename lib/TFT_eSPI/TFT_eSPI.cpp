@@ -69,11 +69,14 @@
   void TFT_eSPI::spi_begin_read()  {begin_tft_read(); }
   void TFT_eSPI::spi_end_read()    {  end_tft_read(); }
 
+SemaphoreHandle_t tftMutex;
+
 /***************************************************************************************
 ** Function name:           begin_tft_write (was called spi_begin)
 ** Description:             Start SPI transaction for writes and select TFT
 ***************************************************************************************/
 inline void TFT_eSPI::begin_tft_write(void){
+  xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY);
   if (locked) {
     locked = false; // Flag to show SPI access now unlocked
 #if defined (SPI_HAS_TRANSACTION) && defined (SUPPORT_TRANSACTIONS) && !defined(TFT_PARALLEL_8_BIT) && !defined(RP2040_PIO_INTERFACE)
@@ -112,6 +115,7 @@ inline void TFT_eSPI::end_tft_write(void){
 #endif
     }
   }
+  xSemaphoreGiveRecursive(tftMutex);
 }
 
 // Non-inlined version to permit override
@@ -612,6 +616,7 @@ void TFT_eSPI::begin(uint8_t tc)
 ***************************************************************************************/
 void TFT_eSPI::init(uint8_t tc)
 {
+  tftMutex = xSemaphoreCreateRecursiveMutex();
   if (_booted)
   {
     initBus();
@@ -3827,6 +3832,7 @@ void TFT_eSPI::pushColor(uint16_t color, uint32_t len)
 
   end_tft_write();
 }
+
 
 /***************************************************************************************
 ** Function name:           startWrite

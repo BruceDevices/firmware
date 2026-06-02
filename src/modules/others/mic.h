@@ -37,11 +37,40 @@ void mic_function() {
 
 #include "core/display.h"
 #include <fft.h>
+#include <functional>
 #include <globals.h>
+
+/**
+ * @brief Microphone recording configuration
+ * @note Used by mic_record_app() and mic_record_wav_to_path()
+ */
+struct MicConfig {
+    uint32_t record_time_ms; ///< Recording duration (0 = unlimited)
+    float gain;              ///< Audio gain multiplier (0.5-4.0, default 2.0)
+    bool stealth_mode;       ///< Enable low-brightness mode
+};
 
 /* Mic */
 void mic_test();
 void mic_test_one_task();
-void mic_record();
+bool mic_record_wav_to_path(
+    FS *fs, const String &path, uint32_t max_ms, uint32_t *out_bytes, float gain,
+    std::function<bool(void)> onProgress = nullptr
+);
+void mic_record_app(); // Mic GUI app @Senape3000
 
+/**
+ * Capture raw audio samples from microphone
+ * Returns array of 16-bit PCM samples
+ *
+ * @param numSamples - Number of samples to capture (64-4096)
+ * @param sampleRate - Sample rate in Hz (8000, 16000, 22050, 32000, 44100, 48000)
+ * @param gain - Audio gain multiplier (0.5-4.0)
+ * @param outSamples - [OUT] Pointer to sample buffer (caller must free())
+ * @param outSampleRate - [OUT] Actual sample rate used
+ * @return true if successful
+ */
+bool mic_capture_samples(
+    uint32_t numSamples, uint32_t sampleRate, float gain, int16_t **outSamples, uint32_t *outSampleRate
+);
 #endif

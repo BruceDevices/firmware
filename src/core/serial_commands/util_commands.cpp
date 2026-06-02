@@ -413,7 +413,7 @@ uint32_t loaderCallback(cmd *c) {
         );
         return false;
     }
-
+    
     // TODO: close: Closes the running application.
     // TODO: info: Displays the loader’s state.
     return false;

@@ -63,6 +63,7 @@ static const uint8_t ADC = 10;
 #define HAS_RTC
 #define RTC_SDA 12
 #define RTC_SCL 11
+#define HAS_RTC_BM8563
 
 #define USB_as_HID
 

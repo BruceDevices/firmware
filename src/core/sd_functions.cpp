@@ -2,10 +2,14 @@
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
+#include "modules/gps/wdgwars.h"
 #include "modules/gps/wigle.h"
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
+#if defined(HAS_NS4168_SPKR)
+#include "modules/others/audio_player.h"
+#endif
 #include "modules/others/qrcode_menu.h"
 #include "modules/rf/rf_send.h"
 #include "mykeyboard.h" // using keyboard when calling rename
@@ -51,8 +55,10 @@ bool setupSdCard() {
         // Serial.println("Task not activated");
     }
     // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
-    else if (bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
-             bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC) {
+    else if (
+        bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
+        bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC
+    ) {
         Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
 #if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
         if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
@@ -74,7 +80,14 @@ bool setupSdCard() {
             (int8_t)bruceConfigPins.SDCARD_bus.cs
         ); // start SPI communications
         delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+            result = false;
+#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
+            // If using Shared SPI, do not stop the bus if SDCard is not present
+            // If using Legacy, release the pins from this SPI Bus
+            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
+#endif
+        }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
 #endif
@@ -152,6 +165,7 @@ bool deleteFromSd(FS fs, String path) {
 ***************************************************************************************/
 bool renameFile(FS fs, String path, String filename) {
     String newName = keyboard(filename, 76, "Type the new Name:");
+    if (newName == "\x1B") return false;
     // Rename the file of folder
     if (fs.rename(path, path.substring(0, path.lastIndexOf('/')) + "/" + newName)) {
         // Serial.println("Renamed from " + filename + " to " + newName);
@@ -319,6 +333,7 @@ bool pasteFile(FS fs, String path) {
 ***************************************************************************************/
 bool createFolder(FS fs, String path) {
     String foldername = keyboard("", 76, "Folder Name: ");
+    if (foldername == "\x1B") return false;
     if (!fs.mkdir(path + "/" + foldername)) {
         displayRedStripe("Couldn't create folder");
         return false;
@@ -340,6 +355,21 @@ String readLineFromFile(File myFile) {
         line += character;
     }
     return line;
+}
+
+/***************************************************************************************
+** Function name: folderExists
+** Description:   check if a folder exists
+***************************************************************************************/
+bool folderExists(FS fs, String path) {
+    if (path == "" || path == "/") return true;
+
+    File dir = fs.open(path);
+    if (!dir) return false;
+
+    bool isDir = dir.isDirectory();
+    dir.close();
+    return isDir;
 }
 
 /***************************************************************************************
@@ -372,8 +402,8 @@ String readSmallFile(FS &fs, String filepath) {
 ** Description:   read file and return its contents as a char*
 **                caller needs to call free()
 ***************************************************************************************/
-char *readBigFile(FS &fs, String filepath, bool binary, size_t *fileSize) {
-    File file = fs.open(filepath);
+char *readBigFile(FS *fs, String filepath, bool binary, size_t *fileSize) {
+    File file = fs->open(filepath);
     if (!file) {
         Serial.printf("Could not open file: %s\n", filepath.c_str());
         return NULL;
@@ -597,9 +627,14 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
         }
         displayScrollingText(fileList[index].filename, coord);
 
+        // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
+        // This condition is important for StickCPlus, Core and other 3 Btn devices
+        if (EscPress && PrevPress) EscPress = false;
+        char pressed_letter;
+        if (check(EscPress)) goto BACK_FOLDER;
+
 #ifdef HAS_KEYBOARD
-        char pressed_letter = checkLetterShortcutPress();
-        if (check(EscPress)) goto BACK_FOLDER; // quit
+        pressed_letter = checkLetterShortcutPress();
 
         // check letter shortcuts
         if (pressed_letter > 0) {
@@ -622,8 +657,6 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                 }
             }
         }
-#elif defined(T_EMBED) || defined(HAS_TOUCH) || !defined(HAS_SCREEN)
-        if (check(EscPress)) goto BACK_FOLDER;
 #endif
 
         if (check(PrevPress) || check(UpPress)) {
@@ -670,6 +703,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         {"Close Menu", [&]() { yield(); }                                                  },
                         {"Main Menu",  [&]() { exit = true; }                                              },
                     };
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -683,6 +717,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
                     options.push_back({"Close Menu", [&]() { yield(); }});
                     options.push_back({"Main Menu", [&]() { exit = true; }});
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -695,6 +730,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                              fileList[index].filename; // Folder=="/"? "":"/" +
                     // Debug viewer
                     Serial.println(Folder);
+                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
                     redraw = true;
                 } else if (fileList[index].folder == false && fileList[index].operation == false) {
                     // Save the file/folder info to Clear memory to allow other functions to work better
@@ -727,15 +763,23 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
                                                          }});
-                    if (filepath.endsWith(".ir"))
+                    if (filepath.endsWith(".ir")) {
+                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
+                                                             delay(200);
+                                                             chooseCmdIrFile(&fs, filepath);
+                                                         }});
                         options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
                                                          }});
+                    }
                     if (filepath.endsWith(".sub"))
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
-                                                             txSubFile(&fs, filepath);
+                                                             RfCodes data{};
+
+                                                             if (readSubFile(&fs, filepath, data))
+                                                                 txSubFile(data);
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
@@ -747,6 +791,16 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              delay(200);
                                                              Wigle wigle;
                                                              wigle.upload_all(&fs, Folder);
+                                                         }});
+                        options.insert(options.begin(), {"WDG Upload", [&]() {
+                                                             delay(200);
+                                                             WDGoWars wdg;
+                                                             wdg.upload(&fs, filepath);
+                                                         }});
+                        options.insert(options.begin(), {"WDG Up All", [&]() {
+                                                             delay(200);
+                                                             WDGoWars wdg;
+                                                             wdg.upload_all(&fs, Folder);
                                                          }});
                     }
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
@@ -808,7 +862,8 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         options.insert(options.begin(), {"Play Audio", [&]() {
                                                              delay(200);
                                                              check(AnyKeyPress);
-                                                             playAudioFile(&fs, filepath);
+                                                             // playAudioFile(&fs, filepath);
+                                                             musicPlayerUI(&fs, filepath);
                                                          }});
 #endif
                     // generate qr codes from small files (<3K)
@@ -830,8 +885,12 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     }
                     options.push_back({"Close Menu", [&]() { yield(); }});
                     options.push_back({"Main Menu", [&]() { exit = true; }});
-                    if (!filePicker) loopOptions(options);
-                    else {
+                    if (!filePicker) {
+                        while (check(SelPress)) {
+                            yield();
+                        } // wait for SEL release to avoid repeated activations
+                        loopOptions(options);
+                    } else {
                         result = filepath;
                         break;
                     }
@@ -896,7 +955,8 @@ bool checkLittleFsSizeNM() { return (LittleFS.totalBytes() - LittleFS.usedBytes(
 **  and LittleFS otherwise. If LittleFS is full it wil return false.
 **********************************************************************/
 bool getFsStorage(FS *&fs) {
-    if (setupSdCard()) fs = &SD;
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) fs = &SD;
     else if (checkLittleFsSize()) fs = &LittleFS;
     else return false;
 

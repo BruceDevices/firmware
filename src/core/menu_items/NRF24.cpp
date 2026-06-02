@@ -3,28 +3,20 @@
 #include "core/utils.h"
 #include "modules/NRF24/nrf_common.h"
 #include "modules/NRF24/nrf_jammer.h"
+#include "modules/NRF24/nrf_mousejack.h"
 #include "modules/NRF24/nrf_spectrum.h"
 
 void NRF24Menu::optionsMenu() {
     options.clear();
     options.push_back({"Information", nrf_info});
-
-    if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.SDCARD_bus.mosi &&
-        bruceConfigPins.NRF24_bus.mosi != GPIO_NUM_NC)
-        options.push_back({"Spectrum", [=]() { nrf_spectrum(&sdcardSPI); }});
-#if TFT_MOSI > 0 // Display doesn't use SPI bus
-    else if (bruceConfigPins.NRF24_bus.mosi == (gpio_num_t)TFT_MOSI)
-        options.push_back({"Spectrum", [=]() { nrf_spectrum(&tft.getSPIinstance()); }});
-#endif
-    else options.push_back({"Spectrum", [=]() { nrf_spectrum(&SPI); }});
-
+    options.push_back({"Spectrum", nrf_spectrum});
+    #if !defined(LITE_VERSION)
+    options.push_back({"MouseJack", nrf_mousejack});
+    #endif
     options.push_back({"NRF Jammer", nrf_jammer});
 
-    options.push_back({"CH Jammer", nrf_channel_jammer});
-    options.push_back({"CH hopper", nrf_channel_hopper});
-
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-    options.push_back({"Config pins", [=]() { configMenu(); }});
+    options.push_back({"Config pins", [this]() { configMenu(); }});
 #endif
 
     addOptionToMainMenu();
@@ -34,15 +26,25 @@ void NRF24Menu::optionsMenu() {
 
 void NRF24Menu::configMenu() {
     uint8_t opt = 0;
+    int idx = 0;
+    if (bruceConfigPins.NRF24_bus.mosi == (gpio_num_t)SDCARD_MOSI) idx = 1;
     options = {
         {"NRF24 (legacy)",     [&]() { opt = 1; }         },
         {"NRF24 (shared SPI)", [&]() { opt = 2; }         },
         {"Back",               [this]() { optionsMenu(); }},
     };
 
-    loopOptions(options, MENU_TYPE_SUBMENU, "RF Config");
+    loopOptions(options, MENU_TYPE_SUBMENU, "RF Config", idx);
     if (opt == 1) {
         bruceConfigPins.setNrf24Pins(
+            {(gpio_num_t)NRF24_SCK_PIN,
+             (gpio_num_t)NRF24_MISO_PIN,
+             (gpio_num_t)NRF24_MOSI_PIN,
+             (gpio_num_t)NRF24_SS_PIN,
+             (gpio_num_t)NRF24_CE_PIN,
+             GPIO_NUM_NC}
+        );
+        bruceConfigPins.setCC1101Pins(
             {(gpio_num_t)NRF24_SCK_PIN,
              (gpio_num_t)NRF24_MISO_PIN,
              (gpio_num_t)NRF24_MOSI_PIN,
@@ -61,14 +63,18 @@ void NRF24Menu::configMenu() {
              GPIO_NUM_32,
              GPIO_NUM_NC}
         );
+        bruceConfigPins.setCC1101Pins(
+            {(gpio_num_t)SDCARD_SCK,
+             (gpio_num_t)SDCARD_MISO,
+             (gpio_num_t)SDCARD_MOSI,
+             GPIO_NUM_33,
+             GPIO_NUM_32,
+             GPIO_NUM_NC}
+        );
     }
 #endif
 }
-void NRF24Menu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.nrf), 0, imgCenterY, true
-    );
-}
+
 void NRF24Menu::drawIcon(float scale) {
     clearIconArea();
     int iconW = scale * 80;

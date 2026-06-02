@@ -18,6 +18,8 @@ static const uint8_t SCK = SPI_SCK_PIN;
 #define SERIAL_TX 43
 #define BAD_RX SERIAL_RX
 #define BAD_TX SERIAL_TX
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 #define USB_as_HID 1
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;

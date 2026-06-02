@@ -16,7 +16,7 @@
   #define INPUT_HANDLER_TASK_STACK_SIZE 4096
 #endif
 #ifndef SSH_TASK_STACK_SIZE
-  #define SSH_TASK_STACK_SIZE 1024*10
+  #define SSH_TASK_STACK_SIZE (1024 * 16)
 #endif
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 4096
@@ -27,13 +27,13 @@
   #define SERIAL_CMDS_TASK_STACK_SIZE 8192
 #endif
 #ifndef INTERPRETER_TASK_STACK_SIZE
-  #define INTERPRETER_TASK_STACK_SIZE 16384
+  #define INTERPRETER_TASK_STACK_SIZE 8192
 #endif
 #ifndef INPUT_HANDLER_TASK_STACK_SIZE
   #define INPUT_HANDLER_TASK_STACK_SIZE 2048
 #endif
 #ifndef SSH_TASK_STACK_SIZE
-  #define SSH_TASK_STACK_SIZE 1024*8
+  #define SSH_TASK_STACK_SIZE (1024 * 16)
 #endif
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 1024
@@ -253,7 +253,11 @@
 // Temporary, delete after finish Interfaces
 
 #ifndef SMOOTH_FONT
-#define SMOOTH_FONT
+#define SMOOTH_FONT 1
+#endif
+
+#ifndef BTN_ALIAS
+#define BTN_ALIAS "Sel"
 #endif
 
 #ifndef DEEPSLEEP_WAKEUP_PIN

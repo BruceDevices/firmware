@@ -35,14 +35,18 @@ public:
 
     const char *filepath = "/bruce.conf";
 
-    // Settings
-    int dimmerSet = 10;
+    //  Settings
+    int dimmerSet = 60;
     int bright = 100;
+    bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;
+    bool dst = false;
+    bool clock24hr = true;
     int soundEnabled = 1;
     int soundVolume = 100;
     int wifiAtStartup = 0;
     int instantBoot = 0;
+    String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
 
 #ifdef HAS_RGB_LED
     // Led
@@ -61,10 +65,12 @@ public:
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
+    bool TerminalLog = true;
 
     // EvilPortal
     EvilPortalEndpoints evilPortalEndpoints = {"/creds", "/ssid", true, true, true};
     EvilPortalPasswordMode evilPortalPasswordMode = FULL_PASSWORD;
+    String evilPortalGatewayIp = "172.0.0.1";
 
     void setWifiMAC(const String &mac) {
         wifiMAC = mac;
@@ -76,11 +82,14 @@ public:
 
     // Misc
     String startupApp = "";
+    String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
+    String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
     int devMode = 0;
     int colorInverted = 1;
     int badUSBBLEKeyboardLayout = 0;
-    int badUSBBLEKeyDelay = 50;
+    uint16_t badUSBBLEKeyDelay = 10;
+    bool badUSBBLEShowOutput = true;
 
     std::vector<String> disabledMenus = {};
 
@@ -114,8 +123,11 @@ public:
     void validateDimmerValue();
     void setBright(uint8_t value);
     void validateBrightValue();
+    void setAutomaticTimeUpdateViaNTP(bool value);
     void setTmz(float value);
     void validateTmzValue();
+    void setDST(bool value);
+    void setClock24Hr(bool value);
     void setSoundEnabled(int value);
     void setSoundVolume(int value);
     void validateSoundEnabledValue();
@@ -142,6 +154,7 @@ public:
     // Wifi
     void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
+    void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);
     void removeQrCodeEntry(const String &menuName);
@@ -154,9 +167,11 @@ public:
     void setEvilAllowGetCreds(bool value);
     void setEvilAllowSetSsid(bool value);
     void setEvilPasswordMode(EvilPortalPasswordMode value);
+    void setEvilGatewayIp(String value);
     void validateEvilEndpointCreds();
     void validateEvilEndpointSsid();
     void validateEvilPasswordMode();
+    void validateEvilGatewayIp();
 
     // RFID
     void addMifareKey(String value);
@@ -164,15 +179,18 @@ public:
 
     // Misc
     void setStartupApp(String value);
+    void setStartupAppJSInterpreterFile(String value);
     void setWigleBasicToken(String value);
+    void setWdgwarsApiKey(String value);
     void setDevMode(int value);
     void validateDevModeValue();
     void setColorInverted(int value);
     void validateColorInverted();
     void setBadUSBBLEKeyboardLayout(int value);
     void validateBadUSBBLEKeyboardLayout();
-    void setBadUSBBLEKeyDelay(int value);
+    void setBadUSBBLEKeyDelay(uint16_t value);
     void validateBadUSBBLEKeyDelay();
+    void setBadUSBBLEShowOutput(bool value);
     void addDisabledMenu(String value);
     // TODO: removeDisabledMenu(String value);
 

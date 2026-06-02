@@ -1,12 +1,23 @@
 #include "configPins.h"
 #include "esp_mac.h"
 #include "sd_functions.h"
+#include <globals.h>
 String getMacAddress() {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
     char macStr[18];
-    sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(
+        macStr,
+        sizeof(macStr),
+        "%02X:%02X:%02X:%02X:%02X:%02X",
+        mac[0],
+        mac[1],
+        mac[2],
+        mac[3],
+        mac[4],
+        mac[5]
+    );
 
     return String(macStr);
 }
@@ -135,6 +146,17 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         count++;
         log_e("Fail");
     }
+    if (!root["PN532_Pins"].isNull()) {
+        SPIPins def = PN532_bus;
+        PN532_bus.fromJson(root["PN532_Pins"].as<JsonObject>());
+        if (PN532_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
+            PN532_bus = def;
+            count++;
+        }
+    } else {
+        count++;
+        log_e("Fail");
+    }
 
     if (!root["SDCard_Pins"].isNull()) {
         SPIPins def = SDCARD_bus;
@@ -219,6 +241,9 @@ void BruceConfigPins::toJson(JsonObject obj) const {
     JsonObject _NRF = root["NRF24_Pins"].to<JsonObject>();
     NRF24_bus.toJson(_NRF);
 
+    JsonObject _PN532 = root["PN532_Pins"].to<JsonObject>();
+    PN532_bus.toJson(_PN532);
+
     JsonObject _SD = root["SDCard_Pins"].to<JsonObject>();
     SDCARD_bus.toJson(_SD);
 
@@ -271,6 +296,7 @@ void BruceConfigPins::fromFile(bool checkFS) {
     loadFile(jsonDoc, checkFS);
 
     if (!jsonDoc.isNull()) fromJson(jsonDoc.as<JsonObject>());
+    jsonDoc.clear();
 }
 
 void BruceConfigPins::createFile() {
@@ -292,8 +318,10 @@ void BruceConfigPins::createFile() {
     else log_i("config file written successfully");
 
     file.close();
+    jsonDoc.clear();
 
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfigPins::saveFile() {
@@ -318,15 +346,16 @@ void BruceConfigPins::saveFile() {
     else log_i("config file written successfully");
 
     file.close();
-
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    jsonDoc.clear();
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) copyToFs(LittleFS, SD, filepath, false);
 }
 
 void BruceConfigPins::factoryReset() {
     FS *fs = &LittleFS;
     fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
-    ESP.restart();
+    // don't try to mount SD Card if not previously mounted
+    if (sdcardMounted) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
 }
 
 void BruceConfigPins::validateConfig() {
@@ -341,6 +370,7 @@ void BruceConfigPins::validateConfig() {
 #endif
     validateSpiPins(CC1101_bus);
     validateSpiPins(NRF24_bus);
+    validateSpiPins(PN532_bus);
     validateSpiPins(SDCARD_bus);
     validateI2CPins(i2c_bus);
     validateUARTPins(uart_bus);
@@ -367,6 +397,12 @@ void BruceConfigPins::setCC1101Pins(SPIPins value) {
 void BruceConfigPins::setNrf24Pins(SPIPins value) {
     NRF24_bus = value;
     validateSpiPins(NRF24_bus);
+    saveFile();
+}
+
+void BruceConfigPins::setPn532Pins(SPIPins value) {
+    PN532_bus = value;
+    validateSpiPins(PN532_bus);
     saveFile();
 }
 

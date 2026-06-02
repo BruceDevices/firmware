@@ -135,6 +135,18 @@ public:
     SPIPins NRF24_bus;
 #endif
 
+#ifdef PN532_SCK_PIN
+    SPIPins PN532_bus = {
+        (gpio_num_t)PN532_SCK_PIN,
+        (gpio_num_t)PN532_MISO_PIN,
+        (gpio_num_t)PN532_MOSI_PIN,
+        (gpio_num_t)PN532_SS_PIN,
+        (gpio_num_t)PN532_CE_PIN
+    };
+#else
+    SPIPins PN532_bus;
+#endif
+
 #ifdef SDCARD_SCK
     SPIPins SDCARD_bus = {
         (gpio_num_t)SDCARD_SCK, (gpio_num_t)SDCARD_MISO, (gpio_num_t)SDCARD_MOSI, (gpio_num_t)SDCARD_CS
@@ -222,6 +234,7 @@ public:
 
     void setCC1101Pins(SPIPins value);
     void setNrf24Pins(SPIPins value);
+    void setPn532Pins(SPIPins value);
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
     void setLoRaPins(SPIPins value);

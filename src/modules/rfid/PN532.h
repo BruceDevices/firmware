@@ -7,7 +7,9 @@
  */
 
 #include "RFIDInterface.h"
+#define private public
 #include <Adafruit_PN532.h>
+#undef private
 
 class PN532 : public RFIDInterface {
 public:
@@ -46,6 +48,7 @@ public:
     int erase();
     int write(int cardBaudRate = PN532_MIFARE_ISO14443A);
     int write_ndef();
+    int emulate() override;
     int load();
     int save(String filename);
 

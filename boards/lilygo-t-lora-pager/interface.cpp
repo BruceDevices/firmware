@@ -94,7 +94,7 @@ const KeyValue_t _key_value_map[KB_ROWS][KB_COLS] = {
      {KEY_SHIFT, KEY_SHIFT, CAPS_LOCK},
      {KEY_BACKSPACE, KEY_BACKSPACE, '#'}},
 
-    {{' ', ' ', ' '}}
+    {{' ', ' ', KEY_TAB}}
 };
 
 char getKeyChar(uint8_t k) {
@@ -151,18 +151,12 @@ void _setup_gpio() {
     bool pmu_ret = false;
     pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %ld mA\n", PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
-        PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(832);
-        PPM.getChargerConstantCurr();
-        Serial.printf("getChargerConstantCurr: %d mA\n", PPM.getChargerConstantCurr());
+        // https://github.com/Xinyuan-LilyGO/LilyGoLib/blob/a64fc6ca94757baa5401ad71b39fb7f92cd1a7e9/src/LilyGo_LoRa_Pager.cpp#L442-L452
+        PPM.resetDefault();
+
+        PPM.setChargeTargetVoltage(4288);
+        PPM.setChargerConstantCurr(704);
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
     }
 
     // Battery gauge
@@ -309,6 +303,7 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = millis();
+    static unsigned long lastEncoderMoveMs = 0;
     static int posDifference = 0;
     static int lastPos = 0;
     bool sel = !BTN_ACT;
@@ -323,39 +318,60 @@ void InputHandler(void) {
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
         lastPos = newPos;
+        lastEncoderMoveMs = millis();
+    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
+        // Drop any stale queued steps once the encoder has stopped moving.
+        posDifference = 0;
     }
 
     sel = digitalRead(SEL_BTN);
     esc = digitalRead(BK_BTN);
 
     if (keyboard->available() > 0) {
-        int keyValue = keyboard->getEvent();
-        bool pressed = keyValue & 0x80;
-        keyValue &= 0x7F;
-        keyValue--;
-        if (keyValue / 10 < 4) {
-            if (handleSpecialKeys(keyValue, pressed) > 0) goto END;
+        keyStroke pendingKey;
+        bool keyPulse = false;
+        bool hapticPulse = false;
+
+        // Drain the full TCA8418 FIFO so quick taps are handled immediately.
+        while (keyboard->available() > 0) {
+            int keyValue = keyboard->getEvent();
+            bool pressed = keyValue & 0x80;
+            keyValue &= 0x7F;
+            keyValue--;
+
+            if (keyValue / 10 >= 4) continue;
+            if (handleSpecialKeys(keyValue, pressed) > 0) continue;
+
             keyVal = getKeyChar(keyValue);
-        }
-        if (pressed && !wakeUpScreen() && keyVal != '\0') {
-            KeyStroke.Clear();
-            KeyStroke.hid_keys.push_back(keyVal);
+            if (!pressed || keyVal == '\0') continue;
+            if (wakeUpScreen()) continue;
+
+            pendingKey.hid_keys.push_back(keyVal);
             if (keyVal == KEY_BACKSPACE) {
-                KeyStroke.del = true;
+                pendingKey.del = true;
                 EscPress = true;
             }
             if (keyVal == KEY_ENTER) {
-                KeyStroke.enter = true;
+                pendingKey.enter = true;
                 SelPress = true;
             }
-            if (keyVal == KEY_FN) KeyStroke.fn = true;
-            KeyStroke.word.push_back(keyVal);
-            KeyStroke.pressed = true;
+            if (keyVal == KEY_FN) pendingKey.fn = true;
+            pendingKey.word.push_back(keyVal);
+            keyPulse = true;
+            hapticPulse = true;
+        }
 
-            // Haptic feedback
-            drv.setWaveform(0, 81);
-            drv.setWaveform(1, 0);
-            drv.run();
+        if (keyPulse) {
+            pendingKey.pressed = true;
+            KeyStroke = pendingKey;
+
+            if (hapticPulse) {
+                drv.setWaveform(0, 81);
+                drv.setWaveform(1, 0);
+                drv.run();
+            }
+        } else {
+            KeyStroke.Clear();
         }
     } else KeyStroke.Clear();
 

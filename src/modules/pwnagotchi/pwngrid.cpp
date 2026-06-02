@@ -8,7 +8,7 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 20/09 - Changed from DynamicJsonDocument json[2048] to JsonDocument json, to avoid stack smashing errors
 (firgers crossed)
 */
-
+#if !defined(LITE_VERSION)
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
 #include "core/wifi/wifi_common.h"
@@ -325,3 +325,4 @@ void initPwngrid() {
     esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
     vTaskDelay(1 / portTICK_RATE_MS);
 }
+#endif

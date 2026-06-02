@@ -1,52 +1,232 @@
 #include "rf_send.h"
+#include "core/led_control.h"
 #include "core/type_convertion.h"
 #include "rf_utils.h"
 #include <RCSwitch.h>
 
+#define CLOSE_MENU 3
+#define MAIN_MENU 4
+
+std::vector<int> bitList;
+std::vector<int> bitRawList;
+std::vector<uint64_t> keyList;
+std::vector<String> rawDataList;
+
+uint16_t num_steps_keeloq = 1;
+uint8_t num_signal_repeat = 4;
+String filepath = "";
+FS *filesystem = NULL;
+
 void sendCustomRF() {
     // interactive menu part only
-    FS *fs = NULL;
-    String filepath = "";
     struct RfCodes selected_code;
 
     returnToMenu = true; // make sure menu is redrawn when quitting in any point
 
     options = {
         {"Recent",   [&]() { selected_code = selectRecentRfMenu(); }},
-        {"LittleFS", [&]() { fs = &LittleFS; }                      },
+        {"LittleFS", [&]() { filesystem = &LittleFS; }              },
     };
-    if (setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { fs = &SD; }});
+    if (setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { filesystem = &SD; }});
 
     loopOptions(options);
 
-    if (fs == NULL) {                                                   // recent menu was selected
+    if (filesystem == NULL) {                                           // recent menu was selected
         if (selected_code.filepath != "") sendRfCommand(selected_code); // a code was selected
         return;
         // no need to proceed, go back
     }
 
-    while (1) {
+    returnToMenu = false;
+    filepath = "";
+
+    while (!returnToMenu) {
+        num_steps_keeloq = 1;
+        num_signal_repeat = 4;
         delay(200);
-        filepath = loopSD(*fs, true, "SUB", "/BruceRF");
+        filepath = loopSD(*filesystem, true, "SUB", "/BruceRF");
         if (filepath == "" || check(EscPress)) return; //  cancelled
-        // else transmit the file
-        txSubFile(fs, filepath);
-        delay(200);
+
+        RfCodes data{};
+
+        if (!readSubFile(filesystem, filepath, data)) continue;
+
+        if (data.protocol == "RcSwitch") {
+            loopEmulate(data);
+        } else {
+            txSubFile(data);
+            delay(200);
+        }
     }
 }
 
-bool txSubFile(FS *fs, String filepath, bool hideDefaultUI) {
+void set_option(int opt) {
+    switch (opt) {
+        case COUNTER_STEP: {
+            options = {
+                {"-50", [&] { num_steps_keeloq = -50; }},
+                {"-10", [&] { num_steps_keeloq = -10; }},
+                {"-1",  [&] { num_steps_keeloq = -1; } },
+                {"1",   [&] { num_steps_keeloq = 1; }  },
+                {"10",  [&] { num_steps_keeloq = 10; } },
+                {"50",  [&] { num_steps_keeloq = 50; } },
+            };
+
+            loopOptions(options);
+
+            break;
+        }
+
+        case REPEAT: {
+            options = {};
+
+            for (int i = 1; i <= 10; ++i) {
+                options.emplace_back(String(i), [&, i] { num_signal_repeat = i; });
+            }
+
+            loopOptions(options);
+
+            break;
+        }
+
+        case CLOSE_MENU: break;
+
+        case MAIN_MENU: returnToMenu = true; break;
+    }
+}
+
+void select_menu_option(bool keeloq) {
+    options = {};
+
+    if (keeloq) {
+        options.emplace_back("Counter step", [] { set_option(COUNTER_STEP); });
+    }
+
+    options.emplace_back("Repeat", [] { set_option(REPEAT); });
+    options.emplace_back("Close Menu", [] { set_option(CLOSE_MENU); });
+    options.emplace_back("Main Menu", [] { set_option(MAIN_MENU); });
+
+    loopOptions(options);
+}
+
+void keeloq_save(RfCodes data) {
+    String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
+    subfile_out += "Frequency: " + String(data.frequency) + "\n";
+    subfile_out += "Preset: " + String(data.preset) + "\n";
+    subfile_out += "Protocol: RcSwitch\n";
+    subfile_out += "Bit: " + String(data.Bit) + "\n";
+
+    subfile_out += "Manufacturer: " + String(data.mf_name) + "\n";
+    char hexString[64] = {0};
+
+    decimalToHexString(data.serial, hexString);
+
+    subfile_out += "Serial: " + String(hexString) + "\n";
+    subfile_out += "Button: " + String(data.btn) + "\n";
+    subfile_out += "Counter: " + String(data.cnt) + "\n";
+
+    subfile_out += "TE: " + String(data.te) + "\n";
+
+    File file = filesystem->open(filepath, "w", true);
+
+    if (file) { file.println(subfile_out); }
+
+    file.close();
+}
+
+void loopEmulate(RfCodes &data) {
+    if (data.serial != 0) {
+        data.fix = data.btn << 28 | data.serial;
+        data.Bit = 64;
+        data.keeloq_step(0);
+    }
+
+    display_info(data);
+
+    while (1) {
+        if (check(EscPress)) {
+            keyList.clear();
+            bitList.clear();
+
+            return;
+        }
+
+        if (check(NextPress)) {
+            select_menu_option(data.serial != 0);
+
+            if (returnToMenu) {
+                keyList.clear();
+                bitList.clear();
+
+                return;
+            }
+
+            display_info(data);
+        }
+
+        if (check(SelPress)) {
+            blinkLed();
+
+            if (data.serial == 0) {
+                for (int i = 0; uint64_t key : keyList) {
+                    data.Bit = bitList[i++];
+                    data.key = key;
+                    sendRfCommand(data);
+                }
+            } else {
+                sendRfCommand(data);
+                data.keeloq_step(num_steps_keeloq);
+                keeloq_save(data);
+                display_info(data);
+            }
+        }
+    }
+}
+
+void display_info(RfCodes &data) {
+    char hexString[64] = {0};
+
+    drawMainBorderWithTitle("RF Emulate");
+
+    padprintln("Frequency: " + String(data.frequency / 1000000.0) + "MHz");
+
+    if (data.serial != 0) {
+        padprintln("Protocol: KeeLoq");
+        padprintln("Manufacturer: " + data.mf_name);
+
+        decimalToHexString(data.serial, hexString);
+        padprintln("Serial: " + String(hexString));
+
+        padprintln("Btn: " + String(data.btn));
+        padprintln("Counter: " + String(data.cnt));
+        padprintln("\n");
+
+        decimalToHexString(data.key, hexString);
+        padprintln("Payload: " + String(hexString));
+    } else {
+        padprintln("Protocol: " + String(data.protocol) + "(" + data.preset + ")");
+
+        for (uint64_t key : keyList) {
+            decimalToHexString(key, hexString);
+            padprintln("Key: " + String(hexString));
+        }
+    }
+
+    padprintln("");
+    padprintln("");
+
+    padprintln("Press [Mid] to send or [Next] for options");
+}
+
+bool readSubFile(FS *fs, String filepath, RfCodes &data) {
     struct RfCodes selected_code;
     File databaseFile;
     String line;
     String txt;
-    int sent = 0;
 
     if (!fs) return false;
 
     databaseFile = fs->open(filepath, FILE_READ);
-
-    if (!hideDefaultUI) { drawMainBorder(); }
 
     if (!databaseFile) {
         Serial.println("Failed to open database file.");
@@ -55,11 +235,6 @@ bool txSubFile(FS *fs, String filepath, bool hideDefaultUI) {
     }
     Serial.println("Opened sub file.");
     selected_code.filepath = filepath.substring(1 + filepath.lastIndexOf("/"));
-
-    std::vector<int> bitList;
-    std::vector<int> bitRawList;
-    std::vector<uint64_t> keyList;
-    std::vector<String> rawDataList;
 
     if (!databaseFile) Serial.println("Fail opening file");
     // Store the code(s) in the signal
@@ -73,6 +248,12 @@ bool txSubFile(FS *fs, String filepath, bool hideDefaultUI) {
         if (line.startsWith("Frequency:")) selected_code.frequency = txt.toInt();
         if (line.startsWith("TE:")) selected_code.te = txt.toInt();
         if (line.startsWith("Bit:")) bitList.push_back(txt.toInt()); // selected_code.Bit = txt.toInt();
+
+        if (line.startsWith("Manufacturer:")) selected_code.mf_name = txt;
+        if (line.startsWith("Serial:")) selected_code.serial = hexStringToDecimal(txt.c_str());
+        if (line.startsWith("Button:")) selected_code.btn = txt.toInt();
+        if (line.startsWith("Counter:")) selected_code.cnt = txt.toInt();
+
         if (line.startsWith("Bit_RAW:"))
             bitRawList.push_back(txt.toInt()); // selected_code.BitRAW = txt.toInt();
         if (line.startsWith("Key:"))
@@ -81,12 +262,22 @@ bool txSubFile(FS *fs, String filepath, bool hideDefaultUI) {
             ); // selected_code.key = hexStringToDecimal(txt.c_str());
         if (line.startsWith("RAW_Data:") || line.startsWith("Data_RAW:"))
             rawDataList.push_back(txt); // selected_code.data = txt;
+
         if (check(EscPress)) break;
     }
-    int total = bitList.size() + bitRawList.size() + keyList.size() + rawDataList.size() > 0 ? 1 : 0;
-    Serial.printf("Total signals found: %d\n", total);
+
     databaseFile.close();
 
+    data = selected_code;
+
+    return true;
+}
+
+bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
+    int sent = 0;
+
+    int total = bitList.size() + bitRawList.size() + keyList.size() + rawDataList.size() > 0 ? 1 : 0;
+    Serial.printf("Total signals found: %d\n", total);
     // If the signal is complete, send all of the code(s) that were found in it.
     // TODO: try to minimize the overhead between codes.
     if (selected_code.protocol != "" && selected_code.preset != "" && selected_code.frequency > 0) {
@@ -133,15 +324,11 @@ bool txSubFile(FS *fs, String filepath, bool hideDefaultUI) {
     Serial.printf("\nSent %d of %d signals\n", sent, total);
     if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), true); }
 
-    // Clear the vectors from memory
+    // Reset vectors
     bitList.clear();
     bitRawList.clear();
     keyList.clear();
     rawDataList.clear();
-    bitList.shrink_to_fit();
-    bitRawList.shrink_to_fit();
-    keyList.shrink_to_fit();
-    rawDataList.shrink_to_fit();
 
     delay(1000);
     deinitRfModule();
@@ -296,7 +483,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         uint64_t data_val = rfcode.key;
         int bits = rfcode.Bit;
         int pulse = rfcode.te; // not sure about this...
-        int repeat = 10;
+        int repeat = num_signal_repeat;
         /*
         Serial.print("RcSwitch: ");
         Serial.println(data_val,16);
@@ -304,7 +491,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         Serial.println(pulse);
         Serial.println(rcswitch_protocol_no);
         */
-        if (!hideDefaultUI) { displayTextLine("Sending.."); }
+        // if (!hideDefaultUI) { displayTextLine("Sending.."); }
         RCSwitch_send(data_val, bits, pulse, rcswitch_protocol_no, repeat);
     } else if (protocol.startsWith("Princeton")) {
         RCSwitch_send(rfcode.key, rfcode.Bit, 350, 1, 10);

@@ -4,7 +4,7 @@
  * @version 0.1
  * @date 2025-05-15
  */
-
+#if !defined(LITE_VERSION)
 #include "ARPoisoner.h"
 #include "Arduino.h"
 #include "core/display.h"
@@ -162,3 +162,4 @@ void ARPoisoner::sendARPPacket(
         pcapFile.flush();
     }
 }
+#endif

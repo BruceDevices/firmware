@@ -83,6 +83,9 @@ static const uint8_t SCL = GROVE_SCL;
 #define SERIAL_TX 12
 #define SERIAL_RX 13
 
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
+
 #define BAD_TX 12
 #define BAD_RX 13
 

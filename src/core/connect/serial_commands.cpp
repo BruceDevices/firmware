@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "serial_commands.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -110,6 +111,7 @@ EspSerialCmd::Message EspSerialCmd::createCmdMessage() {
     delay(500);
 
     String command = keyboard("", ESP_DATA_SIZE, "Serial Command");
+    if (command == "\x1B") command = "";
     Message msg = createMessage(command);
     printMessage(msg);
 
@@ -164,3 +166,4 @@ void EspSerialCmd::displaySentFooter() {
     padprintln("");
     padprintln("Press [ESC] to leave");
 }
+#endif
