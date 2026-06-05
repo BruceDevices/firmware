@@ -102,6 +102,7 @@ String wifiIP;
 
 bool BLEConnected = false;
 bool returnToMenu;
+bool deviceLocked = false;
 bool isSleeping = false;
 bool isScreenOff = false;
 bool dimmer = false;
@@ -145,6 +146,7 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 
 #include "core/display.h"
 #include "core/led_control.h"
+#include "core/lock.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/serialcmds.h"
@@ -444,6 +446,7 @@ void setup() {
     tft.begin();
 #endif
     begin_storage();
+    deviceLocked = bruceConfig.lockEnabled;
     begin_tft();
     init_clock();
     init_led();
@@ -531,6 +534,11 @@ void loop() {
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);
+
+    if (deviceLocked) {
+        lockScreen();
+        deviceLocked = false;
+    }
 
     mainMenu.begin();
     delay(1);

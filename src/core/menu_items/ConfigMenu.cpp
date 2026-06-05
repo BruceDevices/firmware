@@ -2,6 +2,7 @@
 #include "../mykeyboard.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
+#include "core/lock.h"
 #include "core/main_menu.h"
 #include "core/settings.h"
 #include "core/utils.h"
@@ -48,6 +49,7 @@ void ConfigMenu::optionsMenu() {
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Config");
 
+        if (deviceLocked) return;
         // Exit to Main Menu only if user pressed Back
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
         // Otherwise rebuild Config menu after submenu returns
@@ -172,15 +174,85 @@ void ConfigMenu::systemMenu() {
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {"Clock",                                                               [this]() { setClock(); }             },
             {String("Keyboard Language: ") + bruceConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
+            {"Device Lock",                                                         [this]() { lockMenu(); }             },
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
             {"Back",                                                                []() {}                              },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "System Config");
 
+        if (deviceLocked) return;
         // Exit only if user pressed Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
         // Menu rebuilds to update toggle labels
+    }
+}
+
+/*********************************************************************
+**  Function: setLockPin
+**  Prompt for a new PIN with confirmation, save on match
+**  Returns true if a PIN was successfully set, false if user cancelled
+**********************************************************************/
+static bool setLockPin() {
+    String pin1 = keyboard("", 16, "Set PIN:", true);
+    if (pin1 == "\x1B" || pin1.length() == 0) return false;
+
+    String pin2 = keyboard("", 16, "Confirm PIN:", true);
+    if (pin2 == "\x1B") return false;
+
+    if (pin1 != pin2) {
+        displayError("PINs don't match");
+        return false;
+    }
+    bruceConfig.lockPin = pin1;
+    bruceConfig.saveFile();
+    displaySuccess("PIN set");
+    return true;
+}
+
+/*********************************************************************
+**  Function: lockMenu
+**  Device lock configuration submenu
+**********************************************************************/
+void ConfigMenu::lockMenu() {
+    while (true) {
+        std::vector<Option> localOptions;
+
+        localOptions.push_back(
+            {String("Lock: ") + (bruceConfig.lockEnabled ? "ON" : "OFF"),
+             [this]() {
+                 if (!bruceConfig.lockEnabled) {
+                     // Enabling — ensure a PIN exists first
+                     if (bruceConfig.lockPin.length() == 0) {
+                         if (!setLockPin()) return; // User cancelled PIN setup
+                     }
+                     bruceConfig.lockEnabled = true;
+                 } else {
+                     bruceConfig.lockEnabled = false;
+                     bruceConfig.lockPin      = "";
+                 }
+                 bruceConfig.saveFile();
+             }}
+        );
+
+        if (bruceConfig.lockEnabled) {
+            localOptions.push_back({"Set PIN", []() { setLockPin(); }});
+            localOptions.push_back(
+                {"Lock Now",
+                 []() {
+                     deviceLocked = true;
+                 }}
+            );
+        }
+
+        localOptions.push_back({"Back", []() {}});
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Device Lock");
+
+        if (selected == -1 || selected == (int)localOptions.size() - 1) return;
+
+        // "Lock Now" selected — exit all the way back to the main loop
+        if (deviceLocked) return;
     }
 }
 

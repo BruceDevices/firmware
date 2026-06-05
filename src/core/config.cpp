@@ -75,6 +75,9 @@ JsonDocument BruceConfig::toJson() const {
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
 
+    setting["lockEnabled"] = lockEnabled;
+    setting["lockPin"]     = lockPin;
+
     JsonArray qrArray = setting["qrCodes"].to<JsonArray>();
     for (const auto &entry : qrCodes) {
         JsonObject qrEntry = qrArray.add<JsonObject>();
@@ -414,6 +417,17 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+
+    if (!setting["lockEnabled"].isNull()) {
+        lockEnabled = setting["lockEnabled"].as<bool>();
+    } else {
+        lockEnabled = false;
+    }
+    if (!setting["lockPin"].isNull()) {
+        lockPin = setting["lockPin"].as<String>();
+    } else {
+        lockPin = "";
     }
 
     if (!setting["qrCodes"].isNull()) {

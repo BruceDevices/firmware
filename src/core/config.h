@@ -93,6 +93,10 @@ public:
 
     std::vector<String> disabledMenus = {};
 
+    // Device Lock
+    bool lockEnabled = false;
+    String lockPin   = "";
+
     std::vector<QrCodeEntry> qrCodes = {
         {"Bruce AP",   "WIFI:T:WPA;S:BruceNet;P:brucenet;;"},
         {"Bruce Wiki", "https://github.com/pr3y/Bruce/wiki"},
