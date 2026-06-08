@@ -164,6 +164,9 @@ void setBrightnessMenu() {
 **  Turn screen off and reduces cpu clock
 **********************************************************************/
 void setSleepMode() {
+    // Power down radios during sleep mode
+    WiFi.mode(WIFI_OFF);
+    esp_bt_controller_deinit();
     sleepModeOn();
     while (1) {
         if (check(AnyKeyPress)) {
