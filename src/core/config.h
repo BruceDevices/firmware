@@ -59,9 +59,9 @@ public:
 #endif
 
     // Wifi
-    Credential webUI = {"admin", "bruce"};
+    Credential webUI = {"admin", "bruce"};  // FIXME: hardcoded default - should be unique per device
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
-    WiFiCredential wifiAp = {"BruceNet", "brucenet"};
+    WiFiCredential wifiAp = {"BruceNet", "brucenet"};  // FIXME: hardcoded default - should be MAC-derived
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
@@ -86,6 +86,7 @@ public:
     String wigleBasicToken = "";
     String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
     int devMode = 0;
+    int warningFlags = 0;  // bitmask: bit0=defaults warning
     int colorInverted = 1;
     int badUSBBLEKeyboardLayout = 0;
     uint16_t badUSBBLEKeyDelay = 10;

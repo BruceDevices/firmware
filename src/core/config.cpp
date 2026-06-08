@@ -1,4 +1,17 @@
 #include "config.h"
+#include "esp_mac.h"
+
+// Generate a unique default password from the device MAC address.
+// This replaces hardcoded defaults with device-unique credentials.
+// If the stored password still matches an old default, it should be changed.
+String generateDefaultPassword(const char *prefix) {
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%s_%02x%02x%02x", prefix, mac[3], mac[4], mac[5]);
+    return String(buf);
+}
+
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
 

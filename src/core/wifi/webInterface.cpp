@@ -418,6 +418,13 @@ void configureWebServer() {
             String password = request->getParam("password", true)->value();
 
             if (username == bruceConfig.webUI.user && password == bruceConfig.webUI.pwd) {
+        // Warn if using known default credentials
+        if (password == "bruce" || password == "brucenet") {
+            Serial.println("WARNING: Using default credentials! Change immediately.");
+            // flash a warning on the web interface
+            bruceConfig.warningFlags |= (1 << 0); // flag defaultsWarning
+        }
+
                 String token = generateToken();
                 AsyncWebServerResponse *response = request->beginResponse(302);
                 response->addHeader("Location", "/");
