@@ -16,6 +16,30 @@
 #include "utils.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <globals.h>
+#include <mbedtls/sha256.h>
+
+// AV-004 fix: App Store download integrity verification
+// Set this to the expected SHA-256 hex string of the App Store script.
+// Empty string disables the check (for development, or if hash is unknown).
+// The maintainer should update this when the server content is verified.
+#define EXPECTED_APPSTORE_SHA256 ""
+
+static bool verify_sha256(const uint8_t *data, size_t len, const char *expected_hex) {
+    if (expected_hex == NULL || strlen(expected_hex) == 0) {
+        return true; // No expected hash configured, skip check
+    }
+    unsigned char hash[32];
+    if (mbedtls_sha256(data, len, hash, 0) != 0) {
+        return false;
+    }
+    char hex[65];
+    for (int i = 0; i < 32; i++) {
+        sprintf(hex + i * 2, "%02x", hash[i]);
+    }
+    hex[64] = '\0';
+    return strcmp(hex, expected_hex) == 0;
+}
+
 
 int currentScreenBrightness = -1;
 
@@ -1717,14 +1741,27 @@ void installAppStoreJS() {
         return;
     }
 
+    String content = http.getString();
+    http.end();
+
+    // Verify integrity via SHA-256
+    if (!verify_sha256(
+            (const uint8_t *)content.c_str(),
+            content.length(),
+            EXPECTED_APPSTORE_SHA256)) {
+        displayWarning("App Store integrity check failed", true);
+        log_w("App Store SHA-256 mismatch.");
+        return;
+    }
+
     File file = fs->open("/BruceJS/Tools/App Store.js", FILE_WRITE);
     if (!file) {
         displayWarning("Failed to save App Store", true);
         return;
     }
-    file.print(http.getString());
-    http.end();
+    file.print(content);
     file.close();
+
 
     displaySuccess("App Store installed", true);
     displaySuccess("Goto JS Interpreter -> Tools -> App Store", true);
