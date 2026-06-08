@@ -744,7 +744,7 @@ static void mj_attackString(int targetIndex) {
 
     // Get string from user via keyboard
     String text = keyboard("", 200, "Inject text:");
-    if (text.length() == 0) return;
+    if (text.length() == 0 || text == "\x1B") return;
 
     drawMainBorderWithTitle("INJECTING");
     tft.setTextSize(FP);

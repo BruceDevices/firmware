@@ -7,30 +7,26 @@ MainMenu::MainMenu() {
     _menuItems = {
         &wifiMenu,
         &bleMenu,
-#if !defined(LITE_VERSION)
-        &ethernetMenu,
-#endif
         &rfMenu,
-        &rfidMenu,
-        &irMenu,
+        &nrf24Menu,
+#if !defined(LITE_VERSION)
+        &loraMenu,
+#endif
 #if defined(FM_SI4713) && !defined(LITE_VERSION)
         &fmMenu,
 #endif
-        &fileMenu,
+        &irMenu,
+#if !defined(LITE_VERSION)
+        &ethernetMenu,
+#endif
         &gpsMenu,
-        &nrf24Menu,
-#if !defined(LITE_VERSION)
-#if !defined(DISABLE_INTERPRETER)
+        &rfidMenu,
+        &fileMenu,
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
-        &appsMenu,
 #endif
-        &loraMenu,
-#endif
-        &othersMenu,
         &clockMenu,
-#if !defined(LITE_VERSION)
-        &connectMenu,
-#endif
+        &othersMenu,
         &configMenu,
     };
 

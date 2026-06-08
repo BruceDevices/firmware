@@ -107,7 +107,7 @@ uint32_t infoCallback(cmd *c) {
     serialDevice->print("Bruce v");
     serialDevice->println(BRUCE_VERSION);
     serialDevice->println(GIT_COMMIT_HASH);
-    serialDevice->print("SDK: ");              
+    serialDevice->print("SDK: ");
     serialDevice->println(ESP.getSdkVersion());
     serialDevice->println("MAC addr: " + String(WiFi.macAddress()));
     // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/ChipID/GetChipID/GetChipID.ino
@@ -405,7 +405,7 @@ uint32_t loaderCallback(cmd *c) {
         );
         return false;
     }
-
+    
     // TODO: close: Closes the running application.
     // TODO: info: Displays the loader’s state.
     return false;

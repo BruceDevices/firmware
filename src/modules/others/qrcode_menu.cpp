@@ -47,8 +47,10 @@ void display_custom_qrcode() {
 
 void pix_qrcode() {
     String key = keyboard("", 25, "PIX Key:");
+    if (key == "\x1B") return;
     String key_length = key.length() >= 10 ? String(key.length()) : "0" + String(key.length());
     String amount = num_keyboard("1000.00", 10, "Int amount:");
+    if (amount == "\x1B") return;
     amount = String(amount.toFloat());
     String amount_length = amount.length() >= 10 ? String(amount.length()) : "0" + String(amount.length());
 
@@ -91,6 +93,7 @@ void custom_qrcode_menu() {
 void save_and_display_qrcode() {
 
     String name = keyboard("", 100, "QRCode name:");
+    if (name == "\x1B") return;
     if (name.isEmpty()) {
         displayError("Name cannot be empty!");
         delay(1000);
@@ -108,6 +111,7 @@ void save_and_display_qrcode() {
     }
 
     String text = keyboard("", 100, "QRCode text:");
+    if (text == "\x1B") return;
 
     bruceConfig.addQrCodeEntry(name, text);
     return qrcode_display(text);

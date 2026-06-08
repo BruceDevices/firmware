@@ -209,6 +209,8 @@ void drawGPS(int x, int y);
 
 void drawGpsSmall(int x, int y);
 
+void drawSdSmall(int x, int y);
+
 void drawCreditCard(int x, int y);
 
 void drawMfkey32Icon(int x, int y);

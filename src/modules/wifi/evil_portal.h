@@ -35,7 +35,7 @@ public:
     String getCapturedSSID();
     String getCapturedPassword();
 
-    DNSServer &getDNSServer() { return dnsServer; }
+    DNSServer &getDNSServer() { return *dnsServer; }
     AsyncWebServer &getWebServer() { return webServer; }
     String getApName() { return apName; }
     uint8_t getChannel() { return _channel; }
@@ -63,7 +63,7 @@ private:
 
     AsyncWebServer webServer;
 
-    DNSServer dnsServer;
+    DNSServer *dnsServer = nullptr;
     IPAddress apGateway;
 
     String outputFile = "default_creds.csv";

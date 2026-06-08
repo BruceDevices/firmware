@@ -94,7 +94,7 @@ const KeyValue_t _key_value_map[KB_ROWS][KB_COLS] = {
      {KEY_SHIFT, KEY_SHIFT, CAPS_LOCK},
      {KEY_BACKSPACE, KEY_BACKSPACE, '#'}},
 
-    {{' ', ' ', ' '}}
+    {{' ', ' ', KEY_TAB}}
 };
 
 char getKeyChar(uint8_t k) {
@@ -303,6 +303,7 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = millis();
+    static unsigned long lastEncoderMoveMs = 0;
     static int posDifference = 0;
     static int lastPos = 0;
     bool sel = !BTN_ACT;
@@ -317,39 +318,60 @@ void InputHandler(void) {
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
         lastPos = newPos;
+        lastEncoderMoveMs = millis();
+    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
+        // Drop any stale queued steps once the encoder has stopped moving.
+        posDifference = 0;
     }
 
     sel = digitalRead(SEL_BTN);
     esc = digitalRead(BK_BTN);
 
     if (keyboard->available() > 0) {
-        int keyValue = keyboard->getEvent();
-        bool pressed = keyValue & 0x80;
-        keyValue &= 0x7F;
-        keyValue--;
-        if (keyValue / 10 < 4) {
-            if (handleSpecialKeys(keyValue, pressed) > 0) goto END;
+        keyStroke pendingKey;
+        bool keyPulse = false;
+        bool hapticPulse = false;
+
+        // Drain the full TCA8418 FIFO so quick taps are handled immediately.
+        while (keyboard->available() > 0) {
+            int keyValue = keyboard->getEvent();
+            bool pressed = keyValue & 0x80;
+            keyValue &= 0x7F;
+            keyValue--;
+
+            if (keyValue / 10 >= 4) continue;
+            if (handleSpecialKeys(keyValue, pressed) > 0) continue;
+
             keyVal = getKeyChar(keyValue);
-        }
-        if (pressed && !wakeUpScreen() && keyVal != '\0') {
-            KeyStroke.Clear();
-            KeyStroke.hid_keys.push_back(keyVal);
+            if (!pressed || keyVal == '\0') continue;
+            if (wakeUpScreen()) continue;
+
+            pendingKey.hid_keys.push_back(keyVal);
             if (keyVal == KEY_BACKSPACE) {
-                KeyStroke.del = true;
+                pendingKey.del = true;
                 EscPress = true;
             }
             if (keyVal == KEY_ENTER) {
-                KeyStroke.enter = true;
+                pendingKey.enter = true;
                 SelPress = true;
             }
-            if (keyVal == KEY_FN) KeyStroke.fn = true;
-            KeyStroke.word.push_back(keyVal);
-            KeyStroke.pressed = true;
+            if (keyVal == KEY_FN) pendingKey.fn = true;
+            pendingKey.word.push_back(keyVal);
+            keyPulse = true;
+            hapticPulse = true;
+        }
 
-            // Haptic feedback
-            drv.setWaveform(0, 81);
-            drv.setWaveform(1, 0);
-            drv.run();
+        if (keyPulse) {
+            pendingKey.pressed = true;
+            KeyStroke = pendingKey;
+
+            if (hapticPulse) {
+                drv.setWaveform(0, 81);
+                drv.setWaveform(1, 0);
+                drv.run();
+            }
+        } else {
+            KeyStroke.Clear();
         }
     } else KeyStroke.Clear();
 

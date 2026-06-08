@@ -1024,7 +1024,7 @@ void beaconAttack() {
     // Get user input for single SSID mode
     if (BeaconMode == 4) {
         singleSSID = keyboard("BruceBeacon", 26, "Base SSID:");
-        if (singleSSID.length() == 0) { return; }
+        if (singleSSID.length() == 0 || singleSSID == "\x1B") { return; }
     }
 #endif
     if (BeaconMode != 3) {

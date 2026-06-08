@@ -60,9 +60,7 @@ void stopWebUi() {
 **********************************************************************/
 void cleanlyStopWebUiForWiFiFeature() {
     // Only proceed if WebUI is active
-    if (!isWebUIActive && !server) {
-        return;
-    }
+    if (!isWebUIActive && !server) { return; }
 
     // Brief notification (non-blocking)
     Serial.println("Stopping WebUI for WiFi feature...");
@@ -274,34 +272,42 @@ void notFound(AsyncWebServerRequest *request) { request->send(404, "text/plain",
 **  Draw information on screen of WebUI.
 **********************************************************************/
 void drawWebUiScreen(bool mode_ap) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, ALCOLOR);
-    if (mode_ap) {
-        setTftDisplay(0, 0, bruceConfig.bgColor, FM);
-        tft.drawCentreString("BruceNet/brucenet", tftWidth / 2, 7, 1);
-    }
-    setTftDisplay(0, 0, ALCOLOR, FM);
-    tft.drawCentreString("BRUCE WebUI", tftWidth / 2, 27, 1);
+    drawMainBorderWithTitle("WebUI", true);
+
     String txt;
     if (!mode_ap) txt = WiFi.localIP().toString();
     else txt = WiFi.softAPIP().toString();
-    tft.setTextColor(bruceConfig.priColor);
 
-    tft.drawCentreString("http://bruce.local", tftWidth / 2, 45, 1);
-    setTftDisplay(7, 67);
+    int padX = 14;
+    int currentY = 55;
 
-    tft.setTextSize(FM);
-    tft.print("IP: ");
-    tft.println(txt);
-    tft.setCursor(7, tft.getCursorY());
-    tft.println("Usr: " + String(bruceConfig.webUI.user));
-    tft.setCursor(7, tft.getCursorY());
-    tft.println("Pwd: " + String(bruceConfig.webUI.pwd));
-    tft.setCursor(7, tft.getCursorY());
-    tft.setTextColor(TFT_RED);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP, 1);
+
+    if (mode_ap) {
+        tft.setCursor(padX, currentY);
+        tft.print("Net: BruceNet/brucenet");
+        currentY += LH * FP + 6;
+    }
+
+    tft.setCursor(padX, currentY);
+    tft.print("Url: http://bruce.local");
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("IP:  " + txt);
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("Usr: " + String(bruceConfig.webUI.user));
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("Pwd: " + String(bruceConfig.webUI.pwd));
+
+    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP - 5, 1);
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -465,8 +471,9 @@ void configureWebServer() {
             uint64_t LittleFSUsedBytes = LittleFS.usedBytes();
             uint64_t SDTotalBytes = SD.totalBytes();
             uint64_t SDUsedBytes = SD.usedBytes();
-            sprintf(
+            snprintf(
                 response_body,
+                sizeof(response_body),
                 "{\"%s\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
                 "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"}}",
                 "BRUCE_VERSION",

@@ -11,16 +11,15 @@
 #include "modules/wifi/clients.h"
 #include "modules/wifi/evil_portal.h"
 #include "modules/wifi/karma_attack.h"
+#include "modules/wifi/netcut.h"
 #include "modules/wifi/responder.h"
 #include "modules/wifi/scan_hosts.h"
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/wifi_atks.h"
 
-
-
 #ifndef LITE_VERSION
-#include "modules/wifi/wifi_recover.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
+#include "modules/wifi/wifi_recover.h"
 #endif
 
 // #include "modules/reverseShell/reverseShell.h"
@@ -34,8 +33,8 @@
 
 // 32bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_386.exe
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
-#include "modules/wifi/tcp_utils.h"
 #include "modules/wifi/socks4_proxy.h"
+#include "modules/wifi/tcp_utils.h"
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
 bool showHiddenNetworks = false;
@@ -63,6 +62,7 @@ void WifiMenu::optionsMenu() {
                            // WebUI cleanup now handled automatically inside EvilPortal constructor
                            EvilPortal();
                        }});
+    options.push_back({"NetCut", [=]() { netcutMenu(); }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
@@ -90,7 +90,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Brucegotchi", brucegotchi_start});
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
-    
+
     options.push_back({"Config", [this]() { configMenu(); }});
 
     addOptionToMainMenu();
@@ -106,11 +106,16 @@ void WifiMenu::configMenu() {
     wifiOptions.push_back({"Change MAC", wifiMACMenu});
     wifiOptions.push_back({"Add Evil Wifi", addEvilWifiMenu});
     wifiOptions.push_back({"Remove Evil Wifi", removeEvilWifiMenu});
+    wifiOptions.push_back({bruceConfig.TerminalLog ? "SSH/Telnet Log OFF" : "SSH/Telnet Log ON", [this]() {
+                               bruceConfig.setTerminalLog(!bruceConfig.TerminalLog);
+                               configMenu();
+                           }});
 
     // Evil Wifi Settings submenu (unchanged)
     wifiOptions.push_back({"Evil Wifi Settings", [this]() {
                                std::vector<Option> evilOptions;
 
+                               evilOptions.push_back({"Set Gateway IP", setEvilGatewayIp});
                                evilOptions.push_back({"Password Mode", setEvilPasswordMode});
                                evilOptions.push_back({"Rename /creds", setEvilEndpointCreds});
                                evilOptions.push_back({"Allow /creds access", setEvilAllowGetCreds});

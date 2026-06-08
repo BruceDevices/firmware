@@ -5,6 +5,7 @@
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_mac.h" // Set Mac Address - @IncursioHack
+#include "modules/ble/ble_common.h"
 #include <esp_event.h>
 #include <esp_netif.h>
 #include <globals.h>
@@ -41,6 +42,7 @@ void ensureWifiPlatform() {
 bool _wifiConnect(const String &ssid, int encryption) {
     String password = bruceConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
+    if (password == "\x1B") return false;
     bool connected = _connectToWifiNetwork(ssid, password);
     bool retry = false;
 
@@ -59,6 +61,10 @@ bool _wifiConnect(const String &ssid, int encryption) {
         }
 
         password = keyboard(password, 63, "Network Password:", true);
+        if (password == "\x1B") {
+            wifiDisconnect();
+            return false;
+        }
         connected = _connectToWifiNetwork(ssid, password);
     }
 
@@ -78,6 +84,15 @@ bool _wifiConnect(const String &ssid, int encryption) {
 }
 
 bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        if (BLEConnected) {
+            displayWarning("Board with no PSRAM, closing BLE Stack");
+            vTaskDelay(700 / portTICK_PERIOD_MS);
+        }
+        stopBLEStack();
+        vTaskDelay(300 / portTICK_PERIOD_MS);
+    }
+
     drawMainBorderWithTitle("WiFi Connect");
     padprintln("");
     padprint("Connecting to: " + ssid + ".");
@@ -122,20 +137,25 @@ bool _setupAP() {
 
 void wifiDisconnect() {
     wifiTransitioning = true;
-    
+
     WiFi.softAPdisconnect(true); // turn off AP mode
     vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.disconnect(true, true); // turn off STA mode
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.mode(WIFI_OFF);         // enforces WIFI_OFF mode
+    WiFi.mode(WIFI_OFF); // enforces WIFI_OFF mode
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    
+
     wifiConnected = false;
     wifiTransitioning = false;
 }
 
 bool wifiConnectMenu(wifi_mode_t mode) {
     if (WiFi.isConnected()) return false; // safeguard
+
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        stopBLEStack();
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
 
     // Check if WiFi is in transition
     if (wifiTransitioning) {
@@ -191,7 +211,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 }
                 options.push_back({"Hidden SSID", [=]() {
                                        String __ssid = keyboard("", 32, "Your SSID");
-                                       _wifiConnect(__ssid.c_str(), 8);
+                                       if (__ssid != "\x1B") _wifiConnect(__ssid.c_str(), 8);
                                    }});
                 addOptionToMainMenu();
 
@@ -224,6 +244,11 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 
 void wifiConnectTask(void *pvParameters) {
     if (WiFi.status() == WL_CONNECTED) return;
+
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        stopBLEStack();
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
 
     // Check if WiFi is in transition
     if (wifiTransitioning) {
@@ -267,14 +292,19 @@ String checkMAC() { return String(WiFi.macAddress()); }
 
 bool wifiConnecttoKnownNet(void) {
     if (WiFi.isConnected()) return true; // safeguard
-    
+
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        stopBLEStack();
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+
     // Check if WiFi is in transition
     if (wifiTransitioning) {
         displayTextLine("WiFi busy, please wait...");
         vTaskDelay(500 / portTICK_PERIOD_MS);
         return false;
     }
-    
+
     bool result = false;
     int nets;
     // WiFi.mode(WIFI_MODE_STA);

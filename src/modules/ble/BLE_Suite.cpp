@@ -1,9 +1,11 @@
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #include "HFP_Exploit.h"
+#include "ble_common.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
+#include "core/wifi/wifi_common.h"
 #include "fastpair_crypto.h"
 #include "modules/NRF24/nrf_jammer_api.h"
 #include <SD.h>
@@ -130,6 +132,17 @@ const FastPairModelInfo fastpair_models[] = {
 //=============================================================================
 
 bool BLEStateManager::initBLE(const String &name, int powerLevel) {
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+            if (wifiConnected) {
+                displayWarning("Board with no PSRAM, closing WiFi Stack");
+                vTaskDelay(700 / portTICK_PERIOD_MS);
+            }
+            wifiDisconnect();
+            vTaskDelay(300 / portTICK_PERIOD_MS);
+        }
+    }
+
     if (bleInitialized) deinitBLE(true);
 
     std::string nameStr = name.c_str();
@@ -402,26 +415,33 @@ HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const 
         profile.isAppleDevice = true;
         profile.suggestedAttack = "AppleSpoof";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("surface") != -1 || nameLower.indexOf("windows") != -1 ||
-               nameLower.indexOf("microsoft") != -1 || nameLower.indexOf("xbox") != -1) {
+    } else if (
+        nameLower.indexOf("surface") != -1 || nameLower.indexOf("windows") != -1 ||
+        nameLower.indexOf("microsoft") != -1 || nameLower.indexOf("xbox") != -1
+    ) {
         profile.osType = "Windows";
         profile.isWindowsDevice = true;
         profile.suggestedAttack = "WindowsBypass";
         profile.requiresAuthentication = true;
-    } else if (nameLower.indexOf("android") != -1 || nameLower.indexOf("google") != -1 ||
-               nameLower.indexOf("pixel") != -1 || nameLower.indexOf("samsung") != -1) {
+    } else if (
+        nameLower.indexOf("android") != -1 || nameLower.indexOf("google") != -1 ||
+        nameLower.indexOf("pixel") != -1 || nameLower.indexOf("samsung") != -1
+    ) {
         profile.osType = "Android";
         profile.isAndroidDevice = true;
         profile.suggestedAttack = "AndroidJustWorks";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("linux") != -1 || nameLower.indexOf("raspberry") != -1 ||
-               nameLower.indexOf("pi") != -1) {
+    } else if (
+        nameLower.indexOf("linux") != -1 || nameLower.indexOf("raspberry") != -1 ||
+        nameLower.indexOf("pi") != -1
+    ) {
         profile.osType = "Linux";
         profile.isLinuxDevice = true;
         profile.suggestedAttack = "BootProtocol";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("tv") != -1 || nameLower.indexOf("smart") != -1 ||
-               nameLower.indexOf("iot") != -1) {
+    } else if (
+        nameLower.indexOf("tv") != -1 || nameLower.indexOf("smart") != -1 || nameLower.indexOf("iot") != -1
+    ) {
         profile.osType = "IoT";
         profile.isIoTDevice = true;
         profile.suggestedAttack = "StateConfusion";
@@ -3724,8 +3744,10 @@ String selectTargetFromScan(const char *title) {
             for (size_t j = i + 1; j < scannerData.deviceAddresses.size(); j++) {
                 bool swapNeeded = false;
                 if (scannerData.deviceFastPair[j] && !scannerData.deviceFastPair[i]) swapNeeded = true;
-                else if (scannerData.deviceFastPair[j] == scannerData.deviceFastPair[i] &&
-                         scannerData.deviceRssi[j] > scannerData.deviceRssi[i])
+                else if (
+                    scannerData.deviceFastPair[j] == scannerData.deviceFastPair[i] &&
+                    scannerData.deviceRssi[j] > scannerData.deviceRssi[i]
+                )
                     swapNeeded = true;
 
                 if (swapNeeded) {

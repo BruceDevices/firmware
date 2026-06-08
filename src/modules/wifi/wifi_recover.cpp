@@ -966,7 +966,7 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     if (hs.ssid[0] == '\0') {
         padprintln("SSID not found in PCAP");
         String ssid = keyboard("", 32, "Enter SSID:");
-        if (ssid.length() == 0) {
+        if (ssid.length() == 0 || ssid == "\x1B") {
             setCpuFrequencyMhz(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
             displayError("SSID required", true);
             return;

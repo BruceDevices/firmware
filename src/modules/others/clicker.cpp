@@ -14,8 +14,8 @@
 // These variables persist across function calls and are safe from stack corruption
 // during USB initialization (which can corrupt local stack variables)
 
-static LayoutConfig layout;  // Screen layout configuration
-static ClickerConfig config; // User configuration (delay, button, clicks)
+static LayoutConfig layout;          // Screen layout configuration
+static ClickerConfig config;         // User configuration (delay, button, clicks)
 static USBHIDMouse *Mouse = nullptr; // Lazy init to avoid global HID descriptor registration
 
 // Runtime tracking for CPS calculation
@@ -591,6 +591,7 @@ bool handleValueEditing(
             // Open keyboard for custom input
             if (custom_mode && check(SelPress)) {
                 String customValue = num_keyboard(String(config.max_clicks).c_str(), 6, "Custom Click Count");
+                if (customValue == "\x1B") return false;
                 int val = atoi(customValue.c_str());
                 config.max_clicks = (val < 0) ? 0 : val;
                 custom_mode = false;

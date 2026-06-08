@@ -87,15 +87,15 @@ void socks4Proxy(uint16_t port) {
     WiFiServer server(port);
     server.begin();
 
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(2);
+    drawMainBorderWithTitle("SOCKS4 PROXY");
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawCentreString("SOCKS4 Proxy", tftWidth / 2, 10, 1);
-    tft.setCursor(0, 28);
-    tft.setTextSize(1);
+    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
     tft.println("Port: " + String(port));
+    tft.setCursor(10, tft.getCursorY());
     tft.println("IP: " + WiFi.localIP().toString());
-    tft.println("Esc: exit");
+    tft.println();
+    tft.setCursor(10, tft.getCursorY());
     tft.println("Waiting for clients...");
     tft.println("");
     Serial.println("[SOCKS4] Listening on " + WiFi.localIP().toString() + ":" + String(port));
@@ -118,13 +118,16 @@ void socks4Proxy(uint16_t port) {
         connCount++;
         client.setNoDelay(true);
         String clientIp = client.remoteIP().toString();
+        tft.setCursor(10, tft.getCursorY());
         tft.println("---");
+        tft.setCursor(10, tft.getCursorY());
         tft.println("CLIENT #" + String(connCount) + " " + clientIp);
         Serial.println("[SOCKS4] Client #" + String(connCount) + " connected from " + clientIp);
 
         if (!readSocks4Request(client, cd, dstPort, dstIp, hostname, sizeof(hostname))) {
             sendSocks4Reply(client, SOCKS4_REP_REJECTED, 0, dstIp);
             client.stop();
+            tft.setCursor(10, tft.getCursorY());
             tft.println("  Bad request");
             Serial.println("[SOCKS4] Bad request from " + clientIp);
             continue;
@@ -132,7 +135,8 @@ void socks4Proxy(uint16_t port) {
         if (cd != SOCKS4_CMD_CONNECT) {
             sendSocks4Reply(client, SOCKS4_REP_REJECTED, 0, dstIp);
             client.stop();
-            tft.println("  Unsupported command");
+            tft.setCursor(10, tft.getCursorY());
+            tft.println("  Unsupported cmd");
             continue;
         }
 
@@ -140,7 +144,8 @@ void socks4Proxy(uint16_t port) {
             hostname[0] != '\0'
                 ? (String(hostname) + ":" + String(dstPort))
                 : (IPAddress(dstIp[0], dstIp[1], dstIp[2], dstIp[3]).toString() + ":" + String(dstPort));
-        tft.println("  -> " + destStr + " ...");
+        tft.setCursor(10, tft.getCursorY());
+        tft.println("  -> " + destStr);
         Serial.println("[SOCKS4] Connecting to " + destStr);
 
         WiFiClient target;
@@ -155,11 +160,13 @@ void socks4Proxy(uint16_t port) {
         if (!ok) {
             sendSocks4Reply(client, SOCKS4_REP_REJECTED, 0, dstIp);
             client.stop();
+            tft.setCursor(10, tft.getCursorY());
             tft.println("  FAILED");
             Serial.println("[SOCKS4] Connect failed: " + destStr);
             continue;
         }
 
+        tft.setCursor(10, tft.getCursorY());
         tft.println("  OK - relaying");
         Serial.println("[SOCKS4] Tunnel up: " + clientIp + " <-> " + destStr);
 
@@ -169,6 +176,7 @@ void socks4Proxy(uint16_t port) {
 
         target.stop();
         client.stop();
+        tft.setCursor(10, tft.getCursorY());
         tft.println("  Closed");
         Serial.println("[SOCKS4] Tunnel closed: " + clientIp + " -> " + destStr);
     }
