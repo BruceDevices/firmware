@@ -2,6 +2,23 @@
 #include "globals_js.h"
 #include "user_classes_js.h"
 
+// Safe modules always accessible via require()
+static const char *SAFE_MODULES[] = {
+    "display", "dialog", "keyboard", "runtime", "notification",
+    "math", "device", "led", "menu", "event_loop", "gui",
+    "gui/loading", "gui/submenu", "gui/empty_screen", "gui/text_input",
+    "gui/byte_input", "gui/text_box", "gui/dialog", "gui/file_picker",
+    "gui/icon", "flipper", "buffer"
+};
+static const int NUM_SAFE_MODULES = sizeof(SAFE_MODULES) / sizeof(SAFE_MODULES[0]);
+
+// Dangerous modules that require explicit __allow() permission
+static const char *DANGEROUS_MODULES[] = {
+    "storage", "wifi", "subghz", "nrf24", "ble", "ir",
+    "badusb", "gpio", "i2c", "rfid", "serial", "mic", "audio"
+};
+static const int NUM_DANGEROUS_MODULES = sizeof(DANGEROUS_MODULES) / sizeof(DANGEROUS_MODULES[0]);
+
 #include "mbedtls/base64.h"
 
 JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
@@ -302,10 +319,87 @@ JSValue native_require(JSContext *ctx, JSValue *this_val, int argc, JSValue *arg
     const char *name = JS_ToCString(ctx, argv[0], &name_buf);
     if (!name) { return JS_EXCEPTION; }
 
+    // Check if module is safe (always allowed)
+    bool is_safe = false;
+    for (int i = 0; i < NUM_SAFE_MODULES; i++) {
+        if (strcmp(name, SAFE_MODULES[i]) == 0) { is_safe = true; break; }
+    }
+
+    // Check if module is dangerous (needs permission)
+    bool is_dangerous = false;
+    for (int i = 0; i < NUM_DANGEROUS_MODULES; i++) {
+        if (strcmp(name, DANGEROUS_MODULES[i]) == 0) { is_dangerous = true; break; }
+    }
+
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue val = JS_GetPropertyStr(ctx, global, name);
+
+    // For dangerous modules, check __permitted_modules set
+    if (is_dangerous) {
+        JSValue permitted = JS_GetPropertyStr(ctx, global, "__permitted_modules");
+        bool has_permission = false;
+        if (JS_IsObject(permitted)) {
+            JSValue perm_val = JS_GetPropertyStr(ctx, permitted, name);
+            has_permission = JS_ToBool(ctx, perm_val);
+            JS_FreeValue(ctx, perm_val);
+        }
+        JS_FreeValue(ctx, permitted);
+
+        if (!has_permission) {
+            JS_FreeValue(ctx, global);
+            return JS_ThrowTypeError(
+                ctx,
+                "Module '%s' requires permission. Call __allow('%s') first.",
+                name, name
+            );
+        }
+    }
+
+    // Look up module from __module_registry (hidden internal store)
+    JSValue registry = JS_GetPropertyStr(ctx, global, "__module_registry");
+    JSValue val;
+    if (JS_IsObject(registry)) {
+        val = JS_GetPropertyStr(ctx, registry, name);
+    } else {
+        // Fallback: direct global lookup (for modules not in registry)
+        val = JS_GetPropertyStr(ctx, global, name);
+    }
+    JS_FreeValue(ctx, registry);
+    JS_FreeValue(ctx, global);
 
     return val;
+}
+
+JSValue native_requireAllow(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (argc < 1) { return JS_ThrowTypeError(ctx, "__allow() expects 1 argument"); }
+
+    JSCStringBuf name_buf;
+    const char *name = JS_ToCString(ctx, argv[0], &name_buf);
+    if (!name) { return JS_EXCEPTION; }
+
+    // Validate that the module name is in the dangerous list
+    bool valid = false;
+    for (int i = 0; i < NUM_DANGEROUS_MODULES; i++) {
+        if (strcmp(name, DANGEROUS_MODULES[i]) == 0) { valid = true; break; }
+    }
+    if (!valid) {
+        return JS_ThrowTypeError(ctx, "Unknown or unrestricted module: '%s'", name);
+    }
+
+    JSValue global = JS_GetGlobalObject(ctx);
+
+    // Get or create permitted_modules set
+    JSValue permitted = JS_GetPropertyStr(ctx, global, "__permitted_modules");
+    if (!JS_IsObject(permitted)) {
+        permitted = JS_NewObject(ctx);
+    }
+
+    JS_SetPropertyStr(ctx, permitted, name, JS_NewBool(ctx, 1));
+    JS_SetPropertyStr(ctx, global, "__permitted_modules", permitted);
+
+    JS_FreeValue(ctx, permitted);
+    JS_FreeValue(ctx, global);
+
+    return JS_NewBool(ctx, 1);
 }
 
 JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {

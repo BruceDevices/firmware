@@ -1,8 +1,11 @@
 var dialog = require('dialog');
+__allow("wifi");
 var wifi = require('wifi');
+__allow("storage");
 var storage = require('storage');
 var keyboard = require('keyboard');
 var display = require('display');
+__allow("serial");
 var serial = require('serial');
 
 var dialogMessage = dialog.info;

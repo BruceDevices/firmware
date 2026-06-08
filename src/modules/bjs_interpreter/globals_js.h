@@ -27,6 +27,7 @@ JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
 JSValue native_require(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_requireAllow(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
 JSValue native_assert(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);

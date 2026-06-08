@@ -1,5 +1,6 @@
 var display = require('display');
 var keyboard = require('keyboard');
+__allow("audio");
 var audio = require('audio');
 
 // I am putting all code in function to optimise, if variables are outside

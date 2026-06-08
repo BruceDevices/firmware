@@ -62,6 +62,43 @@ void interpreterHandler(void *pvParameters) {
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
 
+    // Build hidden module registry and remove dangerous modules from global scope
+    // This ensures require() is the ONLY way to access dangerous hardware modules
+    JSValue global_obj = JS_GetGlobalObject(ctx);
+
+    // List of all modules to store in hidden registry
+    const char *MODULE_NAMES[] = {
+        "audio", "badusb", "ble", "device", "display", "dialog",
+        "gpio", "i2c", "ir", "keyboard", "led", "menu", "mic",
+        "notification", "nrf24", "rfid", "runtime", "serial",
+        "storage", "subghz", "wifi", "event_loop", "gui",
+        "gui/loading", "gui/submenu", "gui/empty_screen", "gui/text_input",
+        "gui/byte_input", "gui/text_box", "gui/dialog", "gui/file_picker",
+        "gui/icon", "flipper"
+    };
+
+    JSValue module_registry = JS_NewObject(ctx);
+    for (size_t i = 0; i < sizeof(MODULE_NAMES)/sizeof(MODULE_NAMES[0]); i++) {
+        JSValue mod = JS_GetPropertyStr(ctx, global_obj, MODULE_NAMES[i]);
+        if (!JS_IsUndefined(mod)) {
+            JS_SetPropertyStr(ctx, module_registry, MODULE_NAMES[i], mod);
+        }
+        JS_FreeValue(ctx, mod);
+    }
+
+    // Dangerous modules to remove from global scope
+    const char *RESTRICTED_MODULES[] = {
+        "storage", "wifi", "subghz", "nrf24", "ble", "ir",
+        "badusb", "gpio", "i2c", "rfid", "serial", "mic", "audio"
+    };
+    for (size_t i = 0; i < sizeof(RESTRICTED_MODULES)/sizeof(RESTRICTED_MODULES[0]); i++) {
+        JS_DeleteProperty(ctx, global_obj, JS_NewAtom(ctx, RESTRICTED_MODULES[i]), 0);
+    }
+
+    JS_SetPropertyStr(ctx, global_obj, "__module_registry", module_registry);
+    JS_FreeValue(ctx, module_registry);
+    JS_FreeValue(ctx, global_obj);
+
     js_timers_init(ctx);
 
     // Set global variables
@@ -74,6 +111,7 @@ void interpreterHandler(void *pvParameters) {
     JS_SetPropertyStr(ctx, global, "BRUCE_PRICOLOR", JS_NewInt32(ctx, bruceConfig.priColor));
     JS_SetPropertyStr(ctx, global, "BRUCE_SECCOLOR", JS_NewInt32(ctx, bruceConfig.secColor));
     JS_SetPropertyStr(ctx, global, "BRUCE_BGCOLOR", JS_NewInt32(ctx, bruceConfig.bgColor));
+    JS_SetPropertyStr(ctx, global, "__allow", JS_NewCFunction(ctx, native_requireAllow, "__allow", 1));
 
     JS_SetPropertyStr(ctx, global, "HIGH", JS_NewInt32(ctx, HIGH));
     JS_SetPropertyStr(ctx, global, "LOW", JS_NewInt32(ctx, LOW));
