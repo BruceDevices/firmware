@@ -58,12 +58,9 @@ bool quickloop = false;
 
 static String getParsedProtocolName(const decode_results &r) {
     switch (r.decode_type) {
-        case decode_type_t::RC5:
-            return (r.command > 0x3F) ? "RC5X" : "RC5";
-        case decode_type_t::RC6:
-            return "RC6";
-        case decode_type_t::SAMSUNG:
-            return "Samsung32";
+        case decode_type_t::RC5: return (r.command > 0x3F) ? "RC5X" : "RC5";
+        case decode_type_t::RC6: return "RC6";
+        case decode_type_t::SAMSUNG: return "Samsung32";
         case decode_type_t::SONY:
             if (r.address > 0xFF) return "SIRC20";
             if (r.address > 0x1F) return "SIRC15";
@@ -73,10 +70,8 @@ static String getParsedProtocolName(const decode_results &r) {
             if (r.address > 0xFF1F) return "NECext";
             if (r.address > 0xFF) return "NEC42";
             return "NEC";
-        case decode_type_t::UNKNOWN:
-            return "";
-        default:
-            return typeToString(r.decode_type, r.repeat);
+        case decode_type_t::UNKNOWN: return "";
+        default: return typeToString(r.decode_type, r.repeat);
     }
 }
 
@@ -157,8 +152,14 @@ void IrRead::loop() {
 
         if (_emulate_mode) {
             if (check(SelPress)) emulate_signal();
-            if (check(NextPress)) { _emulate_mode = false; discard_signal(); }
-            if (check(PrevPress)) { _emulate_mode = false; save_signal(); }
+            if (check(NextPress)) {
+                _emulate_mode = false;
+                discard_signal();
+            }
+            if (check(PrevPress)) {
+                _emulate_mode = false;
+                save_signal();
+            }
         } else {
             if (check(NextPress)) save_signal();
             if (quickloop && button_pos == quickButtons.size()) save_device();
@@ -240,9 +241,7 @@ void IrRead::read_signal() {
     padprint("RAW Data Captured:");
     String raw_signal = parse_raw_signal();
     _captured_raw_signal = raw_signal;
-    tft.println(
-        raw_signal.substring(0, 45) + (raw_signal.length() > 45 ? "..." : "")
-    );
+    tft.println(raw_signal.substring(0, 45) + (raw_signal.length() > 45 ? "..." : ""));
 
     display_btn_options();
     delay(500);
@@ -292,6 +291,7 @@ void IrRead::save_signal() {
     if (!_read_signal) return;
     if (!quickloop) {
         String btn_name = keyboard("Btn" + String(signals_read), 30, "Btn name:");
+        if (btn_name == "\x1B") return;
         append_to_file_str(btn_name);
     } else {
         append_to_file_str(quickButtons[button_pos]);
@@ -382,8 +382,8 @@ void IrRead::append_to_file_str(String btn_name) {
         strDeviceContent += "bits: " + String(results.bits) + "\n";
         if (hasACState(results.decode_type)) strDeviceContent += "state: " + parse_state_signal() + "\n";
         else if (results.bits > 32)
-            strDeviceContent += "value: " + uint32ToString(results.value) + " " +
-                                uint32ToString(results.value >> 32) + "\n";
+            strDeviceContent +=
+                "value: " + uint32ToString(results.value) + " " + uint32ToString(results.value >> 32) + "\n";
         else strDeviceContent += "value: " + uint32ToStringInverted(results.value) + "\n";
     }
     strDeviceContent += "#\n";
@@ -393,6 +393,7 @@ void IrRead::save_device() {
     if (signals_read == 0) return;
 
     String filename = keyboard("MyDevice", 30, "File name:");
+    if (filename == "\x1B") return;
 
     display_banner();
 
@@ -487,6 +488,7 @@ bool IrRead::write_file(String filename, FS *fs) {
             case 2: (*fs).remove("/BruceIR/" + filename + ".ir"); break;
             case 3:
                 filename = keyboard(filename, 30, "File name:");
+                if (filename == "\x1B") return false;
                 display_banner();
                 break;
         }

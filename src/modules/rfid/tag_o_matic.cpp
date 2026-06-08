@@ -325,7 +325,7 @@ void TagOMatic::emulate_card() {
 
 void TagOMatic::write_custom_uid() {
     String custom_uid = keyboard("", _rfid->uid.size * 2, "UID (hex):");
-
+    if (custom_uid == "\x1B") return;
     custom_uid.trim();
     custom_uid.replace(" ", "");
     custom_uid.toUpperCase();
@@ -420,6 +420,7 @@ void TagOMatic::create_ndef_text() {
     _rfid->ndefMessage.payload[2] = 0x6E;
 
     String ndef_data = keyboard("", NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
 
     for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 3] = ndef_data.charAt(i); }
     _rfid->ndefMessage.payloadSize = i + 3;
@@ -476,6 +477,7 @@ void TagOMatic::create_ndef_url() {
     _rfid->ndefMessage.payload[0] = uic;
 
     String ndef_data = keyboard(prefix, NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
     ndef_data = ndef_data.substring(prefix.length());
 
     for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 1] = ndef_data.charAt(i); }
@@ -496,10 +498,10 @@ void TagOMatic::load_file() {
         _read_uid = true;
 
         options = {
-            {"Clone UID",  [this]() { set_state(CLONE_MODE); }},
-            {"Write data", [this]() { set_state(WRITE_MODE); }},
-            {"Check tag",  [this]() { set_state(CHECK_MODE); }},
-            {"Emulate tag",[this]() { set_state(EMULATE_MODE); }},
+            {"Clone UID",   [this]() { set_state(CLONE_MODE); }  },
+            {"Write data",  [this]() { set_state(WRITE_MODE); }  },
+            {"Check tag",   [this]() { set_state(CHECK_MODE); }  },
+            {"Emulate tag", [this]() { set_state(EMULATE_MODE); }},
         };
 
         loopOptions(options);
@@ -513,6 +515,7 @@ void TagOMatic::save_file() {
     String uid_str = _rfid->printableUID.uid;
     uid_str.replace(" ", "");
     String filename = keyboard(uid_str, 30, "File name:");
+    if (filename == "\x1B") return;
 
     display_banner();
 

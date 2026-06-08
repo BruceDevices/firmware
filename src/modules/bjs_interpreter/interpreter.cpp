@@ -162,7 +162,7 @@ bool run_bjs_script_headless(char *code) {
     return true;
 }
 
-bool run_bjs_script_headless(FS fs, String filename) {
+bool run_bjs_script_headless(FS &fs, String filename) {
     script = readBigFile(&fs, filename);
     if (script == NULL) { return false; }
 

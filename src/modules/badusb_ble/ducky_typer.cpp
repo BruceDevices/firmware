@@ -182,28 +182,28 @@ struct QueuedHIDKey {
 };
 
 static const KeyboardMenuKey modifierMenuKeys[] = {
-    {"Ctrl",        KEY_LEFT_CTRL },
-    {"Shift",       KEY_LEFT_SHIFT},
-    {"Alt",         KEY_LEFT_ALT  },
-    {"GUI",         KEY_LEFT_GUI  },
-    {"Right Ctrl",  KEY_RIGHT_CTRL},
+    {"Ctrl",        KEY_LEFT_CTRL  },
+    {"Shift",       KEY_LEFT_SHIFT },
+    {"Alt",         KEY_LEFT_ALT   },
+    {"GUI",         KEY_LEFT_GUI   },
+    {"Right Ctrl",  KEY_RIGHT_CTRL },
     {"Right Shift", KEY_RIGHT_SHIFT},
-    {"Right Alt",   KEY_RIGHT_ALT },
-    {"Right GUI",   KEY_RIGHT_GUI },
-    {"Fn",          KEYFN         },
+    {"Right Alt",   KEY_RIGHT_ALT  },
+    {"Right GUI",   KEY_RIGHT_GUI  },
+    {"Fn",          KEYFN          },
 };
 
 static const KeyboardMenuKey navigationMenuKeys[] = {
-    {"Up Arrow",    KEY_UP_ARROW  },
-    {"Down Arrow",  KEY_DOWN_ARROW},
-    {"Left Arrow",  KEY_LEFT_ARROW},
+    {"Up Arrow",    KEY_UP_ARROW   },
+    {"Down Arrow",  KEY_DOWN_ARROW },
+    {"Left Arrow",  KEY_LEFT_ARROW },
     {"Right Arrow", KEY_RIGHT_ARROW},
-    {"Home",        KEY_HOME      },
-    {"End",         KEY_END       },
-    {"Page Up",     KEY_PAGE_UP   },
-    {"Page Down",   KEY_PAGE_DOWN },
-    {"Insert",      KEY_INSERT    },
-    {"Delete",      KEY_DELETE    },
+    {"Home",        KEY_HOME       },
+    {"End",         KEY_END        },
+    {"Page Up",     KEY_PAGE_UP    },
+    {"Page Down",   KEY_PAGE_DOWN  },
+    {"Insert",      KEY_INSERT     },
+    {"Delete",      KEY_DELETE     },
 };
 
 static const KeyboardMenuKey specialMenuKeys[] = {
@@ -353,9 +353,11 @@ static void openKeySection(
 
         for (size_t i = 0; i < keyCount; i++) {
             KeyboardMenuKey menuKey = menuKeys[i];
-            sectionOptions.push_back({menuKey.label, [&, menuKey]() {
-                                          queueOrSendKey(hid, queueRecording, queuedKeys, menuKey.label, menuKey.key);
-                                      }});
+            sectionOptions.push_back(
+                {menuKey.label, [&, menuKey]() {
+                     queueOrSendKey(hid, queueRecording, queuedKeys, menuKey.label, menuKey.key);
+                 }}
+            );
         }
 
         sectionOptions.push_back({"Back", []() {}});
@@ -366,30 +368,28 @@ static void openKeySection(
     }
 }
 
-static void keyboardSectionAction(
-    HIDInterface *hid, bool &queueRecording, std::vector<QueuedHIDKey> &queuedKeys
-) {
+static void
+keyboardSectionAction(HIDInterface *hid, bool &queueRecording, std::vector<QueuedHIDKey> &queuedKeys) {
     if (queueRecording) {
         String queuedChar = keyboard("", 1, "Queue character:");
-        if (queuedChar.length() == 0 || isKeyboardInputCanceled(queuedChar)) return;
+        if (queuedChar == "\x1B" || queuedChar.length() == 0 || isKeyboardInputCanceled(queuedChar)) return;
         String label = queuedChar.substring(0, 1);
         queueOrSendKey(hid, true, queuedKeys, label, static_cast<uint8_t>(queuedChar.charAt(0)));
         return;
     }
 
     String typedText = keyboard("", 76, "Type your message:");
-    if (typedText.length() == 0 || isKeyboardInputCanceled(typedText)) return;
+    if (typedText == "\x1B" || typedText.length() == 0 || isKeyboardInputCanceled(typedText)) return;
 
     hid->print(typedText.c_str());
     displayTextLine("Text sent");
 }
 
-static void sendQueuedKeys(HIDInterface *hid, bool &queueRecording, const std::vector<QueuedHIDKey> &queuedKeys) {
+static void
+sendQueuedKeys(HIDInterface *hid, bool &queueRecording, const std::vector<QueuedHIDKey> &queuedKeys) {
     if (queuedKeys.empty()) return;
 
-    for (const auto &queuedKey : queuedKeys) {
-        hid->press(queuedKey.key);
-    }
+    for (const auto &queuedKey : queuedKeys) { hid->press(queuedKey.key); }
     delay(bruceConfig.badUSBBLEKeyDelay);
     hid->releaseAll();
 
@@ -848,7 +848,8 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
         while (!exitKeyboard) {
             options = {
                 {"Keyboard",      [&]() { keyboardSectionAction(hid, queueRecording, queuedKeys); }},
-                {"Modifiers",     [&]() {
+                {"Modifiers",
+                 [&]() {
                      openKeySection(
                          hid,
                          "Modifier keys",
@@ -857,8 +858,9 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                          queueRecording,
                          queuedKeys
                      );
-                 }                                                                          },
-                {"Navigation",    [&]() {
+                 }                                                                                 },
+                {"Navigation",
+                 [&]() {
                      openKeySection(
                          hid,
                          "Navigation keys",
@@ -867,8 +869,9 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                          queueRecording,
                          queuedKeys
                      );
-                 }                                                                          },
-                {"Special keys",  [&]() {
+                 }                                                                                 },
+                {"Special keys",
+                 [&]() {
                      openKeySection(
                          hid,
                          "Special keys",
@@ -877,8 +880,9 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                          queueRecording,
                          queuedKeys
                      );
-                 }                                                                          },
-                {"Function keys", [&]() {
+                 }                                                                                 },
+                {"Function keys",
+                 [&]() {
                      openKeySection(
                          hid,
                          "Function keys",
@@ -887,7 +891,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                          queueRecording,
                          queuedKeys
                      );
-                 }                                                                          },
+                 }                                                                                 },
                 {"Numpad keys",   [&]() {
                      openKeySection(
                          hid,
@@ -897,7 +901,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                          queueRecording,
                          queuedKeys
                      );
-                 }                                                                          },
+                 }                                                  },
             };
 
             String startQueueLabel = queueRecording ? "Start Queue [ON]" : "Start Queue";

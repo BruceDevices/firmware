@@ -190,6 +190,7 @@ static const uint8_t RX = SERIAL_RX;
 #define KEY_FN 0x14
 #define KEY_BACKSPACE 0x08
 #define KEY_ENTER 0x0D
+#define KEY_TAB 0x2b
 
 // Interrupt IO
 #define RTC_INT 1

@@ -569,10 +569,13 @@ void responder() {
     if (!wifiConnected) wifiConnectMenu();
 
     netbiosname_str = keyboard("Bruce", 20);
+    if (netbiosname_str == "\x1B") return;
     netbiosName = stringTochar(netbiosname_str);
     netbiosdomain_str = keyboard("BRUCEGROUP", 20);
+    if (netbiosdomain_str == "\x1B") return;
     netbiosDomain = stringTochar(netbiosdomain_str);
     dnsdomain_str = keyboard("Bruce.Local", 20);
+    if (dnsdomain_str == "\x1B") return;
     dnsDomain = stringTochar(dnsdomain_str);
 
     drawMainBorderWithTitle("RESPONDER"); // draw again after keyboard
@@ -1049,8 +1052,10 @@ void responder() {
                                         smbState.client.stop();
                                         smbState.active = false;
                                     }
-                                } else if (packet[0] == 0xFF && packet[1] == 'S' && packet[2] == 'M' &&
-                                           packet[3] == 'B') {
+                                } else if (
+                                    packet[0] == 0xFF && packet[1] == 'S' && packet[2] == 'M' &&
+                                    packet[3] == 'B'
+                                ) {
                                     Serial.println(F("Paquet SMBv1 received."));
                                     handleSMB1(packet, smbLength);
                                     continue;

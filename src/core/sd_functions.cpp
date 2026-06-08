@@ -2,8 +2,8 @@
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
-#include "modules/gps/wigle.h"
 #include "modules/gps/wdgwars.h"
+#include "modules/gps/wigle.h"
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
@@ -55,8 +55,10 @@ bool setupSdCard() {
         // Serial.println("Task not activated");
     }
     // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
-    else if (bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
-             bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC) {
+    else if (
+        bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
+        bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC
+    ) {
         Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
 #if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
         if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
@@ -163,6 +165,7 @@ bool deleteFromSd(FS fs, String path) {
 ***************************************************************************************/
 bool renameFile(FS fs, String path, String filename) {
     String newName = keyboard(filename, 76, "Type the new Name:");
+    if (newName == "\x1B") return false;
     // Rename the file of folder
     if (fs.rename(path, path.substring(0, path.lastIndexOf('/')) + "/" + newName)) {
         // Serial.println("Renamed from " + filename + " to " + newName);
@@ -330,6 +333,7 @@ bool pasteFile(FS fs, String path) {
 ***************************************************************************************/
 bool createFolder(FS fs, String path) {
     String foldername = keyboard("", 76, "Folder Name: ");
+    if (foldername == "\x1B") return false;
     if (!fs.mkdir(path + "/" + foldername)) {
         displayRedStripe("Couldn't create folder");
         return false;
@@ -775,7 +779,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              RfCodes data{};
 
                                                              if (readSubFile(&fs, filepath, data))
-                                                                txSubFile(data);
+                                                                 txSubFile(data);
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {

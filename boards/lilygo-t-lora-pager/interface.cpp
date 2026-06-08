@@ -94,7 +94,7 @@ const KeyValue_t _key_value_map[KB_ROWS][KB_COLS] = {
      {KEY_SHIFT, KEY_SHIFT, CAPS_LOCK},
      {KEY_BACKSPACE, KEY_BACKSPACE, '#'}},
 
-    {{' ', ' ', ' '}}
+    {{' ', ' ', KEY_TAB}}
 };
 
 char getKeyChar(uint8_t k) {

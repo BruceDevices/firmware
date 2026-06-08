@@ -42,6 +42,7 @@ void ensureWifiPlatform() {
 bool _wifiConnect(const String &ssid, int encryption) {
     String password = bruceConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
+    if (password == "\x1B") return false;
     bool connected = _connectToWifiNetwork(ssid, password);
     bool retry = false;
 
@@ -60,6 +61,10 @@ bool _wifiConnect(const String &ssid, int encryption) {
         }
 
         password = keyboard(password, 63, "Network Password:", true);
+        if (password == "\x1B") {
+            wifiDisconnect();
+            return false;
+        }
         connected = _connectToWifiNetwork(ssid, password);
     }
 
@@ -206,7 +211,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 }
                 options.push_back({"Hidden SSID", [=]() {
                                        String __ssid = keyboard("", 32, "Your SSID");
-                                       _wifiConnect(__ssid.c_str(), 8);
+                                       if (__ssid != "\x1B") _wifiConnect(__ssid.c_str(), 8);
                                    }});
                 addOptionToMainMenu();
 

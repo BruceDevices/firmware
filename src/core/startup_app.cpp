@@ -41,8 +41,9 @@ StartupApp::StartupApp() {
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
-        FS *fs;
-        String folder = getScriptsFolder(fs);
+        FS *fs = nullptr;
+        getScriptsFolder(fs);
+        if (fs == nullptr) return;
         run_bjs_script_headless(*fs, bruceConfig.startupAppJSInterpreterFile);
     };
 #endif

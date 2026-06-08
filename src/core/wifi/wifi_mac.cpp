@@ -82,6 +82,7 @@ void wifiMACMenu() {
 
     options.push_back({"Set MAC", []() {
                            String newMAC = keyboard("", 17, "Enter MAC XX:YY:ZZ:AA:BB:CC");
+                           if (newMAC == "\x1B") return;
                            if (setCustomMAC(newMAC)) { displayTextLine("MAC Saved: " + newMAC); }
                        }});
 

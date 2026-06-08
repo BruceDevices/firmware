@@ -149,7 +149,7 @@ void startSessionLog(ClientProtocol protocol) {
     withClientLock([&]() {
         closeSessionLogUnlocked();
 
-        if (!sdcardMounted) return;
+        if (!bruceConfig.TerminalLog || !sdcardMounted) return;
 
         if (!SD.exists("/Bruce")) SD.mkdir("/Bruce");
         if (!SD.exists("/Bruce/Terminal")) SD.mkdir("/Bruce/Terminal");
@@ -538,7 +538,7 @@ bool trySyncLiveInputFromRemoteLine(const String &line, bool renderUpdatedPrompt
 
     bool awaiting = false;
     withClientLock([&]() { awaiting = awaitingTabDebugResponse; });
-    if (awaiting && payload == liveInput) return false;
+    if (awaiting && payload == liveInput) return true;
 
     syncCommandBufferFromRemote(payload);
     withClientLock([&]() { awaitingTabDebugResponse = false; });
@@ -1104,15 +1104,22 @@ void runSessionUiLoop(const String &title) {
                 if (key.del) EscPress = false;
                 if (key.del) {
                     size_t promptLength = getCommandPromptLength();
+                    String liveInput = getTerminalLiveInput();
+                    bool remoteLineAlreadyActive = !liveInput.isEmpty();
                     if (commandBuffer.length() > promptLength) {
                         commandBuffer.remove(commandBuffer.length() - 1);
-                        setTerminalLiveInput(getBufferedCommandInput());
+                        if (remoteLineAlreadyActive) {
+                            setTerminalLiveInput(getBufferedCommandInput());
+                            queueSessionCommand(String(char(0x7f)));
+                        }
                         tft.setCursor(tft.getCursorX() - 6, tft.getCursorY());
                         tft.print(" ");
                         tft.setCursor(tft.getCursorX() - 6, tft.getCursorY());
                     } else {
-                        setTerminalLiveInput("");
-                        queueSessionCommand(String(char(0x7f)));
+                        if (remoteLineAlreadyActive) {
+                            setTerminalLiveInput("");
+                            queueSessionCommand(String(char(0x7f)));
+                        }
                     }
                 } else if (key.enter) {
                     String input = getBufferedCommandInput();
@@ -1137,11 +1144,8 @@ void runSessionUiLoop(const String &title) {
         }
 #else
         if (check(SelPress)) {
-            while (check(SelPress)) { yield(); }
-            String message = keyboard("cls", 76, title + " Command:");
-            while (check(SelPress)) { yield(); }
-
-            if (message == "cls") {
+            String message = keyboard("", 76, title + " Command:");
+            if (message == "cls" || message == "clear") {
                 appendSessionCommandToLog(message);
                 resetClientScreen(title.c_str());
             } else {
@@ -1151,7 +1155,6 @@ void runSessionUiLoop(const String &title) {
                 tft.println("> " + message);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             }
-
             resetCommandBufferToPrompt();
             renderPrompt();
         }
@@ -1190,11 +1193,15 @@ void ssh_setup(String host) {
         String my_net =
             WiFi.gatewayIP().toString().substring(0, WiFi.gatewayIP().toString().lastIndexOf(".") + 1);
         ssh_host = keyboard(my_net, 100, "SSH HOST (IP or Hostname)");
+        if (ssh_host == "\x1B") return;
     }
 
     ssh_port = num_keyboard("22", 5, "SSH PORT");
+    if (ssh_port == "\x1B") return;
     ssh_user = keyboard("", 76, "SSH USER");
+    if (ssh_user == "\x1B") return;
     ssh_password = keyboard("", 76, "SSH PASSWORD", true);
+    if (ssh_password == "\x1B") return;
 
     IPAddress resolvedIp;
     if (WiFi.hostByName(ssh_host.c_str(), resolvedIp)) {
@@ -1242,7 +1249,9 @@ void telnet_setup() {
     Serial.println("Starting Telnet Setup");
 
     telnet_server_string = keyboard("", 76, "TELNET_SERVER");
+    if (telnet_server_string == "\x1B") return;
     telnet_port_string = num_keyboard("23", 5, "TELNET PORT");
+    if (telnet_port_string == "\x1B") return;
     telnet_server_port = telnet_port_string.toInt();
 
     IPAddress resolvedIp;

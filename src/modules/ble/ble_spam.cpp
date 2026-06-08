@@ -345,7 +345,10 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
 void aj_adv(int ble_choice) {
     int count = 0;
     String spamName = "";
-    if (ble_choice == 6) { spamName = keyboard("", 24, "Name to spam"); }
+    if (ble_choice == 6) {
+        spamName = keyboard("", 24, "Name to spam");
+        if (spamName == "\x1B") return;
+    }
 
     if (ble_choice == 2) {
         spamName = keyboard("", 24, "Windows Name to spam");

@@ -2,8 +2,8 @@
 //       so there is no loss of data when inputing
 #ifndef LITE_VERSION
 #include "modules/wifi/tcp_utils.h"
-#include "core/wifi/wifi_common.h"
 #include "core/display.h"
+#include "core/wifi/wifi_common.h"
 
 bool inputMode;
 
@@ -11,7 +11,7 @@ void listenTcpPort() {
     if (!wifiConnected) wifiConnectMenu();
 
     String portNumber = num_keyboard("", 5, "TCP port to listen");
-    if (portNumber.length() == 0) {
+    if (portNumber.length() == 0 || portNumber == "\x1B") {
         displayError("No port number given, exiting");
         return;
     }
@@ -46,7 +46,7 @@ void listenTcpPort() {
             while (client.connected()) {
                 if (inputMode) {
                     String keyString = keyboard("", 16, "send input data, q=quit");
-                    if (keyString == "q") {
+                    if (keyString == "q" || keyString == "\x1B") {
                         displayError("Exiting Listener");
                         client.stop();
                         server.stop();
@@ -85,8 +85,10 @@ void listenTcpPort() {
 void clientTCP() {
     if (!wifiConnected) wifiConnectMenu();
 
-    String serverIP = keyboard("", 15, "Enter server IP");
+    String serverIP = num_keyboard("", 15, "Enter server IP");
+    if (serverIP == "\x1B") return;
     String portString = num_keyboard("", 5, "Enter server Port");
+    if (portString == "\x1B") return;
     int portNumber = atoi(portString.c_str());
 
     if (serverIP.length() == 0 || portNumber == 0) {

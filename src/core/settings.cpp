@@ -599,6 +599,26 @@ void setEvilPasswordMode() {
 }
 
 /*********************************************************************
+** Function: setEvilGatewayIp
+** Handles menu for setting the Evil Portal gateway IP
+***********************************************************************/
+void setEvilGatewayIp() {
+    options = {
+        {"172.0.0.1",
+         [=]() { bruceConfig.setEvilGatewayIp("172.0.0.1"); },
+         bruceConfig.evilPortalGatewayIp == "172.0.0.1"},
+        {"192.168.4.1",
+         [=]() { bruceConfig.setEvilGatewayIp("192.168.4.1"); },
+         bruceConfig.evilPortalGatewayIp == "192.168.4.1"},
+        {"Custom", [=]() {
+             String ip = num_keyboard("", 15, "Gateway Addr");
+             bruceConfig.setEvilGatewayIp(ip);
+         }},
+    };
+    loopOptions(options, bruceConfig.evilPortalGatewayIp == "192.168.4.1" ? 1 : 0);
+}
+
+/*********************************************************************
 **  Function: setRFModuleMenu
 **  Handles Menu to set the RF module in use
 **********************************************************************/

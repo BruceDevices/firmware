@@ -697,6 +697,7 @@ void netcutTrollTimingMenu() {
 
         options.push_back({"Offline: " + String(offSec) + "s  [SET]", [&offSec]() {
                                String val = num_keyboard(String(offSec), 3, "Offline (sec):");
+                               if (val == "\x1B") return;
                                if (val.length() > 0) {
                                    unsigned long v = val.toInt();
                                    if (v >= 1 && v <= 300) offSec = v;
@@ -707,6 +708,7 @@ void netcutTrollTimingMenu() {
                            }});
         options.push_back({"Online: " + String(onSec) + "s  [SET]", [&onSec]() {
                                String val = num_keyboard(String(onSec), 3, "Online (sec):");
+                               if (val == "\x1B") return;
                                if (val.length() > 0) {
                                    unsigned long v = val.toInt();
                                    if (v >= 1 && v <= 300) onSec = v;
