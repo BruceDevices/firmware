@@ -1,11 +1,18 @@
 # Roadmap de Migracao SubGHz (Bruce <- Unleashed)
 
-Data de atualizacao: 2026-05-23  
+Data de atualizacao: 2026-06-08  
 Branch de trabalho: `subghz_improvements`
 
 ## Objetivo
 
 Integrar a stack `subghz` do Unleashed no Bruce sem alterar vendor, mantendo compatibilidade com fluxos legados (`rf,subghz`) e evoluindo identificacao de protocolo, analise de chave/counter e TX protocol-native.
+
+## Direcionamento Tecnico do Orientador
+
+- Otimizar a stack RF/SubGHz e reduzir o tamanho do firmware sempre que possivel.
+- Separar responsabilidades do sistema RF atual, que mistura fluxos diferentes no mesmo modulo.
+- Avaliar migracao da captura/recepcao SubGHz para RMT, driver nativo da Espressif para leitura desse tipo de sinal.
+- Priorizar RMT como alternativa ao modelo do RC-Switch, que usa interrupcao direta e contagem manual de tempo, para melhorar performance e reduzir acoplamento.
 
 ## Status Geral
 
@@ -90,6 +97,10 @@ Integrar a stack `subghz` do Unleashed no Bruce sem alterar vendor, mantendo com
 
 ### P1 (proxima iteracao recomendada)
 
+- [ ] Mapear os fluxos RF/SubGHz misturados hoje (RC-Switch legado, SubGHz avancado/vendor e ferramentas auxiliares) e definir fronteiras claras entre captura, decode, TX e UI.
+- [ ] Prototipar backend de RX baseado em RMT da Espressif para sinais SubGHz e comparar contra RC-Switch em uso de CPU, estabilidade de timing, RAM/flash e qualidade de decode.
+- [ ] Criar uma interface comum de captura de pulsos para permitir coexistencia controlada entre RMT e RC-Switch durante a transicao.
+- [ ] Medir tamanho de firmware por target antes/depois das mudancas e listar candidatos de reducao em RF/SubGHz.
 - [ ] Paridade mais profunda de interface rolling (estado, incrementos e UX de emulacao) comparada ao fluxo da biblioteca de origem.
 - [ ] Melhorar telas de `Scan/Copy` com mais contexto de key/counter e acao rapida por protocolo.
 - [ ] Implementar cenas `Add manually (Advanced)` para protocolos rolling prioritarios (FAAC SLH, BFT Mitto, Somfy Telis, Nice FloR-S, CAME Atomo, Alutech AT-4N).
@@ -101,6 +112,8 @@ Integrar a stack `subghz` do Unleashed no Bruce sem alterar vendor, mantendo com
 
 ### P2 (hardening e manutencao)
 
+- [ ] Remover duplicacoes ou caminhos RF/SubGHz obsoletos depois que o backend RMT estiver validado em hardware.
+- [ ] Documentar a arquitetura final de RF/SubGHz, incluindo limites entre driver de captura, decoder, encoder/TX, storage e UI.
 - [ ] Opcional: habilitar `RAW`/`BinRAW` no profile `FULL` via shims faltantes no compat (`float_tools`, helpers de storage e ajustes adicionais de API Furi).
 - [ ] Normalizar metadados de pin do vendor (`UPSTREAM_PIN.txt` e `README.md` do vendor apontam commits diferentes).
 - [ ] Cobrir protocolos ainda sem suporte direto no runtime (`Prastel`, `Airforce`, `HCS101`, `ZKTeco`) via sync upstream ou implementacao dedicada.
