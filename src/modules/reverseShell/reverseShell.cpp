@@ -5,6 +5,8 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include "esp_mac.h"
+#include "core/config.h"
 
 void ReverseShell() {
     WebServer webServer(80); // HTTP server
@@ -34,7 +36,13 @@ void ReverseShell() {
         return;
     }
 
-    if (!WiFi.softAP("BruceShell", "", 1)) {
+    // Generate unique AP password from MAC address
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char apPwd[24];
+    snprintf(apPwd, sizeof(apPwd), "BrSh%02x%02x%02x", mac[3], mac[4], mac[5]);
+    
+    if (!WiFi.softAP("BruceShell", apPwd, 1)) {
         tft.println("Failed to start AP");
         return;
     }
@@ -107,6 +115,23 @@ void ReverseShell() {
 
         if (!shellConnected) {
             tcpClient = tcpServer.accept();
+            // Require password authentication
+            tcpClient.println("Password: ");
+            unsigned long authTimeout = millis() + 10000;
+            String authResp = "";
+            while (millis() < authTimeout) {
+                if (tcpClient.available()) {
+                    char c = tcpClient.read();
+                    if (c == '\n' || c == '\r') break;
+                    if (c >= 32) authResp += c;
+                }
+            }
+            authResp.trim();
+            if (authResp != apPwd) {
+                tcpClient.println("Authentication failed.");
+                tcpClient.stop();
+                continue;
+            }
             if (tcpClient) {
                 tft.println("Client connected.");
                 tcpClient.println("~Welcome to BruceShell.");
