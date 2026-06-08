@@ -1,6 +1,126 @@
 #include "config.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
+#include <mbedtls/aes.h>
+#include <mbedtls/sha256.h>
+#include "esp_mac.h"
+
+// --- Encrypted config field helpers ---
+// Derives a 32-byte AES key from the device MAC address
+static bool derive_config_key(uint8_t key[32]) {
+    uint8_t mac[6];
+    if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+        // Fallback: use a fixed key (less secure but functional)
+        const char *fallback = "BruceConfigEncKey2024";
+        memcpy(key, fallback, strlen(fallback));
+        memset(key + strlen(fallback), 0, 32 - strlen(fallback));
+        return false;
+    }
+    // Derive key from MAC + salt using SHA-256
+    uint8_t material[16];
+    memcpy(material, mac, 6);
+    const char *salt = "BruceSecureConfig";
+    memcpy(material + 6, salt, 10);
+    mbedtls_sha256(material, 16, key, 0);
+    return true;
+}
+
+// Encrypts a plaintext string using AES-256-CBC with MAC-derived key
+// Returns base64-encoded "IV:ciphertext" format
+static String encrypt_field(const String &plaintext) {
+    if (plaintext.length() == 0) return "";
+    
+    uint8_t key[32];
+    derive_config_key(key);
+    
+    // Generate random IV
+    uint8_t iv[16];
+    for (int i = 0; i < 16; i++) iv[i] = esp_random() & 0xFF;
+    
+    // Pad plaintext using PKCS#7
+    size_t pad_len = 16 - (plaintext.length() % 16);
+    size_t buf_len = plaintext.length() + pad_len;
+    uint8_t *buf = (uint8_t *)malloc(buf_len);
+    if (!buf) return "";
+    memcpy(buf, plaintext.c_str(), plaintext.length());
+    for (size_t i = plaintext.length(); i < buf_len; i++) buf[i] = pad_len;
+    
+    // Encrypt
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+    mbedtls_aes_setkey_enc(&aes, key, 256);
+    uint8_t ciphertext[buf_len];
+    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, buf_len, iv, buf, ciphertext);
+    mbedtls_aes_free(&aes);
+    free(buf);
+    
+    // Encode IV:ciphertext as hex
+    String result;
+    for (int i = 0; i < 16; i++) result += String(iv[i], HEX);
+    result += ":";
+    for (size_t i = 0; i < buf_len; i++) {
+        if (ciphertext[i] < 16) result += "0";
+        result += String(ciphertext[i], HEX);
+    }
+    return result;
+}
+
+// Decrypts a field encrypted with encrypt_field
+static String decrypt_field(const String &encrypted) {
+    if (encrypted.length() == 0 || !encrypted.contains(':')) return encrypted;
+    
+    uint8_t key[32];
+    derive_config_key(key);
+    
+    int colon = encrypted.indexOf(':');
+    String iv_hex = encrypted.substring(0, colon);
+    String ct_hex = encrypted.substring(colon + 1);
+    
+    if (iv_hex.length() != 32 || ct_hex.length() % 32 != 0) return encrypted;
+    
+    // Parse IV
+    uint8_t iv[16];
+    for (int i = 0; i < 16; i++) {
+        char hex[3] = {iv_hex[i*2], iv_hex[i*2+1], 0};
+        iv[i] = strtol(hex, NULL, 16);
+    }
+    
+    // Parse ciphertext
+    size_t ct_len = ct_hex.length() / 2;
+    uint8_t *ct = (uint8_t *)malloc(ct_len);
+    if (!ct) return encrypted;
+    for (size_t i = 0; i < ct_len; i++) {
+        char hex[3] = {ct_hex[i*2], ct_hex[i*2+1], 0};
+        ct[i] = strtol(hex, NULL, 16);
+    }
+    
+    // Decrypt
+    uint8_t *plaintext = (uint8_t *)malloc(ct_len);
+    if (!plaintext) { free(ct); return encrypted; }
+    
+    mbedtls_aes_context aes;
+    mbedtls_aes_init(&aes);
+    mbedtls_aes_setkey_dec(&aes, key, 256);
+    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, ct_len, iv, ct, plaintext);
+    mbedtls_aes_free(&aes);
+    free(ct);
+    
+    // Remove PKCS#7 padding
+    size_t pad = plaintext[ct_len - 1];
+    if (pad > 16 || pad == 0) { free(plaintext); return String((const char *)plaintext, ct_len); }
+    size_t text_len = ct_len - pad;
+    
+    String result = String((const char *)plaintext, text_len);
+    free(plaintext);
+    return result;
+}
+
+// Wrapper to check if a string looks encrypted (has the "hex:hex" format)
+static bool is_encrypted(const String &s) {
+    return s.indexOf(':') > 0 && s.indexOf(':') < s.length() - 1;
+}
+
+// -------------------------------------------------------------------------
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -80,6 +200,28 @@ JsonDocument BruceConfig::toJson() const {
         JsonObject qrEntry = qrArray.add<JsonObject>();
         qrEntry["menuName"] = entry.menuName;
         qrEntry["content"] = entry.content;
+    }
+
+    // Encrypt sensitive fields before saving
+    if (!setting["webUI"].isNull()) {
+        setting["webUI"]["user"] = encrypt_field(setting["webUI"]["user"].as<String>());
+        setting["webUI"]["pwd"] = encrypt_field(setting["webUI"]["pwd"].as<String>());
+    }
+    if (!setting["wifiAp"].isNull()) {
+        setting["wifiAp"]["ssid"] = encrypt_field(setting["wifiAp"]["ssid"].as<String>());
+        setting["wifiAp"]["pwd"] = encrypt_field(setting["wifiAp"]["pwd"].as<String>());
+    }
+    if (!setting["wifi"].isNull()) {
+        JsonObject _wifiObj = setting["wifi"].as<JsonObject>();
+        for (JsonPair kv : _wifiObj) {
+            _wifiObj[kv.key()] = encrypt_field(kv.value().as<String>());
+        }
+    }
+    if (!setting["wigleBasicToken"].isNull()) {
+        setting["wigleBasicToken"] = encrypt_field(setting["wigleBasicToken"].as<String>());
+    }
+    if (!setting["wdgwarsApiKey"].isNull()) {
+        setting["wdgwarsApiKey"] = encrypt_field(setting["wdgwarsApiKey"].as<String>());
     }
 
     return jsonDoc;
@@ -259,8 +401,14 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["webUI"].isNull()) {
         JsonObject webUIObj = setting["webUI"].as<JsonObject>();
-        webUI.user = webUIObj["user"].as<String>();
-        webUI.pwd = webUIObj["pwd"].as<String>();
+        {
+            String _val = webUIObj["user"].as<String>();
+            webUI.user = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
+        {
+            String _val = webUIObj["pwd"].as<String>();
+            webUI.pwd = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
     } else {
         count++;
         log_e("Fail");
@@ -277,8 +425,14 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["wifiAp"].isNull()) {
         JsonObject wifiApObj = setting["wifiAp"].as<JsonObject>();
-        wifiAp.ssid = wifiApObj["ssid"].as<String>();
-        wifiAp.pwd = wifiApObj["pwd"].as<String>();
+        {
+            String _val = wifiApObj["ssid"].as<String>();
+            wifiAp.ssid = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
+        {
+            String _val = wifiApObj["pwd"].as<String>();
+            wifiAp.pwd = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
     } else {
         count++;
         log_e("Fail");
@@ -303,7 +457,10 @@ void BruceConfig::fromFile(bool checkFS) {
     if (!setting["wifi"].isNull()) {
         wifi.clear();
         JsonObject wifiObj = setting["wifi"].as<JsonObject>();
-        for (JsonPair kv : wifiObj) wifi[kv.key().c_str()] = kv.value().as<String>();
+        for (JsonPair kv : wifiObj) {
+            String _val = kv.value().as<String>();
+            wifi[kv.key().c_str()] = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
     } else {
         count++;
         log_e("Fail");
@@ -362,13 +519,19 @@ void BruceConfig::fromFile(bool checkFS) {
     }
 
     if (!setting["wigleBasicToken"].isNull()) {
-        wigleBasicToken = setting["wigleBasicToken"].as<String>();
+        {
+            String _val = setting["wigleBasicToken"].as<String>();
+            wigleBasicToken = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
     } else {
         count++;
         log_e("Fail");
     }
     if (!setting["wdgwarsApiKey"].isNull()) {
-        wdgwarsApiKey = setting["wdgwarsApiKey"].as<String>();
+        {
+            String _val = setting["wdgwarsApiKey"].as<String>();
+            wdgwarsApiKey = is_encrypted(_val) ? decrypt_field(_val) : _val;
+        }
     } else {
         count++;
         log_e("Fail");
