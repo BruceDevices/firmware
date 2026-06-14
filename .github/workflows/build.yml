@@ -1,0 +1,89 @@
+name: Build Phantom Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  compile:
+    name: Build lilygo-t-embed-cc1101
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache PlatformIO Framework
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: PIO libraries cache
+        uses: actions/cache@v4
+        with:
+          path: .pio/libdeps
+          key: ${{ runner.os }}-pio-lilygo-t-embed-cc1101-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-lilygo-t-embed-cc1101-
+
+      - name: Install dependencies
+        run: |
+          pip install requests esptool intelhex
+          pip install platformio
+
+      - name: Run Compile
+        run: |
+          set -o pipefail
+          echo "Building environment: lilygo-t-embed-cc1101"
+          platformio run -e "lilygo-t-embed-cc1101" | tee "build-lilygo-t-embed-cc1101.log"
+
+      - name: Build summary
+        run: |
+          if [[ -f "build-lilygo-t-embed-cc1101.log" ]]; then
+            echo "Last 75 lines of build-lilygo-t-embed-cc1101.log:"
+            tail -n 75 "build-lilygo-t-embed-cc1101.log"
+          else
+            echo "Build log not found; nothing to show."
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Phantom-T-Embed-CC1101
+          path: |
+            .pio/build/lilygo-t-embed-cc1101/firmware.bin
+            .pio/build/lilygo-t-embed-cc1101/bootloader.bin
+            .pio/build/lilygo-t-embed-cc1101/partitions.bin
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Display Build Info
+        run: |
+          echo "Build completed successfully!"
+          echo "Environment: lilygo-t-embed-cc1101"
+          echo "Git Hash: $(git describe --always --dirty)"
+          echo "Built files:"
+          ls -la .pio/build/lilygo-t-embed-cc1101/*.bin 2>/dev/null || echo "No binary files found"
