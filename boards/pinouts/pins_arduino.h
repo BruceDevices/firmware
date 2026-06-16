@@ -26,6 +26,8 @@
 #include "../m5stack-cplus1_1/pins_arduino.h"
 #elif ARDUINO_M5STICK_C_PLUS2
 #include "../m5stack-cplus2/pins_arduino.h"
+#elif ODG_S3_ILI9341_SHIELD
+#include "../ODG_S3_ILI9341_SHIELD/pins_arduino.h"
 #elif ESP32S3DEVKITC1
 #include "../ESP-General/pins_arduino.h"
 #elif SMOOCHIEE_BOARD
