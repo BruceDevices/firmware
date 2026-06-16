@@ -7,6 +7,10 @@
 #include "modules/ble/ble_spam.h"
 #if !defined(LITE_VERSION)
 #include "modules/ble/BLE_Suite.h"
+#include "modules/ble/airtag_spoofer.h"
+#include "modules/ble/notif_spoofer.h"
+#include "modules/ble/ble_tracker.h"
+#include "modules/ble/audio_jammer.h"
 #endif
 #include <globals.h>
 
@@ -40,6 +44,10 @@ void BleMenu::optionsMenu() {
 
 #if !defined(LITE_VERSION)
     options.push_back({"BLE Suite", [=]() { BleSuiteMenu(); }});
+    options.push_back({"AirTag Spoofer", airtagSpoofer});
+    options.push_back({"Notif Spoofer", notifSpoofer});
+    options.push_back({"BLE Tracker", bleTracker});
+    options.push_back({"Audio Jammer", audioJammer});
     options.push_back({"Ninebot", [=]() { BLENinebot(); }});
 #endif
     addOptionToMainMenu();

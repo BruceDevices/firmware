@@ -50,7 +50,7 @@ public:
     bool shouldTerminate();
 
 private:
-    String apName = "Free Wifi";
+    String apName = "";
     uint8_t _channel;
     bool _deauth;
     bool isDeauthHeld = false;

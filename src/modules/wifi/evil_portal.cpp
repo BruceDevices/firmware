@@ -62,7 +62,10 @@ bool EvilPortal::setup() {
     if (apGateway == IPAddress((uint32_t)0)) {
         if (!apGateway.fromString(bruceConfig.evilPortalGatewayIp)) apGateway = IPAddress(172, 0, 0, 1);
     }
-    if (apName.isEmpty()) apName = "Free Wifi";
+    if (apName.isEmpty()) {
+        apName_from_keyboard();
+        if (apName.isEmpty()) apName = "Free Wifi";
+    }
 
     if (_autoMode) {
         if (apName.indexOf("router") != -1 || apName.indexOf("update") != -1 ||
