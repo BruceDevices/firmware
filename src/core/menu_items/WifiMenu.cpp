@@ -21,6 +21,8 @@
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/wifi_recover.h"
 #include "modules/wifi/cred_forward.h"
+#include "modules/wifi/dhcp_starvation.h"
+#include "modules/wifi/dns_spoofer.h"
 #endif
 
 // #include "modules/reverseShell/reverseShell.h"
@@ -67,6 +69,8 @@ void WifiMenu::optionsMenu() {
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Cred Forward", credForward});
+    options.push_back({"DNS Spoofer", dnsSpoofer});
+    options.push_back({"DHCP Starvation", dhcpStarvation});
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
     options.push_back({"SOCKS4 Proxy", []() { socks4Proxy(1080); }});
