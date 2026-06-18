@@ -6,6 +6,4 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 void send_pwnagotchi_beacon_main();
-#endif

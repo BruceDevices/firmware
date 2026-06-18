@@ -6,7 +6,6 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 #include "mood.h"
 
 // ASCII equivalent
@@ -75,6 +74,7 @@ String getCurrentMoodPhrase() { return current_phrase; }
 bool isCurrentMoodBroken() { return current_broken; }
 
 void setMood(uint8_t mood, String face, String phrase, bool broken) {
+    if (mood >= number_of_moods) mood = 2; // clamp to safe index (awake)
     current_mood = mood;
     current_broken = broken;
 
@@ -90,4 +90,3 @@ void setMood(uint8_t mood, String face, String phrase, bool broken) {
         current_phrase = palnagotchi_moods_desc[current_mood];
     }
 }
-#endif

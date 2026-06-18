@@ -8,7 +8,6 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 20/09 - Changed from DynamicJsonDocument json[2048] to JsonDocument json, to avoid stack smashing errors
 (firgers crossed)
 */
-#if !defined(LITE_VERSION)
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
 #include "core/wifi/wifi_common.h"
@@ -25,18 +24,15 @@ std::vector<pwngrid_peer> getPwngridPeers() { return pwngrid_peers; }
 // Add pwngrid peers
 void add_new_peer(JsonDocument &json, signed int rssi) {
     // Check if it exists in the list
-    bool exists = false;
-    for (auto peer_list : pwngrid_peers) {
+    for (auto &peer_list : pwngrid_peers) {
         if (peer_list.identity == json["identity"].as<String>()) {
-            exists = true;
             peer_list.last_ping = millis();
             peer_list.gone = false;
             peer_list.rssi = rssi;
             return;
         }
     }
-    // Check if doesn't exists AND there are room in RAM memory to save
-    if (!exists && pwngrid_peers.size() < 50) {
+    if (pwngrid_peers.size() < 50) {
         pwngrid_peers.push_back((pwngrid_peer){
             json["epoch"].as<int>(),
             json["face"].as<String>(),
@@ -105,7 +101,7 @@ esp_err_t pwngridAdvertise(uint8_t channel, String face) {
     String pal_json_str = "";
 
     pal_json["pal"] = true; // Also detect other Palnagotchis
-    pal_json["name"] = "Bruce";
+    pal_json["name"] = "HeavyButter";
     pal_json["face"] = face;
     pal_json["epoch"] = 1;
     pal_json["grid_version"] = "1.10.3";
@@ -179,10 +175,8 @@ esp_err_t pwngridAdvertise(uint8_t channel, String face) {
 const int away_threshold = 120000;
 
 void checkPwngridGoneFriends() {
-    for (auto peer_list : pwngrid_peers) {
-        // Check if peer is away
-        int away_secs = peer_list.last_ping - millis();
-        if (away_secs > away_threshold) {
+    for (auto &peer_list : pwngrid_peers) {
+        if (millis() - peer_list.last_ping > away_threshold) {
             peer_list.gone = true;
             delete_peer_gone();
             return;
@@ -325,4 +319,3 @@ void initPwngrid() {
     esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
     vTaskDelay(1 / portTICK_RATE_MS);
 }
-#endif

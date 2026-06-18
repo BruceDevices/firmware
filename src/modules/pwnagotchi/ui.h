@@ -6,7 +6,6 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 #include "core/display.h"
 #include "mood.h"
 #include "pwngrid.h"
@@ -18,7 +17,7 @@ void drawTime();
 void drawFooterData(
     uint8_t friends_run = 0, uint8_t friends_tot = 0, String last_friend_name = "", signed int rssi = -1000
 );
+void drawFriendPanel();
 void drawTopCanvas();
 void drawBottomCanvas();
 void updateUi(bool show_toolbars = false);
-#endif
