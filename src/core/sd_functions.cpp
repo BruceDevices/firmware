@@ -778,8 +778,12 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              delay(200);
                                                              RfCodes data{};
 
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                 txSubFile(data);
+                                                             if (readSubFile(&fs, filepath, data)) {
+                                                                 if (is_rolling_code_file(&fs, filepath))
+                                                                     loopEmulateRolling(data, filepath, &fs);
+                                                                 else
+                                                                     txSubFile(data);
+                                                             }
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
