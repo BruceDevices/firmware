@@ -54,6 +54,19 @@ uint32_t keeloq_encrypt(const uint32_t data, const uint64_t key);
 uint32_t keeloq_decrypt(const uint32_t data, const uint64_t key);
 uint64_t keeloq_normal_learning(uint32_t data, const uint64_t key);
 
+// Additional KeeLoq learning-mode variants (ports of keeloq_common.c).
+uint64_t keeloq_secure_learning(uint32_t serial28, uint32_t seed, uint64_t mfkey);
+uint64_t keeloq_magic_xor_type1(uint32_t serial28, uint64_t xor_val);
+uint64_t keeloq_magic_serial_type1(uint32_t serial28, uint64_t man);
+uint64_t keeloq_magic_serial_type2(uint32_t btn_serial32, uint64_t man);
+uint64_t keeloq_magic_serial_type3(uint32_t serial24, uint64_t man);
+uint64_t keeloq_learning_aerf(uint32_t serial28, uint64_t mfkey);
+uint64_t keeloq_learning_erreka(uint32_t serial28, uint32_t mix, uint64_t mfkey);
+uint64_t keeloq_learning_pujol(uint32_t serial28, uint64_t mfkey);
+
+// FAAC SLH per-remote working key: encrypt(seed) || encrypt((seed&0xFFFF0000)|0x544D).
+uint64_t faac_slh_derive_key(uint32_t seed, uint64_t mfkey);
+
 uint64_t reverse_bits(uint64_t num, uint8_t bits);
 
 #endif

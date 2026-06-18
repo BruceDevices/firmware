@@ -19,6 +19,7 @@ public:
         RESET,
         RANGE,
         THRESHOLD,
+        ADJUST_COUNTER,
         CLOSE_MENU,
         MAIN_MENU,
     };
@@ -26,7 +27,10 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
-    RFScan();
+    // rollingMode = false: static scanner (non-rolling signals only, no rolling
+    // decode). rollingMode = true: rolling code scanner (identifies serial /
+    // counter / manufacturer / family, exposes Adjust Counter).
+    RFScan(bool rollingMode = false);
     ~RFScan();
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +42,7 @@ public:
 private:
     RCSwitch rcswitch = RCSwitch();
     RfCodes received;
+    bool rollingMode = false;
     String title = "RF Scan Copy";
     bool restartScan = false;
     bool ReadRAW = true;

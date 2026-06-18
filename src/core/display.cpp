@@ -263,6 +263,84 @@ int8_t displayMessage(
     return selected;
 }
 
+int8_t displayConfirm(const char *message, const char *leftButton, const char *rightButton, uint16_t color) {
+    if (color == 0) color = bruceConfig.priColor;
+
+#ifdef HAS_SCREEN
+    uint8_t oldTextDatum = tft.getTextDatum();
+#endif
+
+    // Count message lines.
+    String msg = String(message);
+    int lines = 1;
+    for (uint16_t i = 0; i < msg.length(); i++)
+        if (msg[i] == '\n') lines++;
+
+    // Popup geometry (drawn OVER the existing screen, so the previous bordered
+    // screen stays visible behind it).
+    const int pad = 12, gap = 16, lineH = FM * 9, btnH = 24;
+    int popW = tftWidth - 24;
+    int popH = pad + lines * lineH + gap + btnH + pad;
+    int popX = (tftWidth - popW) / 2;
+    int popY = (tftHeight - popH) / 2;
+
+    tft.fillRoundRect(popX, popY, popW, popH, 8, bruceConfig.bgColor);
+    tft.drawRoundRect(popX, popY, popW, popH, 8, color);
+    tft.drawRoundRect(popX + 1, popY + 1, popW - 2, popH - 2, 8, color); // 2px accent border
+
+    // Message, centred, comfortably spaced.
+    tft.setTextColor(color, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setTextDatum(TC_DATUM);
+    int y = popY + pad;
+    int start = 0;
+    int end = msg.indexOf('\n');
+    while (end != -1) {
+        tft.drawString(msg.substring(start, end), tftWidth / 2, y);
+        y += lineH;
+        start = end + 1;
+        end = msg.indexOf('\n', start);
+    }
+    tft.drawString(msg.substring(start), tftWidth / 2, y);
+
+    // Buttons (smaller text so they don't look cramped).
+    int btnW = (popW - 3 * pad) / 2;
+    int bx0 = popX + pad;
+    int bx1 = popX + popW - pad - btnW;
+    int by = popY + popH - pad - btnH;
+
+    int8_t selected = 0;
+    bool redraw = true;
+    while (true) {
+        if (check(EscPress)) { selected = -1; break; } // ESC exits
+        if (check(PrevPress) || check(NextPress)) { selected ^= 1; redraw = true; }
+        if (check(SelPress)) break;
+
+        if (redraw) {
+            tft.setTextSize(FP);
+            tft.setTextDatum(MC_DATUM);
+            for (int b = 0; b < 2; b++) {
+                int bx = b == 0 ? bx0 : bx1;
+                bool inv = (selected == b);
+                if (inv) tft.fillRoundRect(bx, by, btnW, btnH, 5, color);
+                else {
+                    tft.fillRoundRect(bx, by, btnW, btnH, 5, bruceConfig.bgColor);
+                    tft.drawRoundRect(bx, by, btnW, btnH, 5, color);
+                }
+                tft.setTextColor(inv ? bruceConfig.bgColor : color, inv ? color : bruceConfig.bgColor);
+                tft.drawString(b == 0 ? leftButton : rightButton, bx + btnW / 2, by + btnH / 2);
+            }
+            redraw = false;
+        }
+        delay(10);
+    }
+
+#ifdef HAS_SCREEN
+    tft.setTextDatum(oldTextDatum);
+#endif
+    return selected;
+}
+
 void displayError(String txt, bool waitKeyPress) {
     displayRedStripe(txt);
 #ifndef HAS_SCREEN

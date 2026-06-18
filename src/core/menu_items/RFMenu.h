@@ -14,6 +14,8 @@ public:
 
 private:
     void configMenu(void);
+    void staticRfMenu(void);
+    void rollingCodeRfMenu(void);
 };
 
 #endif

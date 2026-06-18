@@ -41,6 +41,12 @@ struct RfCodes {
     int Bit = 0;
     int BitRAW = 0;
 
+    // --- Rolling code extensions (protocol-agnostic) ---
+    String rolling_protocol = ""; // protocol display name, e.g. "FAAC SLH 868MHz"
+    uint32_t seed = 0;            // per-remote seed (FAAC SLH, Jarolift, Hormann EcoStar)
+    uint32_t crc_field = 0;      // computed CRC (Alutech AT-4N)
+    uint8_t somfy_key = 0;       // per-remote key byte (Somfy Telis/Keytis)
+
     bool keeloq_check_decrypt(uint32_t decrypt);
     bool keeloq_check_decrypt_centurion(uint32_t decrypt);
 

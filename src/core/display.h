@@ -126,6 +126,13 @@ int8_t displayMessage(
     const char *message, const char *leftButton, const char *centerButton, const char *rightButton,
     uint16_t color
 );
+
+// Confirmation dialog like displayMessage but with two buttons where ESC/back
+// actually exits (returning -1) instead of cycling. Returns 0 = left button,
+// 1 = right button, -1 = ESC. `color` defaults to the UI accent colour.
+int8_t displayConfirm(
+    const char *message, const char *leftButton, const char *rightButton, uint16_t color = 0
+);
 void displayError(String txt, bool waitKeyPress = false);    // Red Stripe
 void displayWarning(String txt, bool waitKeyPress = false);  // Yellow Stripe
 void displayInfo(String txt, bool waitKeyPress = false);     // Blue Stripe

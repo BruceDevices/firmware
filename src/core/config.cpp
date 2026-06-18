@@ -67,6 +67,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["wdgwarsApiKey"] = wdgwarsApiKey;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
+    setting["rfKeyFs"] = rfKeyFs;
 
     setting["badUSBBLEKeyboardLayout"] = badUSBBLEKeyboardLayout;
     setting["badUSBBLEKeyDelay"] = badUSBBLEKeyDelay;
@@ -384,6 +385,10 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+
+    if (!setting["rfKeyFs"].isNull()) {
+        rfKeyFs = setting["rfKeyFs"].as<int>();
     }
 
     if (!setting["badUSBBLEKeyboardLayout"].isNull()) {

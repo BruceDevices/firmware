@@ -1,12 +1,26 @@
 #include "rf_scan.h"
 #include "core/led_control.h"
+#include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
 #include "rf_send.h"
+#include "rolling_code_db.h"
+#include "rolling_code_proto.h"
 #include <globals.h>
 #include <sstream>
 
-RFScan::RFScan() { setup(); }
+RFScan::RFScan(bool rollingMode) {
+    this->rollingMode = rollingMode;
+    title = rollingMode ? "Rolling Code Scan" : "RF Scan (Static)";
+    // The rolling scanner captures the raw pulse train (needed to demodulate the
+    // non-KeeLoq families) but presents as "listening for rolling codes" and
+    // only surfaces signals it can identify. codesOnly filters out pure noise.
+    if (rollingMode) {
+        ReadRAW = true;
+        codesOnly = true;
+    }
+    setup();
+}
 
 RFScan::~RFScan() { deinitRfModule(); }
 
@@ -167,6 +181,47 @@ void keeloq_identify(RfCodes &instance) {
     }
 }
 
+// Rolling code framing detector. Runs after every capture. Scores each
+// compiled-in protocol descriptor on bit count (±10%) and short-pulse timing
+// (±20%) against the captured signal. On the best scoring candidate above
+// threshold, tags received.rolling_protocol so the post-capture menu exposes
+// Adjust Counter and the signal can be replayed/saved as rolling code. If no
+// candidate scores high enough, leaves rolling_protocol empty (RAW fallthrough).
+void rolling_framing_identify(RfCodes &instance) {
+    instance.rolling_protocol = "";
+
+    int captured_bits = instance.Bit ? instance.Bit : instance.BitRAW;
+    int captured_te = instance.te;
+    if (captured_bits <= 0) return;
+
+    const RollingProtocol *best = nullptr;
+    int best_score = 0;
+
+    for (size_t i = 0; i < rolling_protocols_count; i++) {
+        const RollingProtocol *p = &rolling_protocols[i];
+        if (p->data_bit_count == 0) continue; // skip parameter-less (Security+ 1.0)
+
+        int score = 0;
+
+        int bit_tol = (p->data_bit_count + 9) / 10; // ~10%
+        if (abs(captured_bits - (int)p->data_bit_count) <= bit_tol) score += 2;
+        else continue; // bit count is the primary gate
+
+        if (captured_te > 0) {
+            int te_tol = (p->te_short_us + 4) / 5; // ~20%
+            if (abs(captured_te - p->te_short_us) <= te_tol) score += 1;
+        }
+
+        if (score > best_score) {
+            best_score = score;
+            best = p;
+        }
+    }
+
+    // Require at least the bit-count match (score >= 2) to claim a family.
+    if (best && best_score >= 2) instance.rolling_protocol = best->display_name;
+}
+
 void RFScan::read_rcswitch() {
     received.fix = 0;
     received.hop = 0;
@@ -192,7 +247,9 @@ void RFScan::read_rcswitch() {
         received.filepath = "signal_" + String(signals);
         received.data = "";
 
-        if (rcswitch.getReceivedProtocol() == 23) {
+        // KeeLoq is a rolling code: only decode it in the rolling scanner. The
+        // static scanner leaves it as a plain RcSwitch capture.
+        if (rollingMode && rcswitch.getReceivedProtocol() == 23) {
             uint64_t yek = reverse_bits(decoded, 64);
 
             received.fix = yek >> 32;
@@ -202,6 +259,8 @@ void RFScan::read_rcswitch() {
 
             keeloq_identify(received);
         }
+
+        if (rollingMode) rolling_framing_identify(received);
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
@@ -268,7 +327,9 @@ void RFScan::read_raw() {
         received.te = rcswitch.getReceivedDelay();
         received.Bit = rcswitch.getReceivedBitlength();
 
-        if (rcswitch.getReceivedProtocol() == 23) {
+        // KeeLoq is a rolling code: only decode it in the rolling scanner. The
+        // static scanner leaves it as a plain RcSwitch capture.
+        if (rollingMode && rcswitch.getReceivedProtocol() == 23) {
             uint64_t yek = reverse_bits(decoded, 64);
 
             received.fix = yek >> 32;
@@ -278,6 +339,8 @@ void RFScan::read_raw() {
 
             keeloq_identify(received);
         }
+
+        if (rollingMode) rolling_framing_identify(received);
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
@@ -292,6 +355,26 @@ void RFScan::read_raw() {
         received.key = crc64_ecma(durations); // Calculate CRC-64
         received.indexed_durations = indexed_durations;
         received.Bit = durations.size();
+
+        // Rolling scanner: try to identify and decode the captured pulse train.
+        if (rollingMode) {
+            std::vector<int> pulses;
+            {
+                std::stringstream ss(_data.c_str());
+                std::string tok;
+                while (ss >> tok) pulses.push_back(atoi(tok.c_str()));
+            }
+            received.Bit = pulses.size() / 2; // estimate data bits for the detector
+            rolling_framing_identify(received);
+            if (received.rolling_protocol != "") {
+                received.protocol = "RcSwitch"; // make it replayable/savable
+                rolling_decode(received, pulses);
+            } else {
+                received.protocol = "RAW";
+                received.Bit = durations.size();
+            }
+        }
+
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
     }
@@ -319,56 +402,78 @@ void RFScan::select_menu_option() {
 
     options = {};
 
-    if (received.protocol != "") options.emplace_back("Replay", [this]() { set_option(REPLAY); });
-    if (received.data != "" && received.protocol != "RAW")
-        options.emplace_back("Replay as RAW", [this]() { set_option(REPLAY_RAW); });
+    bool haveRolling = (received.rolling_protocol != "");
 
-    if (received.protocol != "") options.emplace_back("Save Signal", [this]() { set_option(SAVE); });
-    if (received.data != "" && received.protocol != "RAW")
-        options.emplace_back("Save as RAW", [this]() { set_option(SAVE_RAW); });
-
-    if (received.protocol != "") options.emplace_back("Reset Signal", [this]() { set_option(RESET); });
+    if (rollingMode) {
+        // ---- Rolling Code scanner menu ----
+        if (received.protocol != "")
+            options.emplace_back(
+                haveRolling ? "Transmit & step counter" : "Transmit signal",
+                [this]() { set_option(REPLAY); }
+            );
+        if (received.protocol != "")
+            options.emplace_back("Save rolling code", [this]() { set_option(SAVE); });
+        if (haveRolling)
+            options.emplace_back("Adjust counter", [this]() { set_option(ADJUST_COUNTER); });
+        if (received.protocol != "")
+            options.emplace_back("Clear capture", [this]() { set_option(RESET); });
+    } else {
+        // ---- Static RF scanner menu ----
+        if (received.protocol != "")
+            options.emplace_back("Replay signal", [this]() { set_option(REPLAY); });
+        if (received.data != "" && received.protocol != "RAW")
+            options.emplace_back("Replay as RAW", [this]() { set_option(REPLAY_RAW); });
+        if (received.protocol != "")
+            options.emplace_back("Save signal", [this]() { set_option(SAVE); });
+        if (received.data != "" && received.protocol != "RAW")
+            options.emplace_back("Save as RAW", [this]() { set_option(SAVE_RAW); });
+        if (received.protocol != "")
+            options.emplace_back("Reset signal", [this]() { set_option(RESET); });
+    }
 
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE)
-        options.emplace_back("Range", [this]() { set_option(RANGE); });
+        options.emplace_back("Frequency range", [this]() { set_option(RANGE); });
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE && !bruceConfigPins.rfFxdFreq)
-        options.emplace_back("Threshold", [this]() { set_option(THRESHOLD); });
+        options.emplace_back("RSSI threshold", [this]() { set_option(THRESHOLD); });
 
-    if (ReadRAW)
+    // The RAW/Decode toggle and capture filter only apply to the static
+    // scanner. The rolling scanner always decodes protocols from the registry.
+    if (!rollingMode && ReadRAW)
         options.emplace_back("Mode = RAW", [&]() {
             ReadRAW = false;
             return select_menu_option();
         });
-    else
+    else if (!rollingMode)
         options.emplace_back("Mode = Decode", [&]() {
             ReadRAW = true;
             return select_menu_option();
         });
 
-    if (ReadRAW && codesOnly)
+    // RAW capture filter only matters for the static scanner.
+    if (!rollingMode && ReadRAW && codesOnly)
         options.emplace_back("Filter = Code", [&]() {
             codesOnly = false;
             return select_menu_option();
         });
-    else if (ReadRAW)
+    else if (!rollingMode && ReadRAW)
         options.emplace_back("Filter = All", [&]() {
             codesOnly = true;
             return select_menu_option();
         });
 
     if (autoSave)
-        options.emplace_back("Save = Auto", [&]() {
+        options.emplace_back("Auto-save = On", [&]() {
             autoSave = false;
             return select_menu_option();
         });
     else
-        options.emplace_back("Save = Manual", [&]() {
+        options.emplace_back("Auto-save = Off", [&]() {
             autoSave = true;
             return select_menu_option();
         });
 
-    options.emplace_back("Close Menu", [this]() { set_option(CLOSE_MENU); });
-    options.emplace_back("Main Menu", [this]() { set_option(MAIN_MENU); });
+    options.emplace_back("Close menu", [this]() { set_option(CLOSE_MENU); });
+    options.emplace_back("Main menu", [this]() { set_option(MAIN_MENU); });
 
     loopOptions(options);
 }
@@ -384,6 +489,21 @@ void RFScan::set_option(RFMenuOption option) {
         case RANGE: rf_range_selection(); break; // using a common function to other features
         case RESET: reset_signals(); break;
         case THRESHOLD: set_threshold(); break;
+
+        case ADJUST_COUNTER: {
+            options = {
+                {"+1",     [&]() { received.cnt += 1; }  },
+                {"+10",    [&]() { received.cnt += 10; } },
+                {"+100",   [&]() { received.cnt += 100; }},
+                {"Custom", [&]() {
+                     String s = num_keyboard("", 10, "Add to counter:");
+                     received.cnt += (uint16_t)s.toInt();
+                 }},
+            };
+            loopOptions(options, MENU_TYPE_SUBMENU, "Adjust Counter");
+            display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
+            return; // don't restart scan; let user save the nudged signal
+        }
 
         case CLOSE_MENU: break;
 
@@ -420,6 +540,7 @@ void RFScan::reset_signals() {
     received.key = 0;
     received.preset = "";
     received.protocol = "";
+    received.rolling_protocol = "";
     signals = 0;
     received.fix = 0;
     received.hop = 0;
@@ -484,7 +605,9 @@ void display_info(RfCodes received, int signals, bool ReadRAW, bool codesOnly, b
 
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
 
-    if (!ReadRAW) padprintln("Recording: Only RCSwitch codes.");
+    bool rollingScan = (title == "Rolling Code Scan");
+    if (rollingScan) padprintln("Listening for rolling codes.");
+    else if (!ReadRAW) padprintln("Recording: Only RCSwitch codes.");
     else if (codesOnly) padprintln("Recording: RAW with CRC or RCSwitch.");
     else padprintln("Recording: Any RAW signal.");
 
@@ -515,6 +638,8 @@ void display_signal_data(RfCodes received) {
             padprintln("Protocol: KeeLoq");
         } else padprintln("Protocol: " + String(received.protocol) + "(" + received.preset + ")");
     } else padprintln("Protocol: " + String(received.protocol));
+
+    if (received.rolling_protocol != "") padprintln("Rolling: " + received.rolling_protocol);
 
     if (received.key > 0) {
         decimalToHexString(received.key, hexString);

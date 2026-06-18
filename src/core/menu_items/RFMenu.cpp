@@ -13,23 +13,20 @@
 
 void RFMenu::optionsMenu() {
     options = {
-        {"Scan/copy",       [=]() { RFScan(); }       },
+        {"Static RF",       [this]() { staticRfMenu(); }      },
+        {"Rolling Code RF", [this]() { rollingCodeRfMenu(); } },
+        {"Spectrum",        rf_spectrum                       },
 #if !defined(LITE_VERSION)
-        {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
-        {"Custom SubGhz",   sendCustomRF              },
-#endif
-        {"Spectrum",        rf_spectrum               },
-#if !defined(LITE_VERSION)
-        {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
-        {"SquareWave Spec", rf_SquareWave             }, // @Pirata
-        {"Spectogram",      rf_waterfall              }, // dev_eclipse
+        {"RSSI Spectrum",   rf_CC1101_rssi                    }, // @Pirata
+        {"SquareWave Spec", rf_SquareWave                     }, // @Pirata
+        {"Spectogram",      rf_waterfall                      }, // dev_eclipse
 #if defined(BUZZ_PIN) or defined(HAS_NS4168_SPKR) and defined(RF_LISTEN_H)
-        {"Listen",          rf_listen                 }, // dev_eclipse
+        {"Listen",          rf_listen                         }, // dev_eclipse
 #endif
-        {"Bruteforce",      rf_bruteforce             }, // dev_eclipse
-        {"Jammer",          [=]() { RFJammer(true); } },
+        {"Bruteforce",      rf_bruteforce                     }, // dev_eclipse
+        {"Jammer",          [=]() { RFJammer(true); }         },
 #endif
-        {"Config",          [this]() { configMenu(); }},
+        {"Config",          [this]() { configMenu(); }        },
     };
     addOptionToMainMenu();
 
@@ -39,6 +36,32 @@ void RFMenu::optionsMenu() {
     else txt += " Tx: " + String(bruceConfigPins.rfTx) + " Rx: " + String(bruceConfigPins.rfRx);
 
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
+}
+
+void RFMenu::staticRfMenu() {
+    options = {
+        {"Scan/Record",   [=]() { RFScan(); }},
+#if !defined(LITE_VERSION)
+        {"Record RAW",    rf_raw_record      }, // Pablo-Ortiz-Lopez
+        {"Send Saved",    sendCustomRF       },
+#endif
+        {"Back",          [this]() { optionsMenu(); }},
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "Static RF");
+}
+
+void RFMenu::rollingCodeRfMenu() {
+    options = {
+        {"Scan Rolling Code", [=]() { RFScan(true); }  },
+        {"Create Signal",     createSignal            },
+        {"Send Rolling Code", sendRollingCode         },
+        {"Counter Manager",   [this]() { counterManager([this]() { rollingCodeRfMenu(); }); }},
+        {"Key Setup",         [this]() { rollingKeyHelp([this]() { rollingCodeRfMenu(); }); }},
+        {"Back",              [this]() { optionsMenu(); }},
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "Rolling Code RF");
 }
 
 void RFMenu::configMenu() {

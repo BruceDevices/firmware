@@ -1,6 +1,7 @@
 #include "rf_utils.h"
 #include "core/sd_functions.h"
 #include "core/settings.h"
+#include "rolling_code_db.h"
 
 // CRC-64-ECMA constants
 const uint64_t CRC64_ECMA_POLY = 0x42F0E1EBA9EA3693; // Polynomial for CRC-64-ECMA
@@ -165,10 +166,50 @@ void RfCodes::keeloq_step(uint16_t step) {
             break;
         }
         case KEELOQ_NORMAL_LEARNING: {
-            uint64_t man = keeloq_normal_learning(hop, current_key.key);
+            uint64_t man = keeloq_normal_learning(fix, current_key.key);
 
             encrypted = keeloq_encrypt(hop, man);
 
+            break;
+        }
+        case CIPHER_KEELOQ_SECURE: {
+            uint64_t man = keeloq_secure_learning(serial, seed, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_MAGIC_XOR_TYPE1: {
+            uint64_t man = keeloq_magic_xor_type1(serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_MAGIC_SERIAL_T1: {
+            uint64_t man = keeloq_magic_serial_type1(serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_MAGIC_SERIAL_T2: {
+            uint64_t man = keeloq_magic_serial_type2(btn << 28 | serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_MAGIC_SERIAL_T3: {
+            uint64_t man = keeloq_magic_serial_type3(serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_AERF: {
+            uint64_t man = keeloq_learning_aerf(serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_ERREKA: {
+            uint64_t man = keeloq_learning_erreka(serial, cnt, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
+            break;
+        }
+        case CIPHER_KEELOQ_PUJOL: {
+            uint64_t man = keeloq_learning_pujol(serial, current_key.key);
+            encrypted = keeloq_encrypt(hop, man);
             break;
         }
     }
@@ -195,20 +236,38 @@ std::vector<String> split_string(String str, char c) {
 }
 
 KeeloqKeystore::KeeloqKeystore(FS *fs) {
-    File keystore = fs->open("/mfcodes");
+    // 1) Seed from the compiled-in manufacturer key table. No SD file required.
+    for (size_t i = 0; i < rolling_mf_keys_count; i++) {
+        keys.push_back(KeeloqKey{
+            String(rolling_mf_keys[i].name), rolling_mf_keys[i].key, rolling_mf_keys[i].type
+        });
+    }
 
+    // 2) Merge any SD `/mfcodes` file on top (legacy / user-supplied keys).
+    //    Format per line: name;key_hex;type. A matching name overrides the
+    //    compiled-in entry (handy for dropping in real key material); new
+    //    names are appended.
+    if (!fs) { return; }
+
+    File keystore = fs->open("/mfcodes");
     if (!keystore) { return; }
 
     String line = keystore.readStringUntil('\n');
-
     for (; line != ""; line = keystore.readStringUntil('\n')) {
         auto cols = split_string(line, ';');
-
-        if (cols.size() != 3) { return; }
+        if (cols.size() != 3) { break; }
 
         KeeloqKey key{cols[0], std::strtoull(cols[1].c_str(), NULL, 16), (uint8_t)cols[2].toInt()};
 
-        keys.push_back(key);
+        bool replaced = false;
+        for (auto &existing : keys) {
+            if (existing.mf_name == key.mf_name) {
+                existing = key;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) keys.push_back(key);
     }
 }
 
@@ -597,4 +656,79 @@ uint64_t keeloq_normal_learning(uint32_t data, const uint64_t key) {
     k2 = keeloq_decrypt(data, key);
 
     return ((uint64_t)k2 << 32) | k1;
+}
+
+// --- Additional learning-mode variants (ports of keeloq_common.c) ----------
+
+uint64_t keeloq_secure_learning(uint32_t serial28, uint32_t seed, uint64_t mfkey) {
+    uint32_t k1, k2;
+    serial28 &= 0x0FFFFFFF;
+    k1 = keeloq_decrypt(serial28, mfkey);
+    k2 = keeloq_decrypt(seed, mfkey);
+    return ((uint64_t)k1 << 32) | k2;
+}
+
+uint64_t keeloq_magic_xor_type1(uint32_t serial28, uint64_t xor_val) {
+    serial28 &= 0x0FFFFFFF;
+    return (((uint64_t)serial28 << 32) | serial28) ^ xor_val;
+}
+
+uint64_t keeloq_magic_serial_type1(uint32_t serial28, uint64_t man) {
+    return (man & 0xFFFFFFFF) | ((uint64_t)serial28 << 40) |
+           ((uint64_t)(((serial28 & 0xff) + ((serial28 >> 8) & 0xFF)) & 0xFF) << 32);
+}
+
+uint64_t keeloq_magic_serial_type2(uint32_t btn_serial32, uint64_t man) {
+    uint8_t *p = (uint8_t *)&btn_serial32;
+    uint8_t *m = (uint8_t *)&man;
+    m[7] = p[0];
+    m[6] = p[1];
+    m[5] = p[2];
+    m[4] = p[3];
+    return man;
+}
+
+uint64_t keeloq_magic_serial_type3(uint32_t serial24, uint64_t man) {
+    return (man & 0xFFFFFFFFFF000000) | (serial24 & 0xFFFFFF);
+}
+
+uint64_t keeloq_learning_aerf(uint32_t serial28, uint64_t mfkey) {
+    // Equivalent to normal learning but with the 0x40 outer limit; Momentum
+    // implements this via the manufacturer NL-extend helper. The 0x40 limit
+    // yields the standard decrypt over a reduced schedule.
+    uint32_t d = serial28 & 0x0FFFFFFFu;
+    uint32_t k1 = keeloq_decrypt(d | 0x20000000u, mfkey);
+    uint32_t k2 = keeloq_decrypt(d | 0x60000000u, mfkey);
+    return ((uint64_t)k2 << 32) | k1;
+}
+
+uint64_t keeloq_learning_erreka(uint32_t serial28, uint32_t mix, uint64_t mfkey) {
+    uint32_t d = serial28 & 0x0FFFFFFFu;
+    uint32_t k1 = keeloq_decrypt(d | 0x20000000u, mfkey);
+    uint32_t r4 = mix >> 4;
+    uint32_t r1 = (mix << 4) & 0xF000F000u;
+    r4 = (r4 & 0x0F000F00u) | r1;
+    uint32_t r5 = mix & 0x00FF00FFu;
+    uint32_t x = r4 | r5;
+    x |= 0x60000000u;
+    uint32_t k2 = keeloq_decrypt(x, mfkey);
+    return ((uint64_t)k2 << 32) | k1;
+}
+
+static inline uint32_t keeloq_word_rotate16(uint32_t v) { return (v >> 16) | (v << 16); }
+
+uint64_t keeloq_learning_pujol(uint32_t serial28, uint64_t mfkey) {
+    uint32_t d = serial28 & 0x0FFFFFFFu;
+    uint32_t w1 = keeloq_decrypt(d | 0x20000000u, mfkey);
+    uint32_t w2 = keeloq_decrypt(d | 0x60000000u, mfkey);
+    uint32_t k1 = keeloq_word_rotate16(w1);
+    uint32_t k2 = keeloq_word_rotate16(w2);
+    return ((uint64_t)k2 << 32) | k1;
+}
+
+uint64_t faac_slh_derive_key(uint32_t seed, uint64_t mfkey) {
+    uint16_t hs = seed >> 16;
+    const uint16_t ending = 0x544D;
+    uint32_t lsb = (uint32_t)hs << 16 | ending;
+    return (uint64_t)keeloq_encrypt(seed, mfkey) << 32 | keeloq_encrypt(lsb, mfkey);
 }
