@@ -76,10 +76,9 @@ void startSerialCommandsHandlerTask(bool initQueues) {
         2,    // Priority of the task
         &serialcmdsTaskHandle, // Task handle (optional, can be NULL).
 #if SOC_CPU_CORES_NUM > 1
-        1 // Core where the task should run. By default, all your Arduino code runs on Core 1 and the Wi-Fi
-          // and RF functions
+        0 // PRO_CPU - background tasks run on core 0, UI runs on core 1 (Arduino default)
 #else
-        0 // Core where the task should run. ESP32-C5 has only one core
+        0 // Single core - doesn't matter
 #endif
     ); // (these are usually hidden from the Arduino environment) use the Core 0.
     if (!serialcmdsTaskHandle) { Serial.println("Failed to create Serial Commands Handler task"); }
