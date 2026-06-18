@@ -802,6 +802,44 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 #endif
 }
 
+static void drawDualCoreInfo() {
+    UBaseType_t taskCount = uxTaskGetNumberOfTasks();
+    if (taskCount == 0 || taskCount > 64) {
+        uint16_t x = tftWidth - 72;
+        tft.fillRect(x - 2, 7, 60, 18, bruceConfig.bgColor);
+        setTftDisplay(x, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
+        tft.drawString("C0:C1", x, 12, 1);
+        return;
+    }
+    size_t sz = sizeof(TaskStatus_t) * taskCount;
+    TaskStatus_t *arr = (TaskStatus_t *)malloc(sz);
+    if (!arr) return;
+    uint32_t rt;
+    UBaseType_t n = uxTaskGetSystemState(arr, taskCount, &rt);
+    int c0 = 0, c1 = 0;
+    for (UBaseType_t i = 0; i < n && i < taskCount; i++) {
+#if (configCORECOUNT > 1)
+        if (arr[i].xCoreID == 0) c0++;
+        else if (arr[i].xCoreID == 1) c1++;
+#else
+        (void)c1; c0++;
+#endif
+    }
+    free(arr);
+    char buf[20];
+    int w;
+#if (configCORECOUNT > 1)
+    w = snprintf(buf, sizeof(buf), "C0:%d C1:%d", c0, c1);
+#else
+    w = snprintf(buf, sizeof(buf), "C0:%d", c0);
+#endif
+    w *= 6;
+    uint16_t x = tftWidth - w - 10;
+    tft.fillRect(x - 2, 7, w + 4, 18, bruceConfig.bgColor);
+    setTftDisplay(x, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
+    tft.drawString(buf, x, 12, 1);
+}
+
 void drawStatusBar() {
     uint8_t bat = getBattery();
     if (bat > 0) drawBatteryStatus(bat);
@@ -844,7 +882,14 @@ void drawStatusBar() {
         const int IH  = 16;
         const int GAP = 6;
         int totalW = iconCount * IW + (iconCount - 1) * GAP;
-        int sx = (tftWidth - totalW) / 2;
+
+        // Reserve right-side space for drawDualCoreInfo (called after icons)
+        // "C0:99 C1:99" = 12 chars x 6px = 72px; use 80px safe estimate
+        int coreInfoReserve = 80;
+        int availIconW = tftWidth - coreInfoReserve - 10;
+        int sx = (availIconW - totalW) / 2;
+        if (sx < 5) sx = 5;
+
         int iy = 7;
         int idx = 0;
 
@@ -885,6 +930,8 @@ void drawStatusBar() {
             idx++;
         }
     }
+
+    drawDualCoreInfo();
 }
 
 void drawMainBorder(bool clear) {
