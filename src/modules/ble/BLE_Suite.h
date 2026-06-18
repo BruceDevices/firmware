@@ -127,7 +127,7 @@ struct HIDConnectionResult {
     int attemptCount;
 };
 
-struct DuckyCommand {
+struct BleDuckyCmd {
     String command;
     String parameter;
     int delay_ms;
@@ -295,13 +295,13 @@ public:
     bool parseLine(String line);
     bool loadFromSD(String filename);
     bool loadFromString(String script);
-    std::vector<DuckyCommand> getCommands();
+    std::vector<BleDuckyCmd> getCommands();
     bool isLoaded();
     void clear();
     size_t getCommandCount();
 
 private:
-    std::vector<DuckyCommand> commands;
+    std::vector<BleDuckyCmd> commands;
     bool scriptLoaded;
 };
 
