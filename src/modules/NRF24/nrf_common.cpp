@@ -33,6 +33,11 @@ void nrf_info() {
 // and causing a false "NRF24 not found" on every second entry.
 static bool nrfSpiInitialized = false;
 
+// FIX: Add function to reset SPI state when needed
+void nrf_reset_spi_state() {
+    nrfSpiInitialized = false;
+}
+
 bool nrf_start(NRF24_MODE mode) {
     bool result = false;
     if (mode == NRF_MODE_DISABLED) return false;
@@ -79,6 +84,7 @@ bool nrf_start(NRF24_MODE mode) {
         NRFSPI = &SPI;
     }
 
+    // FIX: Check if SPI bus is actually working before re-initializing
     // Only call NRFSPI->begin() once per bus instance. Calling it again
     // on an already-initialized bus resets the SPI peripheral mid-session
     // which can leave CLK/MOSI in a bad state and corrupt the first
@@ -100,7 +106,20 @@ bool nrf_start(NRF24_MODE mode) {
         )) {
         result = true;
     } else {
-        return false;
+        // FIX: If begin fails, try a soft reset before giving up
+        NRFradio.powerDown();
+        delay(10);
+        NRFradio.powerUp();
+        delay(5);
+        if (NRFradio.begin(
+                NRFSPI,
+                rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.io0),
+                rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.cs)
+            )) {
+            result = true;
+        } else {
+            return false;
+        }
     }
     return result;
 }
