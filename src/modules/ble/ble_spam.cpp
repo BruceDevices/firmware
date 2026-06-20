@@ -19,6 +19,13 @@
  *     CustomCrash variants)
  *   - Samsung EasySetup Galaxy Buds packet (previously only Watch was present)
  *   - Expanded Google FastPair model list (75+ models)
+ *
+ * Additional improvements by Ninja-jr (https://github.com/Ninja-jr):
+ *   - Samsung device detection by MAC OUI for automatic FastPair selection
+ *   - Smart Android spam: uses Samsung FastPair on Samsung devices, Google FastPair on others
+ *   - Enhanced Apple Spam with iCloud binding spoofing (separate PR)
+ *   - MAC randomization every packet for Apple Spam (same strategy as Samsung)
+ *   - Single BLE stack initialization in Apple Spam (no deinit/init per packet)
  */
 
 #include "ble_spam.h"
@@ -51,6 +58,61 @@
 #else
 #define MAX_TX_POWER ESP_PWR_LVL_P9
 #endif
+
+// ============================================================================
+// Samsung Device Detection (Ninja-jr)
+// ============================================================================
+// Samsung MAC OUIs (first 3 bytes of MAC address)
+// These are registered to Samsung Electronics Co., Ltd.
+// Used to automatically select the correct FastPair type
+// - Samsung FastPair for Samsung devices
+// - Google FastPair for all other Android devices
+// This improves Android spam coverage by using the right protocol for each device.
+
+static const char* SAMSUNG_MAC_OUIS[] = {
+    "00:1E:DF", // Samsung Electronics
+    "00:23:E7", // Samsung Electronics
+    "00:24:FE", // Samsung Electronics
+    "00:26:5C", // Samsung Electronics
+    "00:27:14", // Samsung Electronics
+    "00:2A:10", // Samsung Electronics
+    "00:2D:0A", // Samsung Electronics
+    "00:30:FA", // Samsung Electronics
+    "00:35:FE", // Samsung Electronics
+    "00:3C:E4", // Samsung Electronics
+    "00:40:96", // Samsung Electronics
+    "00:44:01", // Samsung Electronics
+    "00:4A:77", // Samsung Electronics
+    "00:4D:4A", // Samsung Electronics
+    "00:50:F7", // Samsung Electronics
+    "00:54:08", // Samsung Electronics
+    "00:57:7A", // Samsung Electronics
+    "00:5A:38", // Samsung Electronics
+    "00:5E:88", // Samsung Electronics
+    "00:62:6E", // Samsung Electronics
+    "00:64:22", // Samsung Electronics
+    "00:66:44", // Samsung Electronics
+    "00:68:EB", // Samsung Electronics
+    "00:6A:94", // Samsung Electronics
+    "00:6C:F0", // Samsung Electronics
+    "00:6E:2A", // Samsung Electronics
+    "00:70:89", // Samsung Electronics
+    "00:72:44", // Samsung Electronics
+    "00:74:04", // Samsung Electronics
+    "00:76:5E", // Samsung Electronics
+    "00:78:2C", // Samsung Electronics
+    "00:7A:04", // Samsung Electronics
+    "00:7C:2E", // Samsung Electronics
+    "00:7E:58", // Samsung Electronics
+    "00:80:82", // Samsung Electronics
+};
+
+static bool isSamsungDevice(const String &mac) {
+    for (int i = 0; i < sizeof(SAMSUNG_MAC_OUIS)/sizeof(SAMSUNG_MAC_OUIS[0]); i++) {
+        if (mac.startsWith(SAMSUNG_MAC_OUIS[i])) return true;
+    }
+    return false;
+}
 
 // ============================================================================
 // Structs used by legacy paths
