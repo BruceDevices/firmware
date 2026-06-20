@@ -28,5 +28,9 @@ NRF24_MODE nrf_setMode();
 
 bool nrf_start(NRF24_MODE mode);
 
+/// Reset SPI bus initialization state
+/// Call this when the NRF24 stops responding or after a jammer session
+void nrf_reset_spi_state();
+
 void nrf_info();
 #endif
