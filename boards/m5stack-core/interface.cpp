@@ -50,8 +50,11 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (aPressed && cPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = aPressed;
-    EscPress = aPressed;
     NextPress = cPressed;
     SelPress = bPressed;
 }

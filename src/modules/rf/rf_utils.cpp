@@ -78,10 +78,93 @@ const float subghz_frequency_list[] = {
     928.000f
 };
 
+uint8_t
+cc1101InterpolateFsctrl0(float frequency, float minFreq, float maxFreq, uint8_t minValue, uint8_t maxValue) {
+    if (frequency <= minFreq) return minValue;
+    if (frequency >= maxFreq) return maxValue;
+
+    const float ratio = (frequency - minFreq) / (maxFreq - minFreq);
+    return uint8_t(minValue + (ratio * float(maxValue - minValue)) + 0.5f);
+}
+
+void cc1101WaitForIdle() {
+    const uint32_t start = millis();
+    while ((ELECHOUSE_cc1101.SpiReadStatus(CC1101_MARCSTATE) & 0x1F) != 0x01) {
+        if (millis() - start > 20) break;
+        delay(1);
+    }
+}
+
+void cc1101ApplyPreciseCalibration(float frequency, bool isTx) {
+    uint8_t fsctrl0 = 0x00;
+    uint8_t test0 = 0x09;
+    bool highVco = true;
+
+    if (frequency >= 280.0f && frequency <= 348.0f) {
+        fsctrl0 = cc1101InterpolateFsctrl0(frequency, 280.0f, 348.0f, 24, 28);
+        highVco = frequency >= 322.88f;
+    } else if (frequency >= 387.0f && frequency <= 464.0f) {
+        fsctrl0 = cc1101InterpolateFsctrl0(frequency, 387.0f, 464.0f, 31, 38);
+        highVco = frequency >= 430.50f;
+    } else if (frequency >= 779.0f && frequency <= 899.99f) {
+        fsctrl0 = cc1101InterpolateFsctrl0(frequency, 779.0f, 899.99f, 65, 76);
+        highVco = frequency >= 861.0f;
+    } else if (frequency >= 900.0f && frequency <= 928.0f) {
+        fsctrl0 = cc1101InterpolateFsctrl0(frequency, 900.0f, 928.0f, 77, 79);
+        highVco = true;
+    } else {
+        return;
+    }
+
+    test0 = highVco ? 0x09 : 0x0B;
+
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCTRL0, fsctrl0);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_TEST0, test0);
+    if (isTx) {
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND0, 0x11);
+        ELECHOUSE_cc1101.setPA(12);
+    } else {
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND1, 0xB6);
+    }
+    ELECHOUSE_cc1101.SpiStrobe(CC1101_SCAL);
+    cc1101WaitForIdle();
+
+    if (highVco) {
+        const uint8_t fscal2 = ELECHOUSE_cc1101.SpiReadReg(CC1101_FSCAL2);
+        if (fscal2 < 0x20) {
+            ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCAL2, fscal2 + 0x20);
+            ELECHOUSE_cc1101.SpiStrobe(CC1101_SCAL);
+            cc1101WaitForIdle();
+        }
+    }
+}
+
+void cc1101ApplyFixedFreqOokPreset(bool isTx) {
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x47);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCTRL1, 0x06);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG0, 0x00);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG1, 0x00);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG2, 0x30);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG3, 0x32);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG4, 0x67);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_MCSM0, 0x18);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FOCCFG, 0x18);
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND0, 0x11);
+    if (isTx) {
+        ELECHOUSE_cc1101.setPA(12);
+    } else {
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL0, 0x40);
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL1, 0x00);
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0x03);
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND1, 0xB6);
+    }
+}
+
 RfCodes recent_rfcodes[16];       // TODO: save/load in EEPROM
 int recent_rfcodes_last_used = 0; // TODO: save/load in EEPROM
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
+static uint8_t cc1101_mode_hint = 0;
 
 bool RfCodes::keeloq_check_decrypt(uint32_t decrypt) {
     uint16_t end_serial = serial & 0xFF;
@@ -124,10 +207,11 @@ void RfCodes::keeloq_step(uint16_t step) {
         if (apr1 % 2 == 0) { apri_serial |= 0b110000000000; }
 
         hop = btn << 28 | (apri_serial & 0xFFF) << 16 | cnt;
-    } else if (mf_name == "DTM_Neo" || mf_name == "FAAC_RC,XT" || mf_name == "Mutanco_Mutancode" ||
-               mf_name == "Came_Space" || mf_name == "Genius_Bravo" || mf_name == "GSN" ||
-               mf_name == "Rosh" || mf_name == "Rossi" || mf_name == "Peccinin" || mf_name == "Steelmate" ||
-               mf_name == "Cardin_S449") {
+    } else if (
+        mf_name == "DTM_Neo" || mf_name == "FAAC_RC,XT" || mf_name == "Mutanco_Mutancode" ||
+        mf_name == "Came_Space" || mf_name == "Genius_Bravo" || mf_name == "GSN" || mf_name == "Rosh" ||
+        mf_name == "Rossi" || mf_name == "Peccinin" || mf_name == "Steelmate" || mf_name == "Cardin_S449"
+    ) {
         hop = btn << 28 | (serial & 0xFFF) << 16 | cnt;
     } else if (mf_name == "NICE_Smilo" || mf_name == "NICE_MHOUSE" || mf_name == "JCM_Tech") {
         hop = btn << 28 | (serial & 0xFF) << 16 | cnt;
@@ -226,15 +310,17 @@ bool initRfModule(String mode, float frequency) {
 #else
             yield();
 #endif
-        } else if (bruceConfigPins.CC1101_bus.mosi ==
-                   bruceConfigPins.SDCARD_bus.mosi) { // (CARDPUTER) and (ESP32S3DEVKITC1) and devices that
-                                                      // share CC1101 pin with only SDCard
+        } else if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi) { // (CARDPUTER) and
+                                                                                         // (ESP32S3DEVKITC1)
+                                                                                         // and devices that
+                                                                                         // share CC1101 pin
+                                                                                         // with only SDCard
             initCC1101once(&sdcardSPI);
-        } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&
-                   bruceConfigPins.CC1101_bus.mosi !=
-                       bruceConfigPins.SDCARD_bus
-                           .mosi) { // This board uses the same Bus for NRF and CC1101, but with
-                                    // different CS pins, different from Stick_Cs down below..
+        } else if (
+            bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&
+            bruceConfigPins.CC1101_bus.mosi != bruceConfigPins.SDCARD_bus.mosi
+        ) { // This board uses the same Bus for NRF and CC1101, but with
+            // different CS pins, different from Stick_Cs down below..
 
             CC_NRF_SPI.end(); // Closes in case it was already in use, it will overwrite the attempt
                               // of SD start over to save configurations
@@ -279,13 +365,19 @@ bool initRfModule(String mode, float frequency) {
         }
         // else
         // ELECHOUSE_cc1101.setRxBW(812.50);  // reset to default
-        ELECHOUSE_cc1101.setRxBW(256);      // narrow band for better accuracy
-        ELECHOUSE_cc1101.setClb(1, 13, 15); // Calibration Offset
-        ELECHOUSE_cc1101.setClb(2, 16, 19); // Calibration Offset
+        if (bruceConfigPins.rfFxdFreq == 1) {
+            cc1101_mode_hint = (mode == "tx") ? 1 : ((mode == "rx") ? 2 : 0);
+            cc1101ApplyFixedFreqOokPreset(cc1101_mode_hint == 1);
+        } else {
+            ELECHOUSE_cc1101.setRxBW(256); // generic profile for scan/hopping
+            ELECHOUSE_cc1101.setDRate(50);
+        }
+        ELECHOUSE_cc1101.setClb(1, 24, 28); // Keep upstream 315 MHz FSCTRL0 range
+        ELECHOUSE_cc1101.setClb(2, 31, 38); // Keep upstream 433 MHz FSCTRL0 range
+        ELECHOUSE_cc1101.setClb(3, 65, 76); // Keep upstream 868 MHz FSCTRL0 range
+        ELECHOUSE_cc1101.setClb(4, 77, 79); // Keep upstream 915 MHz FSCTRL0 range
         // set modulation mode. 0 = 2-FSK, 1 = GFSK, 2 = ASK/OOK, 3 = 4-FSK, 4 = MSK.
         ELECHOUSE_cc1101.setModulation(2);
-        // Set the Data Rate in kBaud. Value from 0.02 to 1621.83. Default is 99.97 kBaud!
-        ELECHOUSE_cc1101.setDRate(50);
         // Format of RX and TX data.
         //   0 = Normal mode, use FIFOs for RX and TX.
         //   1 = Synchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins.
@@ -294,6 +386,7 @@ bool initRfModule(String mode, float frequency) {
         //.  3 = Asynchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins.
         ELECHOUSE_cc1101.setPktFormat(3);
         setMHZ(frequency);
+        cc1101_mode_hint = 0;
         Serial.println("cc1101 setMHZ(frequency);");
 
         /* MEMO: cannot change other params after this is executed */
@@ -308,7 +401,7 @@ bool initRfModule(String mode, float frequency) {
         } else if (mode == "rx") {
             ioExpander.turnPinOnOff(IO_EXP_CC_RX, HIGH);
             ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT);
+            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT_PULLUP);
             ELECHOUSE_cc1101.SetRx();
             Serial.println("cc1101 SetRx();");
         }
@@ -333,7 +426,7 @@ bool initRfModule(String mode, float frequency) {
             gsetRfRxPin(false);
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
-            pinMode(bruceConfigPins.rfRx, INPUT);
+            pinMode(bruceConfigPins.rfRx, INPUT_PULLUP);
         }
     }
     // no error
@@ -409,7 +502,22 @@ void setMHZ(float frequency) {
             vTaskDelay(10 / portTICK_PERIOD_MS); // time to settle the antenna signal
         }
 #endif
+        const bool preciseCalibration = (bruceConfigPins.rfFxdFreq == 1);
+        const uint8_t previousMode = preciseCalibration ? ELECHOUSE_cc1101.getMode() : 0;
+        const uint8_t targetMode =
+            preciseCalibration ? (previousMode != 0 ? previousMode : cc1101_mode_hint) : 0;
+        const bool isTxProfile = (targetMode == 1);
+
+        if (preciseCalibration && previousMode != 0) ELECHOUSE_cc1101.setSidle();
+
         ELECHOUSE_cc1101.setMHZ(frequency);
+
+        if (preciseCalibration) {
+            cc1101ApplyPreciseCalibration(frequency, isTxProfile);
+
+            if (previousMode == 1) ELECHOUSE_cc1101.SetTx();
+            else if (previousMode == 2) ELECHOUSE_cc1101.SetRx();
+        }
     }
 }
 
