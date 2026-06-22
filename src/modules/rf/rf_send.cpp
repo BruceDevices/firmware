@@ -1,6 +1,7 @@
 #include "rf_send.h"
 #include "core/led_control.h"
 #include "core/type_convertion.h"
+#include "protocols/rf_presets.h"
 #include "rf_utils.h"
 #include <RCSwitch.h>
 
@@ -365,34 +366,16 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         FuriHalSubGhzPresetCustom, //Custom Preset
     */
     // struct Protocol rcswitch_protocol;
+    // Radio preset parameters come from the central registry (protocols/).
+    // A preset field at 0 means "keep the module default" (set above).
     int rcswitch_protocol_no = 1;
-    if (preset == "FuriHalSubGhzPresetOok270Async") {
-        rcswitch_protocol_no = 1;
-        //  pulseLength , syncFactor , zero , one, invertedSignal
-        // rcswitch_protocol = { 350, {  1, 31 }, {  1,  3 }, {  3,  1 }, false };
-        modulation = 2;
-        rxBW = 270;
-    } else if (preset == "FuriHalSubGhzPresetOok650Async") {
-        rcswitch_protocol_no = 2;
-        // rcswitch_protocol = { 650, {  1, 10 }, {  1,  2 }, {  2,  1 }, false };
-        modulation = 2;
-        rxBW = 650;
-    } else if (preset == "FuriHalSubGhzPreset2FSKDev238Async") {
-        modulation = 0;
-        deviation = 2.380371;
-        rxBW = 238;
-    } else if (preset == "FuriHalSubGhzPreset2FSKDev476Async") {
-        modulation = 0;
-        deviation = 47.60742;
-        rxBW = 476;
-    } else if (preset == "FuriHalSubGhzPresetMSK99_97KbAsync") {
-        modulation = 4;
-        deviation = 47.60742;
-        dataRate = 99.97;
-    } else if (preset == "FuriHalSubGhzPresetGFSK9_99KbAsync") {
-        modulation = 1;
-        deviation = 19.042969;
-        dataRate = 9.996;
+    const RfPreset *rp = rf_find_preset(preset);
+    if (rp) {
+        modulation = rp->modulation;
+        if (rp->deviation) deviation = rp->deviation;
+        if (rp->rxBW) rxBW = rp->rxBW;
+        if (rp->dataRate) dataRate = rp->dataRate;
+        rcswitch_protocol_no = rp->legacyProto;
     } else {
         bool found = false;
         for (int p = 0; p < 30; p++) {
