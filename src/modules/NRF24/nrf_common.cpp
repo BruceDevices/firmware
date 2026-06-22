@@ -126,8 +126,12 @@ NRF24_MODE nrf_setMode() {
         nrfUART = false;
     }
     if (nrfSPI && nrfUART) {
-        displayError("NRF24 pins undefined", true);
-        mode = NRF_MODE_BOTH;
+        // FIX: having both valid SPI pins AND valid UART pins is not an error.
+        // A UART-NRF can't be reliably auto-detected from pin config, so when the
+        // SPI pins are configured, default to SPI (the common case — e.g. the
+        // M5Stick RF Pack S3 with an SPI nRF24). Previously this branch wrongly
+        // raised "NRF24 pins undefined", blocking every SPI-only NRF24 device.
+        mode = NRF_MODE_SPI;
     } else if (nrfSPI) {
         mode = NRF_MODE_SPI;
     } else if (nrfUART) {
