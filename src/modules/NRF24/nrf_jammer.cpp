@@ -301,7 +301,12 @@ static void shuffleChannels(uint8_t *arr, size_t count) {
 }
 
 // ── CW initialization helper ────────────────────────────────────
+// Must call powerUp() before startConstCarrier() because
+// stopConstCarrier() → powerDown() clears the internal PWR_UP flag,
+// and startConstCarrier() never restores it (RF24 library bug).
 static void initCW(int channel) {
+    NRFradio.powerUp();
+    delay(5); // Tpd2stby: power-down → standby settle
     NRFradio.setPALevel(RF24_PA_MAX);
     NRFradio.startConstCarrier(RF24_PA_MAX, channel);
     NRFradio.setAddressWidth(5);
@@ -903,6 +908,7 @@ void nrf_channel_jammer() {
             if (channel > 125) channel = 0;
             if (CHECK_NRF_SPI(mode) && !paused) {
                 NRFradio.setChannel(channel);
+                NRFradio.startConstCarrier(RF24_PA_MAX, channel);
             }
             redraw = true;
         }
@@ -911,6 +917,7 @@ void nrf_channel_jammer() {
             if (channel < 0) channel = 125;
             if (CHECK_NRF_SPI(mode) && !paused) {
                 NRFradio.setChannel(channel);
+                NRFradio.startConstCarrier(RF24_PA_MAX, channel);
             }
             redraw = true;
         }
