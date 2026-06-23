@@ -59,24 +59,6 @@ Old Furi names remain valid via alias → neutral canonical name:
 | `FuriHalSubGhzPresetMSK99_97KbAsync`     | `MSK99_97KbAsync`|
 | `FuriHalSubGhzPresetGFSK9_99KbAsync`     | `GFSK9_99KbAsync`|
 
-## Status
-
-Milestone 2 complete: the **decode** path runs on the native RMT engine
-(`rf_decoder.{h,cpp}`: `RfRxSession` + `rf_decode_ook` + `rf_build_raw`), a
-faithful port of the classic OOK state machine fed by the registry. Scan
-(decode/raw), SquareWave and the CLI/JS read no longer touch the former
-interrupt receiver; `Protocol:` now stores the identified protocol
-name.
-
-Milestone 5 complete: the external OOK library dependency is removed from
-both code and `lib_deps`; the firmware builds and runs entirely on the
-native RMT engine.
-
-Milestone 3 complete: the **TX** path runs on the native RMT engine
-(`rf_encoder.{h,cpp}`); `rfTransmit*` are thin wrappers over it.
-
-Milestone 4: protocol coverage + KeeLoq centralization (see below).
-
 ## Protocol coverage
 
 Coverage is delivered in three layers:

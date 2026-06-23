@@ -30,9 +30,9 @@ uint32_t rfRxCallback(cmd *c) {
 
     String r = "";
     if (raw) {
-        r = rfReceiveSignal(frequency, 10, true); // true -> raw mode
+        r = rfReceiveSignal(frequency, 10, true, true); // raw mode, headless (Serial only)
     } else {
-        r = rfReceiveSignal(frequency, 10, false); // false -> decoded mode
+        r = rfReceiveSignal(frequency, 10, false, true); // decoded mode, headless (Serial only)
     }
 
     if (r.length() == 0) return false;
@@ -255,7 +255,10 @@ uint32_t rfTxFileCallback(cmd *c) {
     Argument filepathArg = cmd.getArgument("filepath");
     Argument hideDefaultUIArg = cmd.getArgument("hideDefaultUI");
     String filepath = filepathArg.getValue();
-    String hideDefaultUI = hideDefaultUIArg.getValue();
+    String hideDefaultUIStr = hideDefaultUIArg.getValue();
+    hideDefaultUIStr.trim();
+    // CLI: keep the display clean by default; pass "false" to mirror on screen.
+    bool hideDefaultUI = !hideDefaultUIStr.equalsIgnoreCase("false");
     filepath.trim();
 
     if (filepath.indexOf(".sub") == -1) {
@@ -295,7 +298,7 @@ uint32_t rfTxBufferCallback(cmd *c) {
 
     bool r = readSubFile(&PSRamFS, tmpfilepath, data);
 
-    r = txSubFile(data);
+    r = txSubFile(data, true); // CLI: don't pollute the display
     PSRamFS.remove(tmpfilepath);
 
     return r;

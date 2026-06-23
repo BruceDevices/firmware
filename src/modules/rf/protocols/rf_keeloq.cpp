@@ -1,9 +1,13 @@
 #include "rf_keeloq.h"
 #include "core/sd_functions.h" // getFsStorage
 #include "rf_config.h"         // RF_DEBUG, RF_DBG
+#include "rf_keeloq_mfcodes_data.h"
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <cstdlib>
+#include <cstring>
+#include <mbedtls/aes.h>
+#include <vector>
 
 uint32_t keeloq_encrypt(const uint32_t data, const uint64_t key) {
     uint32_t x = data, r;
@@ -137,22 +141,61 @@ static std::vector<String> split_string(String str, char c) {
     return cols;
 }
 
-KeeloqKeystore::KeeloqKeystore(FS *fs) {
-    File keystore = fs->open("/mfcodes");
+static void parse_keystore(const String &content, std::vector<KeeloqKey> &keys) {
+    int start = 0;
+    const int len = content.length();
 
-    if (!keystore) { return; }
+    while (start < len) {
+        int nl = content.indexOf('\n', start);
+        String line = (nl < 0) ? content.substring(start) : content.substring(start, nl);
+        start = (nl < 0) ? len : nl + 1;
 
-    String line = keystore.readStringUntil('\n');
+        line.trim(); // also drops a trailing '\r'
+        if (line.isEmpty()) continue;
 
-    for (; line != ""; line = keystore.readStringUntil('\n')) {
         auto cols = split_string(line, ';');
+        if (cols.size() != 3) continue; // skip malformed lines, keep the rest
 
-        if (cols.size() != 3) { return; }
-
-        KeeloqKey key{cols[0], std::strtoull(cols[1].c_str(), NULL, 16), (uint8_t)cols[2].toInt()};
-
-        keys.push_back(key);
+        keys.push_back({cols[0], std::strtoull(cols[1].c_str(), NULL, 16), (uint8_t)cols[2].toInt()});
     }
+}
+
+static String keeloq_embedded_plaintext() {
+    if (KEELOQ_MFCODES_ENC_LEN == 0 || (KEELOQ_MFCODES_ENC_LEN % 16) != 0) return "";
+
+    std::vector<uint8_t> out(KEELOQ_MFCODES_ENC_LEN + 1, 0);
+    mbedtls_aes_context ctx;
+    mbedtls_aes_init(&ctx);
+    if (mbedtls_aes_setkey_dec(&ctx, KEELOQ_MFCODES_KEY, 256) != 0) {
+        mbedtls_aes_free(&ctx);
+        return "";
+    }
+
+    uint8_t iv[16];
+    memcpy(iv, KEELOQ_MFCODES_IV, sizeof(iv)); // CBC mutates the IV in place
+    int rc = mbedtls_aes_crypt_cbc(
+        &ctx, MBEDTLS_AES_DECRYPT, KEELOQ_MFCODES_ENC_LEN, iv, KEELOQ_MFCODES_ENC, out.data()
+    );
+    mbedtls_aes_free(&ctx);
+    if (rc != 0) return "";
+
+    size_t plen = KEELOQ_MFCODES_ENC_LEN;
+    uint8_t pad = out[plen - 1];
+    if (pad >= 1 && pad <= 16 && pad <= plen) plen -= pad;
+    out[plen] = 0;
+
+    return String((const char *)out.data());
+}
+
+KeeloqKeystore::KeeloqKeystore(FS *fs) {
+    if (fs) {
+        File keystore = fs->open("/mfcodes");
+        if (keystore) {
+            parse_keystore(keystore.readString(), keys);
+            keystore.close();
+        }
+    }
+    if (keys.empty()) parse_keystore(keeloq_embedded_plaintext(), keys);
 }
 
 const std::vector<KeeloqKey> &KeeloqKeystore::get_keys() { return keys; }

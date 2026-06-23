@@ -13,6 +13,11 @@ const int range_limits[4][2] = {
     {0,  56}  // All ranges
 };
 const char *subghz_frequency_ranges[] = {"300-348 MHz", "387-464 MHz", "779-928 MHz", "All ranges"};
+
+String rf_subghz_header(float frequencyMHz) {
+    return "Filetype: Bruce SubGhz File\nVersion 1\n" + String("Frequency: ") +
+           String(int(frequencyMHz * 1000000)) + "\n";
+}
 const float subghz_frequency_list[] = {
     /* 300 - 348 MHz Frequency Range */
     300.000f,
@@ -196,11 +201,8 @@ void RfCodes::keeloq_step(uint16_t step) {
     // so it can be unit-tested without the SD keystore (see rf_keeloq_selftest).
     hop = keeloq_build_hop(mf_name, btn, serial, cnt);
 
-    FS *fs = keeloq_mfcodes_fs();
-
-    if (!fs) { return; }
-
-    KeeloqKeystore keystore{fs};
+    // A null fs is fine: the keystore falls back to the encrypted built-in keys.
+    KeeloqKeystore keystore{keeloq_mfcodes_fs()};
 
     KeeloqKey current_key;
 

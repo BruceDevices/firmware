@@ -123,11 +123,8 @@ bool RFScan::fast_scan() {
 }
 
 void keeloq_identify(RfCodes &instance) {
-    FS *fs = keeloq_mfcodes_fs();
-
-    if (!fs) { return; }
-
-    KeeloqKeystore keystore{fs};
+    // A null fs is fine: the keystore falls back to the encrypted built-in keys.
+    KeeloqKeystore keystore{keeloq_mfcodes_fs()};
 
     // Secure/Erreka need a seed; mirror the reference fallback to the
     // serial-derived seed when none was captured from the frame.
@@ -427,32 +424,45 @@ bruceConfigPins.setRfScanRange(2); }}, {subghz_frequency_ranges[3],             
     else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
 }
 */
-void display_info(RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title) {
-    if (title != "") drawMainBorderWithTitle(title);
-    else drawMainBorder();
-
-    if (received.protocol != "") display_signal_data(received);
-
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-
-    if (!ReadRAW) padprintln("Recording: Only decoded codes.");
-    else if (codesOnly) padprintln("Recording: RAW with CRC or decoded codes.");
-    else padprintln("Recording: Any RAW signal.");
-
-    if (autoSave) padprintln("Auto save: Enabled");
-
-    if (bruceConfigPins.rfFxdFreq) padprintln("Scanning: " + String(bruceConfigPins.rfFreq) + " MHz");
-    else padprintln("Scanning: " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
-
-    padprintln("Total signals found: " + String(signals));
-
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-
-    padprintln("");
-    padprintln("Press [NEXT] for options.");
+// Routes one info line to the right sink: Serial when running headless (CLI),
+// otherwise the on-screen padded print used by the interactive scanner.
+static void rf_info_line(bool headless, const String &s) {
+    if (headless) Serial.println(s);
+    else padprintln(s);
 }
 
-void display_signal_data(RfCodes received) {
+void display_info(
+    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title, bool headless
+) {
+    if (!headless) {
+        if (title != "") drawMainBorderWithTitle(title);
+        else drawMainBorder();
+    }
+
+    if (received.protocol != "") display_signal_data(received, headless);
+
+    if (!headless) tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+
+    if (!ReadRAW) rf_info_line(headless, "Recording: Only decoded codes.");
+    else if (codesOnly) rf_info_line(headless, "Recording: RAW with CRC or decoded codes.");
+    else rf_info_line(headless, "Recording: Any RAW signal.");
+
+    if (autoSave) rf_info_line(headless, "Auto save: Enabled");
+
+    if (bruceConfigPins.rfFxdFreq)
+        rf_info_line(headless, "Scanning: " + String(bruceConfigPins.rfFreq) + " MHz");
+    else rf_info_line(headless, "Scanning: " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
+
+    rf_info_line(headless, "Total signals found: " + String(signals));
+
+    if (!headless) {
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        padprintln("");
+        padprintln("Press [NEXT] for options.");
+    }
+}
+
+void display_signal_data(RfCodes received, bool headless) {
     std::string txt = received.data.c_str();
     std::stringstream ss(txt);
     std::string palavra;
@@ -463,54 +473,53 @@ void display_signal_data(RfCodes received) {
 
     if (received.preset != "") {
         if (received.fix != 0) {
-            padprintln("Protocol: KeeLoq");
-        } else padprintln("Protocol: " + String(received.protocol) + "(" + received.preset + ")");
-    } else padprintln("Protocol: " + String(received.protocol));
+            rf_info_line(headless, "Protocol: KeeLoq");
+        } else
+            rf_info_line(headless, "Protocol: " + String(received.protocol) + "(" + received.preset + ")");
+    } else rf_info_line(headless, "Protocol: " + String(received.protocol));
 
     if (received.key > 0) {
         decimalToHexString(received.key, hexString);
         if (received.protocol == "RAW") {
-            padprintln("Length: " + String(received.Bit) + " transitions");
-            // tft.setCursor(tft.getCursorX(), tft.getCursorY() + 2);
-            padprintln("Record length: " + String(transitions) + " transitions");
+            rf_info_line(headless, "Length: " + String(received.Bit) + " transitions");
+            rf_info_line(headless, "Record length: " + String(transitions) + " transitions");
         } else {
             if (received.fix == 0) {
-                padprintln("Length: " + String(received.Bit) + " bits");
+                rf_info_line(headless, "Length: " + String(received.Bit) + " bits");
                 const char *b = dec2binWzerofill(received.key, min(received.Bit, 40));
-                // tft.setCursor(tft.getCursorX(), tft.getCursorY() + 2);
-                padprintln("Binary: " + String(b));
+                rf_info_line(headless, "Binary: " + String(b));
             }
         }
     } else {
         strlcpy(hexString, "No code identified", sizeof(hexString));
-        padprintln("Length: No code identified");
-        padprintln("Record length: " + String(transitions) + " transitions");
+        rf_info_line(headless, "Length: No code identified");
+        rf_info_line(headless, "Record length: " + String(transitions) + " transitions");
     }
 
-    if (received.protocol == "RAW") padprintln("CRC: " + String(hexString));
+    if (received.protocol == "RAW") rf_info_line(headless, "CRC: " + String(hexString));
     else {
         if (received.fix != 0) {
-            padprintln("Manufacturer: " + received.mf_name);
+            rf_info_line(headless, "Manufacturer: " + received.mf_name);
 
             decimalToHexString(received.serial, hexString);
-            padprintln("Serial: " + String(hexString));
+            rf_info_line(headless, "Serial: " + String(hexString));
 
-            padprintln("Btn: " + String(received.btn));
+            rf_info_line(headless, "Btn: " + String(received.btn));
 
             decimalToHexString(received.fix, hexString);
-            padprintln("Fix: " + String(hexString));
+            rf_info_line(headless, "Fix: " + String(hexString));
 
             if (received.mf_name != "Unknown") {
                 decimalToHexString(received.hop, hexString);
-                padprintln("Hop: " + String(hexString));
+                rf_info_line(headless, "Hop: " + String(hexString));
 
-                padprintln("Counter: " + String(received.cnt));
+                rf_info_line(headless, "Counter: " + String(received.cnt));
             } else {
                 decimalToHexString(received.encrypted, hexString);
-                padprintln("Encrypted: " + String(hexString));
+                rf_info_line(headless, "Encrypted: " + String(hexString));
             }
         } else {
-            padprintln("Key: " + String(hexString));
+            rf_info_line(headless, "Key: " + String(hexString));
         }
     }
 
@@ -531,7 +540,7 @@ void display_signal_data(RfCodes received) {
     // else padprintln("PulseLenght: unknown");
 
     // padprintln("Frequency: " + String(received.frequency) + " Hz");
-    padprintln("");
+    rf_info_line(headless, "");
 }
 
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave) {
@@ -548,8 +557,7 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
         return false;
     }
 
-    String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
-    subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
+    String subfile_out = rf_subghz_header(frequency);
     if (!raw) {
         subfile_out += "Preset: " + String(codes.preset) + "\n";
         // Write the identified protocol under its Flipper-standard name (so the
@@ -713,7 +721,9 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 received.filepath = "unsaved";
                 received.data = _data;
                 decimalToHexString(received.key, hexString);
-                if (!headless) display_info(received, 1, raw);
+                // Interactive: draw on screen. Headless (CLI): emit the same
+                // formatted info on Serial instead of the display.
+                display_info(received, 1, raw, false, false, "", headless);
             } else if (transitions > 20) {
                 // decoding failed (or raw requested): keep it as RAW
                 received.frequency = long(frequency * 1000000);
@@ -722,7 +732,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 received.te = rawTe;
                 received.data = _data;
                 received.filepath = "unsaved";
-                if (!headless) display_info(received, 1, raw);
+                display_info(received, 1, raw, false, false, "", headless);
             } else {
                 received.data = ""; // too few transitions - discard
             }
@@ -732,8 +742,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             received.data.length() > 20) { // RAW data does not have "key", 20 is more than 5 transitions
             bool outRaw = raw || received.protocol == "RAW";
 
-            String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
-            subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
+            String subfile_out = rf_subghz_header(frequency);
             if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
                 subfile_out +=

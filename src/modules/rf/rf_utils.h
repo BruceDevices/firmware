@@ -34,4 +34,6 @@ void rf_range_selection(float currentFrequency = 0.0);
 
 uint64_t reverse_bits(uint64_t num, uint8_t bits);
 
+String rf_subghz_header(float frequencyMHz);
+
 #endif

@@ -79,9 +79,9 @@ private:
 
 void display_info(
     RfCodes received, int signals, bool ReadRAW = false, bool codesOnly = false, bool autoSave = false,
-    String title = ""
+    String title = "", bool headless = false
 );
-void display_signal_data(RfCodes received);
+void display_signal_data(RfCodes received, bool headless = false);
 
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
