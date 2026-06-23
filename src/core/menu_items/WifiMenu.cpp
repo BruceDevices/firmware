@@ -18,6 +18,7 @@
 #include "modules/wifi/wifi_atks.h"
 
 #ifndef LITE_VERSION
+#include "modules/wifi/csi_radar.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
@@ -71,6 +72,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
+    options.push_back({"CSI Radar", csi_radar_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!wifiConnected) doScan = wifiConnectMenu();
