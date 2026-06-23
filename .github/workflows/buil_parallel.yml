@@ -1,10 +1,27 @@
 ---
 name: Build and Push Releases
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
-      - main, workflow
+      - main
+      - dev
+
+    paths:
+        - "**.yml"
+        - "**.h"
+        - "**.cpp"
+        - "**.py"
+        - "**.html"
+        - "**.css"
+        - "**.js"
+        - "**.ini"
+        - "**.json"
+        - "**.csv"
     tags:
       - "*"
   workflow_dispatch:
