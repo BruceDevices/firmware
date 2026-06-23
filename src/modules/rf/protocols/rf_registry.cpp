@@ -13,12 +13,26 @@
 
 static const RfProtocolDef rf_protocols[] = {
     // ---- Named protocols (canonical identities) --------------------------
+    // Two structural families share this table (same {high,low}-factor model):
+    //   * high-first  (inv=false): pulse is HIGH for high*te then LOW for low*te;
+    //     the sync is a short HIGH followed by the long inter-frame LOW gap.
+    //   * space-coded (inv=true):  pulse is LOW  for high*te then HIGH for low*te;
+    //     the sync is the long LOW gap followed by a short HIGH preamble. For
+    //     these `sync` is stored as {gap_factor, preamble_factor}.
+    // `bits` + FIXED is the per-protocol payload length; the decoder rejects a
+    // frame whose decoded length differs, which disambiguates same-timing codes.
     // name           te    sync       zero      one       bits inv  flags
     {"Princeton",     350, {1, 31},   {1, 3},   {3, 1},   24, false, SYNC},           // RCSwitch proto 1
-    {"CAME",          250, {1, 3},    {2, 1},   {1, 2},   12, false, SYNC | FIXED},   // RCSwitch proto 20
     {"NICE_FLO",      700, {1, 36},   {2, 1},   {1, 2},   12, false, SYNC | FIXED},   // RCSwitch proto 22
+    {"Linear",        500, {3, 42},   {1, 3},   {3, 1},   10, false, SYNC | FIXED},   // 10-bit DIP
+    {"Clemsa",        385, {7, 50},   {1, 7},   {7, 1},   18, false, SYNC | FIXED},
+    {"Mastercode",   1072, {2, 14},   {1, 2},   {2, 1},   36, false, SYNC | FIXED},
+    {"CAME",          320, {36, 1},   {2, 1},   {1, 2},   12, true,  SYNC | FIXED},   // RCSwitch proto 20 (space-coded)
+    {"Ansonic",       555, {35, 1},   {1, 2},   {2, 1},   12, true,  SYNC | FIXED},
+    {"GateTX",        350, {49, 2},   {1, 2},   {2, 1},   24, true,  SYNC | FIXED},
+    {"Holtek",        430, {36, 1},   {1, 2},   {2, 1},   40, true,  SYNC | FIXED},   // HT6Pxx 40-bit
     {"Holtek_HT12",   450, {23, 1},   {1, 2},   {2, 1},   12, true,  SYNC | FIXED},   // RCSwitch proto 6 (HT6P20B)
-    {"Ansonic",       555, {1, 35},   {1, 2},   {2, 1},   12, false, SYNC | FIXED},   // brute "Ansonic 12bit"
+    {"PhoenixV2",     427, {60, 6},   {1, 2},   {2, 1},   52, true,  SYNC | FIXED},
 
     // ---- Generic numbered protocols (classic RCSwitch proto 1..12) -------
     {"RcSwitch_1",    350, {1, 31},   {1, 3},   {3, 1},   0,  false, SYNC},
@@ -40,11 +54,52 @@ static const RfProtocolDef rf_protocols[] = {
 
 static const int rf_protocols_count = sizeof(rf_protocols) / sizeof(rf_protocols[0]);
 
+// Flipper Zero protocol name <-> Bruce canonical registry name. Only the entries
+// that differ in spelling are listed; names that already match (Princeton, CAME,
+// Linear, Clemsa, Mastercode, Ansonic, GateTX, Holtek, KeeLoq...) need no alias.
+struct RfProtoAlias {
+    const char *flipper;
+    const char *canonical;
+};
+static const RfProtoAlias rf_proto_aliases[] = {
+    {"Nice FLO", "NICE_FLO"},
+    {"Holtek_HT12X", "Holtek_HT12"},
+    {"Phoenix_V2", "PhoenixV2"},
+};
+
 const RfProtocolDef *rf_find_protocol(const String &name) {
+    // Resolve a Flipper protocol name to the canonical one first.
+    String wanted = name;
+    for (const auto &a : rf_proto_aliases) {
+        if (name == a.flipper) {
+            wanted = a.canonical;
+            break;
+        }
+    }
     for (const auto &p : rf_protocols) {
-        if (name == p.name) return &p;
+        if (wanted == p.name) return &p;
     }
     return nullptr;
+}
+
+String rf_flipper_protocol_name(const String &canonical) {
+    for (const auto &a : rf_proto_aliases) {
+        if (canonical == a.canonical) return a.flipper;
+    }
+    return canonical;
+}
+
+const RfProtocolDef *rf_protocol_for_number(int proto_no) {
+    // Classic RCSwitch numbers that map to a NAMED registry identity.
+    switch (proto_no) {
+        case 20: return rf_find_protocol("CAME");
+        case 22: return rf_find_protocol("NICE_FLO");
+        default: break;
+    }
+    // Numbers 1..12 mirror the generic RcSwitch_N entries.
+    const RfProtocolDef *p = rf_find_protocol(String("RcSwitch_") + String(proto_no));
+    if (p) return p;
+    return rf_find_protocol("RcSwitch_1"); // safe default (never null)
 }
 
 const RfProtocolDef *rf_protocol_at(int index) {

@@ -192,47 +192,13 @@ bool RfCodes::keeloq_check_decrypt_centurion(uint32_t decrypt) {
 void RfCodes::keeloq_step(uint16_t step) {
     cnt += step;
 
-    hop = btn << 28 | (serial & 0x3FF) << 16 | cnt;
+    // Hop framing (per-manufacturer serial masking) lives in protocols/rf_keeloq
+    // so it can be unit-tested without the SD keystore (see rf_keeloq_selftest).
+    hop = keeloq_build_hop(mf_name, btn, serial, cnt);
 
-    if (mf_name == "Aprimatic") {
-        uint32_t apri_serial = serial;
-        uint8_t apr1 = 0;
+    FS *fs = keeloq_mfcodes_fs();
 
-        for (uint16_t i = 1; i != 0b10000000000; i <<= 1) {
-            if (apri_serial & i) apr1++;
-        }
-
-        apri_serial &= 0b00001111111111;
-
-        if (apr1 % 2 == 0) { apri_serial |= 0b110000000000; }
-
-        hop = btn << 28 | (apri_serial & 0xFFF) << 16 | cnt;
-    } else if (
-        mf_name == "DTM_Neo" || mf_name == "FAAC_RC,XT" || mf_name == "Mutanco_Mutancode" ||
-        mf_name == "Came_Space" || mf_name == "Genius_Bravo" || mf_name == "GSN" || mf_name == "Rosh" ||
-        mf_name == "Rossi" || mf_name == "Peccinin" || mf_name == "Steelmate" || mf_name == "Cardin_S449"
-    ) {
-        hop = btn << 28 | (serial & 0xFFF) << 16 | cnt;
-    } else if (mf_name == "NICE_Smilo" || mf_name == "NICE_MHOUSE" || mf_name == "JCM_Tech") {
-        hop = btn << 28 | (serial & 0xFF) << 16 | cnt;
-    } else if (mf_name == "Merlin") {
-        hop = btn << 28 | (0x000) << 16 | cnt;
-    } else if (mf_name == "Centurion") {
-        hop = btn << 28 | (0x1CE) << 16 | cnt;
-    } else if (mf_name == "Monarch") {
-        hop = btn << 28 | (0x100) << 16 | cnt;
-    } else if (mf_name == "Dea_Mio") {
-        uint8_t first_disc_num = (serial >> 8) & 0xF;
-        uint8_t result_disc = (0xC + (first_disc_num % 4));
-
-        uint32_t dea_serial = (serial & 0xFF) | (((uint32_t)result_disc) << 8);
-
-        hop = btn << 28 | (dea_serial & 0xFFF) << 16 | cnt;
-    }
-
-    FS *fs = NULL;
-
-    if (!getFsStorage(fs)) { return; }
+    if (!fs) { return; }
 
     KeeloqKeystore keystore{fs};
 
@@ -242,61 +208,21 @@ void RfCodes::keeloq_step(uint16_t step) {
         if (key.mf_name == mf_name) { current_key = key; }
     }
 
-    switch (current_key.type) {
-        case KEELOQ_SIMPLE_LEARNING: {
-            encrypted = keeloq_encrypt(hop, current_key.key);
+    // Derive the manufacturer key for this learning type and encrypt the hop.
+    // `man` comes from `fix` (button|serial) — matching the decode path in
+    // keeloq_identify and the reference encoder; deriving it from `hop` (the
+    // previous behavior) broke the round-trip because hop carries the counter.
+    // Secure/Erreka need a seed; fall back to the serial-derived seed as the
+    // reference does when none was captured.
+    uint32_t seed_eff = seed ? seed : (fix & 0x0FFFFFFF);
+    uint64_t man = keeloq_derive_man(current_key.type, fix, seed_eff, current_key.key);
 
-            break;
-        }
-        case KEELOQ_NORMAL_LEARNING: {
-            uint64_t man = keeloq_normal_learning(hop, current_key.key);
-
-            encrypted = keeloq_encrypt(hop, man);
-
-            break;
-        }
-    }
+    encrypted = keeloq_encrypt(hop, man);
 
     key = reverse_bits(encrypted, 32) << 32 | reverse_bits(fix, 32);
 }
 
-std::vector<String> split_string(String str, char c) {
-    std::vector<String> cols{};
-    size_t start = 0;
-
-    while (start < str.length()) {
-        auto it = str.indexOf(c, start);
-
-        if (it == -1) break;
-
-        cols.emplace_back(&str[start], it - start);
-        start = it + 1;
-    }
-
-    if (start <= str.length() && !str.isEmpty()) cols.emplace_back(&str[start], str.length() - start);
-
-    return cols;
-}
-
-KeeloqKeystore::KeeloqKeystore(FS *fs) {
-    File keystore = fs->open("/mfcodes");
-
-    if (!keystore) { return; }
-
-    String line = keystore.readStringUntil('\n');
-
-    for (; line != ""; line = keystore.readStringUntil('\n')) {
-        auto cols = split_string(line, ';');
-
-        if (cols.size() != 3) { return; }
-
-        KeeloqKey key{cols[0], std::strtoull(cols[1].c_str(), NULL, 16), (uint8_t)cols[2].toInt()};
-
-        keys.push_back(key);
-    }
-}
-
-const std::vector<KeeloqKey> &KeeloqKeystore::get_keys() { return keys; }
+// split_string + KeeloqKeystore moved to protocols/rf_keeloq.cpp.
 
 bool initRfModule(String mode, float frequency) {
     // use default frequency if no one is passed
@@ -672,37 +598,6 @@ void rf_range_selection(float currentFrequency) {
     else displayTextLine("Range set to " + String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]));
 }
 
-uint32_t keeloq_encrypt(const uint32_t data, const uint64_t key) {
-    uint32_t x = data, r;
-
-    for (r = 0; r < 528; r++)
-        x = (x >> 1) ^ ((bitAt(x, 0) ^ bitAt(x, 16) ^ (uint32_t)bitAt(key, r & 63) ^
-                         bitAt(KEELOQ_NLF, g5(x, 1, 9, 20, 26, 31)))
-                        << 31);
-
-    return x;
-}
-
-uint32_t keeloq_decrypt(const uint32_t data, const uint64_t key) {
-    uint32_t x = data, r;
-
-    for (r = 0; r < 528; r++)
-        x = (x << 1) ^ bitAt(x, 31) ^ bitAt(x, 15) ^ (uint32_t)bitAt(key, (15 - r) & 63) ^
-            bitAt(KEELOQ_NLF, g5(x, 0, 8, 19, 25, 30));
-
-    return x;
-}
-
-uint64_t keeloq_normal_learning(uint32_t data, const uint64_t key) {
-    uint32_t k1, k2;
-
-    data &= 0x0FFFFFFF;
-    data |= 0x20000000;
-    k1 = keeloq_decrypt(data, key);
-
-    data &= 0x0FFFFFFF;
-    data |= 0x60000000;
-    k2 = keeloq_decrypt(data, key);
-
-    return ((uint64_t)k2 << 32) | k1;
-}
+// keeloq_encrypt / keeloq_decrypt / keeloq_normal_learning moved to
+// protocols/rf_keeloq.cpp (declared via protocols/rf_keeloq.h, included by
+// rf_utils.h). reverse_bits stays here since it is a general bit helper.

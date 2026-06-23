@@ -49,6 +49,12 @@ void rf_symbols_to_durations(const rmt_symbol_word_t *symbols, size_t count, std
 // out.preset (radio preset name) and returns true. Other fields are untouched.
 bool rf_decode_ook(const std::vector<int> &durations, RfCodes &out);
 
+// Try to decode a KeeLoq frame (dedicated PWM state machine: header + sync gap +
+// 64 PWM bits). On success sets out.key (raw 64-bit), out.Bit=64, out.te,
+// out.protocol="KeeLoq", out.preset and returns true. The caller still splits
+// out.key into fix/encrypted and runs keeloq_identify.
+bool rf_decode_keeloq(const std::vector<int> &durations, RfCodes &out);
+
 // Build the RAW representation from `durations`:
 //  - `dataOut`  : "+a -b +c ..." string of signed durations.
 //  - `teOut`    : first positive duration (base pulse estimate).

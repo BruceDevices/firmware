@@ -2,6 +2,8 @@
 #include "core/led_control.h"
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
+#include "protocols/rf_config.h"   // RF_DBG
+#include "protocols/rf_registry.h" // rf_flipper_protocol_name
 #include "rf_send.h"
 #include <globals.h>
 #include <sstream>
@@ -121,50 +123,60 @@ bool RFScan::fast_scan() {
 }
 
 void keeloq_identify(RfCodes &instance) {
-    FS *fs = NULL;
+    FS *fs = keeloq_mfcodes_fs();
 
-    if (!getFsStorage(fs)) { return; }
+    if (!fs) { return; }
 
     KeeloqKeystore keystore{fs};
 
+    // Secure/Erreka need a seed; mirror the reference fallback to the
+    // serial-derived seed when none was captured from the frame.
+    uint32_t seed_eff = instance.seed ? instance.seed : (instance.fix & 0x0FFFFFFF);
+
     for (const auto &key : keystore.get_keys()) {
-        switch (key.type) {
-            case KEELOQ_SIMPLE_LEARNING: {
-                uint64_t decrypt = keeloq_decrypt(instance.encrypted, key.key);
+        // Unified derivation: every learning type turns (fix, seed, key) into the
+        // manufacturer key, then we decrypt the captured `encrypted` with it.
+        uint64_t man = keeloq_derive_man(key.type, instance.fix, seed_eff, key.key);
+        uint64_t decrypt = keeloq_decrypt(instance.encrypted, man);
 
-                if (instance.keeloq_check_decrypt(decrypt)) {
-                    instance.mf_name = key.mf_name;
-                    instance.hop = decrypt;
-
-                    return;
-                }
-
-                break;
-            }
-
-            case KEELOQ_NORMAL_LEARNING: {
-                uint64_t man = keeloq_normal_learning(instance.fix, key.key);
-                uint64_t decrypt = keeloq_decrypt(instance.encrypted, man);
-
-                if (instance.mf_name == "Centurion") {
-                    if (instance.keeloq_check_decrypt_centurion(decrypt)) {
-                        instance.hop = decrypt;
-
-                        return;
-                    }
-                }
-
-                if (instance.keeloq_check_decrypt(decrypt)) {
-                    instance.mf_name = key.mf_name;
-                    instance.hop = decrypt;
-
-                    return;
-                }
-
-                break;
+        if (key.mf_name == "Centurion") {
+            if (instance.keeloq_check_decrypt_centurion(decrypt)) {
+                instance.mf_name = key.mf_name;
+                instance.hop = decrypt;
+                return;
             }
         }
+
+        if (instance.keeloq_check_decrypt(decrypt)) {
+            instance.mf_name = key.mf_name;
+            instance.hop = decrypt;
+            return;
+        }
     }
+}
+
+// Try to decode a KeeLoq frame and resolve its manufacturer. On success fills
+// the keeloq fields (key/fix/encrypted/serial/btn + mf_name/cnt via the
+// keystore) and returns true. Shared by the scan and CLI receive paths.
+bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received) {
+    if (!rf_decode_keeloq(durations, received)) return false;
+
+    uint64_t yek = reverse_bits(received.key, 64);
+    received.fix = yek >> 32;
+    received.btn = received.fix >> 28;
+    received.encrypted = yek & 0xFFFFFFFF;
+    received.serial = (yek >> 32) & 0xFFFFFFF;
+    received.seed = 0;
+
+    keeloq_identify(received); // sets mf_name + cnt when a keystore entry matches
+    RF_DBG(
+        "decode keeloq MATCH mf=%s btn=%u cnt=%04X key=%llX",
+        received.mf_name.c_str(),
+        (unsigned)received.btn,
+        (unsigned)received.cnt,
+        (unsigned long long)received.key
+    );
+    return true;
 }
 
 void RFScan::decode_signal(const std::vector<int> &durations) {
@@ -175,8 +187,9 @@ void RFScan::decode_signal(const std::vector<int> &durations) {
     received.mf_name = "Unknown";
     received.encrypted = 0;
 
-    // Decode-only mode: show the signal only if a registry protocol matched.
-    if (rf_decode_ook(durations, received)) {
+    // Decode-only mode: show the signal only if a registry protocol (or KeeLoq)
+    // matched.
+    if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
         Serial.println("Decoded signal captured: " + received.protocol);
         blinkLed();
         ++signals;
@@ -184,17 +197,6 @@ void RFScan::decode_signal(const std::vector<int> &durations) {
         received.frequency = long(frequency * 1000000);
         received.filepath = "signal_" + String(signals);
         received.data = "";
-
-        if (received.protocol == "KeeLoq") {
-            uint64_t yek = reverse_bits(received.key, 64);
-
-            received.fix = yek >> 32;
-            received.btn = received.fix >> 28;
-            received.encrypted = yek & 0xFFFFFFFF;
-            received.serial = (yek >> 32) & 0xFFFFFFF;
-
-            keeloq_identify(received);
-        }
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
@@ -225,23 +227,12 @@ void RFScan::read_raw(const std::vector<int> &durations) {
     received.filepath = "signal_" + String(signals);
     received.frequency = long(frequency * 1000000);
 
-    // if a registry protocol decoded the signal, show it
-    if (rf_decode_ook(durations, received)) {
+    // if a registry protocol (or KeeLoq) decoded the signal, show it
+    if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
         Serial.println("Decoded signal captured: " + received.protocol);
         blinkLed();
         ++signals;
         received.indexed_durations = {};
-
-        if (received.protocol == "KeeLoq") {
-            uint64_t yek = reverse_bits(received.key, 64);
-
-            received.fix = yek >> 32;
-            received.btn = received.fix >> 28;
-            received.encrypted = yek & 0xFFFFFFFF;
-            received.serial = (yek >> 32) & 0xFFFFFFF;
-
-            keeloq_identify(received);
-        }
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
@@ -561,21 +552,27 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
     subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
     if (!raw) {
         subfile_out += "Preset: " + String(codes.preset) + "\n";
-        // Write the identified protocol name (Princeton/CAME/...) instead of the
-        // legacy "RcSwitch" tag. Falls back to RcSwitch only if unidentified.
-        subfile_out += "Protocol: " + String(codes.protocol == "" ? "RcSwitch" : codes.protocol) + "\n";
+        // Write the identified protocol under its Flipper-standard name (so the
+        // `.sub` is portable), falling back to RcSwitch only if unidentified.
+        subfile_out +=
+            "Protocol: " +
+            (codes.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(codes.protocol)) + "\n";
         subfile_out += "Bit: " + String(codes.Bit) + "\n";
+        // The Key (64-bit) is always written so the signal can be replayed; for
+        // KeeLoq the rolling-code fields are added as informative extras.
+        subfile_out += "Key: " + String(key) + "\n";
         if (codes.hop != 0) {
-            subfile_out += "Manufacturer: " + String(codes.mf_name) + "\n";
             char hexString[64] = {0};
-
             decimalToHexString(codes.serial, hexString);
-
+            if (codes.seed != 0) {
+                char seedHex[32] = {0};
+                decimalToHexString(codes.seed, seedHex);
+                subfile_out += "Seed: " + String(seedHex) + "\n";
+            }
+            subfile_out += "Manufacture: " + String(codes.mf_name) + "\n";
             subfile_out += "Serial: " + String(hexString) + "\n";
             subfile_out += "Button: " + String(codes.btn) + "\n";
             subfile_out += "Counter: " + String(codes.cnt) + "\n";
-        } else {
-            subfile_out += "Key: " + String(key) + "\n";
         }
         subfile_out += "TE: " + String(codes.te) + "\n";
         filename = "rcs.sub";
@@ -699,8 +696,9 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
     while (!check(EscPress)) {
         std::vector<int> durations;
         if (rx.poll(durations)) {
-            // In decode mode try the registry first; raw mode skips decoding.
-            bool decoded = (!raw) && rf_decode_ook(durations, received);
+            // In decode mode try KeeLoq, then the registry; raw mode skips decoding.
+            bool decoded =
+                (!raw) && (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received));
 
             // Build the RAW representation (also the data string when decoded).
             String _data;
@@ -738,10 +736,18 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             subfile_out += "Frequency: " + String(int(frequency * 1000000)) + "\n";
             if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
-                subfile_out += "Protocol: " +
-                               String(received.protocol == "" ? "RcSwitch" : received.protocol) + "\n";
+                subfile_out +=
+                    "Protocol: " + String(received.protocol == "" ? "RcSwitch" : received.protocol) + "\n";
                 subfile_out += "Bit: " + String(received.Bit) + "\n";
                 subfile_out += "Key: " + String(hexString) + "\n";
+                if (received.fix != 0) { // KeeLoq: include the resolved rolling-code fields
+                    char tmp[32] = {0};
+                    subfile_out += "Manufacture: " + received.mf_name + "\n";
+                    decimalToHexString(received.serial, tmp);
+                    subfile_out += "Serial: " + String(tmp) + "\n";
+                    subfile_out += "Button: " + String(received.btn) + "\n";
+                    subfile_out += "Counter: " + String(received.cnt) + "\n";
+                }
                 subfile_out += "TE: " + String(received.te) + "\n";
             } else {
                 subfile_out +=

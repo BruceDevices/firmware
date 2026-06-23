@@ -152,8 +152,13 @@ static bool rf_match_protocol(
     }
 
     if (changeCount > 7) { // ignore very short bursts: that would be noise
+        int nbits = (changeCount - 1) / 2;
+        // Fixed-length protocols only match a frame of exactly their length. This
+        // keeps a 12-bit CAME frame from being claimed by a longer/shorter code
+        // with otherwise-compatible timings (the M3 cross-match ambiguity).
+        if ((pro->flags & RF_PF_FIXED_LEN) && nbits != pro->bits) return false;
         out.key = code;
-        out.Bit = (changeCount - 1) / 2;
+        out.Bit = nbits;
         out.te = delay;
         out.protocol = pro->name;
         return true;
@@ -261,4 +266,101 @@ int rf_build_raw(
         (unsigned long long)crcOut
     );
     return transitions;
+}
+
+// KeeLoq dedicated decoder — faithful port of the reference feed() state machine
+// (te_short=400, te_long=800, te_delta=180). Walks the signed durations,
+// resyncing on the 11-pulse header + long sync gap, then reads 64 PWM bits
+// MSB-first (short HIGH + long LOW = 1; long HIGH + short LOW = 0).
+#define RF_KL_TE_SHORT 400
+#define RF_KL_TE_LONG 800
+#define RF_KL_TE_DELTA 180
+#define RF_KL_MIN_BITS 64
+
+static inline uint32_t rf_kl_diff(uint32_t a, uint32_t b) { return (a > b) ? (a - b) : (b - a); }
+
+bool rf_decode_keeloq(const std::vector<int> &durations, RfCodes &out) {
+    enum { ST_RESET, ST_PREAMBLE, ST_SAVE, ST_CHECK } step = ST_RESET;
+    int header = 0;
+    uint64_t data = 0;
+    int bits = 0;
+    uint32_t te_last = 0;
+
+    for (int raw : durations) {
+        bool level = raw > 0;
+        uint32_t dur = (uint32_t)(raw > 0 ? raw : -raw);
+
+        switch (step) {
+            case ST_RESET:
+                if (level && rf_kl_diff(dur, RF_KL_TE_SHORT) < RF_KL_TE_DELTA) {
+                    step = ST_PREAMBLE;
+                    header++;
+                }
+                break;
+            case ST_PREAMBLE:
+                if (!level && rf_kl_diff(dur, RF_KL_TE_SHORT) < RF_KL_TE_DELTA) {
+                    step = ST_RESET; // a header LOW: keep counting via next HIGH
+                    break;
+                }
+                if (header > 2 && rf_kl_diff(dur, RF_KL_TE_SHORT * 10) < RF_KL_TE_DELTA * 10) {
+                    step = ST_SAVE; // sync gap found
+                    data = 0;
+                    bits = 0;
+                } else {
+                    step = ST_RESET;
+                    header = 0;
+                }
+                break;
+            case ST_SAVE:
+                if (level) {
+                    te_last = dur;
+                    step = ST_CHECK;
+                }
+                break;
+            case ST_CHECK:
+                if (!level) {
+                    if (dur >= (uint32_t)(RF_KL_TE_SHORT * 2 + RF_KL_TE_DELTA)) {
+                        // End of transmission.
+                        if (bits >= RF_KL_MIN_BITS && bits <= RF_KL_MIN_BITS + 2) {
+                            out.key = data;
+                            out.Bit = RF_KL_MIN_BITS;
+                            out.te = RF_KL_TE_SHORT;
+                            out.protocol = "KeeLoq";
+                            out.preset = "Ook650Async";
+                            RF_DBG("decode keeloq: key=%llX bits=%d", (unsigned long long)data, bits);
+                            return true;
+                        }
+                        step = ST_RESET;
+                        header = 0;
+                    } else if (rf_kl_diff(te_last, RF_KL_TE_SHORT) < RF_KL_TE_DELTA && rf_kl_diff(dur, RF_KL_TE_LONG) < RF_KL_TE_DELTA * 2) {
+                        if (bits < RF_KL_MIN_BITS) data = (data << 1) | 1ULL;
+                        bits++;
+                        step = ST_SAVE;
+                    } else if (rf_kl_diff(te_last, RF_KL_TE_LONG) < RF_KL_TE_DELTA * 2 && rf_kl_diff(dur, RF_KL_TE_SHORT) < RF_KL_TE_DELTA) {
+                        if (bits < RF_KL_MIN_BITS) data = (data << 1);
+                        bits++;
+                        step = ST_SAVE;
+                    } else {
+                        step = ST_RESET;
+                        header = 0;
+                    }
+                } else {
+                    step = ST_RESET;
+                    header = 0;
+                }
+                break;
+        }
+    }
+
+    // Capture may end before the trailing gap; accept a full 64-bit payload.
+    if (bits >= RF_KL_MIN_BITS && bits <= RF_KL_MIN_BITS + 2) {
+        out.key = data;
+        out.Bit = RF_KL_MIN_BITS;
+        out.te = RF_KL_TE_SHORT;
+        out.protocol = "KeeLoq";
+        out.preset = "Ook650Async";
+        RF_DBG("decode keeloq(eof): key=%llX bits=%d", (unsigned long long)data, bits);
+        return true;
+    }
+    return false;
 }
