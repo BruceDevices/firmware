@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 // Native RMT TX motor.
 //
-// Replaces the former RCSwitch / bit-bang transmit paths. Every send goes
+// Replaces the former library / bit-bang transmit paths. Every send goes
 // through rf_tx_durations(): a list of signed microsecond timings (sign = logic
 // level, + HIGH / - LOW) is packed into rmt_symbol_word_t[] and streamed out on
 // the configured RF TX pin (CC1101 GDO0/io0, or rfTx on single-pinned modules).
@@ -38,7 +38,7 @@ bool rf_tx_protocol(uint64_t data, unsigned int bits, int te, const RfProtocolDe
 bool rf_encoder_selftest();
 
 // KeeLoq has its own framing (12-pulse header, sync gap, 64 PWM bits, trailing
-// gap) that does not fit the registry's RCSwitch model, so it gets a dedicated
+// gap) that does not fit the registry's factor-based OOK model, so it gets a dedicated
 // encoder. `rf_keeloq_durations` builds the signed-µs train for the 64-bit
 // `key` (MSB first); `rf_tx_keeloq` repeats and transmits it. Pure builder is
 // exposed for testing.

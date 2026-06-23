@@ -63,10 +63,14 @@ Old Furi names remain valid via alias → neutral canonical name:
 
 Milestone 2 complete: the **decode** path runs on the native RMT engine
 (`rf_decoder.{h,cpp}`: `RfRxSession` + `rf_decode_ook` + `rf_build_raw`), a
-faithful port of the RCSwitch state machine fed by the registry. Scan
-(decode/raw), SquareWave and the CLI/JS read no longer touch
-`rcswitch.getReceived*`; `Protocol:` now stores the identified protocol
-name. TX still uses RCSwitch (full removal in M5).
+faithful port of the classic OOK state machine fed by the registry. Scan
+(decode/raw), SquareWave and the CLI/JS read no longer touch the former
+interrupt receiver; `Protocol:` now stores the identified protocol
+name.
+
+Milestone 5 complete: the external OOK library dependency is removed from
+both code and `lib_deps`; the firmware builds and runs entirely on the
+native RMT engine.
 
 Milestone 3 complete: the **TX** path runs on the native RMT engine
 (`rf_encoder.{h,cpp}`); `rfTransmit*` are thin wrappers over it.
@@ -108,7 +112,7 @@ Coverage is delivered in three layers:
    - "golden" = encoder output checked against absolute reference timings by
      `subghz selftest` (`rf_encoder_selftest`).
    - ¹ Ansonic and CAME are both 12-bit space-coded with a 1:2 ratio, so they are
-     timing-ambiguous (the classic RCSwitch alias class): a captured Ansonic
+     timing-ambiguous (the classic OOK alias class): a captured Ansonic
      frame decodes as `CAME` (key still correct). TX by name keeps Ansonic's own
      `te`. Distinguishing them would need exact-`te` matching, which the
      tolerance-based decoder intentionally does not do.
@@ -136,7 +140,7 @@ Coverage is delivered in three layers:
    under `RF_DEBUG`.
 
    KeeLoq's over-the-air framing (11-pulse header, sync gap, 64 PWM bits at
-   te 400/800) does not fit the RCSwitch registry model, so it has a dedicated
+   te 400/800) does not fit the factor-based registry model, so it has a dedicated
    encoder (`rf_keeloq_durations`/`rf_tx_keeloq`) and decoder (`rf_decode_keeloq`,
    wired into the RX paths via `rf_try_keeloq`). `sendRfCommand` routes
    `Protocol: KeeLoq` to the encoder; `subghz rx` decodes it and `subghz keeloqtx`

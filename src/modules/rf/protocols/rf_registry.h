@@ -15,7 +15,7 @@ const RfProtocolDef *rf_find_protocol(const String &name);
 // Flipper-compatible.
 String rf_flipper_protocol_name(const String &canonical);
 
-// Resolve a classic RCSwitch protocol NUMBER (as still carried by the Serial
+// Resolve a classic OOK protocol NUMBER (as still carried by the Serial
 // CLI `subghz tx` and the `RfSend` JSON API) to a registry definition. This is
 // part of the permanent TX motor (not legacy `.sub` migration): the numeric
 // transmit contract is external and must survive removal of the legacy module.

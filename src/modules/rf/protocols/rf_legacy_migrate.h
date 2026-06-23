@@ -19,7 +19,7 @@
 // Do NOT spread RcSwitch / legacy handling into the registry files.
 // ===========================================================================
 
-// Map an old RCSwitch protocol number to a registry protocol definition.
+// Map an old legacy protocol number to a registry protocol definition.
 // Returns nullptr when the number has no known mapping.
 const RfProtocolDef *rf_find_legacy(int preset_no);
 

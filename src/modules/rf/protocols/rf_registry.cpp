@@ -1,12 +1,12 @@
 #include "rf_registry.h"
 
-// Canonical static OOK protocol table. Timings use the RCSwitch factor model
+// Canonical static OOK protocol table. Timings use the classic factor model
 // ({high,low} multiples of `te` µs). The numbered "RcSwitch_N" entries mirror
-// the classic RCSwitch protocol table (so legacy numeric presets still
+// the classic numeric protocol table (so legacy numeric presets still
 // resolve); the named entries are the human-facing protocol identities
 // written to `Protocol:` in `.sub` files.
 //
-// Sources: classic RCSwitch protocol table (proto 1..22) and the brute-force
+// Sources: classic numeric protocol table (proto 1..22) and the brute-force
 // timing table previously kept in rf_bruteforce.h.
 #define SYNC RF_PF_HAS_SYNC
 #define FIXED RF_PF_FIXED_LEN
@@ -22,19 +22,19 @@ static const RfProtocolDef rf_protocols[] = {
     // `bits` + FIXED is the per-protocol payload length; the decoder rejects a
     // frame whose decoded length differs, which disambiguates same-timing codes.
     // name           te    sync       zero      one       bits inv  flags
-    {"Princeton",     350, {1, 31},   {1, 3},   {3, 1},   24, false, SYNC},           // RCSwitch proto 1
-    {"NICE_FLO",      700, {1, 36},   {2, 1},   {1, 2},   12, false, SYNC | FIXED},   // RCSwitch proto 22
+    {"Princeton",     350, {1, 31},   {1, 3},   {3, 1},   24, false, SYNC},           // legacy proto 1
+    {"NICE_FLO",      700, {1, 36},   {2, 1},   {1, 2},   12, false, SYNC | FIXED},   // legacy proto 22
     {"Linear",        500, {3, 42},   {1, 3},   {3, 1},   10, false, SYNC | FIXED},   // 10-bit DIP
     {"Clemsa",        385, {7, 50},   {1, 7},   {7, 1},   18, false, SYNC | FIXED},
     {"Mastercode",   1072, {2, 14},   {1, 2},   {2, 1},   36, false, SYNC | FIXED},
-    {"CAME",          320, {36, 1},   {2, 1},   {1, 2},   12, true,  SYNC | FIXED},   // RCSwitch proto 20 (space-coded)
+    {"CAME",          320, {36, 1},   {2, 1},   {1, 2},   12, true,  SYNC | FIXED},   // legacy proto 20 (space-coded)
     {"Ansonic",       555, {35, 1},   {1, 2},   {2, 1},   12, true,  SYNC | FIXED},
     {"GateTX",        350, {49, 2},   {1, 2},   {2, 1},   24, true,  SYNC | FIXED},
     {"Holtek",        430, {36, 1},   {1, 2},   {2, 1},   40, true,  SYNC | FIXED},   // HT6Pxx 40-bit
-    {"Holtek_HT12",   450, {23, 1},   {1, 2},   {2, 1},   12, true,  SYNC | FIXED},   // RCSwitch proto 6 (HT6P20B)
+    {"Holtek_HT12",   450, {23, 1},   {1, 2},   {2, 1},   12, true,  SYNC | FIXED},   // legacy proto 6 (HT6P20B)
     {"PhoenixV2",     427, {60, 6},   {1, 2},   {2, 1},   52, true,  SYNC | FIXED},
 
-    // ---- Generic numbered protocols (classic RCSwitch proto 1..12) -------
+    // ---- Generic numbered protocols (classic legacy proto 1..12) -------
     {"RcSwitch_1",    350, {1, 31},   {1, 3},   {3, 1},   0,  false, SYNC},
     {"RcSwitch_2",    650, {1, 10},   {1, 2},   {2, 1},   0,  false, SYNC},
     {"RcSwitch_3",    100, {30, 71},  {4, 11},  {9, 6},   0,  false, SYNC},
@@ -90,7 +90,7 @@ String rf_flipper_protocol_name(const String &canonical) {
 }
 
 const RfProtocolDef *rf_protocol_for_number(int proto_no) {
-    // Classic RCSwitch numbers that map to a NAMED registry identity.
+    // Classic legacy numbers that map to a NAMED registry identity.
     switch (proto_no) {
         case 20: return rf_find_protocol("CAME");
         case 22: return rf_find_protocol("NICE_FLO");

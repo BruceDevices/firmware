@@ -3,15 +3,15 @@
 #include "rf_config.h"   // RF_DBG
 #include "rf_registry.h"
 
-// --- Decode tuning (mirrors the classic RCSwitch receiver) -----------------
+// --- Decode tuning (mirrors the classic OOK receiver) ----------------------
 #define RF_SEPARATION_LIMIT 4300 // µs: a longer low is treated as an inter-frame gap
 #define RF_RECEIVE_TOLERANCE 60  // % tolerance on pulse-length matching
-#define RF_MAX_CHANGES 131       // max transitions kept per frame (RCSWITCH_MAX_CHANGES)
+#define RF_MAX_CHANGES 131       // max transitions kept per frame
 
 // --- RX noise rejection ----------------------------------------------------
 // In RX the CC1101 OOK slicer outputs random hash when there is no real signal.
 // Without these filters every noise burst becomes a "phantom" capture, flooding
-// Scan/Copy. The classic RCSwitch receiver rejects this via its own ISR noise
+// Scan/Copy. The classic OOK receiver rejects this via its own ISR noise
 // pre-filter; we reproduce it here.
 #define RF_RX_MIN_TRANSITIONS 16 // discard captures with fewer edges (noise bursts)
 // NOTE: signal_range_min_ns is kept at the framework-proven 3µs; larger values
@@ -37,7 +37,7 @@ void RfRxSession::arm() {
                                     // rejected by the transition-count floor below
     // 30ms idle ends the capture. Must exceed the largest inter-frame gap so that
     // several repeats stay in one capture (the decoder needs two gaps to lock on,
-    // exactly like the continuous RCSwitch receiver). NICE's gap is ~25ms; the RMT
+    // exactly like the continuous OOK receiver). NICE's gap is ~25ms; the RMT
     // hardware idle threshold maxes out near 32ms.
     cfg.signal_range_max_ns = 30000000;
     esp_err_t err = rmt_receive(_ch, _buf, _bufSymbols * sizeof(rmt_symbol_word_t), &cfg);
@@ -122,7 +122,7 @@ void rf_symbols_to_durations(const rmt_symbol_word_t *symbols, size_t count, std
 }
 
 // ---------------------------------------------------------------------------
-// OOK decode (faithful port of RCSwitch::receiveProtocol)
+// OOK decode (faithful port of the classic receiveProtocol state machine)
 // ---------------------------------------------------------------------------
 static bool rf_match_protocol(
     const RfProtocolDef *pro, unsigned int changeCount, const unsigned int *timings, RfCodes &out

@@ -8,8 +8,8 @@
 // ===========================================================================
 // Native RMT RX engine + generic OOK decoder.
 //
-// Replaces the RCSwitch interrupt receiver on the decode side. The decode
-// logic is a faithful port of the classic RCSwitch capture/decode state
+// Replaces the former interrupt-driven receiver on the decode side. The decode
+// logic is a faithful port of the classic OOK capture/decode state
 // machine (separation-gap detection + per-protocol pulse matching), driven
 // from durations captured with the framework's native RMT RX peripheral.
 // Protocol definitions come from the central registry (rf_registry).

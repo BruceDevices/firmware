@@ -374,22 +374,21 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         FuriHalSubGhzPresetGFSK9_99KbAsync, //< GFSK, deviation 19.042969 kHz, 9.996Kb/s, asynchronous
         FuriHalSubGhzPresetCustom, //Custom Preset
     */
-    // struct Protocol rcswitch_protocol;
     // Radio preset parameters come from the central registry (protocols/).
     // A preset field at 0 means "keep the module default" (set above).
-    int rcswitch_protocol_no = 1;
+    int legacy_protocol_no = 1;
     const RfPreset *rp = rf_find_preset(preset);
     if (rp) {
         modulation = rp->modulation;
         if (rp->deviation) deviation = rp->deviation;
         if (rp->rxBW) rxBW = rp->rxBW;
         if (rp->dataRate) dataRate = rp->dataRate;
-        rcswitch_protocol_no = rp->legacyProto;
+        legacy_protocol_no = rp->legacyProto;
     } else {
         bool found = false;
         for (int p = 0; p < 30; p++) {
             if (preset == String(p)) {
-                rcswitch_protocol_no = preset.toInt();
+                legacy_protocol_no = preset.toInt();
                 found = true;
             }
         }
@@ -485,7 +484,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
 #if RF_SUB_LEGACY_MIGRATION
         // Safety net for non-migrated legacy sources (PSRamFS / read-only FS):
         // a `.sub` still carrying `Protocol: RcSwitch` + numeric `Preset`.
-        if (def == nullptr && protocol == "RcSwitch") def = rf_find_legacy(rcswitch_protocol_no);
+        if (def == nullptr && protocol == "RcSwitch") def = rf_find_legacy(legacy_protocol_no);
 #endif
 
         if (def != nullptr) {
@@ -502,7 +501,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
     deinitRfModule();
 }
 
-// Transmit `data` (`bits` long) using a classic RCSwitch protocol NUMBER. Thin
+// Transmit `data` (`bits` long) using a classic OOK protocol NUMBER. Thin
 // wrapper over the RMT encoder; the number is resolved to a registry definition
 // (keeps the external CLI/JSON numeric contract). Signature unchanged.
 void rfTransmitCode(uint64_t data, unsigned int bits, int pulse, int protocol, int repeat) {

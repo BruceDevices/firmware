@@ -18,13 +18,13 @@ struct RfPreset {
     float deviation;      // kHz (0 = keep default)
     float rxBW;           // kHz (0 = keep default)
     float dataRate;       // kbps (0 = keep default)
-    uint8_t legacyProto;  // default RCSwitch protocol no. for OOK presets
+    uint8_t legacyProto;  // default legacy protocol no. for OOK presets
                           // (kept so the legacy TX path stays bit-identical;
                           //  irrelevant for FSK/MSK/GFSK presets)
 };
 
 // ---------------------------------------------------------------------------
-// Static OOK protocol definition. Timings follow the RCSwitch factor model:
+// Static OOK protocol definition. Timings follow the classic factor model:
 // every pulse is a multiple of `te` µs, expressed as {high, low} counts.
 // `name` is the protocol identity written to `Protocol:` in the `.sub` file
 // and used for replay dispatch — choose neutral, stable names.

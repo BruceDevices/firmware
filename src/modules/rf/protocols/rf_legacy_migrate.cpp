@@ -4,7 +4,7 @@
 
 #include "rf_registry.h"
 
-// Old RCSwitch protocol number -> registry protocol name. Only the numbers
+// Old legacy protocol number -> registry protocol name. Only the numbers
 // the firmware actually emitted are mapped; everything else falls through to
 // a generic "RcSwitch_N" entry when one exists.
 struct LegacyMap {

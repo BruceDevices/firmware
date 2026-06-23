@@ -7,8 +7,6 @@
 
 #define _MAX_TRIES 5
 
-#define PRESET_KEELOQ 23
-
 class RFScan {
 public:
     enum RFMenuOption {

@@ -117,7 +117,7 @@ bool rf_encode_protocol(
     if (base <= 0) return false;
     if (repeat < 1) repeat = 1;
 
-    // Faithful port of RCSwitch::send: for each repetition emit the data bits
+    // Faithful port of the classic OOK send: for each repetition emit the data bits
     // MSB first, then the sync/pilot pulse. Each pulse is firstLevel for
     // high*te µs then secondLevel for low*te µs; inverted protocols swap levels.
     const bool inv = def->inverted;
