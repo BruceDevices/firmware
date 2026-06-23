@@ -135,3 +135,24 @@ Coverage is delivered in three layers:
    are **not** named-decoded today; they are captured and replayed via RAW.
    Adding a named decoder for one of these means registering a decode/encode
    callback on `RfProtocolDef` (planned extension point), not a timing row.
+
+## References / credits
+
+The sub-GHz protocol set, the KeeLoq cipher and learning schemes, and the
+manufacturer keystore format are ports of / validated against the Flipper Zero
+ecosystem. The encrypted built-in keystore (decrypted at runtime as a fallback
+when no `/mfcodes` file is present — see `rf_keeloq.cpp`) mirrors how Momentum
+ships its `keeloq_mfcodes` asset.
+
+- **Flipper Zero firmware** — SubGhz protocols, `keeloq.c` / `keeloq_common`,
+  and the SubGhz keystore format:
+  <https://github.com/flipperdevices/flipperzero-firmware>
+  (`lib/subghz/protocols/*`, `lib/subghz/blocks/*`)
+- **Momentum firmware** — Flipper fork with an extended protocol set and
+  manufacturer list, and the encrypted `keeloq_mfcodes` asset this module's
+  built-in keystore is modeled on:
+  <https://github.com/Next-Flip/Momentum-Firmware>
+  (`applications/main/subghz/.../assets/keeloq_mfcodes`)
+
+The KeeLoq `type` ids (learning schemes) match that keystore's `type` column, so
+a `/mfcodes` exported from either firmware works in Bruce verbatim.

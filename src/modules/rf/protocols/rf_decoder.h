@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Part of Bruce (AGPL-3.0-or-later). This file contains code DERIVED FROM and
+// modified after:
+//   - rc-switch (LGPL-2.1-or-later), (C) 2011 Suat Ozgur and contributors —
+//     the classic OOK protocol capture/decode state machine;
+//   - Flipper Zero firmware (GPL-3.0-or-later), (C) Flipper Devices Inc. and
+//     contributors — the KeeLoq frame decoder framing.
+// See THIRD_PARTY.md for full attribution.
 #pragma once
 
 #include "../structs.h"
@@ -13,6 +22,15 @@
 // machine (separation-gap detection + per-protocol pulse matching), driven
 // from durations captured with the framework's native RMT RX peripheral.
 // Protocol definitions come from the central registry (rf_registry).
+//
+// References / credits — the SubGhz protocol set and decode behavior mirror
+// the Flipper Zero ecosystem; timings and protocol identities were validated
+// against these sources:
+//   - Flipper Zero firmware (SubGhz):
+//       https://github.com/flipperdevices/flipperzero-firmware
+//       (lib/subghz/protocols/*)
+//   - Momentum firmware (Flipper fork with an extended protocol set):
+//       https://github.com/Next-Flip/Momentum-Firmware
 // ===========================================================================
 
 // One-shot RMT RX capture session. Wraps channel + queue lifecycle so callers

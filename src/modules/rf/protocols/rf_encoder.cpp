@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Part of Bruce (AGPL-3.0-or-later). This file contains code DERIVED FROM and
+// modified after:
+//   - rc-switch (LGPL-2.1-or-later), (C) 2011 Suat Ozgur and contributors —
+//     the classic OOK protocol send state machine;
+//   - Flipper Zero firmware (GPL-3.0-or-later), (C) Flipper Devices Inc. and
+//     contributors — the KeeLoq OOK framing.
+// See THIRD_PARTY.md for full attribution.
 #include "rf_encoder.h"
 #include "../rf_utils.h" // bruceConfigPins, RMT defines
 #include "rf_config.h"   // RF_DBG

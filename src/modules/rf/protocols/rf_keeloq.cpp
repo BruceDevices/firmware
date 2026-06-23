@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Part of Bruce (AGPL-3.0-or-later). This file is DERIVED FROM and modified
+// after the Flipper Zero firmware (KeeLoq cipher + keeloq_common learning
+// schemes), Copyright (C) Flipper Devices Inc. and the flipperzero-firmware
+// contributors, licensed GPL-3.0-or-later. The encrypted built-in keystore
+// mirrors Momentum firmware's keeloq_mfcodes (GPL-3.0-or-later).
+// See THIRD_PARTY.md for full attribution.
 #include "rf_keeloq.h"
 #include "core/sd_functions.h" // getFsStorage
 #include "rf_config.h"         // RF_DEBUG, RF_DBG

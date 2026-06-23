@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Part of Bruce (AGPL-3.0-or-later). The OOK protocol timing table is DERIVED
+// FROM and modified after rc-switch (LGPL-2.1-or-later), (C) 2011 Suat Ozgur
+// and contributors; the Flipper-name mapping mirrors the Flipper Zero firmware
+// (GPL-3.0-or-later). See THIRD_PARTY.md for full attribution.
 #include "rf_registry.h"
 
 // Canonical static OOK protocol table. Timings use the classic factor model
