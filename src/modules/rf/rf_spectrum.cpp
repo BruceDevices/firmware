@@ -1,7 +1,7 @@
 #include "rf_spectrum.h"
+#include "protocols/rf_decoder.h"
 #include "rf_utils.h"
 #include "structs.h"
-#include <RCSwitch.h>
 
 static bool spectrum_rmt_rx_done_callback(
     rmt_channel_t *channel, const rmt_rx_done_event_data_t *edata, void *user_data
@@ -89,14 +89,16 @@ void rf_spectrum() {
 #define TIME_DIVIDER (tftWidth / 10)
 //@Pirata
 void rf_SquareWave() {
-    RCSwitch rcswitch;
     if (!initRfModule("rx", bruceConfigPins.rfFreq)) return;
 
-    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) rcswitch.enableReceive(bruceConfigPins.CC1101_bus.io0);
-    else rcswitch.enableReceive(bruceConfigPins.rfRx);
+    RfRxSession rx;
+    if (!rx.begin()) {
+        deinitRfModule();
+        return;
+    }
     int line_w = 0;
     int line_h = 15;
-    unsigned int *raw;
+    std::vector<int> durations;
 PRINT:
     tft.drawPixel(0, 0, 0);
     tft.fillScreen(bruceConfig.bgColor);
@@ -105,17 +107,16 @@ PRINT:
     tft.printf("  RF - SquareWave (%.2f Mhz)", bruceConfigPins.rfFreq);
 
     while (1) {
-        if (rcswitch.RAWavailable()) {
-            raw = rcswitch.getRAWReceivedRawdata();
-            // Clear the display area
-            // tft.fillRect(0, 0, tftWidth, tftHeight, bruceConfig.bgColor);
-            // Draw waveform based on signal strength
-            for (int i = 0; i < RCSWITCH_RAW_MAX_CHANGES - 1; i += 2) {
-                if (raw[i] == 0) break;
+        if (rx.poll(durations)) {
+            // Draw the captured square wave (HIGH width then LOW width per pair).
+            for (size_t i = 0; i + 1 < durations.size(); i += 2) {
+                int high = abs(durations[i]);
+                int low = abs(durations[i + 1]);
+                if (high == 0) break;
 
-                if (raw[i] > 20000) raw[i] = 20000;
-                if (raw[i + 1] > 20000) raw[i + 1] = 20000;
-                if (line_w + (raw[i] + raw[i + 1]) / TIME_DIVIDER > tftWidth) {
+                if (high > 20000) high = 20000;
+                if (low > 20000) low = 20000;
+                if (line_w + (high + low) / TIME_DIVIDER > tftWidth) {
                     line_w = 10;
                     line_h += 10;
                 }
@@ -124,24 +125,21 @@ PRINT:
                     tft.fillRect(0, 12, tftWidth, tftHeight, bruceConfig.bgColor);
                 }
                 tft.drawFastVLine(line_w, line_h, 6, bruceConfig.priColor);
-                tft.drawFastHLine(line_w, line_h, raw[i] / TIME_DIVIDER, bruceConfig.priColor);
+                tft.drawFastHLine(line_w, line_h, high / TIME_DIVIDER, bruceConfig.priColor);
 
-                tft.drawFastVLine(line_w + raw[i] / TIME_DIVIDER, line_h, 6, bruceConfig.priColor);
+                tft.drawFastVLine(line_w + high / TIME_DIVIDER, line_h, 6, bruceConfig.priColor);
                 tft.drawFastHLine(
-                    line_w + raw[i] / TIME_DIVIDER,
-                    line_h + 6,
-                    raw[i + 1] / TIME_DIVIDER,
-                    bruceConfig.priColor
+                    line_w + high / TIME_DIVIDER, line_h + 6, low / TIME_DIVIDER, bruceConfig.priColor
                 );
-                line_w += (raw[i] + raw[i + 1]) / TIME_DIVIDER;
+                line_w += (high + low) / TIME_DIVIDER;
             }
-            rcswitch.resetAvailable();
         }
         // Checks to leave while
         if (check(EscPress)) { break; }
         if (setMHZMenu()) goto PRINT;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+    rx.end();
     returnToMenu = true;
 }
 

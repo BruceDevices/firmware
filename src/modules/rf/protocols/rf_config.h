@@ -11,3 +11,20 @@
 #ifndef RF_SUB_LEGACY_MIGRATION
 #define RF_SUB_LEGACY_MIGRATION 1
 #endif
+
+// RF_DEBUG: when set to 1, the RF decode/capture path prints diagnostic
+// traces to Serial (capture sizes, separation gaps, decode matches, RAW
+// classification). Intended for bring-up / hardware validation only — leave
+// at 0 for normal builds. Toggle here (or with -DRF_DEBUG=1) to enable.
+#ifndef RF_DEBUG
+#define RF_DEBUG 1
+#endif
+
+#if RF_DEBUG
+#include <Arduino.h>
+#define RF_DBG(fmt, ...) Serial.printf("[RFDBG] " fmt "\n", ##__VA_ARGS__)
+#else
+#define RF_DBG(fmt, ...)                                                                                     \
+    do {                                                                                                     \
+    } while (0)
+#endif

@@ -24,9 +24,9 @@ uint32_t rfRxCallback(cmd *c) {
 
     String r = "";
     if (raw) {
-        r = RCSwitch_Read(frequency, 10, true); // true -> raw mode
+        r = rfReceiveSignal(frequency, 10, true); // true -> raw mode
     } else {
-        r = RCSwitch_Read(frequency, 10, false); // false -> decoded mode
+        r = rfReceiveSignal(frequency, 10, false); // false -> decoded mode
     }
 
     if (r.length() == 0) return false;

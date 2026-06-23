@@ -1,0 +1,62 @@
+#pragma once
+
+#include "../structs.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <vector>
+
+// ===========================================================================
+// Native RMT RX engine + generic OOK decoder.
+//
+// Replaces the RCSwitch interrupt receiver on the decode side. The decode
+// logic is a faithful port of the classic RCSwitch capture/decode state
+// machine (separation-gap detection + per-protocol pulse matching), driven
+// from durations captured with the framework's native RMT RX peripheral.
+// Protocol definitions come from the central registry (rf_registry).
+// ===========================================================================
+
+// One-shot RMT RX capture session. Wraps channel + queue lifecycle so callers
+// can poll for captured signals without touching the RMT driver directly.
+class RfRxSession {
+public:
+    // Create + enable the RMT RX channel (via setup_rf_rx) and arm a receive.
+    // Returns false if the RF module / channel could not be initialised.
+    bool begin();
+    // Non-blocking: when a signal has been captured, fills `durations` with the
+    // signed pulse lengths (HIGH > 0, LOW < 0, µs), re-arms the receiver and
+    // returns true. Returns false when nothing is ready yet.
+    bool poll(std::vector<int> &durations);
+    // Disable + delete the channel and free the queue/buffer.
+    void end();
+    bool active() const { return _ch != nullptr; }
+    ~RfRxSession() { end(); }
+
+private:
+    rmt_channel_handle_t _ch = nullptr;
+    QueueHandle_t _queue = nullptr;
+    // Heap-allocated capture buffer: keeping ~1KB off the (8KB) serialcmds task
+    // stack, where rfReceiveSignal runs, avoids stack overflow / corruption.
+    rmt_symbol_word_t *_buf = nullptr;
+    static const size_t _bufSymbols = 256;
+    void arm();
+};
+
+// Convert a buffer of RMT symbols into signed durations (HIGH > 0, LOW < 0).
+void rf_symbols_to_durations(const rmt_symbol_word_t *symbols, size_t count, std::vector<int> &out);
+
+// Try to decode an OOK frame from `durations` using the protocol registry.
+// On success fills out.key, out.Bit, out.te, out.protocol (registry name) and
+// out.preset (radio preset name) and returns true. Other fields are untouched.
+bool rf_decode_ook(const std::vector<int> &durations, RfCodes &out);
+
+// Build the RAW representation from `durations`:
+//  - `dataOut`  : "+a -b +c ..." string of signed durations.
+//  - `teOut`    : first positive duration (base pulse estimate).
+//  - when a repeated pattern is detected, sets `hasCrc=true` and fills
+//    `crcOut` (CRC-64 of the pulse-index sequence), `indexedOut` (distinct
+//    pulse lengths) and `bitsOut` (number of indexed transitions).
+// Returns the number of transitions written to `dataOut`.
+int rf_build_raw(
+    const std::vector<int> &durations, String &dataOut, bool &hasCrc, uint64_t &crcOut,
+    std::vector<int> &indexedOut, int &bitsOut, int &teOut
+);
