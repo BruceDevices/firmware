@@ -1,14 +1,35 @@
 #include "nrf_spectrum.h"
-#include "core/display.h"
-#include "core/mykeyboard.h"
+#include "../../core/display.h"
+#include "../../core/mykeyboard.h"
 
 #define CHANNELS 80
 #define RGB565(r, g, b) ((((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)))
 uint8_t channel[CHANNELS];
 
+// Register Access Functions
+inline byte getRegister(SPIClass &SSPI, byte r) {
+
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, LOW);
+    byte c = SSPI.transfer(r & 0x1F);
+    c = SSPI.transfer(0);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+
+    return c;
+}
+
+inline void setRegister(SPIClass &SSPI, byte r, byte v) {
+
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, LOW);
+    SSPI.transfer((r & 0x1F) | 0x20);
+    SSPI.transfer(v);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+}
+
+inline void powerDown(SPIClass &SSPI) { setRegister(SSPI, 0x00, getRegister(SSPI, 0x00) & ~0x02); }
+
 // scanning channels
 #define _BW tftWidth / CHANNELS
-String scanChannels(bool web) {
+String scanChannels(SPIClass *SSPI, bool web) {
     String result = "{";
 
     uint8_t rpdValues[CHANNELS] = {0};
@@ -54,7 +75,7 @@ String scanChannels(bool web) {
                    // used in the WebUI (Future)
 }
 
-void nrf_spectrum() {
+void nrf_spectrum(SPIClass *SSPI) {
     tft.fillScreen(bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawString("2.40Ghz", 0, tftHeight - LH);
@@ -76,9 +97,9 @@ void nrf_spectrum() {
         for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
         NRFradio.setDataRate(RF24_1MBPS);
 
-        while (!check(EscPress)) { scanChannels(); }
+        while (!check(EscPress)) { scanChannels(SSPI); }
         NRFradio.stopListening();
-        NRFradio.powerDown();
+        powerDown(*SSPI);
         delay(250);
         return;
 
