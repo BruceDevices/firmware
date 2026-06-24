@@ -40,7 +40,7 @@ String BLEStateManager::currentDeviceName = "";
 // v3.1: Samsung MAC OUI Detection
 //=============================================================================
 
-static const char* SAMSUNG_MAC_OUIS[] = {
+const char* SAMSUNG_MAC_OUIS[] = {
     "00:1E:DF", "00:23:E7", "00:24:FE", "00:26:5C", "00:27:14",
     "00:2A:10", "00:2D:0A", "00:30:FA", "00:35:FE", "00:3C:E4",
     "00:40:96", "00:44:01", "00:4A:77", "00:4D:4A", "00:50:F7",
@@ -3183,14 +3183,10 @@ bool FastPairExploitEngine::smartExploit(NimBLEAddress target) {
 }
 
 bool FastPairExploitEngine::exploitSamsungFastPair(NimBLEAddress target) {
-    // Samsung devices often use different FastPair implementation
-    // Use Samsung-specific attacks here
-    // For now, fallback to standard exploit with Samsung models
     return exploitFastPairConnection(target, FP_EXPLOIT_ALL);
 }
 
 bool FastPairExploitEngine::exploitGoogleFastPair(NimBLEAddress target) {
-    // Standard Google FastPair exploit
     return exploitFastPairConnection(target, FP_EXPLOIT_ALL);
 }
 
@@ -3244,7 +3240,6 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
             info.modelId = modelId;
             info.deviceType = getDeviceTypeFromModelId(modelId);
 
-            // v3.1: Mark if Samsung device
             if (isSamsungDevice(info.address)) {
                 info.deviceType += " (Samsung)";
             }
