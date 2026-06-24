@@ -1,3 +1,12 @@
+/*
+ * BLE Sniffer - Standalone module for LITE_VERSION
+ * Author: Ninja-jr
+ * Date: 2026-01-24
+ * 
+ * Captures BLE advertisements, displays hex dumps,
+ * parses manufacturer data, and saves to SD/LittleFS.
+ */
+
 #if defined(LITE_VERSION)
 #include "ble_sniffer.h"
 #include "core/display.h"
@@ -132,7 +141,7 @@ void BLE_Sniffer() {
                 NimBLEScanResults results = pSnifferScan->getResults(10 * 1000, true);
                 
                 for (int i = 0; i < results.getCount(); i++) {
-                    NimBLEAdvertisedDevice *device = results.getDevice(i);
+                    const NimBLEAdvertisedDevice *device = results.getDevice(i);
                     
                     SnifferPacket packet;
                     packet.address = String(device->getAddress().toString().c_str());
