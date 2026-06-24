@@ -204,12 +204,33 @@ struct FastPairModelInfo {
     const char* deviceType;
 };
 
+// v3.1: Samsung MAC OUI detection
+extern const char* SAMSUNG_MAC_OUIS[];
+extern const int SAMSUNG_MAC_OUIS_COUNT;
+bool isSamsungDevice(const NimBLEAddress &address);
+bool isSamsungDevice(const String &mac);
+
+// v3.1: FastPair version detection
+enum FastPairVersion {
+    FP_VERSION_UNKNOWN = 0,
+    FP_VERSION_1,
+    FP_VERSION_2,
+    FP_VERSION_3
+};
+
+FastPairVersion detectFastPairVersion(NimBLEAddress target);
+
 class FastPairExploitEngine {
 public:
     std::vector<FastPairDeviceInfo> scanForFastPairDevices(int duration);
     bool exploitFastPairConnection(NimBLEAddress target, FastPairExploitType exploitType);
     void spamFastPairPopups(FastPairPopupType popupType, int count);
     bool testVulnerability(NimBLEAddress target);
+
+    // v3.1: Smart FastPair attack with Samsung detection
+    bool smartExploit(NimBLEAddress target);
+    bool exploitSamsungFastPair(NimBLEAddress target);
+    bool exploitGoogleFastPair(NimBLEAddress target);
 
     // Public exploit methods
     bool executeMemoryCorruption(NimBLERemoteCharacteristic* pChar);
