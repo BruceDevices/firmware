@@ -42,7 +42,7 @@ String BLEStateManager::currentDeviceName = "";
 // v3.1: Samsung MAC OUI Detection
 //=============================================================================
 
-const char* SAMSUNG_MAC_OUIS[] = {
+static const char* SAMSUNG_MAC_OUIS[] = {
     "00:1E:DF", "00:23:E7", "00:24:FE", "00:26:5C", "00:27:14",
     "00:2A:10", "00:2D:0A", "00:30:FA", "00:35:FE", "00:3C:E4",
     "00:40:96", "00:44:01", "00:4A:77", "00:4D:4A", "00:50:F7",
@@ -4229,7 +4229,7 @@ String selectMultipleTargetsFromScan(const char* title, std::vector<NimBLEAddres
             delay(200);
             selected[currentIndex] = !selected[currentIndex];
             if (selected[currentIndex]) {
-                targets.push_back(NimBLEAddress(scannerData.deviceAddresses[currentIndex].c_str()));
+                targets.push_back(NimBLEAddress(std::string(scannerData.deviceAddresses[currentIndex].c_str())));
             } else {
                 for (auto it = targets.begin(); it != targets.end(); ++it) {
                     if (it->toString() == scannerData.deviceAddresses[currentIndex].c_str()) {
@@ -4288,10 +4288,10 @@ NimBLEAddress parseAddress(const String& addressInfo) {
     
     if (cleanAddr.length() < 17) {
         Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
-        return NimBLEAddress("");
+        return NimBLEAddress(std::string(""));
     }
     
-    return NimBLEAddress(cleanAddr.c_str());
+    return NimBLEAddress(std::string(cleanAddr.c_str()));
 }
 
 //=============================================================================
