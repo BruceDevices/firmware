@@ -1,6 +1,7 @@
 #include "utils.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
 #include "scrollableTextArea.h"
+#include <Preferences.h>
 #include <globals.h>
 
 /*********************************************************************
@@ -89,6 +90,52 @@ void updateClockTimezone() {
     struct timeval tv = {.tv_sec = localTime};
     settimeofday(&tv, nullptr);
 }
+
+#if !defined(HAS_RTC)
+// --- Persistent software clock (boards without an RTC chip) ---
+// Boards without an RTC lose a set time on a full power-off. Periodically save
+// the current epoch to NVS and restore it on boot, so the clock comes back
+// close to correct (it re-syncs exactly via NTP/GPS when available). NVS (not
+// the user filesystem) so it survives FS reformats and custom partition layouts.
+#define CLOCK_PERSIST_NS "clock"
+#define CLOCK_PERSIST_KEY "epoch"
+#define CLOCK_PERSIST_INTERVAL_MS 300000 // 5 min: bounds NVS wear, <=5 min drift after power loss
+
+static void time_persist_task(void *param) {
+    Preferences prefs;
+    uint32_t last_write_ms = 0;
+    bool saved = false;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(60000)); // wake every minute
+        if (!clock_set) continue;
+        // Save promptly the first time the clock is set, then at most every 5 min.
+        if (saved && (millis() - last_write_ms) < CLOCK_PERSIST_INTERVAL_MS) continue;
+        if (prefs.begin(CLOCK_PERSIST_NS, false)) {
+            prefs.putULong(CLOCK_PERSIST_KEY, (uint32_t)rtc.getEpoch());
+            prefs.end();
+            last_write_ms = millis();
+            saved = true;
+        }
+    }
+}
+
+// Restore the last-saved time from NVS (if plausible) and start the periodic
+// save task. Call once from init_clock() on boards without an RTC.
+void restorePersistedClock() {
+    Preferences prefs;
+    if (prefs.begin(CLOCK_PERSIST_NS, true)) { // read-only
+        uint32_t epoch = prefs.getULong(CLOCK_PERSIST_KEY, 0);
+        prefs.end();
+        if (epoch > 1735689600UL) { // sanity: only restore a plausible time (after 2025-01-01)
+            rtc.setTime((unsigned long)epoch);
+            clock_set = true;
+            struct timeval tv = {.tv_sec = (time_t)epoch};
+            settimeofday(&tv, nullptr);
+        }
+    }
+    xTaskCreate(time_persist_task, "clockSave", 4096, NULL, 1, NULL);
+}
+#endif
 
 void updateTimeStr(struct tm timeInfo) {
     if (bruceConfig.clock24hr) {
