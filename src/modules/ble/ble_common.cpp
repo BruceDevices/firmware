@@ -235,7 +235,6 @@ void disPlayBLESend() {
     drawMainBorder(); // Moved up to avoid drawing screen issues
     tft.setTextSize(1);
 
-    pService->start();
     pServer->getAdvertising()->start();
 
     uint64_t chipid = ESP.getEfuseMac();
@@ -301,7 +300,7 @@ void disPlayBLESend() {
     pService->~NimBLEService();
     pServer->getAdvertising()->stop();
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
+    btStop();
 #else
     BLEDevice::deinit();
 #endif
