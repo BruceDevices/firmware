@@ -433,6 +433,15 @@ const JSPropDef js_subghz[] = {
 
 const JSClassDef js_subghz_obj = JS_OBJECT_DEF("SubGHz", js_subghz);
 
+const JSPropDef js_subghz_advanced[] = {
+    JS_CFUNC_DEF("read", 1, native_subghzAdvancedRead),
+    JS_CFUNC_DEF("analyzeFile", 1, native_subghzAdvancedAnalyzeFile),
+    JS_CFUNC_DEF("transmitFile", 2, native_subghzAdvancedTransmitFile),
+    JS_PROP_END,
+};
+
+const JSClassDef js_subghz_advanced_obj = JS_OBJECT_DEF("SubGHzAdvanced", js_subghz_advanced);
+
 const JSPropDef js_serial[] = {
     JS_CFUNC_DEF("print", 1, native_serialPrint),
     JS_CFUNC_DEF("println", 1, native_serialPrintln),
@@ -852,6 +861,7 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("serial", &js_serial_obj),
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),
     JS_PROP_CLASS_DEF("subghz", &js_subghz_obj),
+    JS_PROP_CLASS_DEF("subghzAdvanced", &js_subghz_advanced_obj),
     JS_PROP_CLASS_DEF("wifi", &js_wifi_obj),
     JS_PROP_CLASS_DEF("ble", &js_ble_obj),
     JS_PROP_CLASS_DEF("nrf24", &js_nrf24_obj),

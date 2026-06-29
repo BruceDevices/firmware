@@ -11,6 +11,7 @@
 #include "settings_commands.h"
 #include "sound_commands.h"
 #include "storage_commands.h"
+#include "subghz_advanced_commands.h"
 #include "util_commands.h"
 #include "wifi_commands.h"
 #include <globals.h>
@@ -38,6 +39,7 @@ void SerialCli::setup() {
     createIrCommands(&_cli);
     createPowerCommands(&_cli);
     createRfCommands(&_cli);
+    createSubGhzAdvancedCommands(&_cli);
     createSettingsCommands(&_cli);
     createStorageCommands(&_cli);
     createUtilCommands(&_cli);

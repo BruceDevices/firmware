@@ -1,0 +1,10 @@
+{
+  "name": "subghz_unleashed_vendor",
+  "version": "0.1.0",
+  "build": {
+    "srcFilter": [
+      "-<*>"
+    ],
+    "includeDir": "src"
+  }
+}

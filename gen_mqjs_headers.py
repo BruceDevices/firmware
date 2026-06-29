@@ -22,7 +22,6 @@ SRC = [
 CFLAGS = [
     "-Wall",
     "-O2",
-    "-m32",
     "-I" + MQJS_PATH,
 ]
 

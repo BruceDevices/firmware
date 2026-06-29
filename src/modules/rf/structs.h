@@ -33,6 +33,11 @@ struct RfCodes {
     uint8_t btn = 0;
     String mf_name = "Unknown";
     String protocol = "";
+    String detected_protocol = "";
+    String detected_key_hex = "";
+    String detected_counter = "";
+    String detected_button = "";
+    String detected_serial = "";
     String preset = "";
     String data = "";
     int te = 0;

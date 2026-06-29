@@ -8,6 +8,16 @@
 #include <ArduinoJson.h>
 #include <globals.h>
 
+static bool parseBoolArg(const String &arg, bool defaultValue) {
+    String s = arg;
+    s.trim();
+    s.toLowerCase();
+    if (s.length() == 0) return defaultValue;
+    if (s == "1" || s == "true" || s == "yes" || s == "on") return true;
+    if (s == "0" || s == "false" || s == "no" || s == "off") return false;
+    return defaultValue;
+}
+
 uint32_t rfRxCallback(cmd *c) {
     Command cmd(c);
 
@@ -102,7 +112,7 @@ uint32_t rfTxFileCallback(cmd *c) {
     Argument filepathArg = cmd.getArgument("filepath");
     Argument hideDefaultUIArg = cmd.getArgument("hideDefaultUI");
     String filepath = filepathArg.getValue();
-    String hideDefaultUI = hideDefaultUIArg.getValue();
+    String hideDefaultUIArgValue = hideDefaultUIArg.getValue();
     filepath.trim();
 
     if (filepath.indexOf(".sub") == -1) {
@@ -120,9 +130,8 @@ uint32_t rfTxFileCallback(cmd *c) {
         return false;
     }
 
-    RfCodes data{};
-
-    return readSubFile(fs, filepath, data) && txSubFile(data, hideDefaultUI);
+    bool hideDefaultUI = parseBoolArg(hideDefaultUIArgValue, false);
+    return txSubFilePath(fs, filepath, hideDefaultUI);
 }
 
 uint32_t rfTxBufferCallback(cmd *c) {
@@ -138,11 +147,7 @@ uint32_t rfTxBufferCallback(cmd *c) {
     f.close();
     free(txt);
 
-    RfCodes data{};
-
-    bool r = readSubFile(&PSRamFS, tmpfilepath, data);
-
-    r = txSubFile(data);
+    bool r = txSubFilePath(&PSRamFS, tmpfilepath);
     PSRamFS.remove(tmpfilepath);
 
     return r;

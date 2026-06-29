@@ -8,6 +8,7 @@ MainMenu::MainMenu() {
         &wifiMenu,
         &bleMenu,
         &rfMenu,
+        &subGhzMenu,
         &nrf24Menu,
 #if !defined(LITE_VERSION)
         &loraMenu,
