@@ -430,6 +430,8 @@ KeyboardAction handleKeyboardSelection(
     } else if (y > -1 && current_text.length() < max_size) {
         // add a letter to current_text
         if (handleCharacterAdd(current_text, character, cursor_x, cursor_y, max_size, mask_input)) {
+            // Auto-reset caps after each character (shift, not caps-lock)
+            if (caps) caps = false;
             if (current_text.length() >= max_size) { // put the Cursor at "Ok" when max size reached
                 x = 0;
                 y = -1;
@@ -620,7 +622,7 @@ String generalKeyboard(
                     tft.fillRect(btns_layout[1][0], 2, btns_layout[1][1], KBLH, TFT_DARKGREY);
                     tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), TFT_DARKGREY);
                 } else tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
-                tft.drawString(caps ? "ab" : "A@", btns_layout[1][2], top_button_text_y);
+                tft.drawString(caps ? "A@" : "ab", btns_layout[1][2], top_button_text_y);
                 // DEL
                 if (x == 2 && y == -1) {
                     tft.setTextColor(bruceConfig.bgColor, getComplementaryColor2(bruceConfig.bgColor));
@@ -849,6 +851,7 @@ String generalKeyboard(
                 }
                 if (box_list[buttons_start_index + 1].contain(touchPoint.x, touchPoint.y)) { // CAPS btn
                     caps = !caps;
+                    delay(80);  // debounce: prevent accidental re-toggle
                     tft.fillRect(
                         0, keyboard_start_y, tftWidth, tftHeight - keyboard_start_y, bruceConfig.bgColor
                     );
@@ -878,14 +881,16 @@ String generalKeyboard(
 #endif
                 for (k = 0; k < keyboard_boxes; k++) {
                     if (box_list[k].contain(touchPoint.x, touchPoint.y)) {
-                        if (caps)
+                        if (caps) {
                             handleCharacterAdd(
                                 current_text, box_list[k].key_sh, cursor_x, cursor_y, max_size, mask_input
                             );
-                        else
+                            caps = false; // shift, not caps-lock
+                        } else {
                             handleCharacterAdd(
                                 current_text, box_list[k].key, cursor_x, cursor_y, max_size, mask_input
                             );
+                        }
                         touchHandled = true;
                         break;
                     }
