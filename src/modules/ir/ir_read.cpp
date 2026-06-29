@@ -56,6 +56,10 @@ IrRead::IrRead(bool headless_mode, bool raw_mode) {
 }
 bool quickloop = false;
 
+static uint32_t necCommandWithInverse(uint32_t command) {
+    return (command & 0xFF) | (((~command) & 0xFF) << 8);
+}
+
 static String getParsedProtocolName(const decode_results &r) {
     switch (r.decode_type) {
         case decode_type_t::RC5: return (r.command > 0x3F) ? "RC5X" : "RC5";
@@ -66,10 +70,7 @@ static String getParsedProtocolName(const decode_results &r) {
             if (r.address > 0x1F) return "SIRC15";
             return "SIRC";
         case decode_type_t::NEC:
-            if (r.address > 0xFFFF) return "NEC42ext";
-            if (r.address > 0xFF1F) return "NECext";
-            if (r.address > 0xFF) return "NEC42";
-            return "NEC";
+            return (r.address > 0xFF) ? "NECext" : "NEC";
         case decode_type_t::UNKNOWN: return "";
         default: return typeToString(r.decode_type, r.repeat);
     }
@@ -265,7 +266,9 @@ void IrRead::emulate_signal() {
         code.type = "parsed";
         code.protocol = getParsedProtocolName(results);
         code.address = uint32ToString(results.address);
-        code.command = uint32ToString(results.command);
+        code.command = (results.decode_type == decode_type_t::NEC)
+            ? uint32ToString(necCommandWithInverse(results.command))
+            : uint32ToString(results.command);
         code.bits = results.bits;
         code.data = resultToHexidecimal(&results);
         if (code.protocol == "") {
@@ -360,10 +363,7 @@ void IrRead::append_to_file_str(String btn_name) {
                 break;
             }
             case decode_type_t::NEC: {
-                if (results.address > 0xFFFF) strDeviceContent += "protocol: NEC42ext\n";
-                else if (results.address > 0xFF1F) strDeviceContent += "protocol: NECext\n";
-                else if (results.address > 0xFF) strDeviceContent += "protocol: NEC42\n";
-                else strDeviceContent += "protocol: NEC\n";
+                strDeviceContent += (results.address > 0xFF) ? "protocol: NECext\n" : "protocol: NEC\n";
                 break;
             }
             case decode_type_t::UNKNOWN: {
@@ -377,7 +377,9 @@ void IrRead::append_to_file_str(String btn_name) {
         }
 
         strDeviceContent += "address: " + uint32ToString(results.address) + "\n";
-        strDeviceContent += "command: " + uint32ToString(results.command) + "\n";
+        strDeviceContent += "command: " + uint32ToString(
+            (results.decode_type == decode_type_t::NEC) ? necCommandWithInverse(results.command) : results.command
+        ) + "\n";
 
         strDeviceContent += "bits: " + String(results.bits) + "\n";
         if (hasACState(results.decode_type)) strDeviceContent += "state: " + parse_state_signal() + "\n";
