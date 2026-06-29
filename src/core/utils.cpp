@@ -123,6 +123,14 @@ void showDeviceInfo() {
         area.addLine("Free PSRAM: " + formatBytes(ESP.getFreePsram()));
     }
     area.addLine("");
+    area.addLine("[CPU]");
+    area.addLine("Model: " + String(ESP.getChipModel()));
+    area.addLine("Revision: v" + String(ESP.getChipRevision()));
+    area.addLine("Cores: 2 (PRO_CPU + APP_CPU)");
+    area.addLine("Freq: " + String(ESP.getCpuFreqMHz()) + " MHz");
+    area.addLine("Core 0 (PRO): Input, WiFi, BLE, Serial, RF");
+    area.addLine("Core 1 (APP): UI / Menu / Display");
+    area.addLine("");
     area.addLine("[NETWORK]");
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
     String localIP = WiFi.localIP().toString();
