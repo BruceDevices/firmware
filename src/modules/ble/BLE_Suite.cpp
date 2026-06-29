@@ -1575,7 +1575,7 @@ bool DuckyScriptEngine::parseLine(String line) {
     line.trim();
     if (line.length() == 0 || line.startsWith("//") || line.startsWith("REM")) return true;
 
-    DuckyCommand cmd;
+    BleDuckyCmd cmd;
     if (line.startsWith("DELAY ")) {
         cmd.command = "DELAY";
         cmd.parameter = line.substring(6);
@@ -1686,7 +1686,7 @@ bool DuckyScriptEngine::loadFromString(String script) {
     return true;
 }
 
-std::vector<DuckyCommand> DuckyScriptEngine::getCommands() { return commands; }
+std::vector<BleDuckyCmd> DuckyScriptEngine::getCommands() { return commands; }
 bool DuckyScriptEngine::isLoaded() { return scriptLoaded; }
 void DuckyScriptEngine::clear() {
     commands.clear();
@@ -1885,12 +1885,12 @@ bool HIDDuckyService::executeDuckyScript(NimBLEAddress target) {
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BleDuckyCmd> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BleDuckyCmd cmd = commands[i];
         if (i % 5 == 0)
             showAttackProgress(
                 String("Executing command " + String(i + 1) + "/" + String(commands.size())).c_str(), TFT_BLUE
@@ -2002,12 +2002,12 @@ bool HIDDuckyService::forceInjectDuckyScript(
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BleDuckyCmd> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BleDuckyCmd cmd = commands[i];
 
         if (cmd.command == "DELAY") delay(cmd.delay_ms);
         else if (cmd.command == "DEFAULT_DELAY") currentDelay = cmd.delay_ms;
