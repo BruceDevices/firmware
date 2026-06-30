@@ -203,9 +203,8 @@ void InputHandler(void) {
                 t.x = tftWidth - t.x;
             }
             if (bruceConfigPins.rotation == 0) {
-                int tmp = t.x;
                 t.x = tftWidth - t.y;
-                t.y = tmp;
+                t.y = tftHeight - t.y;
             }
             if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
