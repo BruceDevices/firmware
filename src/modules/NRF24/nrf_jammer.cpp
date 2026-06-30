@@ -1,3 +1,5 @@
+#include "esp_phy_init.h"
+#include "esp_wifi.h"
 /**
  * @file nrf_jammer.cpp
  * @brief Enhanced 2.4 GHz jammer with 12 modes and dual strategy.
@@ -17,6 +19,11 @@
  */
 
 #include "nrf_jammer.h"
+#include "esp32-hal-semaphore.h"
+
+// Shared SPI bus mutex (defined in main.cpp)
+extern SemaphoreHandle_t cc_nrf_spi_mutex;
+
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include <LittleFS.h>
@@ -599,6 +606,17 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
+
+    // Power down WiFi PHY during jamming to clear 2.4GHz band
+    wifi_mode_t savedWifiMode = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&savedWifiMode);
+    if (savedWifiMode != WIFI_MODE_NULL) {
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        esp_wifi_stop();
+        esp_phy_disable();
+        delay(10);  // Wait for RF front-end to settle
+    }
+
     bool running = true;
     bool redraw = false;
 
@@ -630,6 +648,7 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
         // ── Config: press SEL to edit mode config ───────────────
         if (check(SelPress)) {
             if (CHECK_NRF_SPI(nrfMode)) NRFradio.stopConstCarrier();
+
             editModeConfig(currentMode);
 
             // Re-apply config after edit
@@ -659,6 +678,7 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
                 bool nowFlood = (cfg.strategy >= 1);
                 if (prevFlood != nowFlood) {
                     NRFradio.stopConstCarrier();
+
                     if (nowFlood) {
                         applyJamConfig(cfg, true);
                     } else {
@@ -683,6 +703,7 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
                 bool nowFlood = (cfg.strategy >= 1);
                 if (prevFlood != nowFlood) {
                     NRFradio.stopConstCarrier();
+
                     if (nowFlood) {
                         applyJamConfig(cfg, true);
                     } else {
@@ -742,9 +763,16 @@ static void runJammer(NRF24_MODE nrfMode, NrfJamMode jamMode) {
     // ── Cleanup ─────────────────────────────────────────────────
     if (CHECK_NRF_SPI(nrfMode)) {
         NRFradio.stopConstCarrier();
+
         NRFradio.flush_tx();
         NRFradio.powerDown();
     }
+        // Restore WiFi state after jamming completes
+        if (savedWifiMode != WIFI_MODE_NULL) {
+            esp_wifi_set_mode(savedWifiMode);
+            esp_wifi_start();
+        }
+
     if (CHECK_NRF_UART(nrfMode) || CHECK_NRF_BOTH(nrfMode)) { NRFSerial.println("OFF"); }
 }
 
@@ -896,6 +924,7 @@ void nrf_channel_jammer() {
             if (CHECK_NRF_SPI(mode)) {
                 if (paused) {
                     NRFradio.stopConstCarrier();
+
                 } else {
                     initCW(channel);
                 }
@@ -924,6 +953,7 @@ void nrf_channel_jammer() {
     }
 
     if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+
     if (CHECK_NRF_UART(mode) || CHECK_NRF_BOTH(mode)) NRFSerial.println("OFF");
 }
 
@@ -1079,6 +1109,7 @@ void nrf_channel_hopper() {
 
                 if (CHECK_NRF_SPI(nrfMode)) {
                     NRFradio.stopConstCarrier();
+
                     NRFradio.powerDown();
                 }
                 if (CHECK_NRF_UART(nrfMode) || CHECK_NRF_BOTH(nrfMode)) { NRFSerial.println("OFF"); }
@@ -1094,4 +1125,6 @@ void nrf_channel_hopper() {
 
         delay(50);
     }
+
+
 }

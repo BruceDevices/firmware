@@ -33,6 +33,9 @@ SPIClass CC_NRF_SPI(VSPI);
 SPIClass CC_NRF_SPI(HSPI);
 #endif
 
+// Shared SPI bus mutex for CC_NRF_SPI (coordinates access between NRF24, CC1101, LoRa, W5500)
+SemaphoreHandle_t cc_nrf_spi_mutex = NULL;
+
 // Navigation Variables
 volatile bool NextPress = false;
 volatile bool PrevPress = false;
@@ -412,6 +415,10 @@ void startup_sound() {
  **  Where the devices are started and variables set
  *********************************************************************/
 void setup() {
+
+    // Create shared SPI bus mutex for CC_NRF_SPI (NRF24, CC1101, LoRa, W5500)
+    cc_nrf_spi_mutex = xSemaphoreCreateMutex();
+
     Serial.setRxBufferSize(
         SAFE_STACK_BUFFER_SIZE / 4
     ); // Must be invoked before Serial.begin(). Default is 256 chars
