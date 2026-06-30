@@ -15,7 +15,8 @@ enum RFIDModules {
     PN532_SPI_MODULE = 2,
     RC522_SPI_MODULE = 3,
     ST25R3916_SPI_MODULE = 4,
-    PN532_I2C_SPI_MODULE = 5
+    PN532_I2C_SPI_MODULE = 5,
+    ST25R3916_I2C_MODULE = 6,
 };
 
 enum RFModules {
@@ -42,6 +43,12 @@ public:
             obj["rx"] = rx;
             obj["tx"] = tx;
         }
+
+        bool checkConflict(int8_t p) {
+            gpio_num_t pin = (gpio_num_t)p;
+            if (rx == pin || tx == pin) return true;
+            return false;
+        }
     };
 
     struct I2CPins {
@@ -60,6 +67,12 @@ public:
         void toJson(JsonObject obj) const {
             obj["sda"] = sda;
             obj["scl"] = scl;
+        }
+
+        bool checkConflict(int8_t p) {
+            gpio_num_t pin = (gpio_num_t)p;
+            if (sda == pin || scl == pin) return true;
+            return false;
         }
     };
 
@@ -99,7 +112,7 @@ public:
             obj["io2"] = io2;
         }
 
-        bool checkConflict(uint8_t p) {
+        bool checkConflict(int8_t p) {
             gpio_num_t pin = (gpio_num_t)p;
             if (sck == pin || miso == pin || mosi == pin || cs == pin) return true;
             return false;
@@ -145,6 +158,19 @@ public:
     };
 #else
     SPIPins PN532_bus;
+#endif
+
+#ifdef ST25R_SCLK
+    SPIPins ST25R_bus = {
+        (gpio_num_t)ST25R_SCLK,
+        (gpio_num_t)ST25R_MISO,
+        (gpio_num_t)ST25R_MOSI,
+        (gpio_num_t)ST25R_CS,
+        (gpio_num_t)ST25R_IRQ,
+        GPIO_NUM_NC
+    };
+#else
+    SPIPins ST25R_bus;
 #endif
 
 #ifdef SDCARD_SCK
@@ -237,6 +263,7 @@ public:
     void setPn532Pins(SPIPins value);
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
+    void setSR25RPins(SPIPins value);
     void setLoRaPins(SPIPins value);
     void setW5500Pins(SPIPins value);
 #endif

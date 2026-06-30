@@ -49,15 +49,15 @@ void HostInfo::client_stop() {
 #endif
 }
 
-void HostInfo::client_connect(IPAddress ip, int port) {
+void HostInfo::client_connect(IPAddress ip, int port, int timeout_ms) {
 #if !defined(LITE_VERSION)
     if (eth_client != nullptr) {
-        sockfd = eth_client->connect(ip, port, 3000);
+        sockfd = eth_client->connect(ip, port, timeout_ms);
     } else {
-        wifi_client->connect(ip, port);
+        wifi_client->connect(ip, port, timeout_ms);
     }
 #else
-    wifi_client->connect(ip, port);
+    wifi_client->connect(ip, port, timeout_ms);
 #endif
 }
 
@@ -118,16 +118,24 @@ void HostInfo::setup(const Host &host) {
             break;
         }
 
-        client_connect(host.ip, port);
+        client_connect(host.ip, port, TIMEOUT_MS);
         unsigned long startTime = millis();
 
         bool connected = false;
         while (millis() - startTime < TIMEOUT_MS) {
+            if (check(EscPress)) {
+                returnToMenu = true;
+                break;
+            }
             if (client_connected()) {
                 connected = true;
                 break;
             }
-            continue;
+        }
+
+        if (returnToMenu) {
+            client_stop();
+            break;
         }
 
         if (connected) {

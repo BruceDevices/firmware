@@ -758,6 +758,14 @@ void setRFIDModuleMenu() {
         {"RC522 on SPI",
          [=]() { bruceConfigPins.setRfidModule(RC522_SPI_MODULE); },
          bruceConfigPins.rfidModule == RC522_SPI_MODULE    },
+#if !defined(LITE_VERSION)
+        {"ST25R3916 SPI",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE},
+        {"ST25R3916 I2C",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+#endif
     };
     loopOptions(options, bruceConfigPins.rfidModule);
 }
@@ -1709,7 +1717,7 @@ void installAppStoreJS() {
     }
 
     HTTPClient http;
-    http.begin("http://ghp.iceis.co.uk/service/appstore/");
+    http.begin("https://ghp.iceis.co.uk/service/appstore/");
     int httpCode = http.GET();
     if (httpCode != 200) {
         http.end();

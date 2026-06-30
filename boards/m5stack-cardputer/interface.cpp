@@ -130,6 +130,18 @@ void _post_setup_gpio() {
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
 
+    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)13;
+    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+
+    bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
+    bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
+
     tca.matrix(7, 8);
     tca.flush();
     pinMode(11, INPUT);

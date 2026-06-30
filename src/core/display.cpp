@@ -568,10 +568,12 @@ int loopOptions(
             displayScrollingText(txt, coord);
         }
 
-        // Checks ESC Press first, to not exit after PrevPress is processed
-        // PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
-        // Same happens to Core and some other boards
+// Checks ESC Press first, to not exit after PrevPress is processed
+// PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
+// Same happens to Core and some other boards
+#ifdef HAS_3_BUTTONS
         if (EscPress && PrevPress) EscPress = false;
+#endif
         if (menuType != MENU_TYPE_MAIN && check(EscPress)) {
             index = -1;
             break;
@@ -826,22 +828,22 @@ void drawStatusBar() {
     }
 
     int iconCount = 0;
-    bool showSD   = sdcardMounted;
-    bool showGPS  = gpsConnected;
+    bool showSD = sdcardMounted;
+    bool showGPS = gpsConnected;
     bool showWifi = (WiFi.getMode() != 0);
-    bool showWeb  = isWebUIActive;
-    bool showBLE  = BLEConnected;
-    bool showWG   = isConnectedWireguard;
-    if (showSD)   iconCount++;
-    if (showGPS)  iconCount++;
+    bool showWeb = isWebUIActive;
+    bool showBLE = BLEConnected;
+    bool showWG = isConnectedWireguard;
+    if (showSD) iconCount++;
+    if (showGPS) iconCount++;
     if (showWifi) iconCount++;
-    if (showWeb)  iconCount++;
-    if (showBLE)  iconCount++;
-    if (showWG)   iconCount++;
+    if (showWeb) iconCount++;
+    if (showBLE) iconCount++;
+    if (showWG) iconCount++;
 
     if (iconCount > 0) {
-        const int IW  = 16;
-        const int IH  = 16;
+        const int IW = 16;
+        const int IH = 16;
         const int GAP = 6;
         int totalW = iconCount * IW + (iconCount - 1) * GAP;
         int sx = (tftWidth - totalW) / 2;

@@ -1,13 +1,11 @@
 #ifndef __RF_SCAN_H__
 #define __RF_SCAN_H__
 
+#include "protocols/rf_decoder.h"
 #include "rf_utils.h"
 #include "structs.h"
-#include <RCSwitch.h>
 
 #define _MAX_TRIES 5
-
-#define PRESET_KEELOQ 23
 
 class RFScan {
 public:
@@ -36,7 +34,7 @@ public:
     void loop();
 
 private:
-    RCSwitch rcswitch = RCSwitch();
+    RfRxSession _rx;
     RfCodes received;
     String title = "RF Scan Copy";
     bool restartScan = false;
@@ -63,8 +61,8 @@ private:
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
-    void read_rcswitch();
-    void read_raw();
+    void decode_signal(const std::vector<int> &durations);
+    void read_raw(const std::vector<int> &durations);
     void replay_signal(bool asRaw = false);
     void save_signal(bool asRaw = false);
     void reset_signals();
@@ -74,20 +72,20 @@ private:
     /////////////////////////////////////////////////////////////////////////////////////
     // Utils
     /////////////////////////////////////////////////////////////////////////////////////
-    void RCSwitch_Enable_Receive(RCSwitch rcswitch);
+    void enable_receive();
     void init_freqs();
     bool fast_scan();
 };
 
 void display_info(
     RfCodes received, int signals, bool ReadRAW = false, bool codesOnly = false, bool autoSave = false,
-    String title = ""
+    String title = "", bool headless = false
 );
-void display_signal_data(RfCodes received);
+void display_signal_data(RfCodes received, bool headless = false);
 
-bool RCSwitch_SaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
+bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
-String RCSwitch_Read(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
+String rfReceiveSignal(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
 
 #endif

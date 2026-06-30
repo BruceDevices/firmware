@@ -11,6 +11,9 @@
 #include "core/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
 
+#if !defined(LITE_VERSION)
+#include "ST25R3916.h"
+#endif
 #include "PN532.h"
 #include "RFID2.h"
 
@@ -47,6 +50,10 @@ void TagOMatic::set_rfid_module() {
 #endif
         case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
         case RC522_SPI_MODULE: _rfid = new RFID2(false); break;
+#if !defined(LITE_VERSION)
+        case ST25R3916_SPI_MODULE: _rfid = new ST25R3916(ST25R3916::SPI_MODE); break;
+        case ST25R3916_I2C_MODULE: _rfid = new ST25R3916(ST25R3916::I2C_MODE); break;
+#endif
         case M5_RFID2_MODULE:
         default: _rfid = new RFID2(); break;
     }
@@ -190,6 +197,9 @@ void TagOMatic::dump_card_details() {
         padprintln("UID: " + _rfid->printableUID.uid);
         padprintln("ATQA: " + _rfid->printableUID.atqa);
         padprintln("SAK: " + _rfid->printableUID.sak);
+        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
+            padprintln("Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages));
+        }
     } else {
         padprintln("IDm: " + _rfid->printableUID.uid);
         padprintln("PMm: " + _rfid->printableUID.sak);
@@ -309,7 +319,7 @@ void TagOMatic::emulate_card() {
             set_state(EMULATE_MODE);
             break;
         case RFIDInterface::NOT_IMPLEMENTED:
-            displayError("Not implemented for this module.", true);
+            displayError("Card emulation not supported.", true);
             set_state(READ_MODE);
             break;
         case RFIDInterface::FAILURE:
@@ -354,7 +364,7 @@ void TagOMatic::erase_card() {
 
     switch (result) {
         case RFIDInterface::TAG_NOT_PRESENT: return; break;
-        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully."); break;
+        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully.", true); break;
         default: displayError("Error erasing data from tag."); break;
     }
 

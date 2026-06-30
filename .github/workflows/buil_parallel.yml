@@ -1,10 +1,27 @@
 ---
 name: Build and Push Releases
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
-      - main, workflow
+      - main
+      - dev
+
+    paths:
+        - "**.yml"
+        - "**.h"
+        - "**.cpp"
+        - "**.py"
+        - "**.html"
+        - "**.css"
+        - "**.js"
+        - "**.ini"
+        - "**.json"
+        - "**.csv"
     tags:
       - "*"
   workflow_dispatch:
@@ -60,6 +77,7 @@ jobs:
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "elecrow-24B",                     family: "ESP32",}
           - { env: "elecrow-28B",                     family: "ESP32",}
+          - { env: "elecrow-advance-35-s3",           family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}

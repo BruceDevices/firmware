@@ -368,6 +368,7 @@ void init_clock() {
     clock_set = true;
     struct timeval tv = {.tv_sec = epoch};
     settimeofday(&tv, nullptr);
+    restorePersistedClock(); // override the default with the last-saved time (NVS) + start periodic save
 #endif
 }
 

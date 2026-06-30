@@ -188,6 +188,18 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         count++;
         log_e("Fail");
     }
+
+    if (!root["ST25R_Pins"].isNull()) {
+        SPIPins def = ST25R_bus;
+        ST25R_bus.fromJson(root["ST25R_Pins"].as<JsonObject>());
+        if (ST25R_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
+            ST25R_bus = def;
+            count++;
+        }
+    } else {
+        count++;
+        log_e("Fail");
+    }
 #endif
     // if (!root["sys_i2c"].isNull()) {
     //     sys_i2c.fromJson(root["sys_i2c"].as<JsonObject>());
@@ -253,6 +265,9 @@ void BruceConfigPins::toJson(JsonObject obj) const {
 
     JsonObject _LoRa = root["LoRa_Pins"].to<JsonObject>();
     LoRa_bus.toJson(_LoRa);
+
+    JsonObject _ST25R = root["ST25R_Pins"].to<JsonObject>();
+    ST25R_bus.toJson(_ST25R);
 #endif
     // JsonObject _si2c = root["sys_i2c"].as<JsonObject>();
     // sys_i2c.toJson(_si2c);
@@ -365,6 +380,7 @@ void BruceConfigPins::validateConfig() {
     validateRfidModuleValue();
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
+    validateSpiPins(ST25R_bus);
     validateSpiPins(LoRa_bus);
     validateSpiPins(W5500_bus);
 #endif
@@ -385,6 +401,11 @@ void BruceConfigPins::setLoRaPins(SPIPins value) {
 void BruceConfigPins::setW5500Pins(SPIPins value) {
     LoRa_bus = value;
     validateSpiPins(W5500_bus);
+    saveFile();
+}
+void BruceConfigPins::setSR25RPins(SPIPins value) {
+    ST25R_bus = value;
+    validateSpiPins(ST25R_bus);
     saveFile();
 }
 #endif
@@ -525,7 +546,12 @@ void BruceConfigPins::setRfidModule(RFIDModules value) {
 
 void BruceConfigPins::validateRfidModuleValue() {
     if (rfidModule != M5_RFID2_MODULE && rfidModule != PN532_I2C_MODULE && rfidModule != PN532_SPI_MODULE &&
-        rfidModule != RC522_SPI_MODULE && rfidModule != PN532_I2C_SPI_MODULE) {
+        rfidModule != RC522_SPI_MODULE && rfidModule != PN532_I2C_SPI_MODULE
+#if !defined(LITE_VERSION)
+        && rfidModule != ST25R3916_SPI_MODULE
+        && rfidModule != ST25R3916_I2C_MODULE
+#endif
+    ) {
         rfidModule = M5_RFID2_MODULE;
     }
 }

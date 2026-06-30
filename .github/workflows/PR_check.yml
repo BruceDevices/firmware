@@ -1,18 +1,28 @@
 ---
 name: Build and Push OR check-PR
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches:
-      - main, dev
+      - main
+      - dev
+    paths:
+        - "**.yml"
+        - "**.h"
+        - "**.cpp"
+        - "**.py"
+        - "**.html"
+        - "**.css"
+        - "**.js"
+        - "**.ini"
+        - "**.json"
+        - "**.csv"
+
   workflow_dispatch:
-    inputs:
-      board:
-        description: "Board to Compile"
-        type: choice
-        required: true
-        default: "M5Cardputer"
-        options: ["M5Cardputer", "M5StickCPlus2", "ESP32-S3"]
 
 jobs:
   compile_sketch:
@@ -49,7 +59,12 @@ jobs:
             }
           - {
               name: "ESP32-C5",
-              env: "esp32-c5",
+              env: "nm-cyd-c5",
+              partitions: { bootloader_addr: "0x2000" },
+            }
+          - {
+              name: "ESP32-C6",
+              env: "arduino-nesso-n1",
               partitions: { bootloader_addr: "0x2000" },
             }
     steps:
@@ -65,31 +80,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
-
-      # - name: Cache pip
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ~/.cache/pip
-      #     key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-pip-
-
-      # - name: Cache PlatformIO
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: |
-      #       ~/.platformio
-      #     key: Bruce-platformio-${{ hashFiles('**/platformio.ini') }}
-      #     restore-keys: Bruce-platformio-
-
-      # - name: Restore PIO
-      #   uses: actions/cache/restore@v4
-      #   with:
-      #     path: |
-      #       ${{ github.workspace }}/.pio
-      #     key: Bruce-pio-${{ matrix.board.env }}-${{ github.run_id }}-${{ github.run_attempt }}
-      #     restore-keys: |
-      #           Bruce-pio-${{ matrix.board.env }}-
 
       - name: Install PlatformIO Core
         run: |
@@ -109,17 +99,6 @@ jobs:
       - name: Run Compile
         run: |
           platformio run -e ${{ matrix.board.env }}
-
-      # - name: Cache PIO
-      #   uses: actions/cache/save@v4
-      #   with:
-      #     path: |
-      #       ${{ github.workspace }}/.pio
-      #     key: Bruce-pio-${{ matrix.board.env }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      # - name: Merge Files
-      #   run: |
-      #    pio run -e ${{ matrix.board.env }} -t build-firmware
 
       - name: Upload ${{ matrix.board.name }}
         uses: actions/upload-artifact@v4

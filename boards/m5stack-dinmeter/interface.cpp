@@ -80,6 +80,12 @@ void InputHandler(void) {
         SelPress = true;
         tm = millis();
     }
+
+    if (PrevPress && SelPress) {
+        EscPress = true;
+        SelPress = false;
+        PrevPress = false;
+    }
 }
 
 /*********************************************************************

@@ -11,10 +11,6 @@ extern RotaryEncoder *encoder;
 RotaryEncoder *encoder = nullptr;
 IRAM_ATTR void checkPosition() { encoder->tick(); }
 
-// GPIO expander
-#include <ExtensionIOXL9555.hpp>
-ExtensionIOXL9555 io;
-
 // Charger chip
 #define XPOWERS_CHIP_BQ25896
 #include <XPowersLib.h>
@@ -123,6 +119,33 @@ int handleSpecialKeys(uint8_t k, bool pressed) {
     return 0;
 }
 
+void initPeripherals() {
+    if (ioExpander.init()) {
+        const uint8_t expands[] = {
+            EXPANDS_DRV_EN,
+            EXPANDS_AMP_EN,
+            EXPANDS_KB_RST,
+            EXPANDS_LORA_EN,
+            EXPANDS_GPS_EN,
+            EXPANDS_NFC_EN,
+            EXPANDS_GPS_RST,
+            EXPANDS_KB_PWR,
+            EXPANDS_KB_EN,
+            EXPANDS_GPIO_EN,
+            EXPANDS_SD_EN
+        };
+        for (auto pin : expands) {
+            ioExpander.pinMode(pin, OUTPUT);
+            ioExpander.digitalWrite(pin, HIGH);
+            delay(1);
+        }
+        ioExpander.pinMode(EXPANDS_SD_DET, INPUT);
+        Serial.println("Initializing expander OK");
+    } else {
+        Serial.println("Initializing expander failed");
+    }
+    delay(50);
+}
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Description:   initial setup for the device
@@ -131,6 +154,7 @@ void _setup_gpio() {
 
     pinMode(SEL_BTN, INPUT);
     pinMode(BK_BTN, INPUT);
+    pinMode(ST25R_IRQ, INPUT);
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
@@ -146,6 +170,7 @@ void _setup_gpio() {
 
     pinMode(LORA_RST, OUTPUT);
     digitalWrite(LORA_RST, HIGH);
+    Wire.begin(GROVE_SDA, GROVE_SCL);
 
     // Power management
     bool pmu_ret = false;
@@ -161,48 +186,7 @@ void _setup_gpio() {
 
     // Battery gauge
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
-
-    // IO Expander
-    // TODO: Needs updating to use the same interface as the other IO Expanders (io_expander ioExpander)
-    // if (ioExpander.init(IO_EXPANDER_ADDRESS, &Wire)) {
-    //     const uint8_t expands[] = {
-    //         EXPANDS_KB_RST,
-    //         EXPANDS_KB_EN,
-    //         EXPANDS_SD_EN,
-    //         EXPANDS_DRV_EN,
-    //         EXPANDS_AMP_EN, // Audio
-    //     };
-    //     for (auto pin : expands) {
-    //         ioExpander.pinMode(pin, OUTPUT);
-    //         ioExpander.digitalWrite(pin, HIGH);
-    //         delay(1);
-    //     }
-    //     ioExpander.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    //     ioExpander.digitalWrite(EXPANDS_DRV_EN, LOW);
-    // } else {
-    //     Serial.println("Initializing expander failed");
-    // }
-    if (io.begin(Wire, IO_EXPANDER_ADDRESS)) {
-        const uint8_t expands[] = {
-            EXPANDS_KB_RST,
-            EXPANDS_KB_EN,
-            EXPANDS_SD_EN,
-            EXPANDS_DRV_EN,
-            EXPANDS_AMP_EN, // Audio
-            EXPANDS_LORA_EN,
-            EXPANDS_GPS_EN,
-            EXPANDS_GPS_RST,
-            EXPANDS_NFC_EN,
-        };
-        for (auto pin : expands) {
-            io.pinMode(pin, OUTPUT);
-            io.digitalWrite(pin, HIGH);
-            delay(1);
-        }
-        io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    } else {
-        Serial.println("Initializing expander failed");
-    }
+    initPeripherals();
 
     // Initialise keyboard
     keyboard = new Adafruit_TCA8418();
@@ -260,6 +244,8 @@ void _setup_gpio() {
     cfg.i2s.rate = RATE_44K;
     board.begin(cfg);
 }
+
+void _post_setup_gpio() { initPeripherals(); }
 
 /***************************************************************************************
 ** Function name: getBattery()

@@ -275,7 +275,7 @@ uint32_t navCallback(cmd *c) {
             AnyKeyPress = true;
             SerialCmdPress = true;
             *var = true;
-            if (!LongPress) vTaskDelay(190 / portTICK_PERIOD_MS);
+            if (!LongPress) break;
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -405,7 +405,7 @@ uint32_t loaderCallback(cmd *c) {
         );
         return false;
     }
-    
+
     // TODO: close: Closes the running application.
     // TODO: info: Displays the loader’s state.
     return false;
