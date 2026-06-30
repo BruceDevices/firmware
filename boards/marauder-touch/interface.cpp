@@ -16,7 +16,6 @@ IRAM_ATTR void checkPosition() { encoder->tick(); }
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    touch.setRotation(3); // if x is mirrored and y is mirrorred 
     bruceConfig.colorInverted = 0;
     bruceConfigPins.rotation = 0; // portrait mode for Phantom
     pinMode(TFT_BL, OUTPUT);
@@ -36,6 +35,7 @@ void _setup_gpio() {
 void _post_setup_gpio() {
     if (!touch.begin(&tft.getSPIinstance())) {
         Serial.println("Touch IC not Started");
+        touch.setRotation(3); // if x is mirrored and y is mirrorred 
         log_i("Touch IC not Started");
     } else Serial.println("Touch IC Started");
 }
