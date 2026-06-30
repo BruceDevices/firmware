@@ -88,7 +88,7 @@ void IrRead::setup() {
     }
     if (count == 0) gsetIrRxPin(true);
 
-    setup_ir_pin(bruceConfigPins.irRx, INPUT_PULLUP);
+    setup_ir_pin(bruceConfigPins.irRx, INPUT);
     if (headless) return;
     returnToMenu = true;
     std::vector<Option> quickRemoteOptions = {

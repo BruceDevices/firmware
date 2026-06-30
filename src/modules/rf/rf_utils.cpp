@@ -165,8 +165,14 @@ void cc1101ApplyFixedFreqOokPreset(bool isTx) {
     }
 }
 
-RfCodes recent_rfcodes[16];       // TODO: save/load in EEPROM
-int recent_rfcodes_last_used = 0; // TODO: save/load in EEPROM
+// Circular buffer (FIFO eviction) of the last RF signals sent/scanned, capped at
+// RECENT_RFCODES_MAX so it survives navigating back to the Main menu (unlike the
+// previous refcounted alloc-on-enter/free-on-exit scheme). An empty std::vector
+// costs only the container header, so this stays cheap when RF is unused.
+// TODO: save/load in EEPROM.
+static constexpr size_t RECENT_RFCODES_MAX = 15;
+std::vector<RfCodes> recent_rfcodes;
+
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 static uint8_t cc1101_mode_hint = 0;
@@ -329,7 +335,7 @@ bool initRfModule(String mode, float frequency) {
         } else if (mode == "rx") {
             ioExpander.turnPinOnOff(IO_EXP_CC_RX, HIGH);
             ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT_PULLUP);
+            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT);
             ELECHOUSE_cc1101.SetRx();
             Serial.println("cc1101 SetRx();");
         }
@@ -354,7 +360,7 @@ bool initRfModule(String mode, float frequency) {
             gsetRfRxPin(false);
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
-            pinMode(bruceConfigPins.rfRx, INPUT_PULLUP);
+            pinMode(bruceConfigPins.rfRx, INPUT);
         }
     }
     // no error
@@ -501,25 +507,27 @@ uint64_t crc64_ecma(const std::vector<int> &data) {
 }
 
 void addToRecentCodes(struct RfCodes rfcode) {
-    // copy rfcode -> recent_rfcodes[recent_rfcodes_last_used]
-    recent_rfcodes[recent_rfcodes_last_used] = rfcode;
-    recent_rfcodes_last_used += 1;
-    if (recent_rfcodes_last_used == 16) recent_rfcodes_last_used = 0; // cycle
+    recent_rfcodes.push_back(rfcode);
+    if (recent_rfcodes.size() > RECENT_RFCODES_MAX) {
+        recent_rfcodes.erase(recent_rfcodes.begin()); // evict oldest
+    }
 }
 
 struct RfCodes selectRecentRfMenu() {
     options = {};
-    bool exit = false;
     struct RfCodes selected_code;
 
-    for (int i = 0; i < 16; i++) {
+    for (size_t i = 0; i < recent_rfcodes.size(); i++) {
         if (recent_rfcodes[i].filepath == "") continue; // not inited
 
         options.emplace_back(recent_rfcodes[i].filepath.c_str(), [i, &selected_code]() {
             selected_code = recent_rfcodes[i];
         });
     }
-    options.emplace_back("Main Menu", [&]() { exit = true; });
+    if (!recent_rfcodes.empty()) {
+        options.emplace_back("Clear Recent", []() { recent_rfcodes.clear(); });
+    }
+    options.emplace_back("Main Menu", []() {});
 
     loopOptions(options);
     options.clear();

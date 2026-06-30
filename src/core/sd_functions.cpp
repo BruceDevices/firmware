@@ -216,7 +216,9 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
         return false;
     }
     const int bufSize = 1024;
-    static uint8_t buff[bufSize] = {0}; // static to keep this buffer off the task stack
+    // heap-allocated (not stack) to keep this buffer off the task stack; freed before
+    // every return below
+    uint8_t *buff = (uint8_t *)malloc(bufSize);
     // tft.drawRect(5,tftHeight-12, (tftWidth-10), 9, bruceConfig.priColor);
     while ((bytesRead = source.read(buff, bufSize)) > 0) {
         if (dest.write(buff, bytesRead) != bytesRead) {
@@ -224,6 +226,7 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
             source.close();
             dest.close();
             Serial.println("Error 5");
+            free(buff);
             return false;
         } else {
             prog += bytesRead;
@@ -245,9 +248,11 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
     if (prog == tot) result = true;
     else {
         displayError("Fail Copying File", true);
+        free(buff);
         return false;
     }
 
+    free(buff);
     return result;
 }
 

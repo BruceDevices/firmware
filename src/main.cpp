@@ -2,6 +2,7 @@
 #include <globals.h>
 
 #include "core/powerSave.h"
+#include "core/ram_profile.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
 #include "current_year.h"
@@ -426,6 +427,8 @@ void setup() {
     log_d("Total PSRAM: %d", ESP.getPsramSize());
     log_d("Free PSRAM: %d", ESP.getFreePsram());
 
+    RAM_LOG("setup-start");
+
     // declare variables
     prog_handler = 0;
     sdcardMounted = false;
@@ -441,15 +444,20 @@ void setup() {
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
     tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
     tft.begin();
 #endif
     begin_storage();
+    RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
     begin_tft();
     init_clock();
     init_led();
+    RAM_LOG("after-tft-clock-led");
 
     options.reserve(20); // preallocate some options space to avoid fragmentation
+
+    RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
     // Set WiFi country to avoid warnings and ensure max power
     const wifi_country_t country = {
@@ -508,6 +516,8 @@ void setup() {
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }
+
+    RAM_LOG("setup-end");
 }
 
 /**********************************************************************
@@ -532,6 +542,14 @@ void loop() {
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);
+
+#if defined(ENABLE_RAM_LOGGING)
+    static bool ramLoggedFirstMenu = false;
+    if (!ramLoggedFirstMenu) {
+        RAM_LOG("first-mainMenu");
+        ramLoggedFirstMenu = true;
+    }
+#endif
 
     mainMenu.begin();
     delay(1);
