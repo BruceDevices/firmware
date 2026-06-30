@@ -8,7 +8,9 @@
 #include <interface.h> //for charging ischarging to print charging indicator
 #include <memory>
 
-#define MAX_MENU_SIZE (int)(tftHeight / 25)
+// Row height in the redesigned drawOptions: FG*LH + 8 = 24+8 = 32px
+// Reserve 30px status bar + 54px footer + some padding
+#define MAX_MENU_SIZE (int)((tftHeight - 30 - 54) / 32)
 
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
@@ -62,27 +64,72 @@ void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight) 
 
 /***************************************************************************************
 ** Function name: TouchFooter
-** Description:   Draw touch screen footer
+** Description:   Draw touch screen footer - redesigned for 800x480 with large tap targets
+** Touch zones (handled by touchHeatMap):
+**   Left  third (x<W/3, y>H/3)  → PrevPress  (labeled BACK)
+**   Middle third (W/3<x<2W/3)   → SelPress   (labeled SELECT)
+**   Right  third (x>2W/3)       → NextPress  (labeled NEXT)
+**   Top-left (x<W/3, y<H/3)     → EscPress   (also acts as BACK from content)
 ***************************************************************************************/
 void TouchFooter(uint16_t color) {
-    tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
-    tft.setTextColor(color);
-    tft.setTextSize(FM);
-    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + 4, 1);
+    // Footer sits in the bottom strip below content (tftHeight to physical screen edge).
+    // We also draw a prominent bar INSIDE the screen so it's fully visible and easy to tap.
+    int fh  = 46;                     // footer bar height (px)
+    int fy  = tftHeight - fh - 2;     // top of footer bar, inside visible area
+    int gap = 6;                       // gap between buttons
+    int bw  = (tftWidth - 2 * gap - 10) / 3;  // button width
+
+    int x1 = 5;
+    int x2 = x1 + bw + gap;
+    int x3 = x2 + bw + gap;
+
+    // Fill backgrounds
+    tft.fillRoundRect(x1, fy, bw, fh, 8, bruceConfig.bgColor);
+    tft.fillRoundRect(x2, fy, bw, fh, 8, bruceConfig.bgColor);
+    tft.fillRoundRect(x3, fy, bw, fh, 8, bruceConfig.bgColor);
+
+    // Draw outlines
+    tft.drawRoundRect(x1, fy, bw, fh, 8, color);
+    tft.drawRoundRect(x2, fy, bw, fh, 8, color);
+    tft.drawRoundRect(x3, fy, bw, fh, 8, color);
+
+    // Labels — use FG (size 3) for readability on the large screen
+    tft.setTextColor(color, bruceConfig.bgColor);
+    tft.setTextSize(FG);
+    int ty = fy + (fh - FG * LH) / 2;   // vertically centred text
+    tft.drawCentreString("< BACK",  x1 + bw / 2, ty, 1);
+    tft.drawCentreString("SELECT",  x2 + bw / 2, ty, 1);
+    tft.drawCentreString("NEXT >",  x3 + bw / 2, ty, 1);
 }
+
 /***************************************************************************************
-** Function name: TouchFooter
-** Description:   Draw touch screen footer
+** Function name: MegaFooter
+** Description:   Draw touch screen footer (Exit / UP / DOWN variant)
 ***************************************************************************************/
 void MegaFooter(uint16_t color) {
-    tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
-    tft.setTextColor(color);
-    tft.setTextSize(FM);
-    tft.drawCentreString("Exit", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("UP", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("DOWN", 5 * tftWidth / 6, tftHeight + 4, 1);
+    int fh  = 46;
+    int fy  = tftHeight - fh - 2;
+    int gap = 6;
+    int bw  = (tftWidth - 2 * gap - 10) / 3;
+
+    int x1 = 5;
+    int x2 = x1 + bw + gap;
+    int x3 = x2 + bw + gap;
+
+    tft.fillRoundRect(x1, fy, bw, fh, 8, bruceConfig.bgColor);
+    tft.fillRoundRect(x2, fy, bw, fh, 8, bruceConfig.bgColor);
+    tft.fillRoundRect(x3, fy, bw, fh, 8, bruceConfig.bgColor);
+
+    tft.drawRoundRect(x1, fy, bw, fh, 8, color);
+    tft.drawRoundRect(x2, fy, bw, fh, 8, color);
+    tft.drawRoundRect(x3, fy, bw, fh, 8, color);
+
+    tft.setTextColor(color, bruceConfig.bgColor);
+    tft.setTextSize(FG);
+    int ty = fy + (fh - FG * LH) / 2;
+    tft.drawCentreString("EXIT",   x1 + bw / 2, ty, 1);
+    tft.drawCentreString("UP",     x2 + bw / 2, ty, 1);
+    tft.drawCentreString("DOWN",   x3 + bw / 2, ty, 1);
 }
 
 /***************************************************************************************
@@ -508,6 +555,15 @@ void padprintln(double n, int digits, int16_t padx) {
     tft.println(n, digits);
 }
 
+// Per-render Y positions filled by drawOptions/drawSubmenu for direct tap detection
+static int16_t optionItemY[32];
+static int     optionItemCount = 0;
+
+// Y positions of the three items drawn by drawSubmenu (prev / selected / next)
+static int16_t submenuPrevY = 0;
+static int16_t submenuSelY  = 0;
+static int16_t submenuNextY = 0;
+
 /*********************************************************************
 **  Function: loopOptions
 **  Where you choose among the options in menu
@@ -549,15 +605,16 @@ int loopOptions(
     int devModeCounter = 0;
     static unsigned long _clock_bat_timer = millis();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
-    if (index > 0)
-        tft.fillRoundRect(
-            tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
-            tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
-            5,
+    if (index > 0) {
+        // Clear previous option box (drawOptions will re-draw it fully on first render)
+        tft.fillRect(
+            (int)(tftWidth * 0.05),
+            30,
+            (int)(tftWidth * 0.90),
+            tftHeight - 30 - 58,
             bruceConfig.bgColor
         );
+    }
     if (index >= options.size()) index = 0;
     bool firstRender = true;
     unsigned long menuOpenTs = 0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
@@ -619,9 +676,77 @@ int loopOptions(
             displayScrollingText(txt, coord, true);
         }
 
-// Checks ESC Press first, to not exit after PrevPress is processed
-// PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
-// Same happens to Core and some other boards
+#if defined(HAS_TOUCH)
+        // ================================================================
+        //  Pinpoint touch — runs BEFORE PrevPress/NextPress handlers so
+        //  that zone-mapped flags from touchHeatMap don't fire first.
+        //  Content-area flags are cleared and replaced with exact coords.
+        //  Footer flags set by touchHeatMap are left alone (y > H-56).
+        // ================================================================
+        if (touchPoint.pressed && millis() - menuOpenTs > 300) {
+            int tapX = touchPoint.x;
+            int tapY = touchPoint.y;
+            touchPoint.Clear();
+
+            if (tapY < tftHeight - 56) {
+                // Clear zone-mapped flags for content area — we'll set correct ones.
+                SelPress  = false;
+                PrevPress = false;
+                NextPress = false;
+                EscPress  = false;
+
+                if (menuType == MENU_TYPE_REGULAR) {
+                    int visStart = (index >= optionItemCount) ? index - optionItemCount + 1 : 0;
+                    const int rowH = FG * LH + 8;
+                    bool hit = false;
+                    for (int row = 0; row < optionItemCount; row++) {
+                        int rowTop = optionItemY[row] - 2;
+                        int rowBot = rowTop + rowH;
+                        if (tapY >= rowTop && tapY <= rowBot) {
+                            int tappedOpt = visStart + row;
+                            if (tappedOpt >= 0 && tappedOpt < (int)options.size()
+                                               && options[tappedOpt].enabled) {
+                                index = tappedOpt;
+                                options[tappedOpt].operation();
+                                exit = true;
+                            }
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (!hit) {
+                        if (tapY < 60) EscPress = true;  // tap near top = back
+                    }
+
+                } else if (menuType == MENU_TYPE_SUBMENU) {
+                    const int adjH = 4 * LH + 8;
+                    const int selH = 6 * LH + 12;
+                    if (submenuPrevY > 0 && tapY >= submenuPrevY - 4 && tapY <= submenuPrevY + adjH)
+                        PrevPress = true;
+                    else if (submenuNextY > 0 && tapY >= submenuNextY - 4 && tapY <= submenuNextY + adjH)
+                        NextPress = true;
+                    else if (submenuSelY > 0 && tapY >= submenuSelY - 4 && tapY <= submenuSelY + selH)
+                        SelPress = true;
+                    else {
+                        // Tap above mid = prev, below mid = next
+                        int midY = tftHeight / 2;
+                        if (tapY < midY) PrevPress = true;
+                        else NextPress = true;
+                    }
+
+                } else if (menuType == MENU_TYPE_MAIN) {
+                    if (tapX < tftWidth / 7)            PrevPress = true;
+                    else if (tapX > tftWidth * 6 / 7)   NextPress = true;
+                    else                                 SelPress  = true;
+                }
+            }
+            // Footer taps: touchHeatMap already set flags correctly — leave them.
+        }
+#endif  // HAS_TOUCH
+
+        // Checks ESC Press first, to not exit after PrevPress is processed
+        // PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
+        // Same happens to Core and some other boards
 #ifdef HAS_3_BUTTONS
         if (EscPress && PrevPress) EscPress = false;
 #endif
@@ -753,109 +878,88 @@ void progressHandler(int progress, size_t total, const String &message) {
 
 /***************************************************************************************
 ** Function name: drawOptions
-** Description:   Função para desenhar e mostrar as opçoes de contexto
+** Description:   Draw and show context options — scaled up for 800x480 touch display.
+**                Each visible row is stored in optionItemY[] so loopOptions can map
+**                a finger tap directly to the hovered item.
+**
+** Item font size — use FG (3) for easy reading on the large panel.
+** Row height     — FG * LH + 6 = 24 + 6 = 30 px per row.
 ***************************************************************************************/
+
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
 ) {
-    static int last_index = 0;
-
     Opt_Coord coord;
-    int menuSize = options.size();
-    if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
-    // Uncomment to update the statusBar (causes flickering)
-    // drawStatusBar();
+    // ---- Sizing for 800×460 -----------------------------------------------
+    // Use FG (3) for menu text so it's large enough to read and tap.
+    const int txtSize   = FG;               // 3 → glyph 18×24 px
+    const int rowH      = txtSize * LH + 8; // 24 + 8 = 32 px per row
+    const int footerH   = 54;               // reserved for TouchFooter bar
+    const int contentH  = tftHeight - 30 - footerH; // usable content height
+    const int visRows   = contentH / rowH;  // how many rows fit
+    int MAX_VIS = min(visRows, (int)options.size());
+    if (MAX_VIS < 1) MAX_VIS = 1;
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
+    int menuSize = (int)options.size();
+    int boxX  = (int)(tftWidth * 0.05);
+    int boxW  = (int)(tftWidth * 0.90);
+    int boxH  = rowH * MAX_VIS + 10;
+    int boxY  = 30 + (contentH - rowH * MAX_VIS) / 2;  // vertically centred in content
+
     tft.drawPixel(0, 0, bruceConfig.bgColor);
+
     if (firstRender) {
-        tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 8 + 4) * menuSize + 10, 5, bgcolor
-        );
-        tft.drawRoundRect(
-            tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
-            tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
-            5,
-            fgcolor
-        );
+        tft.fillRoundRect(boxX, boxY, boxW, boxH, 8, bgcolor);
+        tft.drawRoundRect(boxX, boxY, boxW, boxH, 8, fgcolor);
     }
-    tft.setTextColor(fgcolor, bgcolor);
-    tft.setTextSize(FM);
-    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
+    tft.setTextSize(txtSize);
 
-    int i = 0;
     int init = 0;
-    int cont = 1;
+    if (index >= MAX_VIS) init = index - MAX_VIS + 1;
 
-    if (index >= MAX_MENU_SIZE) init = index - MAX_MENU_SIZE + 1;
-    // check if cycling from last item to first
-    if(abs(index - last_index) >= menuSize) {
-        if(index > last_index) last_index = init;             // from first to last
-        else last_index = menuSize - 1; // from last to first
-    }
+    int cont = 0;
+    optionItemCount = 0;
 
-    cont = 1;
-    for (i = 0; i < options.size(); i++) {
-        if (i >= init) {
-            int16_t cursorY = tft.getCursorY();
-            // Erase previously highlited element,
-            if(i == last_index) {
-                tft.fillRoundRect(
-                    tftWidth * 0.10 + 2,
-                    cursorY + 2,
-                    tftWidth * 0.8 - 4,
-                    FM * LH + 2,
-                    3,
-                    bruceConfig.bgColor
-                );
-            }
-            // Draw selection highlight bar
-            if (i == index) {
-                tft.fillRoundRect(
-                    tftWidth * 0.10 + 2,
-                    cursorY + 2,
-                    tftWidth * 0.8 - 4,
-                    FM * LH + 2,
-                    3,
-                    bruceConfig.priColor
-                );
-            }
+    for (int i = 0; i < menuSize && cont < MAX_VIS; i++) {
+        if (i < init) continue;
 
-            if (options[i].selected) tft.setTextColor(selcolor, bgcolor); // if selected, change Text color
-            else tft.setTextColor(fgcolor, bgcolor);
-            if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
+        int rowY = boxY + 5 + cont * rowH;
+        optionItemY[cont] = rowY;        // store for tap detection
+        optionItemCount++;
 
-            String text = "";
-            if (i == index) {
-                text += ">";
-                coord.x = tftWidth * 0.10 + 5 + FM * LW;
-                coord.y = tft.getCursorY() + 4;
-                coord.size = (tftWidth * 0.8 - 10) / (LW * FM) - 1;
-                coord.fgcolor = fgcolor;
-                coord.bgcolor = bgcolor;
-            } else text += " ";
-            text += String(options[i].label) + "              ";
-            tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 4);
-
-            // Draw text with appropriate colors for selection
-            if (i == index) {
-                tft.setTextColor(bgcolor, bruceConfig.priColor);
-            }
-            tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
-
-            // Reset text color for next item
-            tft.setTextColor(fgcolor, bgcolor);
-
-            cont++;
+        // Highlight bar for selected item
+        if (i == index) {
+            tft.fillRoundRect(boxX + 4, rowY - 2, boxW - 8, rowH, 5, fgcolor);
+            tft.setTextColor(bgcolor, fgcolor);
+            // Record coord for scrolling text
+            coord.x      = boxX + 4 + txtSize * LW;
+            coord.y      = rowY + 2;
+            coord.size   = (boxW - 16) / (LW * txtSize) - 1;
+            coord.fgcolor = bgcolor;
+            coord.bgcolor = fgcolor;
+        } else {
+            tft.fillRoundRect(boxX + 4, rowY - 2, boxW - 8, rowH, 5, bgcolor);
+            if (options[i].selected)       tft.setTextColor(selcolor, bgcolor);
+            else if (!options[i].enabled)  tft.setTextColor(TFT_DARKGREY, bgcolor);
+            else                           tft.setTextColor(fgcolor, bgcolor);
         }
-        if (cont > MAX_MENU_SIZE) break;
+
+        // Arrow indicator for selected
+        String text = (i == index) ? "> " : "  ";
+        text += String(options[i].label);
+        // Truncate to fit box width
+        int maxChars = (boxW - 16) / (LW * txtSize) - 1;
+        if ((int)text.length() > maxChars) text = text.substring(0, maxChars);
+        text += "                ";  // pad to clear leftover characters
+
+        tft.setCursor(boxX + 8, rowY + 2);
+        tft.print(text.substring(0, maxChars));
+
+        cont++;
     }
-    // update history
-    last_index = index;
+
 #if defined(HAS_TOUCH)
     TouchFooter();
 #endif
@@ -864,62 +968,136 @@ Opt_Coord drawOptions(
 
 /***************************************************************************************
 ** Function name: drawSubmenu
-** Description:   Função para desenhar e mostrar as opçoes de contexto
+** Description:   Three-item scroll menu (prev / SELECTED / next) — redesigned for
+**                the Waveshare 4.3B 800×480 display.
+**
+** Layout (all sizes relative to actual tftWidth / tftHeight):
+**   • Status bar          : y = 0   … 28
+**   • Title row           : y = 28  … 58
+**   • UP arrow hint       : y = 58  … 88   (touch devices)
+**   • Previous item       : y = 88  … 148  (FM × LH = 16 px, size 4 = 32 px)
+**   • ── separator ──
+**   • Selected item       : centred  (very large font)
+**   • ── separator ──
+**   • Next item           : mirror of previous
+**   • DOWN arrow hint
+**   • TouchFooter bar
+**   • Scroll bar on right edge
+**
+** Font strategy for 800×480:
+**   Prev/Next  : textSize = 4  (glyph 24×32 px) – clearly readable
+**   Selected   : textSize = 6  (glyph 36×48 px) – large & prominent
+**   Title      : textSize = 3  (glyph 18×24 px)
+**   Back btn   : textSize = 3
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     drawStatusBar();
-    int menuSize = options.size();
+
+    const int menuSize = (int)options.size();
+
+    // ---- Geometry -------------------------------------------------------------
+    const int statusH   = 28;           // height of the status bar area
+    const int footerH   = 54;           // height reserved for TouchFooter
+    const int arrowH    = 36;           // up/down arrow hint height
+    const int selSize   = 6;            // text size for the selected (centre) item
+    const int adjSize   = 4;            // text size for prev / next items
+    const int titleSize = 3;
+
+    // Usable content band (between status bar and footer)
+    const int contentTop  = statusH + 8;
+    const int contentBot  = tftHeight - footerH - 8;
+    const int contentMid  = (contentTop + contentBot) / 2;
+
+    // Vertical slots
+    int selH     = selSize  * LH;           // selected item pixel height  (48)
+    int adjH     = adjSize  * LH;           // adjacent item pixel height  (32)
+    int selY     = contentMid - selH / 2;   // top of selected text
+    int prevY    = selY - arrowH - adjH - 12;
+    int nextY    = selY + selH + 12 + arrowH;
+
+    // Store for pinpoint tap detection in loopOptions
+    submenuPrevY = (int16_t)prevY;
+    submenuSelY  = (int16_t)selY;
+    submenuNextY = (int16_t)nextY;
+
+    // ---- Clear content band --------------------------------------------------
+    tft.fillRect(0, contentTop, tftWidth, contentBot - contentTop + adjH + arrowH + 6, bruceConfig.bgColor);
+
+    // ---- Title ---------------------------------------------------------------
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.drawPixel(0, 0, 0);
-    tft.fillRect(6, 30, tftWidth - 12, 8 * FP, bruceConfig.bgColor);
-    tft.drawString(title, 12, 30);
+    tft.setTextSize(titleSize);
+    tft.fillRect(6, contentTop, tftWidth - 12, titleSize * LH + 4, bruceConfig.bgColor);
+    // Centre the title
+    String titleStr = String(title);
+    titleStr.toUpperCase();
+    tft.drawCentreString(titleStr, tftWidth / 2, contentTop + 2, SMOOTH_FONT);
 
-    // middle of the drawing area
-    int middle = 25 /*status*/ + (tftHeight - 30 /*status + bottom margin*/) / 2;
-    // drawCentreString uses TC_DATUM, so we need to adjust the Y position
-    // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
-    int middle_up = middle - (tftHeight - 42) / 3 - FM * LH / 2 + 4;
-    int middle_down = middle + (tftHeight - 42) / 3 - FM * LH / 2;
+    int belowTitle = contentTop + titleSize * LH + 8;
 
-    tft.setTextSize(FM);
+    // ---- UP arrow hint -------------------------------------------------------
 #if defined(HAS_TOUCH)
-    tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
+    tft.setTextSize(adjSize);
+    tft.setTextColor(getColorVariation(bruceConfig.priColor, 6), bruceConfig.bgColor);
+    // Place it halfway between title and prev item
+    int arrowUpY = belowTitle + (prevY - belowTitle - adjSize * LH) / 2;
+    tft.drawCentreString("/\\", tftWidth / 2, arrowUpY, 1);
 #endif
-    // Previous item
-    int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
-    const char *firstOption = options[firstIndex].label.c_str();
-    tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
-    // Selected item
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
-    tft.setTextSize(selectedTextSize);
-    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+    // ---- Previous item -------------------------------------------------------
+    int firstIndex = (index - 1 + menuSize) % menuSize;
+    tft.setTextSize(adjSize);
+    tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY, bruceConfig.bgColor);
+    tft.fillRect(6, prevY, tftWidth - 12, adjH + 2, bruceConfig.bgColor);
+    tft.drawCentreString(options[firstIndex].label, tftWidth / 2, prevY, SMOOTH_FONT);
+
+    // ---- Separator lines -----------------------------------------------------
+    uint16_t sepCol = getColorVariation(bruceConfig.priColor, 8);
+    tft.drawFastHLine(40, selY - 8, tftWidth - 80, sepCol);
+    tft.drawFastHLine(40, selY + selH + 4, tftWidth - 80, sepCol);
+
+    // ---- Selected item (highlighted box + large text) -----------------------
+    // Draw a subtle highlight behind the selected text
+    tft.fillRoundRect(20, selY - 6, tftWidth - 40, selH + 12, 10,
+                      getColorVariation(bruceConfig.bgColor, 4, 1));
+    tft.setTextSize(selSize);
+    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY, bruceConfig.bgColor);
+    // If label is too wide at selSize, fall back to adjSize
+    int actualSelSize = selSize;
+    if ((int)options[index].label.length() * selSize * LW > tftWidth - 60) actualSelSize = adjSize;
+    tft.setTextSize(actualSelSize);
+    tft.drawCentreString(options[index].label, tftWidth / 2,
+                         contentMid - actualSelSize * LH / 2, SMOOTH_FONT);
+    // Underline
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
-        middle + selectedTextSize * LH / 2 + 1,
-        strlen(options[index].label.c_str()) * selectedTextSize * LW,
+        tftWidth / 2 - (int)options[index].label.length() * actualSelSize * LW / 2,
+        contentMid + actualSelSize * LH / 2 + 3,
+        (int)options[index].label.length() * actualSelSize * LW,
         bruceConfig.priColor
     );
-    // Next Item
-    int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
-    const char *thirdOption = options[thirdIndex].label.c_str();
-    tft.setTextSize(FM);
-    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
-    tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
-    tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
+    // ---- Next item -----------------------------------------------------------
+    int thirdIndex = (index + 1) % menuSize;
+    tft.setTextSize(adjSize);
+    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY, bruceConfig.bgColor);
+    tft.fillRect(6, nextY, tftWidth - 12, adjH + 2, bruceConfig.bgColor);
+    tft.drawCentreString(options[thirdIndex].label, tftWidth / 2, nextY, SMOOTH_FONT);
 
+    // ---- DOWN arrow hint -----------------------------------------------------
 #if defined(HAS_TOUCH)
-    tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawString("[ x ]", 7, 7, 1);
+    tft.setTextSize(adjSize);
+    tft.setTextColor(getColorVariation(bruceConfig.priColor, 6), bruceConfig.bgColor);
+    int arrowDnY = nextY + adjH + 6;
+    tft.drawCentreString("\\/", tftWidth / 2, arrowDnY, 1);
+#endif
+
+    // ---- Scroll bar (right edge) ---------------------------------------------
+    tft.fillRect(tftWidth - 6, contentTop, 6, contentBot - contentTop, bruceConfig.bgColor);
+    int sbH = max(8, (contentBot - contentTop) / menuSize);
+    int sbY = contentTop + index * (contentBot - contentTop) / menuSize;
+    tft.fillRect(tftWidth - 6, sbY, 6, sbH, bruceConfig.priColor);
+
+    // ---- Footer buttons (BACK / SELECT / NEXT) --------------------------------
+#if defined(HAS_TOUCH)
     TouchFooter();
 #endif
 }
@@ -1116,16 +1294,23 @@ void drawWireguardStatus(int x, int y) {
 ** Function name: listFiles
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
-#define MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
+// File-list row height: same as drawOptions (FG*LH + 8 = 32px)
+#define MAX_ITEMS (int)((tftHeight - 60) / 32)
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     Opt_Coord coord;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
+
+    // Use FG (size 3) for file listing — readable on 800×480
+    const int txtSize = FG;
+    const int rowH    = txtSize * LH + 8;  // 32 px
+
     if (index == 0) {
         tft.fillScreen(bruceConfig.bgColor);
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     }
-    tft.setCursor(10, 10);
-    tft.setTextSize(FM);
+    tft.setCursor(10, 30);
+    tft.setTextSize(txtSize);
+
     int i = 0;
     int arraySize = fileList.size();
     int start = 0;
@@ -1133,27 +1318,40 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         start = index - MAX_ITEMS + 1;
         if (start < 0) start = 0;
     }
-    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
-    String txt = ">";
+    int nchars = (tftWidth - 24) / (LW * txtSize);
+
     while (i < arraySize) {
         if (i >= start) {
-            tft.setCursor(10, tft.getCursorY());
-            if (fileList[i].folder == true)
-                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
-            else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
+            int rowY = 30 + (i - start) * rowH;
+            tft.setCursor(10, rowY);
 
+            if (fileList[i].folder)
+                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+            else if (fileList[i].operation)
+                tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
+            else
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+
+            String txt;
             if (index == i) {
-                txt = ">";
-                coord.x = 10 + FM * LW;
-                coord.y = tft.getCursorY();
-                coord.size = nchars;
-                coord.fgcolor =
-                    fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;
-            } else txt = " ";
-            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
+                // Highlight selected row
+                tft.fillRoundRect(8, rowY - 2, tftWidth - 16, rowH, 5, bruceConfig.priColor);
+                uint16_t hfg = fileList[i].folder
+                                   ? getColorVariation(bruceConfig.priColor)
+                                   : bruceConfig.bgColor;
+                tft.setTextColor(hfg, bruceConfig.priColor);
+                coord.x      = 10 + txtSize * LW;
+                coord.y      = rowY;
+                coord.size   = nchars - 1;
+                coord.fgcolor = hfg;
+                coord.bgcolor = bruceConfig.priColor;
+                txt = "> ";
+            } else {
+                tft.fillRect(8, rowY - 2, tftWidth - 16, rowH, bruceConfig.bgColor);
+                txt = "  ";
+            }
+            txt += fileList[i].filename + "                    ";
+            tft.print(txt.substring(0, nchars));
         }
         i++;
         if (i == (start + MAX_ITEMS) || i == arraySize) break;
@@ -1292,7 +1490,15 @@ void jpegRender(int xpos, int ypos) {
     uint32_t max_y = JpegDec.height;
 
     bool swapBytes = tft.getSwapBytes();
+#if defined(USE_ARDUINO_GFX)
+    // Arduino_GFX's drawPixel/pushImage take a NATIVE uint16_t RGB565, which is
+    // exactly what JPEGDecoder produces on ESP32 (its SWAP_BYTES path is
+    // ESP8266-only). Forcing a byte swap here scrambles the colours into
+    // "psychedelic" rainbow noise — so leave the bytes unswapped on this backend.
+    tft.setSwapBytes(false);
+#else
     tft.setSwapBytes(true);
+#endif
 
     // Jpeg images are draw as a set of image block (tiles) called Minimum Coding Units (MCUs)
     // Typically these MCUs are 16x16 pixel blocks

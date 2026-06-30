@@ -503,7 +503,15 @@ String generalKeyboard(
     /*---------------------------------------------------------------------------------------*/
 
     const int PAD = 2;
+// On large touch screens (Waveshare 4.3B = 800 px wide) make the top button
+// row tall enough to tap comfortably and spread buttons across full width.
+#if defined(HAS_TOUCH)
+    const int KBLH = (tftWidth >= 400) ? 52 : (6 + LH * FM);
+    const int KEY_FONT = (tftWidth >= 400) ? FG : FM;  // larger font for key letters
+#else
     const int KBLH = 6 + LH * FM;
+    const int KEY_FONT = FM;
+#endif
     const int counter_height = LH * FP;
     const int top_button_text_y = 2 + (KBLH - LH * FM) / 2;
     const int counter_y = KBLH + 4;
@@ -511,6 +519,21 @@ String generalKeyboard(
     const int textbox_text_y = textbox_y + 2;
     const int keyboard_start_y = textbox_y + KBLH + 2;
 
+// Build btns_layout: for touch-enabled wide screens spread buttons evenly.
+// btns_layout[][0] = button left-x, [1] = button width, [2] = label left-x.
+#if defined(HAS_TOUCH)
+    // Divide full screen width equally among all buttons with 3px gaps.
+    // Fixed-size array (max 6 buttons) avoids a VLA in a template — VLAs in
+    // template functions break GCC LTO and drop the entire translation unit.
+    const int _gap = 3;
+    const int _bw  = (tftWidth - (buttons_number + 1) * _gap) / buttons_number;
+    int btns_layout[6][3] = {};
+    for (int _bi = 0; _bi < buttons_number; _bi++) {
+        btns_layout[_bi][0] = _gap + _bi * (_bw + _gap);
+        btns_layout[_bi][1] = _bw;
+        btns_layout[_bi][2] = _gap + _bi * (_bw + _gap) + (_bw - 2 * LW * FM) / 2;
+    }
+#else
     const int btns_layout[buttons_number][3] = {
         {1 * PAD + 0 * LW * FM,  3 * LW * FM, 1 * PAD + 0 * LW * FM + LW * FM / 2  }, // Ok
         {2 * PAD + 3 * LW * FM,  3 * LW * FM, 2 * PAD + 3 * LW * FM + LW * FM / 2  }, // ab/A@
@@ -521,11 +544,12 @@ String generalKeyboard(
         {6 * PAD + 15 * LW * FM, 4 * LW * FM, 6 * PAD + 15 * LW * FM + LW * FM / 2 }, // R/D or L/U
 #endif
     };
+#endif
 
     const int key_width = tftWidth / KeyboardWidth;
     const int key_height = (tftHeight - keyboard_start_y) / KeyboardHeight;
-    const int text_offset_x = key_width / 2 - LW * FM / 2;
-    const int text_offset_y = key_height / 2 - LH * FM / 2;
+    const int text_offset_x = key_width / 2 - LW * KEY_FONT / 2;
+    const int text_offset_y = key_height / 2 - LH * KEY_FONT / 2;
 
 #if defined(HAS_TOUCH) // filling touch box list
     // Calculate actual box count
@@ -742,7 +766,7 @@ String generalKeyboard(
             tft.drawRect(3, textbox_y, tftWidth - 3, KBLH, bruceConfig.priColor); // typed string border
 
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
-            tft.setTextSize(FM);
+            tft.setTextSize(KEY_FONT);
 
             // Draw the actual keyboard
             for (int i = 0; i < KeyboardHeight; i++) {

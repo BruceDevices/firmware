@@ -503,7 +503,7 @@ void BruceConfig::setDimmer(int value) {
 
 void BruceConfig::validateDimmerValue() {
     if (dimmerSet < 0) dimmerSet = 10;
-    if (dimmerSet > 60) dimmerSet = 0;
+    if (dimmerSet > 300) dimmerSet = 0;
 }
 
 void BruceConfig::setBright(uint8_t value) {

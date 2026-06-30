@@ -6,13 +6,18 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-static SemaphoreHandle_t tftMutex;
+static SemaphoreHandle_t tftMutex = nullptr;
+// Null-safe: the mutex is created in the constructor, but guard here so a draw
+// can never assert on an uninitialized mutex.
 #define RUN_ON_MUTEX(fn)                                                                                     \
-    xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY);                                                        \
-    fn;                                                                                                      \
-    xSemaphoreGiveRecursive(tftMutex);
+    do {                                                                                                     \
+        if (tftMutex) xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY);                                      \
+        fn;                                                                                                  \
+        if (tftMutex) xSemaphoreGiveRecursive(tftMutex);                                                    \
+    } while (0)
 
 tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {
+    if (tftMutex == nullptr) tftMutex = xSemaphoreCreateRecursiveMutex();
     // clang-format off
 #if TFT_DATABUS_N == 3
     #if TFT_DISPLAY_DRIVER_N != 49
@@ -48,7 +53,15 @@ tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {
         TFT_VSYNC_PULSE_WIDTH,
         TFT_VSYNC_BACK_PORCH,
         TFT_PCLK_ACTIVE_NEG,
-        TFT_PREF_SPEED
+        TFT_PREF_SPEED,
+        false,  // useBigEndian
+        0,      // de_idle_high
+        0,      // pclk_idle_high
+#if defined(RGB_PANEL) && defined(TFT_BOUNCE_LINES)
+        (TFT_WIDTH) * (TFT_BOUNCE_LINES)  // SRAM bounce buffer — decouples DMA from PSRAM
+#else
+        0
+#endif
     );
     #if !defined(TFT_WIDTH) || !defined(TFT_HEIGHT)
         #error "Missing Macros definitions of: TFT_WIDTH, TFT_HEIGHT"
@@ -67,6 +80,9 @@ tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {
     bus = new TFT_DATABUS(TFT_HSYNC_PULSE_WIDTH, TFT_HSYNC_BACK_PORCH, TFT_HSYNC_FRONT_PORCH,
                           TFT_VSYNC_PULSE_WIDTH, TFT_VSYNC_BACK_PORCH, TFT_VSYNC_FRONT_PORCH, TFT_PREF_SPEED);
 #endif
+// RGB panels (TFT_DATABUS_N == 3, driver 49) already created _gfx above in the
+// TFT_DATABUS_N == 3 block. Skip the controller-driver dispatch for them.
+#if TFT_DATABUS_N != 3
 #if TFT_DISPLAY_DRIVER_N == 50
     #if !defined(TFT_RST) || !defined(TFT_WIDTH) || !defined(TFT_HEIGHT) || !defined(TFT_DSI_INIT)
         #error "Missing Macros definitions of: TFT_RST, TFT_WIDTH, TFT_HEIGHT"
@@ -127,6 +143,7 @@ tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {
         TFT_ROW_OFS2
     );
 #endif
+#endif // TFT_DATABUS_N != 3
 
 }
 // clang-format on

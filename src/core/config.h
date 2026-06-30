@@ -36,7 +36,7 @@ public:
     const char *filepath = "/bruce.conf";
 
     //  Settings
-    int dimmerSet = 60;
+    int dimmerSet = 0; // screen-off disabled by default (backlight kept on; see waveshare_43b interface)
     int bright = 100;
     bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;

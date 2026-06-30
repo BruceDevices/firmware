@@ -185,13 +185,15 @@ void setDimmerTimeMenu() {
     else if (bruceConfig.dimmerSet == 20) idx = 1;
     else if (bruceConfig.dimmerSet == 30) idx = 2;
     else if (bruceConfig.dimmerSet == 60) idx = 3;
-    else if (bruceConfig.dimmerSet == 0) idx = 4;
+    else if (bruceConfig.dimmerSet == 120) idx = 4;
+    else if (bruceConfig.dimmerSet == 0) idx = 5;
     options = {
-        {"10s",      [=]() { bruceConfig.setDimmer(10); }, bruceConfig.dimmerSet == 10},
-        {"20s",      [=]() { bruceConfig.setDimmer(20); }, bruceConfig.dimmerSet == 20},
-        {"30s",      [=]() { bruceConfig.setDimmer(30); }, bruceConfig.dimmerSet == 30},
-        {"60s",      [=]() { bruceConfig.setDimmer(60); }, bruceConfig.dimmerSet == 60},
-        {"Disabled", [=]() { bruceConfig.setDimmer(0); },  bruceConfig.dimmerSet == 0 },
+        {"10s",      [=]() { bruceConfig.setDimmer(10); },  bruceConfig.dimmerSet == 10 },
+        {"20s",      [=]() { bruceConfig.setDimmer(20); },  bruceConfig.dimmerSet == 20 },
+        {"30s",      [=]() { bruceConfig.setDimmer(30); },  bruceConfig.dimmerSet == 30 },
+        {"60s",      [=]() { bruceConfig.setDimmer(60); },  bruceConfig.dimmerSet == 60 },
+        {"120s",     [=]() { bruceConfig.setDimmer(120); }, bruceConfig.dimmerSet == 120},
+        {"Disabled", [=]() { bruceConfig.setDimmer(0); },   bruceConfig.dimmerSet == 0  },
     };
     loopOptions(options, idx);
 }

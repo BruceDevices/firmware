@@ -96,33 +96,33 @@ public:
     }
 
     void drawTitle(float scale = 1) {
-        int titleY = iconCenterY + iconAreaH / 2 + FG;
+        // Title sits in the gap between the icon area and the footer.
+        // Use FG (size 3) so it's readable on large screens.
+        const int fontSize = FG;
+        const int textH    = LH * fontSize;
+        int titleY = iconAreaY + iconAreaH + 4;   // 4 px below icon area
 
-        tft.setTextSize(FM);
-        tft.drawPixel(0, 0, 0);
-        tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
-        int nchars = (tftWidth - 16) / (LW * FM);
-        tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
+        tft.setTextSize(fontSize);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.fillRect(BORDER_PAD_X, titleY, tftWidth - 2 * BORDER_PAD_X, textH + 2, bruceConfig.bgColor);
+        int nchars = (tftWidth - 2 * BORDER_PAD_X) / (LW * fontSize);
+        tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, SMOOTH_FONT);
     }
 
 protected:
     const char *_name = "";
     uint8_t rotation = ROTATION;
 
-    int iconAreaH =
-        ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y
-                                                 : tftHeight - 2 * BORDER_PAD_Y + 1);
-    int iconAreaW = iconAreaH;
-
-    int iconCenterX = tftWidth / 2;
-    int iconCenterY = tftHeight / 2;
-    int imgCenterY = 13;
-
-    int iconAreaX = iconCenterX - iconAreaW / 2;
-    int iconAreaY = iconCenterY - iconAreaH / 2;
-
-    int arrowAreaX = BORDER_PAD_X;
-    int arrowAreaW = iconAreaX - arrowAreaX;
+    // These are updated by resetCoordinates() before first use.
+    int iconAreaH   = 0;
+    int iconAreaW   = 0;
+    int iconCenterX = 0;
+    int iconCenterY = 0;
+    int imgCenterY  = 13;
+    int iconAreaX   = 0;
+    int iconAreaY   = 0;
+    int arrowAreaX  = BORDER_PAD_X;
+    int arrowAreaW  = 0;
 
     MenuItemInterface(const char *name) : _name(name) {}
 
@@ -130,28 +130,33 @@ protected:
         tft.fillRect(iconAreaX, iconAreaY, iconAreaW, iconAreaH, bruceConfig.bgColor);
     }
     void clearImgArea(void) { tft.fillRect(7, 27, tftWidth - 14, tftHeight - 34, bruceConfig.bgColor); }
-    void resetCoordinates(void) {
-        // Recalculate Center and ared due to portrait/landscape changings
-        if (tftWidth > tftHeight) {
-            iconAreaH =
-                ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y
-                                                         : tftHeight - 2 * BORDER_PAD_Y + 1);
-        } else {
-            iconAreaH =
-                ((tftWidth - 2 * BORDER_PAD_Y) % 2 == 0 ? tftWidth - 2 * BORDER_PAD_Y
-                                                        : tftWidth - 2 * BORDER_PAD_Y + 1);
-        }
 
-        iconAreaW = iconAreaH;
+    void resetCoordinates(void) {
+        // On touch screens the bottom of the content area is above the footer
+        // (54 px) and the menu item title (FG*LH+6 = 30 px).
+        // On non-touch screens use the original symmetric padding.
+        int topY    = BORDER_PAD_Y;          // below status bar
+#if defined(HAS_TOUCH)
+        int bottomY = tftHeight - 54 - 30;   // above footer + title row
+#else
+        int bottomY = tftHeight - BORDER_PAD_Y;
+#endif
+        int availH  = bottomY - topY;
+
+        // Keep the icon square; in landscape constrain by height, in portrait by width.
+        int side = (tftWidth > tftHeight) ? availH : (tftWidth - 2 * BORDER_PAD_Y);
+        if (side % 2 != 0) side--;           // keep even for clean centering
+        iconAreaH = side;
+        iconAreaW = side;
 
         iconCenterX = tftWidth / 2;
-        iconCenterY = tftHeight / 2;
+        iconCenterY = topY + side / 2;       // centred in the available content band
 
-        iconAreaX = iconCenterX - iconAreaW / 2;
-        iconAreaY = iconCenterY - iconAreaH / 2;
+        iconAreaX = iconCenterX - side / 2;
+        iconAreaY = iconCenterY - side / 2;
 
         arrowAreaX = BORDER_PAD_X;
-        arrowAreaW = iconAreaX - arrowAreaX;
+        arrowAreaW = max(1, iconAreaX - arrowAreaX);
 
         rotation = bruceConfigPins.rotation;
     }

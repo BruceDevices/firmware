@@ -561,9 +561,9 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
             padprintln("Deauth sent: " + String(deauthCount));
             padprintln("");
             tft.drawRightString(
-                "Press " + String(BTN_ALIAS) + " to send deauth", tftWidth - 10, tftHeight - 35, 1
+                "Tap SELECT to deauth", tftWidth - 10, tftHeight - 110, 1
             );
-            tft.drawString("Press Back to exit", 10, tftHeight - 20);
+            tft.drawString("Tap BACK to exit", 10, tftHeight - 110);
             needRedraw = false;
         }
         if (check(SelPress)) {
