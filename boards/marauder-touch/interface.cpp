@@ -16,6 +16,7 @@ IRAM_ATTR void checkPosition() { encoder->tick(); }
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    touch.setRotation(3); // if x is mirrored and y is mirrorred 
     bruceConfig.colorInverted = 0;
     bruceConfigPins.rotation = 0; // portrait mode for Phantom
     pinMode(TFT_BL, OUTPUT);
