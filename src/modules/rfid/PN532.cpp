@@ -793,6 +793,7 @@ int PN532::read_mifare_classic_data_sector(byte sector) {
 }
 
 int PN532::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     uint8_t successA = 0;
     uint8_t successB = 0;
 

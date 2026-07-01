@@ -354,6 +354,7 @@ int RFID2::read_mifare_classic_data_sector(byte sector) {
 }
 
 int RFID2::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     byte statusA = 0;
     byte statusB = 0;
 
