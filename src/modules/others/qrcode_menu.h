@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-void qrcode_display(String qrcodeUrl);
+void qrcode_display(const String &qrcodeUrl);
 void pix_qrcode();
 void qrcode_menu();
 void custom_qrcode_menu();

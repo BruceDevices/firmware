@@ -646,7 +646,7 @@ bool tts(String text, PlaybackMode mode) {
     return true;
 }
 
-bool isAudioFile(String filepath) {
+bool isAudioFile(const String &filepath) {
     return filepath.endsWith(".opus") || filepath.endsWith(".rtttl") || filepath.endsWith(".txt") ||
            filepath.endsWith(".wav") || filepath.endsWith(".mod") || filepath.endsWith(".mp3") ||
            filepath.endsWith(".aac") || filepath.endsWith(".flac");

@@ -27,8 +27,8 @@ public:
     int emulate() override;
     int load() override;
     int loadFromFile(const String &filepath) override;
-    int save(String filename) override;
-    int saveFlipper(String filename) override;
+    int save(const String &filename) override;
+    int saveFlipper(const String &filename) override;
 
     void stopDiscovery();
 

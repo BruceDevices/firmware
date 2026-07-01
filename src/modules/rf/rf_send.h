@@ -8,7 +8,7 @@
 
 void sendCustomRF();
 bool txSubFile(RfCodes &selected_code, bool hideDefaultUI = false);
-bool readSubFile(FS *fs, String filepath, RfCodes &data);
+bool readSubFile(FS *fs, const String &filepath, RfCodes &data);
 
 void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI = false);
 

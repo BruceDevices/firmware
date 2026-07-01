@@ -162,7 +162,7 @@ bool run_bjs_script_headless(char *code) {
     return true;
 }
 
-bool run_bjs_script_headless(FS &fs, String filename) {
+bool run_bjs_script_headless(FS &fs, const String &filename) {
     script = readBigFile(&fs, filename);
     if (script == NULL) { return false; }
 
@@ -193,7 +193,8 @@ String getScriptsFolder(FS *&fs) {
     return "";
 }
 
-std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupScript, int rememberedIndex) {
+std::vector<Option>
+getScriptsOptionsList(const String &currentPath, bool saveStartupScript, int rememberedIndex) {
     std::vector<Option> opt = {};
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     FS *fs;

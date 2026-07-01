@@ -329,7 +329,7 @@ String IrRead::parse_raw_signal() {
     return signal_code;
 }
 
-void IrRead::append_to_file_str(String btn_name) {
+void IrRead::append_to_file_str(const String &btn_name) {
     strDeviceContent += "name: " + btn_name + "\n";
 
     if (raw) {

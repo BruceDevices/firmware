@@ -1960,7 +1960,7 @@ static String _bytesToHex(const uint8_t *data, size_t len) {
 }
 
 // dump no formato .nfc do Flipper Zero.
-int ST25R3916::saveFlipper(String filename) {
+int ST25R3916::saveFlipper(const String &filename) {
     if (mfcLoaded || isMifareClassicSak(uid.sak)) return _saveMifareClassicFlipper(filename);
 
     FS *fs;
@@ -2006,7 +2006,7 @@ int ST25R3916::saveFlipper(String filename) {
     return SUCCESS;
 }
 
-int ST25R3916::save(String filename) {
+int ST25R3916::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 

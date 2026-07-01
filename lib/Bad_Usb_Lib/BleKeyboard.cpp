@@ -222,7 +222,7 @@ void BleKeyboard::setBatteryLevel(uint8_t level) {
 }
 
 // must be called before begin in order to set the name
-void BleKeyboard::setName(String deviceName) { this->deviceName = deviceName; }
+void BleKeyboard::setName(const String &deviceName) { this->deviceName = deviceName; }
 
 /**
  * @brief Sets the waiting time (in milliseconds) between multiple keystrokes in NimBLE mode.

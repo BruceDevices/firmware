@@ -123,7 +123,7 @@ String humanReadableSize(uint64_t bytes) {
 **  Function: listFiles
 **  list all of the files, if ishtml=true, return html rather than simple text
 **********************************************************************/
-String listFiles(FS &fs, String folder) {
+String listFiles(FS &fs, const String &folder) {
     // log_i("Listfiles Start");
     String returnText = "pa:" + folder + ":0\n";
     // Serial.println("Listing files stored on SD");
@@ -192,7 +192,7 @@ bool checkUserWebAuth(AsyncWebServerRequest *request, bool onFailureReturnLoginP
 **  Function: createDirRecursive
 ** Create folders recursivelly
 **********************************************************************/
-void createDirRecursive(String path, FS fs) {
+void createDirRecursive(const String &path, FS fs) {
     String currentPath = "";
     int startIndex = 0;
     // Serial.print("Verifying folder: ");
@@ -338,11 +338,11 @@ String color565ToWebHex(uint16_t color565) {
 **  Function: serveWebUIFile
 **  serves files for WebUI and checks for custom WebUI files
 **********************************************************************/
-void serveWebUIFile(AsyncWebServerRequest *request, String filename, const char *contentType) {
+void serveWebUIFile(AsyncWebServerRequest *request, const String &filename, const char *contentType) {
     serveWebUIFile(request, filename, contentType, false, nullptr, 0);
 }
 void serveWebUIFile(
-    AsyncWebServerRequest *request, String filename, const char *contentType, bool gzip,
+    AsyncWebServerRequest *request, const String &filename, const char *contentType, bool gzip,
     const uint8_t *originaFile, uint32_t originalFileSize
 ) {
     AsyncWebServerResponse *response = nullptr;

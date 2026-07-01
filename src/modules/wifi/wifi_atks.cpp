@@ -193,7 +193,7 @@ void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan
 ** function: wifi_atk_info
 ** @brief: Open Wifi information screen
 ***************************************************************************************/
-void wifi_atk_info(String tssid, String mac, uint8_t channel) {
+void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     // desenhar a tela
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
@@ -445,7 +445,7 @@ ScanNets:
 uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filter out EAPOL frames of
                         // unrelated APs
 #if !defined(LITE_VERSION)
-void capture_handshake(String tssid, String mac, uint8_t channel) {
+void capture_handshake(const String &tssid, const String &mac, uint8_t channel) {
 
     // Stop WebUI before setting WiFi mode for handshake capture
     cleanlyStopWebUiForWiFiFeature();
@@ -717,7 +717,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
 ** function: target_atk_menu
 ** @brief: Open menu to choose which AP Attack
 ***************************************************************************************/
-void target_atk_menu(String tssid, String mac, uint8_t channel) {
+void target_atk_menu(const String &tssid, const String &mac, uint8_t channel) {
 AGAIN:
     options = {
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
@@ -741,7 +741,7 @@ AGAIN:
 ** function: target_atk
 ** @brief: Deploy Target deauth
 ***************************************************************************************/
-void target_atk(String tssid, String mac, uint8_t channel) {
+void target_atk(const String &tssid, const String &mac, uint8_t channel) {
     resetGlobalState();
     // Stop WebUI before setting WiFi mode for attack
     cleanlyStopWebUiForWiFiFeature();

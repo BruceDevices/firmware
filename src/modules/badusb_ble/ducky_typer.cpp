@@ -550,7 +550,7 @@ EXIT:
 }
 
 // Parses a file to run in the badUSBBLE
-void key_input(FS fs, String bad_script, HIDInterface *_hid) {
+void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     if (!fs.exists(bad_script) || bad_script == "") return;
     File payloadFile = fs.open(bad_script, "r");
     if (!payloadFile) return;
@@ -748,7 +748,7 @@ EXIT:
 }
 
 // Sends a simple command
-void key_input_from_string(String text) {
+void key_input_from_string(const String &text) {
     ducky_startKb(hid_usb, false);
 
     hid_usb->print(text.c_str()); // buggy with some special chars
@@ -1065,11 +1065,11 @@ void printTextAtPosition(uint16_t xOffset, uint16_t yOffset, const String &text)
     tft.setCursor(currentTextCursorX, currentTextCursorY);
 }
 
-void printStatusBadUSBBLE(String text) { printTextAtPosition(8, 2, text); }
+void printStatusBadUSBBLE(const String &text) { printTextAtPosition(8, 2, text); }
 
 void printDecimalTime(uint32_t timeElapsed) { printTextAtPosition(10, 3, formatTimeDecimal(timeElapsed)); }
 
-void printHeaderBadUSBBLE(String bad_script) {
+void printHeaderBadUSBBLE(const String &bad_script) {
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
 
@@ -1087,7 +1087,7 @@ void printHeaderBadUSBBLE(String bad_script) {
     tft.println("Status:");
 }
 
-void printTFTBadUSBBLE(String text, uint16_t color, bool newline) {
+void printTFTBadUSBBLE(const String &text, uint16_t color, bool newline) {
     if (!bruceConfig.badUSBBLEShowOutput) return;
 
     static int bottomHalfStartY = tftHeight / 2;

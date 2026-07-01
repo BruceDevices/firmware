@@ -432,7 +432,7 @@ static void rf_info_line(bool headless, const String &s) {
 }
 
 void display_info(
-    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title, bool headless
+    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, const String &title, bool headless
 ) {
     if (!headless) {
         if (title != "") drawMainBorderWithTitle(title);

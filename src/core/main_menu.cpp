@@ -45,7 +45,7 @@ void MainMenu::begin(void) {
         if (find(l.begin(), l.end(), itemName) == l.end()) { // If menu item is not disabled
             options.push_back(
                 {// selected lambda
-                 _menuItems[i]->getName(),
+                 itemName,
                  [this, i]() { _menuItems[i]->optionsMenu(); },
                  false,                                  // selected = false
                  [](void *menuItem, bool shouldRender) { // render lambda

@@ -99,7 +99,7 @@ const int raw_beacon_len = sizeof(pwngrid_beacon_raw);
 
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
-esp_err_t pwngridAdvertise(uint8_t channel, String face) {
+esp_err_t pwngridAdvertise(uint8_t channel, const String &face) {
     static uint8_t _chan = 1;
     JsonDocument pal_json;
     String pal_json_str = "";

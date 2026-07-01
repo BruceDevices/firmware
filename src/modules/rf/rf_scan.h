@@ -79,7 +79,7 @@ private:
 
 void display_info(
     RfCodes received, int signals, bool ReadRAW = false, bool codesOnly = false, bool autoSave = false,
-    String title = "", bool headless = false
+    const String &title = "", bool headless = false
 );
 void display_signal_data(RfCodes received, bool headless = false);
 

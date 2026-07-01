@@ -44,7 +44,7 @@ uint8_t sta_mac[6];
 char strID[18];
 char strAddl[200];
 
-void ble_info(String name, String address, String signal) {
+void ble_info(const String &name, const String &address, const String &signal) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
     tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);

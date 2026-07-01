@@ -314,8 +314,8 @@ public:
     DuckyScriptEngine();
     HIDKeycode charToKeycode(char c);
     bool parseLine(String line);
-    bool loadFromSD(String filename);
-    bool loadFromString(String script);
+    bool loadFromSD(const String &filename);
+    bool loadFromString(const String &script);
     std::vector<DuckyCommand> getCommands();
     bool isLoaded();
     void clear();
@@ -329,10 +329,10 @@ private:
 class HIDDuckyService {
 public:
     HIDDuckyService();
-    bool injectDuckyScript(NimBLEAddress target, String script);
-    bool injectDuckyScriptFromSD(NimBLEAddress target, String filename);
+    bool injectDuckyScript(NimBLEAddress target, const String &script);
+    bool injectDuckyScriptFromSD(NimBLEAddress target, const String &filename);
     bool executeDuckyScript(NimBLEAddress target);
-    bool forceInjectDuckyScript(NimBLEAddress target, String script, const String& deviceName, int rssi);
+    bool forceInjectDuckyScript(NimBLEAddress target, const String &script, const String &deviceName, int rssi);
     void setDefaultDelay(int delay_ms);
     size_t getScriptSize();
 
@@ -396,7 +396,7 @@ private:
 public:
     VulnerabilityScanner();
     void scanDevice(NimBLEAddress target);
-    void addCustomCheck(String name, bool (*checkFunc)(NimBLEAddress), String desc);
+    void addCustomCheck(const String &name, bool (*checkFunc)(NimBLEAddress), const String &desc);
     void runAllChecks(NimBLEAddress target);
     std::vector<String> getVulnerabilities();
 };
@@ -491,7 +491,7 @@ bool isBLEInitialized();
 void runHFPVulnerabilityTest(NimBLEAddress target);
 void runHFPAttackChain(NimBLEAddress target);
 void runHFPHIDPivotAttack(NimBLEAddress target);
-void runSmartHFPPivot(NimBLEAddress target, String deviceName, int rssi);
+void runSmartHFPPivot(NimBLEAddress target, const String &deviceName, int rssi);
 void runFastPairScan(NimBLEAddress target);
 void runFastPairVulnerabilityTest(NimBLEAddress target);
 void runFastPairMemoryCorruption(NimBLEAddress target);
@@ -502,7 +502,7 @@ void runFastPairAllExploits(NimBLEAddress target);
 void runFastPairHIDChain(NimBLEAddress target);
 void runUniversalAttack(NimBLEAddress target);
 String selectFileFromSD();
-bool loadScriptFromSD(String filename);
+bool loadScriptFromSD(const String &filename);
 
 // Forward declarations for submenu functions
 void showFastPairSubMenu(NimBLEAddress target);

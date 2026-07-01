@@ -589,7 +589,7 @@ int PN532::load() {
     return SUCCESS;
 }
 
-int PN532::save(String filename) {
+int PN532::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 

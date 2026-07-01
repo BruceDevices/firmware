@@ -707,7 +707,7 @@ void SRIXTool::load_file() {
     loopOptions(options);
 }
 
-void SRIXTool::load_file_data(FS *fs, String filepath) {
+void SRIXTool::load_file_data(FS *fs, const String &filepath) {
 
     if (_screen_drawn) {
         delay(50);
@@ -1052,7 +1052,7 @@ int SRIXTool::write_tag_headless(int timeout_seconds) {
     return blocks_verified; // WRITE OK, VERIFY partial / skipped
 }
 
-String SRIXTool::save_file_headless(String filename) {
+String SRIXTool::save_file_headless(const String &filename) {
     if (!_dump_valid_from_read && !_dump_valid_from_load) return ""; // No data
 
     FS *fs;
@@ -1113,7 +1113,7 @@ String SRIXTool::save_file_headless(String filename) {
     return filepath;
 }
 
-int SRIXTool::load_file_headless(String filename) {
+int SRIXTool::load_file_headless(const String &filename) {
     if (!nfc) return -1;
 
     FS *fs;
