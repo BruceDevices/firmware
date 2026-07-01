@@ -10,7 +10,7 @@ public:
     void optionsMenu(void);
     void drawIcon(float scale);
     bool hasTheme() { return bruceConfig.theme.files; }
-    String themePath() { return bruceConfig.theme.paths.files; }
+    const String& themePath() override { return bruceConfig.theme.paths.files; }
 };
 
 #endif

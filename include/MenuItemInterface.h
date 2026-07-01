@@ -12,7 +12,7 @@ public:
     virtual void drawIconImg() {
         drawImg(
             *bruceConfig.themeFS(),
-            bruceConfig.getThemeItemImg(themePath()),
+            bruceConfig.getThemeItemImg(themePath()),  // const String& - no heap alloc
             0,
             imgCenterY,
             true,
@@ -21,10 +21,10 @@ public:
         );
     }
     virtual bool hasTheme() = 0;
-    virtual String themePath() = 0;
+    virtual const String& themePath() = 0;
 
-    bool checkTheme() { return hasTheme() && themePath() != ""; }
-    String getName() const { return _name; }
+    bool checkTheme() { return hasTheme() && themePath().length() > 0; }
+    String getName() const { return String(_name); }
 
     void draw(float scale = 1) {
         if (rotation != bruceConfigPins.rotation) resetCoordinates();
@@ -106,7 +106,7 @@ public:
     }
 
 protected:
-    String _name = "";
+    const char *_name = "";
     uint8_t rotation = ROTATION;
 
     int iconAreaH =
@@ -124,7 +124,7 @@ protected:
     int arrowAreaX = BORDER_PAD_X;
     int arrowAreaW = iconAreaX - arrowAreaX;
 
-    MenuItemInterface(const String &name) : _name(name) {}
+    MenuItemInterface(const char *name) : _name(name) {}
 
     void clearIconArea(void) {
         tft.fillRect(iconAreaX, iconAreaY, iconAreaW, iconAreaH, bruceConfig.bgColor);

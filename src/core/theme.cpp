@@ -38,7 +38,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         return false;
     }
     themePath = filepath;
-    String baseThemePath = themePath.substring(0, themePath.lastIndexOf('/')) + "/";
+    String baseThemePath = filepath.substring(0, filepath.lastIndexOf('/')) + "/";
 
     ThemeEntry entries[] = {
         {"wifi",        &theme.wifi,        theme.paths.wifi       },
@@ -67,7 +67,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
             String path = baseThemePath + _th[entry.key].as<String>();
             if (fs->exists(path)) {
                 *entry.flag = true;
-                entry.path = _th[entry.key].as<String>();
+                entry.path = path;
                 // Pre-cache PNGs into BIN files to avoid runtime decoding and allocations
                 if (path.endsWith(".png") || path.endsWith(".PNG")) { preparePngBin(*fs, path); }
             } else {

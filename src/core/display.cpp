@@ -265,8 +265,8 @@ int8_t displayMessage(
 
 void displayError(String txt, bool waitKeyPress) {
     displayRedStripe(txt);
-#ifndef HAS_SCREEN
     Serial.println("ERR: " + txt);
+#ifndef HAS_SCREEN
     return;
 #endif
     delay(200);
@@ -275,8 +275,8 @@ void displayError(String txt, bool waitKeyPress) {
 
 void displayWarning(String txt, bool waitKeyPress) {
     displayRedStripe(txt, TFT_BLACK, TFT_YELLOW);
-#ifndef HAS_SCREEN
     Serial.println("WARN: " + txt);
+#ifndef HAS_SCREEN
     return;
 #endif
     delay(200);
@@ -286,8 +286,8 @@ void displayWarning(String txt, bool waitKeyPress) {
 void displayInfo(String txt, bool waitKeyPress) {
     // todo: add newlines to txt if too long
     displayRedStripe(txt, TFT_WHITE, TFT_BLUE);
-#ifndef HAS_SCREEN
     Serial.println("INFO: " + txt);
+#ifndef HAS_SCREEN
     return;
 #endif
 
@@ -298,8 +298,8 @@ void displayInfo(String txt, bool waitKeyPress) {
 void displaySuccess(String txt, bool waitKeyPress) {
     // todo: add newlines to txt if too long
     displayRedStripe(txt, TFT_WHITE, TFT_DARKGREEN);
-#ifndef HAS_SCREEN
     Serial.println("SUCCESS: " + txt);
+#ifndef HAS_SCREEN
     return;
 #endif
     delay(200);
@@ -309,8 +309,8 @@ void displaySuccess(String txt, bool waitKeyPress) {
 void displayTextLine(String txt, bool waitKeyPress) {
     // todo: add newlines to txt if too long
     displayRedStripe(txt, getComplementaryColor2(bruceConfig.priColor), bruceConfig.priColor);
-#ifndef HAS_SCREEN
     Serial.println("MESSAGE: " + txt);
+#ifndef HAS_SCREEN
     return;
 #endif
     delay(200);
