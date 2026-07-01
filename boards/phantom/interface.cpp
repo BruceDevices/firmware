@@ -13,6 +13,7 @@
 SPIClass touchSPI;
 void _setup_gpio() {
     pinMode(XPT2046_CS, OUTPUT);
+    touch.setRotation(3); // if x is mirrored and y is mirrorred 
     digitalWrite(XPT2046_CS, HIGH);
     bruceConfigPins.rotation = 0;  // portrait mode for Phantom
     bruceConfig.colorInverted = 0; // color invert for Phantom
