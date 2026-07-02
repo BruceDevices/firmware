@@ -2,6 +2,8 @@
 #define __WIFI_ATKS_H__
 
 #include <WiFi.h>
+#include "scan_hosts.h"
+#include <vector>
 
 extern wifi_ap_record_t ap_record;
 
@@ -52,5 +54,9 @@ void capture_handshake(String tssid, String mac, uint8_t channel);
 void beaconAttack();
 
 void deauthFloodAttack();
+
+void enhancedDeauthMenu();
+void showTargetSelection();
+std::vector<Host> buildTargetListFromScan();
 
 #endif
