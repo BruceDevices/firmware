@@ -1094,6 +1094,8 @@ void enhancedDeauthMenu() {
             std::vector<Host> targets = buildTargetListFromScan();
             if (!targets.empty()) {
                 deauthTargetList(targets);
+            } else {
+                displayError("No targets found", true);
             }
         }},
         {"Back", [=]() { returnToMenu = true; }},
@@ -1123,11 +1125,16 @@ void showTargetSelection() {
         String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
         
         targetOptions.push_back({optionText.c_str(), [=]() {
-            Host target;
-            target.mac = bssid;
-            target.ssid = ssid;
-            target.channel = channel;
-            target.rssi = rssi;
+            uint8_t mac[6];
+            sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+            eth_addr eth;
+            memcpy(eth.addr, mac, 6);
+            
+            ip4_addr_t ip;
+            ip.addr = 0;
+            
+            Host target(&ip, &eth);
             stationDeauth(target);
         }});
     }
@@ -1141,11 +1148,18 @@ std::vector<Host> buildTargetListFromScan() {
     int n = WiFi.scanNetworks(false, true);
     
     for (int i = 0; i < n; i++) {
-        Host host;
-        host.mac = WiFi.BSSIDstr(i);
-        host.ssid = WiFi.SSID(i);
-        host.channel = WiFi.channel(i);
-        host.rssi = WiFi.RSSI(i);
+        String bssid = WiFi.BSSIDstr(i);
+        
+        uint8_t mac[6];
+        sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+        eth_addr eth;
+        memcpy(eth.addr, mac, 6);
+        
+        ip4_addr_t ip;
+        ip.addr = 0;
+        
+        Host host(&ip, &eth);
         targets.push_back(host);
     }
     return targets;
