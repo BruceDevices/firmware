@@ -20,6 +20,7 @@
 #include <Arduino.h>
 #include <globals.h>
 #include <nvs_flash.h>
+#include "deauther.h"
 
 #define WIFI_ATK_NAME "BruceAttack"
 extern bool showHiddenNetworks;
@@ -287,6 +288,7 @@ void wifi_atk_menu() {
 #endif
         {"Beacon SPAM",  [=]() { beaconAttack(); }     },
         {"Deauth Flood", [=]() { deauthFloodAttack(); }},
+        {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -1076,4 +1078,75 @@ void beaconAttack() {
         }
     }
     wifi_atk_unsetWifi();
+}
+
+void enhancedDeauthMenu() {
+    resetGlobalState();
+    
+    options = {
+        {"Station Deauth (Single)", [=]() {
+            showTargetSelection();
+        }},
+        {"Deauth All Clients", [=]() { 
+            deauthAll(); 
+        }},
+        {"Deauth Target List", [=]() {
+            std::vector<Host> targets = buildTargetListFromScan();
+            if (!targets.empty()) {
+                deauthTargetList(targets);
+            }
+        }},
+        {"Back", [=]() { returnToMenu = true; }},
+    };
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+void showTargetSelection() {
+    drawMainBorderWithTitle("Select Target");
+    displayTextLine("Scanning for networks...");
+    
+    int n = WiFi.scanNetworks(false, true);
+    if (n == 0) {
+        displayError("No networks found", true);
+        return;
+    }
+    
+    std::vector<Option> targetOptions;
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        String bssid = WiFi.BSSIDstr(i);
+        int channel = WiFi.channel(i);
+        int rssi = WiFi.RSSI(i);
+        
+        String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
+        String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        
+        targetOptions.push_back({optionText.c_str(), [=]() {
+            Host target;
+            target.mac = bssid;
+            target.ssid = ssid;
+            target.channel = channel;
+            target.rssi = rssi;
+            stationDeauth(target);
+        }});
+    }
+    targetOptions.push_back({"Back", []() { returnToMenu = true; }});
+    
+    loopOptions(targetOptions, MENU_TYPE_SUBMENU, "Select Target");
+}
+
+std::vector<Host> buildTargetListFromScan() {
+    std::vector<Host> targets;
+    int n = WiFi.scanNetworks(false, true);
+    
+    for (int i = 0; i < n; i++) {
+        Host host;
+        host.mac = WiFi.BSSIDstr(i);
+        host.ssid = WiFi.SSID(i);
+        host.channel = WiFi.channel(i);
+        host.rssi = WiFi.RSSI(i);
+        targets.push_back(host);
+    }
+    return targets;
 }
