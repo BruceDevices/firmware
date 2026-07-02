@@ -978,15 +978,16 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
 
 void drawBLE_beacon(int x, int y, uint16_t color) {
-tft.fillRect(x, y, 16, 32, bruceConfig.bgColor);
- tft.drawWideLine(16 + x, 21 + y,1 + x, 10 + y, 2, color, bruceConfig.bgColor);
-tft.drawWideLine(16 + x, 10 + y,1 + x, 21 + y, 2, color, bruceConfig.bgColor);
-tft.drawWideLine(16 + x, 21 + y, 8 + x, 27 + y, 2, color, bruceConfig.bgColor);
-tft.drawWideLine(16 + x, 10 + y, 8 + x, 5 + y, 2, color, bruceConfig.bgColor);
-tft.drawWideLine(8 + x, 5 + y, 8 + x, 27 + y, 2, color, bruceConfig.bgColor);
-  tft.fillTriangle(16 + x, 10 + y, 8 + x, 16 + y, 8 + x, 5 + y, color);
-  tft.fillTriangle(16 + x, 21 + y, 8 + x, 16 + y, 8 + x, 27 + y, color);
-  }
+    tft.fillRect(x, y, 12, 20, bruceConfig.bgColor);
+    tft.drawWideLine(12 + x, 13 + y, 1 + x, 7 + y, 1, color, bruceConfig.bgColor);
+    tft.drawWideLine(12 + x, 7 + y, 1 + x, 13 + y, 1, color, bruceConfig.bgColor);
+    tft.drawWideLine(12 + x, 13 + y, 6 + x, 17 + y, 1, color, bruceConfig.bgColor);
+    tft.drawWideLine(12 + x, 7 + y, 6 + x, 3 + y, 1, color, bruceConfig.bgColor);
+    tft.drawWideLine(6 + x, 3 + y, 6 + x, 17 + y, 1, color, bruceConfig.bgColor);
+    tft.fillTriangle(12 + x, 7 + y, 6 + x, 10 + y, 6 + x, 3 + y, color);
+    tft.fillTriangle(12 + x, 13 + y, 6 + x, 10 + y, 6 + x, 17 + y, color);
+    }
+}
 
 
 
