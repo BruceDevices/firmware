@@ -108,12 +108,9 @@ int nchars = (tftWidth - 16) / (LW * FM);
 tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
   }
 
-protected:
-String _name = "";
+protected: String _name = "";
 uint8_t rotation = ROTATION;
-int iconAreaH =
-((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y
-: tftHeight - 2 * BORDER_PAD_Y + 1);
+int iconAreaH = ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y : tftHeight - 2 * BORDER_PAD_Y + 1);
 int iconAreaW = iconAreaH;
 int iconCenterX = tftWidth / 2;
 int iconCenterY = tftHeight / 2;
@@ -125,35 +122,33 @@ int arrowAreaW = iconAreaX - arrowAreaX;
 MenuItemInterface(const String &name) : _name(name) {}
 
 void clearIconArea(void) {
+
      tft.fillRect(iconAreaX, iconAreaY, iconAreaW, iconAreaH, bruceConfig.bgColor);
     }
-void clearImgArea(void) { tft.fillRect(7, 27, tftWidth - 14, tftHeight - 34, bruceConfig.bgColor); }
+
+void clearImgArea(void) { tft.fillRect(7, 27, tftWidth - 14, tftHeight - 34, bruceConfig.bgColor);
+}
+
 void resetCoordinates(void) {
-
 if (tftWidth > tftHeight) {
-               iconAreaH = ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y
-                 : tftHeight - 2 * BORDER_PAD_Y + 1);
+    iconAreaH = ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y : tftHeight - 2 * BORDER_PAD_Y + 1);
                  } else {
-                     iconAreaH =
-                         ((tftWidth - 2 * BORDER_PAD_Y) % 2 == 0 ? tftWidth - 2 * BORDER_PAD_Y
-                                       : tftWidth - 2 * BORDER_PAD_Y + 1);
-                                }
+    iconAreaH = ((tftWidth - 2 * BORDER_PAD_Y) % 2 == 0 ? tftWidth - 2 * BORDER_PAD_Y : tftWidth - 2 * BORDER_PAD_Y + 1);
+    }
 
-                                          iconAreaW = iconAreaH;
+iconAreaW = iconAreaH;
+iconCenterX = tftWidth / 2;
+iconCenterY = tftHeight / 2;
 
-                             iconCenterX = tftWidth / 2;
-                                    iconCenterY = tftHeight / 2;
+iconAreaX = iconCenterX - iconAreaW / 2;
+iconAreaY = iconCenterY - iconAreaH / 2;
 
-                  iconAreaX = iconCenterX - iconAreaW / 2;
-                       iconAreaY = iconCenterY - iconAreaH / 2;
+    arrowAreaX = BORDER_PAD_X;
+    arrowAreaW = iconAreaX - arrowAreaX;
+rotation = bruceConfigPins.rotation;
+}
 
-                        arrowAreaX = BORDER_PAD_X;
-                              arrowAreaW = iconAreaX - arrowAreaX;
-
-                        rotation = bruceConfigPins.rotation;
-                   }
-
-   private
+private)))
 };
-     #endif // __MENU_ITEM_INTERFACE_H__
+#endif // __MENU_ITEM_INTERFACE_H__
 
