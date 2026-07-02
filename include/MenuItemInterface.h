@@ -100,7 +100,7 @@ public:
     }
 
 void drawTitle(float scale = 1) {
-int titleY = iconCenterY + iconAreaH / 2 + FG;
+int titleY = iconCenterY + iconAreaH / 2 + FG - 10;
 tft.setTextSize(FM);
 tft.drawPixel(0, 0, 0);
 tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
@@ -140,8 +140,8 @@ iconAreaW = iconAreaH;
 iconCenterX = tftWidth / 2;
 iconCenterY = tftHeight / 2;
 
-iconAreaX = iconCenterX - iconAreaW / 2;
-iconAreaY = iconCenterY - iconAreaH / 2;
+iconAreaX = iconCenterX - iconAreaW / 2 - 4;
+iconAreaY = iconCenterY - iconAreaH / 2 - 5;
 
     arrowAreaX = BORDER_PAD_X;
     arrowAreaW = iconAreaX - arrowAreaX;
