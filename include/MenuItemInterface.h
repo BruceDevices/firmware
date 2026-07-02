@@ -129,7 +129,7 @@ void clearIconArea(void) {
     }
 void clearImgArea(void) { tft.fillRect(7, 27, tftWidth - 14, tftHeight - 34, bruceConfig.bgColor); }
 void resetCoordinates(void) {
-                                                                                                                                                                                                 // Recalculate Center and ared due to portrait/landscape changings
+
 if (tftWidth > tftHeight) {
                iconAreaH = ((tftHeight - 2 * BORDER_PAD_Y) % 2 == 0 ? tftHeight - 2 * BORDER_PAD_Y
                  : tftHeight - 2 * BORDER_PAD_Y + 1);
@@ -151,10 +151,9 @@ if (tftWidth > tftHeight) {
                               arrowAreaW = iconAreaX - arrowAreaX;
 
                         rotation = bruceConfigPins.rotation;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                      }
+                   }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                      private:
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                      };
+   private
+};
+     #endif // __MENU_ITEM_INTERFACE_H__
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                      #endif // __MENU_ITEM_INTERFACE_H__
-}
