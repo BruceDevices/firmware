@@ -148,7 +148,7 @@ iconAreaY = iconCenterY - iconAreaH / 2;
 rotation = bruceConfigPins.rotation;
 }
 
-private)))
+private
 };
 #endif // __MENU_ITEM_INTERFACE_H__
 
