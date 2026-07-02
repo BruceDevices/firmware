@@ -35,7 +35,7 @@ void _setup_gpio() {
 void _post_setup_gpio() {
     if (!touch.begin(&tft.getSPIinstance())) {
         Serial.println("Touch IC not Started");
-        touch.setRotation(3); // if x is mirrored and y is mirrorred 
+        touch.setRotation(0); // if x is mirrored and y is mirrorred 
         log_i("Touch IC not Started");
     } else Serial.println("Touch IC Started");
 }
