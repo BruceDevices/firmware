@@ -1212,14 +1212,14 @@ bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool ce
     return true;
 }
 
-#if !defined(LITE_VERSION)
+//#if !defined(LITE_VERSION)
 // ####################################################################################################
 //  Draw a GIF on the TFT
 //  derived from
 //  https://github.com/bitbank2/AnimatedGIF/blob/master/examples/TFT_eSPI_memory/TFT_eSPI_memory.ino and
 //  https://github.com/bitbank2/AnimatedGIF/blob/master/examples/best_practices_example/best_practices_example.ino
 // ####################################################################################################
-
+/**
 Gif::Gif() : gifPosition(0, 0) {}
 
 Gif::~Gif() {
@@ -1342,7 +1342,7 @@ void Gif::GIFDraw(GIFDRAW *pDraw) {
         tft.drawPixel(0, 0, 0);
         tft.pushImage(pDraw->iX + position->x, y + position->y, iWidth, 1, (uint16_t *)usTemp);
     }
-} /* GIFDraw() */
+} ****//* GIFDraw() */
 
 bool Gif::openGIF(FS *fs, const char *filename) {
     if (fs != NULL) {
@@ -1408,7 +1408,7 @@ bool showGif(
 
     return true;
 }
-#endif
+#endif ***/
 /***************************************************************************************
 ** Function name: getComplementaryColor2
 ** Description:   Get simple complementary color in RGB565 format
