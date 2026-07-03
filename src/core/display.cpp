@@ -770,7 +770,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.drawPixel(0, 0, 0);
     tft.fillRect(0, 12, tftWidth, 16, bruceConfig.bgColor);
     tft.drawString(title, 6, 14);
-    // tft.drawString(title, 6, 14);
+    tft.drawString(title, 6, 14);
 
     // middle of the drawing area
     int middle = 14 /*status*/ + (tftHeight - 18 /*status + bottom margin*/) / 2;
