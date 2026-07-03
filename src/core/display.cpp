@@ -561,7 +561,7 @@ int loopOptions(
 
         if (menuType == MENU_TYPE_REGULAR) {
             String txt = options[index].label;
-            displayScrollingText(txt, coord);
+            tft.print(txt, coord);
         }
 
         // Checks ESC Press first, to not exit after PrevPress is processed
