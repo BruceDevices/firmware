@@ -92,7 +92,6 @@ void MegaFooter(uint16_t color) {
 ***************************************************************************************/
 void resetTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg, uint16_t screen) {
     tft.setCursor(x, y);
-    tft.fillRect(0, 14, tft.width(), tft.height() - 14, screen);
 
     tft.fillScreen(screen);
   tft.setTextSize(size);
