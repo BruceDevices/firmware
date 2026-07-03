@@ -1343,7 +1343,7 @@ void Gif::GIFDraw(GIFDRAW *pDraw) {
         tft.pushImage(pDraw->iX + position->x, y + position->y, iWidth, 1, (uint16_t *)usTemp);
     }
 } ****//* GIFDraw() */
-
+/***
 bool Gif::openGIF(FS *fs, const char *filename) {
     if (fs != NULL) {
         GifFs = fs;
@@ -1375,14 +1375,14 @@ int Gif::playFrame(int x, int y, bool bSync) {
 }
 
 int Gif::getLastError() { return gif->getLastError(); }
-
+*/
 /*
  * playDurationMs:
  *  -1 : Play the GIF in an infinite loop
  *  0  : Play the GIF once
  * >0  : Play the GIF for the specified duration in milliseconds
  *       (e.g., 1000 = play for 1 second)
- */
+ *//*** 
 bool showGif(
     FS *fs, const char *filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus
 ) {
