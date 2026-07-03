@@ -1,6 +1,7 @@
 var display = require('display');
 var keyboardApi = require('keyboard');
 var dialog = require('dialog');
+__allow("subghz");
 var subghz = require('subghz');
 
 var fillScreen = display.fill;

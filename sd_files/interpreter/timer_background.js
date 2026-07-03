@@ -1,7 +1,9 @@
 var runtime = require("runtime");
+__allow("audio");
 var audio = require("audio");
 var display = require("display");
 var keyboard = require("keyboard");
+__allow("gpio");
 var gpio = require("gpio");
 
 var alarmTime = 0;

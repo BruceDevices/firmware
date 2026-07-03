@@ -1,10 +1,12 @@
 // created by hxd57. V2
 // repository: https://github.com/HawkstoNGriM/m5-bruce-tamagochi-lite
 var dbStore = {fs: "sd", path: "/pet.json"}; // fs can be "sd" or "littlefs"
+__allow("storage");
 var storage = require("storage");
 var display = require('display');
 var keyboard = require('keyboard');
 var dialog = require('dialog');
+__allow("serial");
 var serialApi = require('serial');
 
 var width = display.width;

@@ -9,6 +9,7 @@ var __importDefault =
 Object.defineProperty(exports, "__esModule", { value: true });
 var display_1 = __importDefault(require("display"));
 var keyboard_1 = __importDefault(require("keyboard"));
+__allow("wifi");
 var wifi_1 = __importDefault(require("wifi"));
 var PRICE_UPDATE_INTERVAL = 2e4;
 var ESC_CHECK_INTERVAL = 10;
