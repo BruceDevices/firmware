@@ -757,12 +757,13 @@ Exit:
 #endif
     return coord;
 }
-tft.fillScreen(bruceConfig.bgColor);
+
 /***************************************************************************************
 ** Function name: drawSubmenu
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
+    tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -771,7 +772,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.fillRect(0, 12, tftWidth, 16, bruceConfig.bgColor);
     tft.drawString(title, 6, 14);
     tft.drawString(title, 6, 14);
-    forceTFTFlush();
+
     // middle of the drawing area
     int middle = 14 /*status*/ + (tftHeight - 18 /*status + bottom margin*/) / 2;
     // drawCentreString uses TC_DATUM, so we need to adjust the Y position
