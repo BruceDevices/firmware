@@ -1843,7 +1843,7 @@ bool preparePngBin(FS &fs, String filename) {
     //pngCacheOnly = previous;
     return ok;
 }
-#else
+
 bool preparePngBin(FS &fs, String filename) {
     log_w("PNG: Not supported in this version");
     return true;
@@ -1852,4 +1852,4 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
     log_w("PNG: Not supported in this version");
     return false;
 }
-#endif
+
