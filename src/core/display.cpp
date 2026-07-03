@@ -1620,7 +1620,7 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 
     return false;
 }
-*/
+*//**
 #if !defined(LITE_VERSION)
 /// Draw PNG files
 
@@ -1852,4 +1852,4 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
     log_w("PNG: Not supported in this version");
     return false;
 }
-#endif
+#endif*///
