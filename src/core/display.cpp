@@ -763,6 +763,7 @@ Exit:
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
+    tft.setTextWrap(false);
     tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
@@ -771,14 +772,13 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.drawPixel(0, 0, 0);
     tft.fillRect(0, 12, tftWidth, 16, bruceConfig.bgColor);
     tft.drawString(title, 6, 14);
-    tft.drawString(title, 6, 14);
 
     // middle of the drawing area
-    int middle = 14 /*status*/ + (tftHeight - 18 /*status + bottom margin*/) / 2;
+    int middle = 40;
     // drawCentreString uses TC_DATUM, so we need to adjust the Y position
     // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
-    int middle_up = middle - (tftHeight - 22) / 3 - FM * LH / 2;
-    int middle_down = middle + (tftHeight - 22) / 3 - FM * LH / 2;
+    int middle_up = 24;
+    int middle_down = 56;
 
     tft.setTextSize(FM);
 #if defined(HAS_TOUCH)
