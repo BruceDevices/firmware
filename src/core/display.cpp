@@ -1600,7 +1600,7 @@ bool drawBmp(FS &fs, String filename, int x, int y, bool center) {
     bmpFS.close();
     return true;
 }
-/**
+
 bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus) {
     String ext = filename.substring(filename.lastIndexOf('.'));
     ext.toLowerCase();
@@ -1620,7 +1620,7 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 
     return false;
 }
-*//**
+/**
 #if !defined(LITE_VERSION)
 /// Draw PNG files
 
@@ -1834,7 +1834,7 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
 
     return rc == PNG_SUCCESS;
 }
-
+*///
 // Prepare (or verify) the cached BIN for a PNG without rendering it on screen
 bool preparePngBin(FS &fs, String filename) {
     bool previous = pngCacheOnly;
@@ -1852,4 +1852,4 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
     log_w("PNG: Not supported in this version");
     return false;
 }
-#endif*///
+#endif
