@@ -824,6 +824,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 }
 
 void drawStatusBar() {
+    tft.fillRect(0, 0, tftWidth, 12, bruceConfig.bgColor);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     uint8_t bat = getBattery();
     if (bat > 0) drawBatteryStatus(bat);
 
