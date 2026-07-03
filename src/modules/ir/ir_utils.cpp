@@ -1,6 +1,8 @@
 #include "ir_utils.h"
 #include "core/display.h"
 #include "core/sd_functions.h"
+#include "modules/ir/TV-B-Gone.h"
+#include "modules/ir/custom_ir.h"
 #include <algorithm>
 
 void setup_ir_pin(int pin, uint8_t mode) {
@@ -173,6 +175,133 @@ String pickDirectory(FS &fs, String rootPath) {
             }
             readDirsOnly(fs, folder, dirList);
             index = 0;
+            redraw = true;
+        }
+    }
+}
+
+namespace {
+
+const char *SC_BACK_LABEL = ">> Back";
+
+// Parses a .sc file (one .ir path per line, "#" comment lines ignored)
+// into the list of paths it references.
+void readScEntries(FS *fs, const String &filepath, std::vector<String> &out) {
+    out.clear();
+    File f = (*fs).open(filepath, FILE_READ);
+    if (!f) return;
+
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line == "" || line.startsWith("#")) continue;
+        out.push_back(line);
+    }
+    f.close();
+}
+
+// Builds the on-screen list (basenames + a trailing "Back" entry) from
+// the raw .sc entries, reusing FileList/listFiles() for rendering so it
+// looks like the rest of the file browser.
+void buildScDisplayList(const std::vector<String> &entries, std::vector<FileList> &out) {
+    out.clear();
+    for (auto &e : entries) {
+        FileList item;
+        int slash = e.lastIndexOf('/');
+        item.filename = (slash >= 0) ? e.substring(slash + 1) : e;
+        item.folder = false;
+        item.operation = false;
+        out.push_back(item);
+    }
+    FileList backEntry;
+    backEntry.filename = SC_BACK_LABEL;
+    backEntry.folder = false;
+    backEntry.operation = true;
+    out.push_back(backEntry);
+}
+
+} // namespace
+
+/*
+ * loadScFile
+ * Reads a .sc scan-match list (created by the IR Scanner's
+ * irbrf_saveMatches) and lets the user browse the .ir files it
+ * references. Selecting an entry shows the same IR command menu used
+ * when browsing to an .ir file directly ("IR Tx SpamAll" / "IR Choose
+ * cmd"), then returns to this .sc list afterwards instead of exiting,
+ * so several matches can be tried one after another. Pressing Esc on
+ * the list (or picking ">> Back") returns to the caller; picking
+ * "Main Menu" from an entry's IR menu exits all the way out via
+ * exitAll, which the caller (e.g. loopSD) should also honor.
+ */
+void loadScFile(FS *fs, String filepath, bool &exitAll) {
+    std::vector<String> entries;
+    readScEntries(fs, filepath, entries);
+
+    if (entries.empty()) {
+        displayError("No entries found", true);
+        return;
+    }
+
+    std::vector<FileList> displayList;
+    buildScDisplayList(entries, displayList);
+
+    int index = 0;
+    bool redraw = true;
+    Opt_Coord coord;
+
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
+
+    while (true) {
+        delay(10);
+        if (exitAll) break;
+
+        if (redraw) {
+            coord = listFiles(index, displayList);
+            redraw = false;
+        }
+        displayScrollingText(displayList[index].filename, coord);
+
+        if (EscPress && PrevPress) EscPress = false;
+
+        if (check(EscPress)) break; // back out of the .sc loader
+
+        if (check(PrevPress) || check(UpPress)) {
+            index = (index == 0) ? (int)displayList.size() - 1 : index - 1;
+            redraw = true;
+        }
+        if (check(NextPress) || check(DownPress)) {
+            index = (index == (int)displayList.size() - 1) ? 0 : index + 1;
+            redraw = true;
+        }
+        if (check(SelPress)) {
+            while (check(SelPress)) yield(); // debounce, avoid double-activation
+
+            if (displayList[index].operation) break; // ">> Back" selected
+
+            String irPath = entries[index];
+            if (!(*fs).exists(irPath)) {
+                displayError("File not found:\n" + irPath, true);
+            } else {
+                options = {
+                    {"IR Tx SpamAll", [&]() {
+                                          delay(200);
+                                          txIrFile(fs, irPath);
+                                      }},
+                    {"IR Choose cmd", [&]() {
+                                          delay(200);
+                                          chooseCmdIrFile(fs, irPath);
+                                      }},
+                    {"Close Menu",    [&]() { yield(); }},
+                    {"Main Menu",     [&]() { exitAll = true; }},
+                };
+                while (check(SelPress)) yield(); // wait for SEL release
+                loopOptions(options);
+            }
+
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
             redraw = true;
         }
     }

@@ -3,4 +3,5 @@
 #include <FS.h>
 
 void ir_scanner();
+void ir_scanner_loadMatches();
 #endif

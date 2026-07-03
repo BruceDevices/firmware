@@ -1,6 +1,6 @@
 /**
  * @file ir_scanner.cpp
- * @brief IR scanner module for Bruce firmware.
+ * @brief IR scanner module for Bruce firmware by 7wp81x.
  *
  * Scans a directory recursively for *.ir files, either filtering
  * signals by keyword (e.g. "power", "on", "off") or - in "All IR
@@ -12,10 +12,13 @@
  *   =  / right   Next file
  *   <  / left    Previous file
  *   Enter        Pause / Resume (persists across Next/Prev and auto-advance)
+ *   o            Previous signal in current file
+ *   p            Next signal in current file
+ *   s            Send current signal right now (does not wait for auto delay)
  *   m            Mark current file as match
  *   l            Toggle "loop current file" (stay on this file forever
  *                instead of auto-advancing once all cycles finish)
- *   ` or Esc     Save matches = /BruceIR/IRmatch_<date>_<hhmmss>.txt and exit
+ *   ` or Esc     Save matches = /BruceIR/Scanner/match_<date>_<hhmmss>.sc and exit
  *
  * Memory notes:
  *   The directory scan only keeps the *path* of every file that has at
@@ -387,7 +390,7 @@ static void irbrf_drawStatic(const String &filePath, int fileIdx, int fileTotal)
     int footerY = tftHeight - BORDER_PAD_X - FP * LH - 2;
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
 #ifdef HAS_KEYBOARD
-    tft.drawCentreString("< > Ent=Pause M=Match L=Loop",
+    tft.drawCentreString("< > Ent] O/P=Sig S]end M]atch L]oop",
                          tftWidth / 2, footerY, 1);
 #else
     // No physical keys on this board, so "m" and "l" do not apply here;
@@ -468,7 +471,7 @@ static bool irbrf_interruptibleDelay(uint32_t ms) {
 /*
  * irbrf_saveMatches
  * Writes the list of file paths the user marked as a match (pressed
- * "m" on) into a timestamped text file under /BruceIR on the SD card.
+ * "m" on) into a timestamped text file under /BruceIR/Scanner on the SD card.
  * Creates the /BruceIR folder if it does not exist yet. If the clock
  * has not been set, falls back to using millis() in the file name so
  * the file is still unique. Returns the saved file path, or an empty
@@ -478,13 +481,14 @@ static String irbrf_saveMatches(const std::vector<String> &matches) {
     if (matches.empty()) return "";
 
     if (!SD.exists("/BruceIR")) SD.mkdir("/BruceIR");
+    if (!SD.exists("/BruceIR/Scanner")) SD.mkdir("/BruceIR/Scanner");
     char fname[64];
     if (clock_set && timeInfo != nullptr) {
         char stamp[24];
         strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", timeInfo);
-        snprintf(fname, sizeof(fname), "/BruceIR/IRmatch_%s.txt", stamp);
+        snprintf(fname, sizeof(fname), "/BruceIR/Scanner/match_%s.sc", stamp);
     } else {
-        snprintf(fname, sizeof(fname), "/BruceIR/IRmatch_%lu.txt", (unsigned long)millis());
+        snprintf(fname, sizeof(fname), "/BruceIR/Scanner/match_%lu.sc", (unsigned long)millis());
     }
 
     File out = SD.open(fname, FILE_WRITE);
@@ -580,7 +584,8 @@ static std::vector<String> irbrf_splitKeywords(const String &csv) {
  * loopFile, and status are updated in place based on the choice made.
  */
 static bool irbrf_showExitMenu(const String &curPath, std::vector<String> &matches,
-                               bool &loopFile, String &status) {
+                               bool &loopFile, String &status, int &sigIdx,
+                               int sigTotal, std::vector<IrBrfSignal> &curSignals) {
     while (check(EscPress)) yield(); // drain the press that opened this menu
 
     bool alreadyMatched = false;
@@ -591,6 +596,22 @@ static bool irbrf_showExitMenu(const String &curPath, std::vector<String> &match
 
     options = {
         {"Resume", [&]() {}},
+        {"Prev Signal",
+         [&]() {
+             sigIdx = (sigIdx == 0) ? sigTotal - 1 : sigIdx - 1;
+             status = "Prev signal";
+         }},
+        {"Next Signal",
+         [&]() {
+             sigIdx = (sigIdx == sigTotal - 1) ? 0 : sigIdx + 1;
+             status = "Next signal";
+         }},
+        {"Send Signal",
+         [&]() {
+             const IrBrfSignal &manualSig = curSignals[sigIdx];
+             status = "TX: " + manualSig.name;
+             irbrf_sendSignal(manualSig);
+         }},
         {alreadyMatched ? "Already Matched" : "Mark as Match",
          [&]() {
              if (!alreadyMatched) {
@@ -769,7 +790,8 @@ void ir_scanner() {
                 irbrf_drawDynamic(sigIdx, sigTotal, cycle, maxCycles, paused, status,
                                   (int)matches.size(), loopFile);
 
-                bool exitChosen = irbrf_showExitMenu(curPath, matches, loopFile, status);
+                bool exitChosen = irbrf_showExitMenu(curPath, matches, loopFile, status,
+                                                     sigIdx, sigTotal, curSignals);
 
                 if (exitChosen) {
                     running = false;
@@ -821,6 +843,28 @@ void ir_scanner() {
             if (pressedLetter == 'l' || pressedLetter == 'L') {
                 loopFile = !loopFile;
                 status = loopFile ? "Loop: ON" : "Loop: OFF";
+            }
+
+            if (pressedLetter == 'o' || pressedLetter == 'O') {
+                sigIdx = (sigIdx == 0) ? sigTotal - 1 : sigIdx - 1;
+                status = "<: " + curSignals[sigIdx].name;
+                irbrf_drawDynamic(sigIdx, sigTotal, cycle, maxCycles, paused, status,
+                                  (int)matches.size(), loopFile);
+            }
+
+            if (pressedLetter == 'p' || pressedLetter == 'P') {
+                sigIdx = (sigIdx == sigTotal - 1) ? 0 : sigIdx + 1;
+                status = ">: " + curSignals[sigIdx].name;
+                irbrf_drawDynamic(sigIdx, sigTotal, cycle, maxCycles, paused, status,
+                                  (int)matches.size(), loopFile);
+            }
+
+            if (pressedLetter == 's' || pressedLetter == 'S') {
+                const IrBrfSignal &manualSig = curSignals[sigIdx];
+                status = "TX: " + manualSig.name;
+                irbrf_drawDynamic(sigIdx, sigTotal, cycle, maxCycles, paused, status,
+                                  (int)matches.size(), loopFile);
+                irbrf_sendSignal(manualSig);
             }
 #endif
 

@@ -6,6 +6,7 @@
 #include "modules/gps/wigle.h"
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
+#include "modules/ir/ir_utils.h"
 #include "modules/others/audio.h"
 #if defined(HAS_NS4168_SPKR)
 #include "modules/others/audio_player.h"
@@ -771,6 +772,12 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
+                                                         }});
+                    }
+                    if (filepath.endsWith(".sc")) {
+                        options.insert(options.begin(), {"Load IR Scan List", [&]() {
+                                                             delay(200);
+                                                             loadScFile(&fs, filepath, exit);
                                                          }});
                     }
                     if (filepath.endsWith(".sub"))
