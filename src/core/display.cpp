@@ -703,17 +703,17 @@ Opt_Coord drawOptions(
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 5 + 2) / 2 - 5;
+    int32_t optionsTopY = 15;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 5 + 2) * menuSize + 7, 5, bgcolor
+            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 5 - 3) * menuSize + 7, 5, bgcolor
         );
         tft.drawRoundRect(
             tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 5 + 2) / 2 - 5,
+            tftHeight / 2 - menuSize * (FM * 5 - 3) / 2 - 5,
             tftWidth * 0.8,
-            (FM * 5 + 2) * menuSize + 7,
+            (FM * 5 - 3) * menuSize + 7,
             5,
             fgcolor
         );
@@ -797,12 +797,12 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
     tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
     tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
-    tft.drawFastHLine(
+    /**tft.drawFastHLine(
         tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
         middle + selectedTextSize * LH / 2 + 1,
         strlen(options[index].label.c_str()) * selectedTextSize * LW,
         bruceConfig.priColor
-    );
+    );**/
     // Next Item
     int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
     const char *thirdOption = options[thirdIndex].label.c_str();
