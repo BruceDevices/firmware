@@ -1614,7 +1614,7 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 #if !defined(LITE_VERSION)
 
     else if (ext.endsWith("gif"))
-        return showGif(&fs, filename.c_str(), x, y, center, playDurationMs, resetButtonStatus);
+       // return showGif(&fs, filename.c_str(), x, y, center, playDurationMs, resetButtonStatus);
 #endif
     else log_e("Image not supported");
 
@@ -1837,10 +1837,10 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
 *///
 // Prepare (or verify) the cached BIN for a PNG without rendering it on screen
 bool preparePngBin(FS &fs, String filename) {
-    bool previous = pngCacheOnly;
-    pngCacheOnly = true;
+   // bool previous = pngCacheOnly;
+   // pngCacheOnly = true;
     bool ok = drawPNG(fs, filename, 0, 0, false);
-    pngCacheOnly = previous;
+    //pngCacheOnly = previous;
     return ok;
 }
 #else
