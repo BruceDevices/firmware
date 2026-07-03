@@ -6,7 +6,6 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 #include "ui.h"
 #include "../wifi/sniffer.h"
 
@@ -107,8 +106,9 @@ void updateUi(bool show_toolbars) {
         );
     }
 
-    // Draw mood
     drawMood(mood_face, mood_phrase, mood_broken);
+
+    drawFriendPanel();
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -142,19 +142,49 @@ void drawBottomCanvas() {
 }
 
 void drawMood(String face, String phrase, bool broken) {
-    // prepare canvas
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FG + 1);
     tft.setTextDatum(MC_DATUM);
-    // draw screen
     tft.drawPixel(0, 0, 0);
     tft.fillRect(0, canvas_top_h + 10, display_w, canvas_bot_h - 40, bruceConfig.bgColor);
     tft.drawCentreString(face, canvas_center_x, canvas_h / 3, SMOOTH_FONT);
-    // prepare canvas
     tft.setTextDatum(BC_DATUM);
     tft.setTextSize(1);
-    // draw screen
     tft.drawPixel(0, 0, 0);
     tft.drawCentreString(phrase, canvas_center_x, canvas_h - 30, SMOOTH_FONT);
 }
-#endif
+
+void drawFriendPanel() {
+    auto peers = getPwngridPeers();
+    int y = canvas_h - 22;
+    int lineH = 10;
+
+    tft.setTextSize(1);
+    tft.setTextDatum(TL_DATUM);
+
+    int count = 0;
+    for (auto &p : peers) {
+        if (p.gone) continue;
+        if (count >= 3) break;
+
+        tft.fillRect(4, y, display_w - 8, lineH, bruceConfig.bgColor);
+        tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+
+        String name = p.name.substring(0, 12);
+        tft.drawString(name, 4, y);
+
+        String rssi;
+        if (p.rssi >= -67) rssi = "[####]";
+        else if (p.rssi >= -70) rssi = "[### ]";
+        else if (p.rssi >= -80) rssi = "[##  ]";
+        else rssi = "[#   ]";
+
+        tft.setTextDatum(TR_DATUM);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawString(rssi, display_w - 4, y);
+        tft.setTextDatum(TL_DATUM);
+
+        y += lineH;
+        count++;
+    }
+}

@@ -6,7 +6,6 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 #include "../wifi/sniffer.h"
 #include "../wifi/wifi_atks.h"
 #include "core/mykeyboard.h"
@@ -80,10 +79,10 @@ void brucegotchi_update() {
 }
 
 void wakeUp() {
-    for (uint8_t i = 0; i < active_channels_size; i++) {
+    for (uint8_t i = 0; i < 4; i++) {
         setMood(i % getNumberOfMoods());
         updateUi(false);
-        vTaskDelay(1250 / portTICK_RATE_MS);
+        vTaskDelay(300 / portTICK_RATE_MS);
     }
 }
 
@@ -114,11 +113,6 @@ void advertise(uint8_t channel) {
 void set_pwnagotchi_exit(bool new_value) { pwnagotchi_exit = new_value; }
 
 void brucegotchi_start() {
-    int tmp = 0;              // Control workflow
-    bool shot = false;        // Control deauth faces
-    bool pwgrid_done = false; // Control to start advertising
-    bool Deauth_done = false; // Control to start deauth
-    uint8_t _times = 0;       // control delays without impacting control btns
     set_pwnagotchi_exit(false);
 
     tft.fillScreen(bruceConfig.bgColor);
@@ -158,79 +152,78 @@ void brucegotchi_start() {
 #endif
     brucegotchi_update();
 
-    tmp = millis();
-    // LET'S GOOOOO!!!
-    while (true) {
-        if (millis() - tmp < 2000 && !Deauth_done) {
-            Deauth_done = true;
-            drawMood("(-@_@)", "Preparing Deauth Sniper");
-        }
-        if (millis() - tmp > (2000 + 1000 * _times) && Deauth_done && !pwgrid_done) {
+    uint32_t lastAdv = 0;
+    uint32_t lastUi = 0;
+    uint32_t lastDeauth = 0;
+    uint32_t lastMoodCheck = 0;
+    bool deauthFaces = false;
 
-            if (registeredBeacons.size() > 30)
-                registeredBeacons.clear(); // Clear registered beacons to restart search and avoid restarts
-            // Serial.println("<<---- Starting Deauthentication Process ---->>");
-            for (auto registeredBeacon : registeredBeacons) {
-                char _MAC[20];
-                sprintf(
-                    _MAC,
-                    "%02X:%02X:%02X:%02X:%02X:%02X",
-                    registeredBeacon.MAC[0],
-                    registeredBeacon.MAC[1],
-                    registeredBeacon.MAC[2],
-                    registeredBeacon.MAC[3],
-                    registeredBeacon.MAC[4],
-                    registeredBeacon.MAC[5]
-                );
-                // Serial.println(
-                //     String(_MAC) + " on ch" + String(registeredBeacon.channel) + " -> we are now on ch " +
-                //     String(ch)
-                // );
-                if (registeredBeacon.channel == ch) {
-                    memcpy(&ap_record.bssid, registeredBeacon.MAC, 6);
-                    wsl_bypasser_send_raw_frame(
-                        &ap_record, registeredBeacon.channel
-                    ); // writes the buffer with the information
+    while (true) {
+        uint32_t now = millis();
+
+        if (registeredBeacons.size() > 30) {
+            registeredBeacons.clear();
+        }
+
+        if (now - lastAdv > 2500) {
+            current_channel++;
+            if (current_channel >= active_channels_size) current_channel = 0;
+            ch = active_channels[current_channel];
+            advertise(ch);
+            lastAdv = now;
+        }
+
+        if (now - lastDeauth > 800 && !registeredBeacons.empty()) {
+            for (const auto &beacon : registeredBeacons) {
+                if (beacon.channel == ch) {
+                    memcpy(&ap_record.bssid, beacon.MAC, 6);
+                    wsl_bypasser_send_raw_frame(&ap_record, beacon.channel);
                     send_raw_frame(deauth_frame, 26);
                 }
-                if (SelPress) break; // stops deauthing if select button is pressed
             }
-            // Serial.println("<<---- Stopping Deauthentication Process ---->>");
-            drawMood(shot ? "(<<_<<)" : "(>>_>>)", shot ? "Lasers Activated! Deauthing" : "pew! pew! pew!");
-            _times++;
-            shot = !shot;
+            lastDeauth = now;
+            deauthFaces = true;
         }
-        if (millis() - tmp > 12000 && pwgrid_done == false) {
-            drawMood("(^__^)", "Lets Make Friends!");
-            _times = 0;
-            pwgrid_done = true;
+
+        if (now - lastMoodCheck > 4000) {
+            if (!registeredBeacons.empty()) {
+                // Active pwnage: cycle through intense/cool/motivated/debugging moods
+                static const uint8_t activeMoods[] = {7, 8, 12, 14, 20};
+                static uint8_t activeIdx = 0;
+                setMood(activeMoods[activeIdx % 5], "", "Pwning " + String(registeredBeacons.size()) + " friends!", false);
+                activeIdx++;
+            } else if (deauthFaces) {
+                // Just finished deauthing but no active friends: happy/excited
+                static const uint8_t happyMoods[] = {9, 10, 11, 13};
+                static uint8_t happyIdx = 0;
+                setMood(happyMoods[happyIdx % 4], "", "", false);
+                happyIdx++;
+                deauthFaces = false;
+            } else {
+                // No friends around: mood varies by loneliness
+                static const uint8_t lonelyMoods[] = {5, 15, 16, 17, 18};
+                static uint8_t lonelyIdx = 0;
+                setMood(lonelyMoods[lonelyIdx % 5], "", "", false);
+                lonelyIdx++;
+            }
+            lastMoodCheck = now;
         }
-        if (pwgrid_done && millis() - tmp > (12000 + 3000 * _times)) {
-            _times++;
-            advertise(ch);
+
+        if (now - lastUi > 1000) {
             updateUi(true);
+            lastUi = now;
         }
-        if (millis() - tmp > 29500) {
-            _times = 0;
-            tmp = millis();
-            pwgrid_done = false;
-            Deauth_done = false;
-            brucegotchi_update();
-        }
+
         if (check(SelPress)) {
-            // Build options menu with channel toggle status
             String channel_status = use_all_channels ? "All Ch: ON" : "All Ch: OFF";
 
-            // moved down here to reset the options, due to use in other parts in pwngrid spam
             options = {
                 {"Find friends", yield},
                 {"Pwngrid spam", send_pwnagotchi_beacon_main},
                 {channel_status.c_str(), toggle_all_channels},
                 {"Main Menu", lambdaHelper(set_pwnagotchi_exit, true)},
             };
-            // Display menu
             loopOptions(options);
-            // Redraw footer & header
             tft.fillScreen(bruceConfig.bgColor);
             drawTopCanvas();
             drawBottomCanvas();
@@ -245,4 +238,3 @@ void brucegotchi_start() {
     esp_wifi_set_promiscuous_rx_cb(nullptr);
     wifiDisconnect();
 }
-#endif

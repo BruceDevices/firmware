@@ -6,7 +6,6 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-#if !defined(LITE_VERSION)
 #include <Arduino.h>
 
 #define MOOD_BROKEN 19
@@ -17,4 +16,3 @@ int getNumberOfMoods();
 String getCurrentMoodFace();
 String getCurrentMoodPhrase();
 bool isCurrentMoodBroken();
-#endif
