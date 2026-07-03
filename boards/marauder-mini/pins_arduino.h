@@ -1,146 +1,107 @@
-#include "core/powerSave.h"
-#include <interface.h>
-#include <Arduino.h>
+#ifndef Pins_Arduino_h
+#define Pins_Arduino_h
 
-// กำหนดแชนเนลสำหรับควบคุมไฟ Backlight จอด้วย PWM
-#define PWM_CH     0
-#define PWM_FREQ   5000
-#define PWM_RES    8
+#include "soc/soc_caps.h"
+#include <stdint.h>
 
-// ฟังก์ชันภายใน: เช็กว่ามีปุ่มใดปุ่มหนึ่งถูกกดอยู่หรือไม่ (Active LOW)
-bool anyBtnPressed() {
-    return (!digitalRead(UP_BTN) || !digitalRead(DW_BTN) || 
-            !digitalRead(L_BTN)  || !digitalRead(R_BTN)  || !digitalRead(SEL_BTN));
-}
+// เปลี่ยนกลับเป็นขา Serial มาตรฐานของ ESP32 Classic
+static const uint8_t TX = 1;
+static const uint8_t RX = 3;
 
-/***************************************************************************************
-** Function name: _setup_gpio()
-** Location: main.cpp
-** Description:   initial setup for the device
-***************************************************************************************/
-void _setup_gpio() {
-    // 1. เปลี่ยนเป็น INPUT_PULLUP เพื่อเปิดแรงดันอ้างอิงภายในชิป
-    pinMode(UP_BTN, INPUT_PULLUP);
-    pinMode(SEL_BTN, INPUT_PULLUP);
-    pinMode(DW_BTN, INPUT_PULLUP);
-    pinMode(R_BTN, INPUT_PULLUP);
-    pinMode(L_BTN, INPUT_PULLUP);
+static const uint8_t TXD2 = 17;
+static const uint8_t RXD2 = 16;
 
-    // 2. แก้เป็น 1 เพื่อเปิดคำสั่งกลับสีจอ ST7789 ไม่ให้สีเพี้ยน
-    bruceConfig.colorInverted = 1; 
-    
-    // ทิศทางหน้าจอแนวตั้ง (หากต้องการแนวนอนให้แก้เป็น 1 หรือ 3 ใน platformio.ini)
-    bruceConfigPins.rotation = 0; 
-}
+static const uint8_t SDA = 33;
+static const uint8_t SCL = 26;
 
-/***************************************************************************************
-** Function name: _post_setup_gpio()
-** Location: main.cpp
-** Description:   second stage gpio setup to make a few functions work
-***************************************************************************************/
-void _post_setup_gpio() { 
-    // ตั้งค่าขาไฟจอและเปิดใช้งานระบบ PWM (LEDC) ของ ESP32
-    ledcSetup(PWM_CH, PWM_FREQ, PWM_RES);
-    ledcAttachPin(TFT_BL, PWM_CH);
-    ledcWrite(PWM_CH, 255); // เปิดไฟสว่างสุดตอนเริ่มทำงาน
-}
+// กำหนดขาตำแหน่ง SPI มาตรฐาน (VSPI Bus)
+static const uint8_t SS   = 5;
+static const uint8_t MOSI = 23;
+static const uint8_t MISO = 19;
+static const uint8_t SCK  = 18;
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { 
-    return 100; // บอร์ด DevKitC ทั่วไปไม่มีไอซีวัดไฟ ให้ส่ง 100% ไว้เสมอ
-}
+// รายชื่อขา GPIO ที่มีอยู่จริงบน ESP32 Classic 30-pin เท่านั้น
+static const uint8_t G0 = 0;
+static const uint8_t G2 = 2;
+static const uint8_t G4 = 4;
+static const uint8_t G5 = 5;
+static const uint8_t G12 = 12;
+static const uint8_t G13 = 13;
+static const uint8_t G14 = 14;
+static const uint8_t G15 = 15;
+static const uint8_t G16 = 16;
+static const uint8_t G17 = 17;
+static const uint8_t G18 = 18;
+static const uint8_t G19 = 19;
+static const uint8_t G21 = 21;
+static const uint8_t G22 = 22;
+static const uint8_t G23 = 23;
+static const uint8_t G25 = 25;
+static const uint8_t G26 = 26;
+static const uint8_t G27 = 27;
+static const uint8_t G32 = 32;
+static const uint8_t G33 = 33;
+static const uint8_t G34 = 34; // Input Only
+static const uint8_t G35 = 35; // Input Only
+static const uint8_t G36 = 36; // Input Only
+static const uint8_t G39 = 39; // Input Only
 
-/*********************************************************************
-** Function: setBrightness
-** location: settings.cpp
-** set brightness value
-**********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    // ปรับระดับไฟหน้าจอจริงตามค่าแปรผัน (0 - 255) จากเมนูตั้งค่าของเฟิร์มแวร์
-    ledcWrite(PWM_CH, brightval);
-}
+// SERIAL (GPS) ย้ายมาใช้คู่ขาพอร์ต 2 (Serial2) เพื่อไม่ให้ชนกับระบบอื่น
+#define SERIAL_TX 17
+#define SERIAL_RX 16
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 
-/*********************************************************************
-** Function: InputHandler
-** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
-**********************************************************************/
-void InputHandler(void) {
-    static unsigned long tm = millis();
-    static unsigned long esc_tm = millis();
-    static bool esc_armed = false;
-    
-    if (!(millis() - tm > 200 || LongPress)) return;
+// --- ระบบควบคุม 5 ปุ่ม ---
+// (โน้ต: ขา 34, 35, 36, 39 จำเป็นต้องต่อตัวต้านทาน Pull-up 10k ภายนอกลงไฟ 3.3V)
+#define HAS_BTN 1
+#define HAS_5_BUTTONS
+#define SEL_BTN 34
+#define UP_BTN 36
+#define DW_BTN 35
+#define R_BTN 39
+#define L_BTN 13
+#define BTN_ALIAS "\"Ok\""
+#define BTN_ACT LOW
 
-    bool u = digitalRead(UP_BTN);
-    bool d = digitalRead(DW_BTN);
-    bool r = digitalRead(R_BTN);
-    bool l = digitalRead(L_BTN);
-    bool s = digitalRead(SEL_BTN);
-    
-    // ตรวจสอบว่ามีการกดปุ่มใดๆ
-    if (!s || !u || !d || !r || !l) {
-        tm = millis();
-        if (!wakeUpScreen()) AnyKeyPress = true;
-        else return;
-    }
-    
-    // คอมโบกดปุ่ม Left + Select พร้อมกันเพื่อทำเป็นปุ่มลัด Esc (ย้อนกลับ)
-    if (!l && !s) {
-        EscPress = true;
-        return;
-    }
-    
-    // กดปุ่ม Left ปกติ (ทำหน้าที่เป็นเมนูก่อนหน้า และจับเวลากดค้างเพื่อเป็น Esc ได้ด้วย)
-    if (!l) {
-        PrevPress = true;
-        if (esc_armed == false) {
-            esc_tm = millis();
-            esc_armed = true;
-        }
-    }
-    
-    if (esc_armed && millis() - esc_tm > 1000) {
-        esc_armed = false;
-        esc_tm = millis();
-        PrevPress = false;
-        EscPress = true; // หากกด Left ค้างไว้เกิน 1 วินาทีจะกลายเป็นปุ่ม Esc
-    }
-    
-    if (!r) NextPress = true;
-    if (!u) UpPress = true;
-    if (!d) DownPress = true;
-    if (!s) SelPress = true;
+#define TXLED -1
+#define LED_ON HIGH
+#define LED_OFF LOW
 
-END:
-    // แก้ไขระบบ Debounce ป้องกันปุ่มเบิ้ล โดยให้รอจนปล่อยปุ่มจริงหรือหมดเวลา 200ms
-    if (AnyKeyPress || PrevPress || NextPress || EscPress || SelPress || UpPress || DownPress) {
-        long tmp = millis();
-        while ((millis() - tmp) < 200 && anyBtnPressed());
-    }
-}
+// --- บอร์ดเสริม CC1101 & NRF24 ---
+#define CC1101_GDO0_PIN 27
+#define CC1101_SS_PIN 15
+#define CC1101_MOSI_PIN SPI_MOSI_PIN
+#define CC1101_SCK_PIN SPI_SCK_PIN
+#define CC1101_MISO_PIN SPI_MISO_PIN
 
-/*********************************************************************
-** Function: powerOff
-** location: mykeyboard.cpp
-** Turns off the device (or try to)
-**********************************************************************/
-void powerOff() {
-    ledcWrite(PWM_CH, 0); // ดับไฟหน้าจอ
-    
-    // ตั้งค่าให้บอร์ดตื่นจากการหลับลึก (Deep Sleep) เมื่อกดปุ่ม SEL_BTN (ขาลอจิกเป็น 0)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)SEL_BTN, 0);
-    esp_deep_sleep_start();
-}
+#define NRF24_CE_PIN 12
+#define NRF24_SS_PIN 14
+#define NRF24_MOSI_PIN SPI_MOSI_PIN
+#define NRF24_SCK_PIN SPI_SCK_PIN
+#define NRF24_MISO_PIN SPI_MISO_PIN
 
-/*********************************************************************
-** Function: checkReboot
-** location: mykeyboard.cpp
-** Btn logic to turn off the device
-**********************************************************************/
-void checkReboot() {
-    // ปล่อยว่างไว้หรือใส่เงื่อนไขรีบูตระบบตามต้องการ
-}
+#define FP 1
+#define FM 1
+#define FG 2
+
+#define HAS_SCREEN 1
+#define ROTATION 0
+#define MINBRIGHT 20
+
+// --- ระบบ SD Card (ย้ายขา CS หนีจอแสดงผล) ---
+#define SDCARD_CS 15
+#define SDCARD_SCK 18
+#define SDCARD_MISO 19
+#define SDCARD_MOSI 23
+
+#define GROVE_SDA 33
+#define GROVE_SCL 26
+
+// สรุปขาเชื่อมต่อ SPI หลักให้ถูกต้องตามสถาปัตยกรรมชิป
+#define SPI_SCK_PIN 18
+#define SPI_MISO_PIN 19
+#define SPI_MOSI_PIN 23
+#define SPI_SS_PIN 5  // เปลี่ยนจากขา 1 มาเป็นขา 5 ป้องกัน Serial พัง
+
+#endif /* Pins_Arduino_h */
