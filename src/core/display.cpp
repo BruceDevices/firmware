@@ -1126,7 +1126,7 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
     else return false;
 
     const size_t data_size = picture.size();
-
+    if (data_size > 120000) return false;
     // Alloc memory into heap
     uint8_t *data_array = new uint8_t[data_size];
     if (data_array == nullptr) {
@@ -1624,7 +1624,7 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 #if !defined(LITE_VERSION)
 /// Draw PNG files
 
-#include <PNGdec.h>
+//#include <PNGdec.h>
 #if TFT_WIDTH > TFT_HEIGHT
 #define MAX_IMAGE_WIDTH TFT_WIDTH
 #else
