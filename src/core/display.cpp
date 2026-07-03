@@ -80,7 +80,7 @@ void displayScrollingText(const String &text, Opt_Coord &coord) {
                                                                                     tft.print(text);
                                                                                         }
                                                                                         }
-}
+
 /***************************************************************************************
 ** Function name: TouchFooter
 ** Description:   Draw touch screen footer
