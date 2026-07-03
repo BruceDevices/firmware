@@ -96,7 +96,7 @@ bool drawImg(
 /****
 bool drawPNG(FS &fs, String filename, int x, int y, bool center);****/
 /**
-bool preparePngBin(FS &fs, String filename);*//
+bool preparePngBin(FS &fs, String filename);*/
 bool drawBmp(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
 /***
 #if !defined(LITE_VERSION)
