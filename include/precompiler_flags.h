@@ -261,7 +261,7 @@
 #endif
 
 #ifndef DEEPSLEEP_WAKEUP_PIN
-#define DEEPSLEEP_WAKEUP_PIN -1
+#define DEEPSLEEP_WAKEUP_PIN 0
 #endif
 
 #ifndef DEEPSLEEP_PIN_ACT

@@ -1366,6 +1366,9 @@ String num_keyboard(String current_text, int max_size, String textbox_title, boo
 
 void powerOff() { displayWarning("Not available", true); }
 void goToDeepSleep() {
+    // Power down radios before deep sleep
+    WiFi.mode(WIFI_OFF);
+    esp_bt_controller_deinit();
 #if DEEPSLEEP_WAKEUP_PIN >= 0
 
 #if SOC_PM_SUPPORT_EXT0_WAKEUP
