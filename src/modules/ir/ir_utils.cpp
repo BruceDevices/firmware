@@ -224,7 +224,7 @@ void buildScDisplayList(const std::vector<String> &entries, std::vector<FileList
 
 /*
  * loadScFile
- * Reads a .sc scan-match list (created by the IR Scanner's
+ * Reads a .sc scan-match list (created by the IR Bruteforce's
  * irbrf_saveMatches) and lets the user browse the .ir files it
  * references. Selecting an entry shows the same IR command menu used
  * when browsing to an .ir file directly ("IR Tx SpamAll" / "IR Choose
