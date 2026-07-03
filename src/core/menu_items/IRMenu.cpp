@@ -6,6 +6,7 @@
 #include "modules/ir/custom_ir.h"
 #include "modules/ir/ir_jammer.h"
 #include "modules/ir/ir_read.h"
+#include "modules/ir/ir_scanner.h"
 
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
@@ -18,6 +19,7 @@ void IRMenu::optionsMenu() {
         {"IR Read",   [=]() { IrRead(); }       },
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
+        {"IR Scanner", []() { ir_scanner(); }},
 #endif
         {"Config",    [this]() { configMenu(); }},
     };
