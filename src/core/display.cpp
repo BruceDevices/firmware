@@ -1609,14 +1609,14 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
     tft.imageToBin(fls, filename, x, y, center, playDurationMs);
     if (ext.endsWith("jpg")) return showJpeg(fs, filename, x, y, center);
     else if (ext.endsWith("bmp")) return drawBmp(fs, filename, x, y, center);
-    else if (ext.endsWith("png")) return drawPNG(fs, filename, x, y, center);
+    //else if (ext.endsWith("png")) return drawPNG(fs, filename, x, y, center);
 
 #if !defined(LITE_VERSION)
 
     else if (ext.endsWith("gif"))
        // return showGif(&fs, filename.c_str(), x, y, center, playDurationMs, resetButtonStatus);
 #endif
-    else log_e("Image not supported");
+        log_e("image not supported");
 
     return false;
 }
@@ -1836,6 +1836,7 @@ bool drawPNG(FS &fs, String filename, int x, int y, bool center) {
 }
 *///
 // Prepare (or verify) the cached BIN for a PNG without rendering it on screen
+/**
 bool preparePngBin(FS &fs, String filename) {
    // bool previous = pngCacheOnly;
    // pngCacheOnly = true;
@@ -1843,7 +1844,7 @@ bool preparePngBin(FS &fs, String filename) {
     //pngCacheOnly = previous;
     return ok;
 }
-
+*/
 bool preparePngBin(FS &fs, String filename) {
     log_w("PNG: Not supported in this version");
     return true;
