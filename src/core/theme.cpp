@@ -57,10 +57,9 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
                 *entry.flag = true;
                 entry.path = _th[entry.key].as<String>();
                 // Pre-cache PNGs into BIN files to avoid runtime decoding and allocations
-                if (path.endsWith(".png") || path.endsWith(".PNG")) { preparePngBin(*fs, path); }
-            } else {
+    
                 log_w("THEME: file not found: %s", entry.key);
-            }
+
         }
     }
 
