@@ -688,10 +688,10 @@ Opt_Coord drawOptions(
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
-            tftWidth * 0.8, optionsTopY, tftWidth * 0.8, (FM * 5 + 2) * menuSize + 7, 5, bgcolor
+            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 5 + 2) * menuSize + 7, 5, bgcolor
         );
         tft.drawRoundRect(
-            tftWidth * 0.8,
+            tftWidth * 0.10,
             tftHeight / 2 - menuSize * (FM * 5 + 2) / 2 - 5,
             tftWidth * 0.8,
             (FM * 5 + 2) * menuSize + 7,
