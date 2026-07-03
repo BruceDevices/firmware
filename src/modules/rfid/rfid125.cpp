@@ -232,7 +232,6 @@ void RFID125::save_file() {
     String data = _printable_data;
     data.replace(" ", "");
     String filename = keyboard(data, 30, "File name:");
-    if (filename == "\x1B") return;
 
     display_banner();
 

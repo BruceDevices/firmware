@@ -35,7 +35,7 @@ public:
     String getCapturedSSID();
     String getCapturedPassword();
 
-    DNSServer &getDNSServer() { return *dnsServer; }
+    DNSServer &getDNSServer() { return dnsServer; }
     AsyncWebServer &getWebServer() { return webServer; }
     String getApName() { return apName; }
     uint8_t getChannel() { return _channel; }
@@ -57,13 +57,13 @@ private:
     bool _verifyPwd;
     bool _autoMode;
     bool _backgroundMode;
-
+    
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
-
+    
     AsyncWebServer webServer;
 
-    DNSServer *dnsServer = nullptr;
+    DNSServer dnsServer;
     IPAddress apGateway;
 
     String outputFile = "default_creds.csv";

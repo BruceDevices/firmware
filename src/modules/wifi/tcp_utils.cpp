@@ -2,7 +2,6 @@
 //       so there is no loss of data when inputing
 #ifndef LITE_VERSION
 #include "modules/wifi/tcp_utils.h"
-#include "core/display.h"
 #include "core/wifi/wifi_common.h"
 
 bool inputMode;
@@ -10,8 +9,13 @@ bool inputMode;
 void listenTcpPort() {
     if (!wifiConnected) wifiConnectMenu();
 
+    WiFiClient tcpClient;
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
     String portNumber = num_keyboard("", 5, "TCP port to listen");
-    if (portNumber.length() == 0 || portNumber == "\x1B") {
+    if (portNumber.length() == 0) {
         displayError("No port number given, exiting");
         return;
     }
@@ -21,49 +25,39 @@ void listenTcpPort() {
         return;
     }
 
-    WiFiClient tcpClient;
-    drawMainBorderWithTitle("LISTEN TCP");
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-
     WiFiServer server(portNumberInt);
     server.begin();
 
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-    tft.println("Listening on:");
-    tft.setCursor(10, tft.getCursorY());
+    tft.println("Listening...");
     tft.print(WiFi.localIP().toString().c_str());
     tft.println(":" + portNumber);
 
     for (;;) {
-        WiFiClient client = server.accept();
+        WiFiClient client = server.accept(); // Wait for a client to connect
 
         if (client) {
             Serial.println("Client connected");
-            tft.setCursor(10, tft.getCursorY());
             tft.println("Client connected");
 
             while (client.connected()) {
                 if (inputMode) {
                     String keyString = keyboard("", 16, "send input data, q=quit");
-                    if (keyString == "q" || keyString == "\x1B") {
+                    if (keyString == "q") {
                         displayError("Exiting Listener");
                         client.stop();
                         server.stop();
                         return;
                     }
                     inputMode = false;
-                    drawMainBorderWithTitle("LISTEN TCP");
-                    tft.setTextSize(FP);
-                    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-                    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setCursor(0, 0);
                     if (keyString.length() > 0) {
-                        client.print(keyString);
+                        client.print(keyString); // Send the entire string to the client
                         Serial.print(keyString);
                     }
                 } else {
                     if (client.available()) {
-                        char incomingChar = client.read();
+                        char incomingChar = client.read(); // Read one byte at time from the client
                         tft.print(incomingChar);
                         Serial.print(incomingChar);
                     }
@@ -85,10 +79,8 @@ void listenTcpPort() {
 void clientTCP() {
     if (!wifiConnected) wifiConnectMenu();
 
-    String serverIP = num_keyboard("", 15, "Enter server IP");
-    if (serverIP == "\x1B") return;
+    String serverIP = keyboard("", 15, "Enter server IP");
     String portString = num_keyboard("", 5, "Enter server Port");
-    if (portString == "\x1B") return;
     int portNumber = atoi(portString.c_str());
 
     if (serverIP.length() == 0 || portNumber == 0) {
@@ -97,32 +89,24 @@ void clientTCP() {
     }
 
     WiFiClient client;
-    drawMainBorderWithTitle("TCP CLIENT");
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-    tft.println("Connecting to:");
-    tft.setCursor(10, tft.getCursorY());
-    tft.println(serverIP + ":" + portString);
-
     if (!client.connect(serverIP.c_str(), portNumber)) {
         displayError("Connection failed");
         return;
     }
 
-    tft.setCursor(10, tft.getCursorY());
-    tft.println("Connected!");
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.println("Connected to:");
+    tft.println(serverIP + ":" + portString);
     Serial.println("Connected to server");
 
     while (client.connected()) {
         if (inputMode) {
             String keyString = keyboard("", 16, "send input data");
             inputMode = false;
-            drawMainBorderWithTitle("TCP CLIENT");
-            tft.setTextSize(FP);
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+            tft.fillScreen(TFT_BLACK);
+            tft.setCursor(0, 0);
             if (keyString.length() > 0) {
                 client.print(keyString);
                 Serial.print(keyString);

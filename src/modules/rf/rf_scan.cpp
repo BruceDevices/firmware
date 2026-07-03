@@ -531,7 +531,7 @@ void display_signal_data(RfCodes received) {
             }
         }
     } else {
-        strlcpy(hexString, "No code identified", sizeof(hexString));
+        strcpy(hexString, "No code identified");
         padprintln("Length: No code identified");
         padprintln("Record length: " + String(transitions) + " transitions");
     }

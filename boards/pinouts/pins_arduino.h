@@ -12,10 +12,6 @@
 #include "../m5stack-cardputer/pins_arduino.h"
 #elif CYD_2432S028
 #include "../CYD-2432S028/pins_arduino.h"
-#elif ARDUINO_NESSO_N1
-#include "../arduino-nesso-n1/pins_arduino.h"
-#elif ARDUINO_M5STACK_DINMETER
-#include "../m5stack-dinmeter/pins_arduino.h"
 #elif ARDUINO_M5STACK_CORE
 #include "../m5stack-core/pins_arduino.h"
 #elif ARDUINO_M5STACK_CORES3
@@ -30,6 +26,8 @@
 #include "../ESP-General/pins_arduino.h"
 #elif SMOOCHIEE_BOARD
 #include "../smoochiee-board/pins_arduino.h"
+#elif SMOOCHIEE_S3_2_8INCH_ILI9341
+#include "../smoochiee-s3-2.8inch-ili9341/pins_arduino.h"
 #elif XK404
 #include "../xk404/pins_arduino.h"
 #elif REAPER
@@ -46,12 +44,8 @@
 #include "../marauder-mini/pins_arduino.h"
 #elif LILYGO_T_HMI
 #include "../lilygo-t-hmi/pins_arduino.h"
-#elif ELECROW
-#include "../elecrow/pins_arduino.h"
 #elif ESP32C5_DEVKITC_1_TFT
 #include "../ESP32-C5-tft/pins_arduino.h"
 #elif ESP32C5_DEVKITC_1
 #include "../ESP32-C5/pins_arduino.h"
-#elif NM_CYD_ESP32C5
-#include "../nm-cyd-c5/pins_arduino.h"
 #endif
