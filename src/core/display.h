@@ -92,15 +92,17 @@ bool drawImg(
     FS &fs, String filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
     bool resetButtonStatus = true
 );
-bool drawPNG(FS &fs, String filename, int x, int y, bool center);
+/****
+bool drawPNG(FS &fs, String filename, int x, int y, bool center);****/
 bool preparePngBin(FS &fs, String filename);
 bool drawBmp(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
+/***
 #if !defined(LITE_VERSION)
 bool showGif(
     FS *fs, const char *filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
     bool clearButtonStatus = true
 );
-#endif
+#endif*/
 bool showJpeg(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
 bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center = false);
 
