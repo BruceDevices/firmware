@@ -103,7 +103,7 @@ void drawTitle(float scale = 1) {
 int titleY = iconCenterY + iconAreaH / 2 + FG - 14;
 tft.setTextSize(FM);
 tft.drawPixel(0, 0, 0);
-tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
+tft.fillRect(arrowAreaX + 3, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
 int nchars = (tftWidth - 16) / (LW * FM);
 tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
   }
