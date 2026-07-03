@@ -30,6 +30,7 @@ bool __attribute__((weak)) isCharging() { return false; }
 ** Function name: displayScrollingText
 ** Description:   Scroll large texts into screen
 ***************************************************************************************/
+/***
 void displayScrollingText(const String &text, Opt_Coord &coord) {
     int len = text.length();
     String displayText = text + "        "; // Add spaces for smooth looping
@@ -58,7 +59,7 @@ void displayScrollingText(const String &text, Opt_Coord &coord) {
         i++;
         if (i == 1) _lastmillis = millis() + 1000;
     }
-}
+}*/
 
 /***************************************************************************************
 ** Function name: TouchFooter

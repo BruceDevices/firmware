@@ -26,8 +26,9 @@ struct Opt_Coord {
     uint16_t fgcolor = bruceConfig.priColor;
     uint16_t bgcolor = bruceConfig.bgColor;
 };
-void displayScrollingText(const String &text, Opt_Coord &coord);
 /***
+void displayScrollingText(const String &text, Opt_Coord &coord);
+
 #if !defined(LITE_VERSION)
 
 #include <AnimatedGIF.h>
