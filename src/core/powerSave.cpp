@@ -3,10 +3,10 @@
 #include "settings.h"
 
 /* Check if it's time to put the device to sleep */
-#define SCREEN_OFF_DELAY 5000
+#define SCREEN_OFF_DELAY 30000
 
 void fadeOutScreen(int startValue) {
-    for (int brightValue = startValue; brightValue >= 0; brightValue -= 1) {
+    for (int brightValue = startValue; brightValue >= 0; brightValue -= 5) {
         setBrightness(max(brightValue, 0), false);
         delay(5);
     }

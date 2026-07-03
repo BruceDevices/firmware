@@ -9,8 +9,6 @@
 #include "modules/ethernet/ARPScanner.h"
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
-#include "modules/wifi/evil_portal.h"
-#include "modules/wifi/karma_attack.h"
 #include "modules/wifi/netcut.h"
 #include "modules/wifi/responder.h"
 #include "modules/wifi/scan_hosts.h"
@@ -18,7 +16,6 @@
 #include "modules/wifi/wifi_atks.h"
 
 #ifndef LITE_VERSION
-#include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
 
@@ -58,10 +55,6 @@ void WifiMenu::optionsMenu() {
         options.push_back({"AP info", displayAPInfo});
     }
     options.push_back({"Wifi Atks", wifi_atk_menu});
-    options.push_back({"Evil Portal", [=]() {
-                           // WebUI cleanup now handled automatically inside EvilPortal constructor
-                           EvilPortal();
-                       }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
@@ -87,7 +80,6 @@ void WifiMenu::optionsMenu() {
                        }});
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
-    options.push_back({"Brucegotchi", brucegotchi_start});
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
@@ -98,49 +90,6 @@ void WifiMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "WiFi");
 
     options.clear();
-}
-
-void WifiMenu::configMenu() {
-    std::vector<Option> wifiOptions;
-
-    wifiOptions.push_back({"Change MAC", wifiMACMenu});
-    wifiOptions.push_back({"Add Evil Wifi", addEvilWifiMenu});
-    wifiOptions.push_back({"Remove Evil Wifi", removeEvilWifiMenu});
-    wifiOptions.push_back({bruceConfig.TerminalLog ? "SSH/Telnet Log OFF" : "SSH/Telnet Log ON", [this]() {
-                               bruceConfig.setTerminalLog(!bruceConfig.TerminalLog);
-                               configMenu();
-                           }});
-
-    // Evil Wifi Settings submenu (unchanged)
-    wifiOptions.push_back({"Evil Wifi Settings", [this]() {
-                               std::vector<Option> evilOptions;
-
-                               evilOptions.push_back({"Set Gateway IP", setEvilGatewayIp});
-                               evilOptions.push_back({"Password Mode", setEvilPasswordMode});
-                               evilOptions.push_back({"Rename /creds", setEvilEndpointCreds});
-                               evilOptions.push_back({"Allow /creds access", setEvilAllowGetCreds});
-                               evilOptions.push_back({"Rename /ssid", setEvilEndpointSsid});
-                               evilOptions.push_back({"Allow /ssid access", setEvilAllowSetSsid});
-                               evilOptions.push_back({"Display endpoints", setEvilAllowEndpointDisplay});
-                               evilOptions.push_back({"Back", [this]() { configMenu(); }});
-                               loopOptions(evilOptions, MENU_TYPE_SUBMENU, "Evil Wifi Settings");
-                           }});
-
-    {
-
-        String hidden__wifi_option = String("Hidden Networks:") + (showHiddenNetworks ? "ON" : "OFF");
-
-        // construct Option explicitly using char* label
-        Option opt(hidden__wifi_option.c_str(), [this]() {
-            showHiddenNetworks = !showHiddenNetworks;
-            displayInfo(String("Hidden Networks:") + (showHiddenNetworks ? "ON" : "OFF"), true);
-            configMenu();
-        });
-
-        wifiOptions.push_back(opt);
-    }
-    wifiOptions.push_back({"Back", [this]() { optionsMenu(); }});
-    loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Config");
 }
 
 void WifiMenu::drawIcon(float scale) {

@@ -32,23 +32,6 @@ void setCustomUIColorSettingMenu(
     int colorType, int rgb, std::function<uint16_t(uint16_t, int)> colorGenerator
 );
 
-void addEvilWifiMenu();
-
-void removeEvilWifiMenu();
-
-void setEvilEndpointCreds();
-
-void setEvilEndpointSsid();
-
-void setEvilAllowEndpointDisplay();
-
-void setEvilAllowGetCreds();
-
-void setEvilAllowSetSsid();
-
-void setEvilPasswordMode();
-
-void setEvilGatewayIp();
 
 void setRFModuleMenu();
 

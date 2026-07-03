@@ -232,12 +232,12 @@ void boot_screen() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
     tft.drawPixel(0, 0, bruceConfig.bgColor);
-    tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
+    tft.drawCentreString("Khang", tftWidth / 2, 10, 1);
     tft.setTextSize(FP);
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
     tft.setTextSize(FM);
     tft.drawCentreString(
-        "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1
+        "FIRMWARE", tftWidth / 2, tftHeight + 2, 1
     ); // will draw outside the screen on non touch devices
 }
 
@@ -261,7 +261,7 @@ void boot_screen_anim() {
 
     tft.drawPixel(0, 0, 0);       // Forces back communication with TFT, to avoid ghosting
                                   // Start image loop
-    while (millis() < i + 7000) { // boot image lasts for 5 secs
+    while (millis() < i + 1000) { // boot image lasts for 5 secs
         if ((millis() - i > 2000) && !drawn) {
             tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
             if (boot_img > 0 && !drawn) {
@@ -438,8 +438,8 @@ void setup() {
     tft.setRotation(bruceConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
-    tft.setTextColor(TFT_PURPLE, TFT_BLACK);
-    tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("Be Dao", tft.width() / 2, tft.height() / 2, 1);
 #else
     tft.begin();
 #endif
@@ -485,8 +485,9 @@ void setup() {
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
-        boot_screen_anim();
-        startup_sound();
+        boot_screen();
+        delay(200);
+        tft.fillScreen(bruceConfig.bgColor);
     }
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");

@@ -867,7 +867,6 @@ async function renderTFT(data) {
   const allText = screenText.join(" ").toLowerCase();
   const isWiFiMenu =
     allText.includes("wifi") ||
-    allText.includes("evil portal") ||
     allText.includes("deauth") ||
     allText.includes("handshake");
 

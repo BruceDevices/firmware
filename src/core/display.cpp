@@ -811,19 +811,9 @@ void drawStatusBar() {
         tft.drawLine(5, 25, tftWidth - 6, 25, bruceConfig.priColor);
     }
 
-    if (clock_set) {
         setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
-        tft.fillRect(12, 12, 60, LH, bruceConfig.bgColor);
-#if defined(HAS_RTC)
-        updateTimeStr(_rtc.getTimeStruct());
-#else
-        updateTimeStr(rtc.getTimeStruct());
-#endif
-        tft.print(timeStr);
-    } else {
-        setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
-        tft.print("BRUCE " + String(BRUCE_VERSION));
-    }
+        tft.print("Khang " + String(BRUCE_VERSION));
+
 
     int iconCount = 0;
     bool showSD   = sdcardMounted;

@@ -13,8 +13,6 @@
 #include "core/wifi/wifi_common.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
-#include "evil_portal.h"
-#include "karma_attack.h"
 #include "sniffer.h"
 #include "vector"
 #include <Arduino.h>
@@ -282,9 +280,6 @@ void wifi_atk_menu() {
     bool scanAtks = false;
     options = {
         {"Target Atks",  [&]() { scanAtks = true; }    },
-#ifndef LITE_VERSION
-        {"Karma Attack", [=]() { karma_setup(); }      },
-#endif
         {"Beacon SPAM",  [=]() { beaconAttack(); }     },
         {"Deauth Flood", [=]() { deauthFloodAttack(); }},
     };
@@ -722,14 +717,8 @@ AGAIN:
     options = {
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
         {"Deauth",              [=]() { target_atk(tssid, mac, channel); }         },
-#ifndef LITE_VERSION
         {"Capture Handshake",   [=]() { capture_handshake(tssid, mac, channel); }  },
-#endif
-        {"Clone Portal",        [=]() { EvilPortal(tssid, channel, false, false); }},
-        {"Deauth+Clone",        [=]() { EvilPortal(tssid, channel, true, false); } },
-        {"Deauth+Clone+Verify",
-         [=]() // New WiFi Attack
-         { EvilPortal(tssid, channel, true, true); }                               },
+
     };
     addOptionToMainMenu();
 
