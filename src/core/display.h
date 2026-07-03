@@ -27,7 +27,7 @@ struct Opt_Coord {
     uint16_t bgcolor = bruceConfig.bgColor;
 };
 void displayScrollingText(const String &text, Opt_Coord &coord);
-
+/***
 #if !defined(LITE_VERSION)
 
 #include <AnimatedGIF.h>
@@ -78,7 +78,7 @@ private:
 
     static void GIFDraw(GIFDRAW *pDraw);
 };
-#endif
+#endif*****/
 /*
  * @name drawImg
  * @param fs: File system
