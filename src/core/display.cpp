@@ -1382,7 +1382,7 @@ int Gif::getLastError() { return gif->getLastError(); }
  *  0  : Play the GIF once
  * >0  : Play the GIF for the specified duration in milliseconds
  *       (e.g., 1000 = play for 1 second)
- *//*** 
+ *//***
 bool showGif(
     FS *fs, const char *filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus
 ) {
@@ -1600,7 +1600,7 @@ bool drawBmp(FS &fs, String filename, int x, int y, bool center) {
     bmpFS.close();
     return true;
 }
-
+/**
 bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus) {
     String ext = filename.substring(filename.lastIndexOf('.'));
     ext.toLowerCase();
@@ -1620,7 +1620,7 @@ bool drawImg(FS &fs, String filename, int x, int y, bool center, int playDuratio
 
     return false;
 }
-
+*/
 #if !defined(LITE_VERSION)
 /// Draw PNG files
 
