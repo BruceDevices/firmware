@@ -781,7 +781,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int middle_up = 24;
     int middle_down = 50;
 
-    tft.setTextSize(2);
+    tft.setTextSize(1);
 #if defined(HAS_TOUCH)
     tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
 #endif
@@ -797,7 +797,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
     tft.setTextSize(selectedTextSize);
     tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 100, bruceConfig.bgColor);
+    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
     tft.drawFastHLine(
