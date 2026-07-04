@@ -1,7 +1,8 @@
 /*
-Last Updated: 24/01/2026
+Last Updated: 04/07/2026
 By: Ninja-Jr
 Optimizations for speed while maintaining 100% compatibility
+Added universal power-off codes auto-run after region-specific codes
 
 ------------------------------------------------------------
 LICENSE:
@@ -55,6 +56,8 @@ uint8_t read_bits(uint8_t count);
 #define MAX_WAIT_TIME 65535 // tens of us (ie: 655.350ms)
 extern const IrCode *const NApowerCodes[];
 extern const IrCode *const EUpowerCodes[];
+extern const IrCode *const UniversalCodes[];
+extern const uint8_t num_UniversalCodes;
 uint8_t num_NAcodes = NUM_ELEM(NApowerCodes);
 uint8_t num_EUcodes = NUM_ELEM(EUpowerCodes);
 uint8_t bitsleft_r = 0;
@@ -146,6 +149,47 @@ void unlock_ir_tx() {
     }
 }
 
+void sendCodeBatch(const IrCode *const *codes, uint8_t count) {
+    uint16_t rawData[300];
+
+    for (uint8_t i = 0; i < count; i++) {
+        lock_ir_tx();
+        powerCode = codes[i];
+
+        const uint8_t freq = powerCode->timer_val;
+        const uint8_t numpairs = powerCode->numpairs;
+        const uint8_t bitcompression = powerCode->bitcompression;
+
+        code_ptr = 0;
+        for (uint8_t k = 0; k < numpairs; k++) {
+            uint16_t ti = (read_bits(bitcompression)) * 2;
+            rawData[k * 2] = powerCode->times[ti] * 10;
+            rawData[(k * 2) + 1] = powerCode->times[ti + 1] * 10;
+        }
+
+        if (i % 5 == 0) {
+            progressHandler(i, count);
+        }
+
+        irsend.sendRaw(rawData, (numpairs * 2), freq);
+        unlock_ir_tx();
+        bitsleft_r = 0;
+        delay_ten_us(20500);
+
+        if (check(SelPress)) {
+            while (check(SelPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
+            displayTextLine("Paused");
+            while (!check(SelPress)) {
+                if (check(EscPress)) { returnToMenu = true; return; }
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            while (check(SelPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+        if (returnToMenu) break;
+    }
+    progressHandler(count, count);
+}
+
 void StartTvBGone() {
     if (!init_ir_tx_mutex()) {
         displayRedStripe("Mutex init failed");
@@ -170,79 +214,32 @@ void StartTvBGone() {
     addOptionToMainMenu();
 
     loopOptions(options);
-    uint16_t rawData[300];
 
     if (!returnToMenu) {
-        if (region) num_codes = num_NAcodes;
-        else num_codes = num_EUcodes;
-
-        bool endingEarly = false; // will be set to true if the user presses the button during code-sending
+        bool endingEarly = false;
 
         check(SelPress);
-        for (i = 0; i < num_codes; i++) {
-            // Lock only during IR transmission - allows button checks to run while waiting
-            lock_ir_tx();
-            
-            if (region == NA) powerCode = NApowerCodes[i];
-            else powerCode = EUpowerCodes[i];
 
-            const uint8_t freq = powerCode->timer_val;
-            const uint8_t numpairs = powerCode->numpairs;
-            const uint8_t bitcompression = powerCode->bitcompression;
+        // Send region-specific codes
+        if (region == NA) {
+            displayTextLine("Sending NA codes...");
+            sendCodeBatch(NApowerCodes, num_NAcodes);
+        } else {
+            displayTextLine("Sending EU codes...");
+            sendCodeBatch(EUpowerCodes, num_EUcodes);
+        }
 
-            // For EACH pair in this code....
-            code_ptr = 0;
-            for (uint8_t k = 0; k < numpairs; k++) {
-                uint16_t ti;
-                ti = (read_bits(bitcompression)) * 2;
-
-                // Direct calculation - skips temp variable for speed
-                rawData[k * 2] = powerCode->times[ti] * 10;        // offtime * 10
-                rawData[(k * 2) + 1] = powerCode->times[ti + 1] * 10; // ontime * 10
-            }
-
-            // Update progress every 5 codes instead of every code - reduces UI overhead
-            if (i % 5 == 0) {
-                progressHandler(i, num_codes);
-            }
-
-            irsend.sendRaw(rawData, (numpairs * 2), freq);
-            unlock_ir_tx();  // Release mutex immediately so other tasks can run
-            bitsleft_r = 0;
-            
-            // Wait 205ms between codes using NOP delays (keeps timing precise)
-            delay_ten_us(20500);
-
-            // Check for user input - this can run freely since mutex is unlocked
-            if (check(SelPress)) // Pause TV-B-Gone
-            {
-                while (check(SelPress)) {
-                    vTaskDelay(10 / portTICK_PERIOD_MS);
-                }
-                displayTextLine("Paused");
-
-                while (!check(SelPress)) { // If Presses Select again, continues
-                    if (check(EscPress)) {
-                        endingEarly = true;
-                        break;
-                    }
-                    vTaskDelay(10 / portTICK_PERIOD_MS);
-                }
-                while (check(SelPress)) {
-                    vTaskDelay(10 / portTICK_PERIOD_MS);
-                }
-                if (endingEarly) break; // Cancels  TV-B-Gone
-                displayTextLine("Running, Wait");
-            }
-
-        } // end of POWER code for loop
+        // Send universal codes if user didn't stop
+        if (!returnToMenu) {
+            displayTextLine("Sending universal codes...");
+            sendCodeBatch(UniversalCodes, num_UniversalCodes);
+        }
 
         // Ensure final progress is shown
-        progressHandler(num_codes, num_codes);
+        progressHandler(1, 1);
 
-        if (endingEarly == false) {
+        if (!returnToMenu) {
             displayTextLine("All codes sent!");
-            // pause for ~1.3 sec using efficient NOP delays
             delay_ten_us(MAX_WAIT_TIME);
             delay_ten_us(MAX_WAIT_TIME);
         } else {
@@ -254,7 +251,6 @@ void StartTvBGone() {
         digitalWrite(bruceConfigPins.irTx, LED_OFF);
 
 #ifdef USE_BOOST
-
         /// DISABLE 5V OUTPUT
         PPM.disableOTG();
 #endif
