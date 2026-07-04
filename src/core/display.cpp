@@ -775,11 +775,11 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.drawString(title, 6, 14);**/
 
     // middle of the drawing area
-    int middle = 40;
+    int middle = 45;
     // drawCentreString uses TC_DATUM, so we need to adjust the Y position
     // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
-    int middle_up = 24;
-    int middle_down = 50;
+    int middle_up = 32;
+    int middle_down = 58;
 
     tft.setTextSize(1);
 #if defined(HAS_TOUCH)
@@ -801,7 +801,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 4,
+        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 2,
         middle + selectedTextSize * LH / 2 + 1,
         strlen(options[index].label.c_str()) * selectedTextSize * LW,
         bruceConfig.priColor
