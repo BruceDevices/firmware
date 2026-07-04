@@ -149,7 +149,7 @@ void unlock_ir_tx() {
     }
 }
 
-void sendCodeBatch(const IrCode *const *codes, uint8_t count) {
+void sendCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irsend) {
     uint16_t rawData[300];
 
     for (uint8_t i = 0; i < count; i++) {
@@ -223,16 +223,16 @@ void StartTvBGone() {
         // Send region-specific codes
         if (region == NA) {
             displayTextLine("Sending NA codes...");
-            sendCodeBatch(NApowerCodes, num_NAcodes);
+            sendCodeBatch(NApowerCodes, num_NAcodes, irsend);
         } else {
             displayTextLine("Sending EU codes...");
-            sendCodeBatch(EUpowerCodes, num_EUcodes);
+            sendCodeBatch(EUpowerCodes, num_EUcodes, irsend);
         }
 
         // Send universal codes if user didn't stop
         if (!returnToMenu) {
             displayTextLine("Sending universal codes...");
-            sendCodeBatch(UniversalCodes, num_UniversalCodes);
+            sendCodeBatch(UniversalCodes, num_UniversalCodes, irsend);
         }
 
         // Ensure final progress is shown
