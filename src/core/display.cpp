@@ -509,13 +509,13 @@ int loopOptions(
         }
         return -1;
     };
-/**
+
     if (index < 0 || index >= static_cast<int>(options.size())) index = 0;
     if (!options[index].enabled) {
         int firstEnabled = findFirstEnabled();
         if (firstEnabled < 0) return -1;
         index = firstEnabled;
-    }*/
+
 
     Opt_Coord coord;
     bool redraw = true;
@@ -547,7 +547,7 @@ int loopOptions(
             }
 
         }
-/*
+
         if (redraw) {
             menuOptionType = menuType; // updates menutype to the remote controller
             menuOptionLabel = subText;
@@ -574,7 +574,7 @@ int loopOptions(
             if (firstRender) menuOpenTs = millis();
             firstRender = false;
             redraw = false;
-        }*/
+        }
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
