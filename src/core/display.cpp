@@ -748,19 +748,19 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 
 
 // Selected item
-/*** int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) + 5 ? 2 : 1;
-tft.setTextSize(selectedTextSize);
+int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) + 5 ? 2 : 1;
+tft.setTextSize(1);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
 tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 2, SMOOTH_FONT);***/
-/*
+
 tft.drawFastHLine(
     tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
     middle + selectedTextSize * LH / 2 + 1,
     strlen(options[index].label.c_str()) * selectedTextSize * LW,
     bruceConfig.priColor
-);**/
-int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) - 3 ? 2 : 1;
+);
+/**int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) - 3 ? 2 : 1;
 tft.setTextSize(2);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
@@ -769,7 +769,7 @@ int maxChars = 9;
 if (label.length() > maxChars) {
     label = label.substring(0, maxChars) + "..";
     }
-tft.drawCentreString(label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 1, SMOOTH_FONT);
+tft.drawCentreString(label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 1, SMOOTH_FONT);**/
 
                           // Next Item
                           int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
