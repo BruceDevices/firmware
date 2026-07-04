@@ -583,7 +583,7 @@ int loopOptions(
 
        /**if (menuType == MENU_TYPE_REGULAR) {
             String txt = options[index].label;
-            tft.print(txt);
+            tft.print(txt); //gây hiển thị nhầm
         }*/
 
         // Checks ESC Press first, to not exit after PrevPress is processed
@@ -786,8 +786,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 
 
 // Selected item
-int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
-tft.setTextSize(selectedTextSize);
+int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 3 ? FG : FM;
+tft.setTextSize(2);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
 tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
@@ -805,7 +805,7 @@ int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
 const char *thirdOption = options[thirdIndex].label.c_str();
 tft.setTextSize(1);
 tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-tft.fillRect(6, middle_down, tftWidth - 12, 8 * 2, bruceConfig.bgColor);
+tft.fillRect(6, middle_down, tftWidth - 12, 14, bruceConfig.bgColor);
 tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
@@ -901,9 +901,9 @@ void drawBatteryStatus(uint8_t bat) {
     uint16_t barcolor = bruceConfig.priColor;
     if (bat < 16) barcolor = color = TFT_RED;
 
-    tft.drawRoundRect(tftWidth - 28, 6, 18, 10, 1, color);
+    tft.drawRoundRect(tftWidth - 28, 6, 18, 9, 1, color);
     tft.setTextSize(FP);
-    tft.fillRect(tftWidth - 28, 6, 18, 10, bruceConfig.bgColor);
+    tft.fillRect(tftWidth - 28, 6, 18, 9, bruceConfig.bgColor);
     if (charging) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawRightString("CHG", tftWidth - 30, 6, 1);
