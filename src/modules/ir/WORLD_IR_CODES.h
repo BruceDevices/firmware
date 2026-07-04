@@ -14,6 +14,9 @@ TV-B-Gone Firmware version 1.2
  (c) Mitch Altman + Limor Fried 2009
 */
 
+#ifndef WORLD_IR_CODES_H
+#define WORLD_IR_CODES_H
+
 // Makes the codes more readable. the OCRA is actually
 // programmed in terms of 'periods' not 'freqs' - that
 // is, the inverse!
