@@ -841,27 +841,7 @@ void drawStatusBar() {
         tft.print("Khang " + String(BRUCE_VERSION));
 
 }
-   /**  int iconCount = 0;
-    bool showSD   = sdcardMounted;
-    bool showWifi = (WiFi.getMode() != 0);
-    bool showWeb  = isWebUIActive;
-    bool showBLE  = BLEConnected;
-    bool showWG   = isConnectedWireguard;
-    if (showSD)   iconCount++;
-    if (showWifi) iconCount++;
-    if (showWeb)  iconCount++;
-    if (showBLE)  iconCount++;
-    if (showWG)   iconCount++;
 
-    if (iconCount > 0) {
-        const int IW  = 10;
-        const int IH  = 10;
-        const int GAP = 2;
-        int totalW = iconCount * IW + (iconCount - 1) * GAP;
-        int sx = (tftWidth - totalW) / 2 - 5;
-        int iy = 5;
-        int idx = 0;
-**/
 void drawMainBorder(bool clear) {
     if (clear) {
         tft.drawPixel(0, 0, 0);
@@ -1021,50 +1001,14 @@ void drawBLE_beacon(int x, int y, uint16_t color) {
 
 
 void drawCreditCard(int x, int y) {
-
-        tft.fillRoundRect(x, y, 36, 22, 3, bruceConfig.priColor);
-
-            tft.fillRect(x, y + 6, 36, 4,
-                             getColorVariation(bruceConfig.priColor, 3, -1));
-
-                                 tft.fillRect(x + 4, y + 13, 8, 5,
-                                                  getColorVariation(bruceConfig.priColor, 3, 1));
-
-                                                      tft.fillRect(x + 18, y + 15, 12, 2,
-                                                                       getColorVariation(bruceConfig.priColor, 5, 1));
-                                                                       }
-
-/****
-void drawMfkey32Icon(int x, int y) {
-    tft.drawRect(x + 2, y + 15, 24, 40, bruceConfig.priColor);
-    tft.drawRect(x + 5, y + 18, 18, 12, bruceConfig.priColor);
-    tft.drawRect(x + 5, y + 34, 18, 18, bruceConfig.priColor);
-    tft.drawLine(x + 5, y + 40, x + 22, y + 40, bruceConfig.priColor);
-    tft.drawLine(x + 5, y + 46, x + 22, y + 46, bruceConfig.priColor);
-    tft.drawLine(x + 11, y + 34, x + 11, y + 51, bruceConfig.priColor);
-    tft.drawLine(x + 17, y + 34, x + 17, y + 51, bruceConfig.priColor);
-    tft.drawRect(x + 30, y + 10, 25, 35, bruceConfig.priColor);
-    int startX = x + 32;
-    int startY = y + 12;
-    int endX = x + 52;
-    int endY = y + 32;
-    int step = 2;
-    int turns = 0;
-
-    while (startX <= endX && startY <= endY && turns < 3) {
-        for (int i = startX; i <= endX; i++) { tft.drawPixel(i, startY, bruceConfig.priColor); }
-        startY += step;
-        for (int i = startY; i <= endY; i++) { tft.drawPixel(endX, i, bruceConfig.priColor); }
-        endX -= step;
-        for (int i = endX; i >= startX; i--) { tft.drawPixel(i, endY, bruceConfig.priColor); }
-        endY -= step;
-        for (int i = endY; i >= startY; i--) { tft.drawPixel(startX, i, bruceConfig.priColor); }
-        startX += step;
-        turns++;
-    }
-    tft.fillRect(x + 40, y + 36, 6, 6, getColorVariation(bruceConfig.priColor, 3, 1));
-}***/
-
+tft.fillRoundRect(x, y, 36, 22, 3, bruceConfig.priColor);
+tft.fillRect(x, y + 6, 36, 4,
+getColorVariation(bruceConfig.priColor, 3, -1));
+tft.fillRect(x + 4, y + 13, 8, 5,
+getColorVariation(bruceConfig.priColor, 3, 1));
+tft.fillRect(x + 18, y + 15, 12, 2,
+getColorVariation(bruceConfig.priColor, 5, 1));
+         }
 // ####################################################################################################
 //  Draw a JPEG on the TFT, images will be cropped on the right/bottom sides if they do not fit
 // ####################################################################################################
@@ -1170,22 +1114,6 @@ bool showJpeg(FS &fs, String filename, int x, int y, bool center) {
         data = picture.read();
         data_array[i] = data;
         i++;
-
-        // print array on Serial
-        /*
-        Serial.print("0x");
-        if (abs(data) < 16) {
-          Serial.print("0");
-        }
-
-        Serial.print(data, HEX);
-        Serial.print(","); // Add value and comma
-        line_len++;
-        if (line_len >= 32) {
-          line_len = 0;
-          Serial.println();
-        }
-        */
     }
 
     picture.close();
