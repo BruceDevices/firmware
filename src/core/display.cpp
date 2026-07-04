@@ -761,14 +761,13 @@ Exit:
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextWrap(false);
+    tft.setViewport(0, 0, tftWidth, tftHeight);
     tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(1);
-    tft.drawPixel(0, 0, 0);
+    //tft.drawPixel(0, 0, 0);
 
     // middle of the drawing area
     int middle = 45;
@@ -792,7 +791,11 @@ int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1
 tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 //tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
-tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+//tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+
+tft.setTextDatum(TL_DATUM);
+tft.setCursor(0, 0);
+tft.print(options[index].label);
 tft.fillRect(0, 1, tftWidth, 70, bruceConfig.bgColor);
 
 tft.drawFastHLine(
@@ -810,12 +813,12 @@ tft.setTextSize(1);
 tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
 tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
 tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
-/*
+
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
 tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
-*/
+
 }
-/**
+
 void drawStatusBar() {
     tft.fillRect(0, 0, tftWidth, 12, bruceConfig.bgColor);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -831,8 +834,8 @@ void drawStatusBar() {
     setTftDisplay(8, 6, bruceConfig.priColor, 1, bruceConfig.bgColor);
      tft.print("Khang " + String(BRUCE_VERSION));
 
-}*/
-/*
+}
+
 void drawMainBorder(bool clear) {
     if (clear) {
         tft.drawPixel(0, 0, 0);
@@ -898,7 +901,7 @@ void printCenterFootnote(String text) {
     tft.fillRect(10, tftHeight - BORDER_PAD_X - FP * LH, tftWidth - 20, FP * LH, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
-}*/
+}
 
 void drawBatteryStatus(uint8_t bat) {
     if (bat == 0) return;
