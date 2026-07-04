@@ -723,7 +723,7 @@ Opt_Coord drawOptions(
     tft.setTextSize(FM);
     //tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
     tft.setCursor(10, 18);
-)
+
     int i = 0;
     int init = 0;
     int cont = 1;
