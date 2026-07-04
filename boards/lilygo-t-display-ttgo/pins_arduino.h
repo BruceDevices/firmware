@@ -77,7 +77,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define MINBRIGHT (uint8_t)1
 
 // Font Sizes#
-#define FP 3
+#define FP 1
 #define FM 1
 #define FG 1
 

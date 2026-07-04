@@ -509,13 +509,13 @@ int loopOptions(
         }
         return -1;
     };
-
+/**
     if (index < 0 || index >= static_cast<int>(options.size())) index = 0;
     if (!options[index].enabled) {
         int firstEnabled = findFirstEnabled();
         if (firstEnabled < 0) return -1;
         index = firstEnabled;
-    }
+    }*/
 
     Opt_Coord coord;
     bool redraw = true;
@@ -547,7 +547,7 @@ int loopOptions(
             }
 
         }
-
+/*
         if (redraw) {
             menuOptionType = menuType; // updates menutype to the remote controller
             menuOptionLabel = subText;
@@ -574,17 +574,17 @@ int loopOptions(
             if (firstRender) menuOpenTs = millis();
             firstRender = false;
             redraw = false;
-        }
+        }*/
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
         checkShortcutPress(); // shortctus to quickly start apps without navigating the menus
 #endif
 
-        if (menuType == MENU_TYPE_REGULAR) {
+       /**if (menuType == MENU_TYPE_REGULAR) {
             String txt = options[index].label;
             tft.print(txt);
-        }
+        }*/
 
         // Checks ESC Press first, to not exit after PrevPress is processed
         // PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
@@ -777,7 +777,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 
 
     // Previous item
-   /* int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
+   int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 2, bruceConfig.bgColor);
@@ -810,7 +810,6 @@ tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
 tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
-*/
 }
 
 void drawStatusBar() {
