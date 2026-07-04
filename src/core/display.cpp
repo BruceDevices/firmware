@@ -777,7 +777,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 
 
     // Previous item
-    int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
+   /* int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 2, bruceConfig.bgColor);
@@ -810,7 +810,7 @@ tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
 tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
-
+*/
 }
 
 void drawStatusBar() {
