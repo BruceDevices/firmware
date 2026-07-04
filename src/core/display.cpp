@@ -930,7 +930,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
 // 80x80
 
-/*
+
 void drawBLE_beacon(int x, int y, uint16_t color) {
     tft.fillRect(x, y, 12, 20, bruceConfig.bgColor);
     tft.drawWideLine(12 + x, 13 + y, 1 + x, 7 + y, 1, color, bruceConfig.bgColor);
@@ -941,7 +941,7 @@ void drawBLE_beacon(int x, int y, uint16_t color) {
     tft.fillTriangle(12 + x, 7 + y, 6 + x, 10 + y, 6 + x, 3 + y, color);
     tft.fillTriangle(12 + x, 13 + y, 6 + x, 10 + y, 6 + x, 17 + y, color);
     }
-*/
+
 
 
 

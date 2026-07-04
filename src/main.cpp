@@ -198,10 +198,10 @@ void begin_tft() {
  *********************************************************************/
 void boot_screen() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FM);
+    tft.setTextSize(2);
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
-    tft.setTextSize(FP);
+    tft.setTextSize(2);
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
     tft.setTextSize(FM);
     tft.drawCentreString(
@@ -374,7 +374,7 @@ void setup() {
     tft.fillScreen(TFT_BLACK);
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawCentreString("Be Dao", tft.width() / 2, tft.height() / 2);
+    tft.drawCentreString("Be Dao", tft.width() / 2 - 2, tft.height() / 2);
 #else
     tft.begin();
 #endif
