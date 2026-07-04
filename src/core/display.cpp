@@ -761,21 +761,21 @@ Exit:
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
+    tft.setTextDatum(TL_DATUM);
     tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(1);
-    //tft.drawPixel(0, 0, 0);
+    tft.drawPixel(0, 0, 0);
 
-    // middle of the drawing area
     int middle = 45;
-    // drawCentreString uses TC_DATUM, so we need to adjust the Y position
-    // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
+
+
     int middle_up = 23;
     int middle_down = 58;
 
-    tft.setTextSize(1);
+
     // Previous item
     int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
@@ -789,12 +789,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
 tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-//tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
-//tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
-tft.fillRect(0, 1, tftWidth, 70, bruceConfig.bgColor);
-tft.setTextDatum(TL_DATUM);
-tft.setCursor(0, 0);
-tft.print(options[index].label);
+tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
+tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
 tft.drawFastHLine(
     tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
