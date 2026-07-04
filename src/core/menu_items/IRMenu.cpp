@@ -19,7 +19,7 @@ void IRMenu::optionsMenu() {
         {"IR Read",   [=]() { IrRead(); }       },
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
-        {"IR Scanner", []() { ir_bruteforce(); }},
+        {"IR Bruteforce", []() { ir_bruteforce(); }},
 #endif
         {"Config",    [this]() { configMenu(); }},
     };
