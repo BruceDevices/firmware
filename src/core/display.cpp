@@ -765,7 +765,7 @@ tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
 String label = options[index].label;
-int maxChars = 10;
+int maxChars = 15;
 if (label.length() > maxChars) {
     label = label.substring(0, maxChars) + "..";
     }
