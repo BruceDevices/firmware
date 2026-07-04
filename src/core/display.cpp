@@ -762,6 +762,7 @@ Exit:
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextDatum(TL_DATUM);
+    tft.setTextWrap(false);
     tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
@@ -769,9 +770,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextSize(1);
     tft.drawPixel(0, 0, 0);
 
+    
     int middle = 45;
-
-
     int middle_up = 23;
     int middle_down = 58;
 
