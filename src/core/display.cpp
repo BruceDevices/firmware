@@ -802,8 +802,9 @@ tft.drawString(firstOption, firstX, middle_up, 1);
 int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
 tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
+//tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
 // tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+tft.fillRect(0, 18, tftWidth - 6, 20, bruceConfig.bgColor);
 int textX = (tftWidth - strlen(options[index].label.c_str()) * selectedTextSize * LW) / 2;
 tft.drawString(options[index].label, textX, middle - selectedTextSize * LH / 2, 1);
 
