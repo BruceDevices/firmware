@@ -74,11 +74,8 @@ Distributed under Creative Commons 2.5 -- Attribution & Share Alike
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 
-// Externals for code databases
-extern const IrCode *const NApowerCodes[];
-extern const IrCode *const EUpowerCodes[];
-extern const IrCode *const UniversalCodes[];
-extern const uint8_t num_UniversalCodes;
+// Include the IR code definitions
+#include "WORLD_IR_CODES.h"
 
 // Function prototypes
 void quickflashLEDx(uint8_t x);
