@@ -1,11 +1,13 @@
 /*
-Last Updated: 30 Mar. 2018
-By Anton Grimpelhuber (anton.grimpelhuber@gmail.com)
+Last Updated: 04/07/2026
+By: Ninja-Jr
+Updated for universal power-off codes support
 
 -----------------------------------------------------------
 Semver (http://semver.org/) VERSION HISTORY (newest on top):
 (date format: yyyymmdd; ex: 20161022 is 22 Oct. 2016)
 ------------------------------------------------------------
+ - 20260704 - v1.5 - Added universal power-off codes support by Ninja-Jr
  - 20180330 - v1.4 - First port to ESP8266 (tested: wemos D1 mini) by Anton Grimpelhuber
  - 20161022 - v1.3 - Semver versioning implemented; various code updates, clarifications, & comment additions,
 and changes to fix incompatibilities so it will now compile with latest versions of gcc compiler; also
@@ -59,6 +61,9 @@ Distributed under Creative Commons 2.5 -- Attribution & Share Alike
 
 */
 
+#ifndef TV_B_GONE_H
+#define TV_B_GONE_H
+
 #include <Arduino.h>
 #include <FS.h>
 #include <IRremoteESP8266.h>
@@ -69,7 +74,13 @@ Distributed under Creative Commons 2.5 -- Attribution & Share Alike
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 
-// void xmitCodeElement(uint16_t ontime, uint16_t offtime, uint8_t PWM_code );
+// Externals for code databases
+extern const IrCode *const NApowerCodes[];
+extern const IrCode *const EUpowerCodes[];
+extern const IrCode *const UniversalCodes[];
+extern const uint8_t num_UniversalCodes;
+
+// Function prototypes
 void quickflashLEDx(uint8_t x);
 void delay_ten_us(uint16_t us);
 void quickflashLED(void);
@@ -79,3 +90,6 @@ bool init_ir_tx_mutex();
 void lock_ir_tx();
 void unlock_ir_tx();
 void precise_delay_us(uint32_t us);
+void sendCodeBatch(const IrCode *const *codes, uint8_t count);
+
+#endif
