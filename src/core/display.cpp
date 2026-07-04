@@ -761,16 +761,16 @@ Exit:
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
-    tft.setTextDatum(TL_DATUM);
+    //tft.setTextDatum(TL_DATUM);
     tft.setTextWrap(false);
     tft.fillScreen(bruceConfig.bgColor);
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(1);
-    tft.drawPixel(0, 0, 0);
+   // tft.drawPixel(0, 0, 0);
 
-    
+
     int middle = 45;
     int middle_up = 23;
     int middle_down = 58;
