@@ -700,9 +700,6 @@ Opt_Coord drawOptions(
     int menuSize = options.size();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
-    // Uncomment to update the statusBar (causes flickering)
-    // drawStatusBar();
-
     int32_t optionsTopY = 18;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
@@ -772,8 +769,6 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(1);
     tft.drawPixel(0, 0, 0);
-   /** tft.fillRect(0, 12, tftWidth, 16, bruceConfig.bgColor);
-    tft.drawString(title, 6, 14);**/
 
     // middle of the drawing area
     int middle = 45;
@@ -783,18 +778,12 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int middle_down = 58;
 
     tft.setTextSize(1);
-#if defined(HAS_TOUCH)
-    tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
-#endif
     // Previous item
     int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-   //tft.drawCentreString(firstOption, tftWidth / 2 - 1, middle_up, SMOOTH_FONT);
-int firstX =
-(tftWidth - strlen(firstOption) * LW) / 2;
-tft.drawString(firstOption, firstX, middle_up, 1);
+   tft.drawCentreString(firstOption, tftWidth / 2 - 1, middle_up, SMOOTH_FONT);
 
 
 
@@ -803,11 +792,8 @@ int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1
 tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 //tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
-// tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
-tft.fillRect(0, 18, tftWidth - 6, 20, bruceConfig.bgColor);
-int textX = (tftWidth - strlen(options[index].label.c_str()) * selectedTextSize * LW) / 2;
-tft.drawString(options[index].label, textX, middle - selectedTextSize * LH / 2, 1);
-
+tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+tft.fillRect(0, 1, tftWidth, 70, bruceConfig.bgColor);
 
 tft.drawFastHLine(
     tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
@@ -823,20 +809,11 @@ const char *thirdOption = options[thirdIndex].label.c_str();
 tft.setTextSize(1);
 tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
 tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-//tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
-int thirdX =
-(tftWidth - strlen(thirdOption) * LW) / 2;
-tft.drawString(thirdOption, thirdX, middle_down, 1);
+tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
 tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
 
-#if defined(HAS_TOUCH)
-    tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawString("[ x ]", 7, 7, 1);
-    TouchFooter();
-#endif
 }
 
 void drawStatusBar() {
