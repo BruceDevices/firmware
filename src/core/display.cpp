@@ -791,32 +791,44 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-   tft.drawCentreString(firstOption, tftWidth / 2 - 1, middle_up, SMOOTH_FONT);
+   //tft.drawCentreString(firstOption, tftWidth / 2 - 1, middle_up, SMOOTH_FONT);
+int firstX =
+(tftWidth - strlen(firstOption) * LW) / 2;
+tft.drawString(firstOption, firstX, middle_up, 1);
 
 
-    // Selected item
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
-    tft.setTextSize(selectedTextSize);
-    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
-   tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
-    tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
-        middle + selectedTextSize * LH / 2 + 1,
-        strlen(options[index].label.c_str()) * selectedTextSize * LW,
-        bruceConfig.priColor
-    );
-    // Next Item
-    int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
-    const char *thirdOption = options[thirdIndex].label.c_str();
-    tft.setTextSize(1);
-    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-    tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
+// Selected item
+int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
+tft.setTextSize(selectedTextSize);
+tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
+tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
+// tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+int textX = (tftWidth - strlen(options[index].label.c_str()) * selectedTextSize * LW) / 2;
+tft.drawString(options[index].label, textX, middle - selectedTextSize * LH / 2, 1);
 
-    tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
-    tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
+
+tft.drawFastHLine(
+    tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
+    middle + selectedTextSize * LH / 2 + 1,
+    strlen(options[index].label.c_str()) * selectedTextSize * LW,
+    bruceConfig.priColor
+);
+
+
+// Next Item
+int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
+const char *thirdOption = options[thirdIndex].label.c_str();
+tft.setTextSize(1);
+tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
+tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
+//tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
+int thirdX =
+(tftWidth - strlen(thirdOption) * LW) / 2;
+tft.drawString(thirdOption, thirdX, middle_down, 1);
+
+tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
+tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
 
 #if defined(HAS_TOUCH)
     tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
