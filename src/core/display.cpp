@@ -790,7 +790,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-   tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
+   tft.drawCentreString(firstOption, tftWidth / 2 - 5, middle_up, SMOOTH_FONT);
 
 
     // Selected item
