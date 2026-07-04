@@ -12,7 +12,6 @@ struct themeFiles {
     String files = "";
     String config = "";
     String boot_img = "";
-    String boot_sound = "";
 };
 
 struct themeInfo {
@@ -26,7 +25,6 @@ struct themeInfo {
     bool files = false;
     bool config = false;
     bool boot_img = false;
-    bool boot_sound = false;
     int gifDuration = 0;
 
     // Theme file paths, colors and border

@@ -46,7 +46,6 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         {"files",       &theme.files,       theme.paths.files      },
         {"config",      &theme.config,      theme.paths.config     },
         {"boot_img",    &theme.boot_img,    theme.paths.boot_img   },
-        {"boot_sound",  &theme.boot_sound,  theme.paths.boot_sound }
     };
 
     JsonObject _th = jsonDoc.as<JsonObject>();

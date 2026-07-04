@@ -30,36 +30,6 @@ bool __attribute__((weak)) isCharging() { return false; }
 ** Function name: displayScrollingText
 ** Description:   Scroll large texts into screen
 ***************************************************************************************/
-/***
-void displayScrollingText(const String &text, Opt_Coord &coord) {
-    int len = text.length();
-    String displayText = text + "        "; // Add spaces for smooth looping
-    int scrollLen = len + 8;                // Full text plus space buffer
-    static int i = 0;
-    static long _lastmillis = 0;
-    tft.setTextColor(coord.fgcolor, coord.bgcolor);
-    if (len < coord.size) {
-        // Text fits within limit, no scrolling needed
-        return;
-    } else if (millis() > _lastmillis + 200) {
-        String scrollingPart =
-            displayText.substring(i, i + (coord.size - 1)); // Display charLimit characters at a time
-        tft.fillRect(
-            coord.x,
-            coord.y,
-            (coord.size - 1) * LW * tft.getTextSize(),
-            LH * tft.getTextSize(),
-            bruceConfig.bgColor
-        ); // Clear display area
-        tft.setCursor(coord.x, coord.y);
-        tft.setCursor(coord.x, coord.y);
-        tft.print(scrollingPart);
-        if (i >= scrollLen - coord.size) i = -1; // Loop back
-        _lastmillis = millis();
-        i++;
-        if (i == 1) _lastmillis = millis() + 1000;
-    }
-}*/
 void displayScrollingText(const String &text, Opt_Coord &coord) {
 
         tft.setTextColor(coord.fgcolor, coord.bgcolor);
@@ -85,14 +55,6 @@ void displayScrollingText(const String &text, Opt_Coord &coord) {
 ** Function name: TouchFooter
 ** Description:   Draw touch screen footer
 ***************************************************************************************/
-void TouchFooter(uint16_t color) {
-    tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 12, 5, color);
-    tft.setTextColor(color);
-    tft.setTextSize(FM);
-    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + 4, 1);
-}
 /***************************************************************************************
 ** Function name: TouchFooter
 ** Description:   Draw touch screen footer
@@ -968,7 +930,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
 // 80x80
 
-
+/*
 void drawBLE_beacon(int x, int y, uint16_t color) {
     tft.fillRect(x, y, 12, 20, bruceConfig.bgColor);
     tft.drawWideLine(12 + x, 13 + y, 1 + x, 7 + y, 1, color, bruceConfig.bgColor);
@@ -979,7 +941,7 @@ void drawBLE_beacon(int x, int y, uint16_t color) {
     tft.fillTriangle(12 + x, 7 + y, 6 + x, 10 + y, 6 + x, 3 + y, color);
     tft.fillTriangle(12 + x, 13 + y, 6 + x, 10 + y, 6 + x, 17 + y, color);
     }
-
+*/
 
 
 
