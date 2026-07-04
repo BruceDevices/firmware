@@ -810,12 +810,12 @@ tft.setTextSize(1);
 tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
 tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
 tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
-
+/*
 tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
 tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
-
+*/
 }
-
+/**
 void drawStatusBar() {
     tft.fillRect(0, 0, tftWidth, 12, bruceConfig.bgColor);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -828,11 +828,11 @@ void drawStatusBar() {
     }
 
 
-        setTftDisplay(8, 6, bruceConfig.priColor, 1, bruceConfig.bgColor);
-        tft.print("Khang " + String(BRUCE_VERSION));
+    setTftDisplay(8, 6, bruceConfig.priColor, 1, bruceConfig.bgColor);
+     tft.print("Khang " + String(BRUCE_VERSION));
 
-}
-
+}*/
+/*
 void drawMainBorder(bool clear) {
     if (clear) {
         tft.drawPixel(0, 0, 0);
@@ -898,7 +898,7 @@ void printCenterFootnote(String text) {
     tft.fillRect(10, tftHeight - BORDER_PAD_X - FP * LH, tftWidth - 20, FP * LH, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
-}
+}*/
 
 void drawBatteryStatus(uint8_t bat) {
     if (bat == 0) return;
