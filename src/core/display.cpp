@@ -515,7 +515,7 @@ int loopOptions(
         int firstEnabled = findFirstEnabled();
         if (firstEnabled < 0) return -1;
         index = firstEnabled;
-
+    }
 
     Opt_Coord coord;
     bool redraw = true;
