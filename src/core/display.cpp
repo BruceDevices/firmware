@@ -769,7 +769,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FP);
+    tft.setTextSize(2);
     tft.drawPixel(0, 0, 0);
    /** tft.fillRect(0, 12, tftWidth, 16, bruceConfig.bgColor);
     tft.drawString(title, 6, 14);**/
@@ -778,10 +778,10 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int middle = 45;
     // drawCentreString uses TC_DATUM, so we need to adjust the Y position
     // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
-    int middle_up = 32;
+    int middle_up = 23;
     int middle_down = 58;
 
-    tft.setTextSize(1);
+    tft.setTextSize(2);
 #if defined(HAS_TOUCH)
     tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
 #endif
@@ -790,7 +790,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
-   tft.drawCentreString(firstOption, tftWidth / 2 - 5, middle_up, SMOOTH_FONT);
+   tft.drawCentreString(firstOption, tftWidth / 2 - 1, middle_up, SMOOTH_FONT);
 
 
     // Selected item
@@ -801,7 +801,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 2,
+        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
         middle + selectedTextSize * LH / 2 + 1,
         strlen(options[index].label.c_str()) * selectedTextSize * LW,
         bruceConfig.priColor
@@ -809,7 +809,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     // Next Item
     int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
     const char *thirdOption = options[thirdIndex].label.c_str();
-    tft.setTextSize(FM);
+    tft.setTextSize(2);
     tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
     tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
