@@ -842,14 +842,10 @@ void drawMainBorder(bool clear) {
 
     drawStatusBar();
 
-#if defined(HAS_TOUCH)
-    TouchFooter();
-#endif
 }
 
 void drawMainBorderWithTitle(String title, bool clear) {
     drawMainBorder(clear);
-    //printTitle(title);
 }
 
 void printTitle(String title) {
@@ -935,7 +931,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     }
     tft.setCursor(10, 10);
-    tft.setTextSize(2);
+    tft.setTextSize(3);
     int i = 0;
     int arraySize = fileList.size();
     int start = 0;
