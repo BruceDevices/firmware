@@ -789,25 +789,16 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-   // tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
-int x1 = (tftWidth - strlen(firstOption) * 6 * FM) / 2;
-tft.drawString(firstOption, x1, middle_up, 1);
+    tft.fillRect(6, middle_up, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
+   tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
 
     // Selected item
     int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
     tft.setTextSize(selectedTextSize);
     tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
-   // tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
-int x2 = (tftWidth - strlen(options[index].label.c_str()) * 6 * selectedTextSize) / 2;
-tft.drawString(
-    options[index].label,
-        x2,
-            middle - 4,
-                1
-                );
+    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, 25, bruceConfig.bgColor);
+   tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
 
     tft.drawFastHLine(
         tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 4,
@@ -820,10 +811,8 @@ tft.drawString(
     const char *thirdOption = options[thirdIndex].label.c_str();
     tft.setTextSize(FM);
     tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    //tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
-int x3 = (tftWidth - strlen(thirdOption) * 6 * FM) / 2;
-tft.drawString(thirdOption, x3, middle_down, 1);
+    tft.fillRect(6, middle_down, tftWidth - 12, 8 * 3, bruceConfig.bgColor);
+    tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
     tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
     tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
