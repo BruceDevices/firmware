@@ -752,7 +752,7 @@ int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) + 5 
 tft.setTextSize(selectedTextSize);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
 tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 16, bruceConfig.bgColor);
-tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 3, SMOOTH_FONT);
+tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 2, SMOOTH_FONT);
 /*
 tft.drawFastHLine(
     tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
