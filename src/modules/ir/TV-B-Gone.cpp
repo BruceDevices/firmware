@@ -1,8 +1,9 @@
 /*
-Last Updated: 04/07/2026
+Last Updated: 05/07/2026
 By: Ninja-Jr
 Optimizations for speed while maintaining 100% compatibility
 Added universal power-off codes auto-run after region-specific codes
+Added support for raw IR codes with 32-bit timing values
 
 ------------------------------------------------------------
 LICENSE:
@@ -31,9 +32,6 @@ Distributed under Creative Commons 2.5 -- Attribution & Share Alike
 #define NA 1 // set by a HIGH on REGIONSWITCH pin
 #define EU 0 // set by a LOW on REGIONSWITCH pin
 
-// Lets us calculate the size of the NA/EU databases
-#define NUM_ELEM(x) (sizeof(x) / sizeof(*(x)));
-
 // set define to 0 to turn off debug output
 #define DEBUG 0
 #define DEBUGP(x)                                                                                            \
@@ -54,16 +52,21 @@ void delay_ten_us(uint16_t us);
 void quickflashLED(void);
 uint8_t read_bits(uint8_t count);
 #define MAX_WAIT_TIME 65535 // tens of us (ie: 655.350ms)
+
 extern const IrCode *const NApowerCodes[];
 extern const IrCode *const EUpowerCodes[];
-extern const IrCode *const UniversalCodes[];
-extern const uint8_t num_UniversalCodes;
-uint8_t num_NAcodes = NUM_ELEM(NApowerCodes);
-uint8_t num_EUcodes = NUM_ELEM(EUpowerCodes);
+extern const IrCode *const UniversalParsedCodes[];
+extern const uint8_t num_UniversalParsedCodes;
+extern const RawIrCode *const UniversalRawCodes[];
+extern const uint8_t num_UniversalRawCodes;
+extern const uint8_t num_NAcodes;
+extern const uint8_t num_EUcodes;
+
 uint8_t bitsleft_r = 0;
 uint8_t bits_r = 0;
 uint8_t code_ptr;
 volatile const IrCode *powerCode;
+volatile const RawIrCode *rawPowerCode;
 
 // Semaphore for thread-safe IR transmission - protects IR LED pin access
 static SemaphoreHandle_t ir_tx_mutex = NULL;
@@ -149,7 +152,8 @@ void unlock_ir_tx() {
     }
 }
 
-void sendCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irsend) {
+// Send parsed protocol codes (16-bit times)
+void sendParsedCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irsend) {
     uint16_t rawData[300];
 
     for (uint8_t i = 0; i < count; i++) {
@@ -190,6 +194,46 @@ void sendCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irsend) {
     progressHandler(count, count);
 }
 
+// Send raw codes (32-bit times - cast to uint16_t for sendRaw)
+void sendRawCodeBatch(const RawIrCode *const *codes, uint8_t count, IRsend &irsend) {
+    uint16_t rawData[300];
+
+    for (uint8_t i = 0; i < count; i++) {
+        lock_ir_tx();
+        rawPowerCode = codes[i];
+
+        const uint8_t freq = rawPowerCode->timer_val;
+        const uint8_t numpairs = rawPowerCode->numpairs;
+        const uint8_t bitcompression = rawPowerCode->bitcompression;
+
+        for (uint8_t k = 0; k < numpairs; k++) {
+            rawData[k * 2] = (uint16_t)(rawPowerCode->times[k * 2] * 10);
+            rawData[(k * 2) + 1] = (uint16_t)(rawPowerCode->times[(k * 2) + 1] * 10);
+        }
+
+        if (i % 5 == 0) {
+            progressHandler(i, count);
+        }
+
+        irsend.sendRaw(rawData, (numpairs * 2), freq);
+        unlock_ir_tx();
+        bitsleft_r = 0;
+        delay_ten_us(20500);
+
+        if (check(SelPress)) {
+            while (check(SelPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
+            displayTextLine("Paused");
+            while (!check(SelPress)) {
+                if (check(EscPress)) { returnToMenu = true; return; }
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            while (check(SelPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+        if (returnToMenu) break;
+    }
+    progressHandler(count, count);
+}
+
 void StartTvBGone() {
     if (!init_ir_tx_mutex()) {
         displayRedStripe("Mutex init failed");
@@ -202,7 +246,7 @@ void StartTvBGone() {
     PPM.enableOTG();
 #endif
     checkIrTxPin();
-    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx);
     irsend.begin();
     setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
 
@@ -223,16 +267,22 @@ void StartTvBGone() {
         // Send region-specific codes
         if (region == NA) {
             displayTextLine("Sending NA codes...");
-            sendCodeBatch(NApowerCodes, num_NAcodes, irsend);
+            sendParsedCodeBatch(NApowerCodes, num_NAcodes, irsend);
         } else {
             displayTextLine("Sending EU codes...");
-            sendCodeBatch(EUpowerCodes, num_EUcodes, irsend);
+            sendParsedCodeBatch(EUpowerCodes, num_EUcodes, irsend);
         }
 
-        // Send universal codes if user didn't stop
+        // Send universal parsed codes if user didn't stop
         if (!returnToMenu) {
-            displayTextLine("Sending universal codes...");
-            sendCodeBatch(UniversalCodes, num_UniversalCodes, irsend);
+            displayTextLine("Sending universal parsed codes...");
+            sendParsedCodeBatch(UniversalParsedCodes, num_UniversalParsedCodes, irsend);
+        }
+
+        // Send universal raw codes if user didn't stop
+        if (!returnToMenu) {
+            displayTextLine("Sending universal raw codes...");
+            sendRawCodeBatch(UniversalRawCodes, num_UniversalRawCodes, irsend);
         }
 
         // Ensure final progress is shown
@@ -255,4 +305,4 @@ void StartTvBGone() {
         PPM.disableOTG();
 #endif
     }
-} // end of sendAllCodes
+}
