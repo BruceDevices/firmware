@@ -1,12 +1,13 @@
 /*
-Last Updated: 04/07/2026
+Last Updated: 05/07/2026
 By: Ninja-Jr
-Updated for universal power-off codes support
+Updated for universal power-off codes support (parsed + raw)
 
 -----------------------------------------------------------
 Semver (http://semver.org/) VERSION HISTORY (newest on top):
 (date format: yyyymmdd; ex: 20161022 is 22 Oct. 2016)
 ------------------------------------------------------------
+ - 20260705 - v1.6 - Added raw IR code support with 32-bit timing values by Ninja-Jr
  - 20260704 - v1.5 - Added universal power-off codes support by Ninja-Jr
  - 20180330 - v1.4 - First port to ESP8266 (tested: wemos D1 mini) by Anton Grimpelhuber
  - 20161022 - v1.3 - Semver versioning implemented; various code updates, clarifications, & comment additions,
@@ -87,6 +88,9 @@ bool init_ir_tx_mutex();
 void lock_ir_tx();
 void unlock_ir_tx();
 void precise_delay_us(uint32_t us);
-void sendCodeBatch(const IrCode *const *codes, uint8_t count);
+
+// Batch send functions for different code types
+void sendParsedCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irsend);
+void sendRawCodeBatch(const RawIrCode *const *codes, uint8_t count, IRsend &irsend);
 
 #endif
