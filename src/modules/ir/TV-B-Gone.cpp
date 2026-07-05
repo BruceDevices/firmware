@@ -194,7 +194,7 @@ void sendParsedCodeBatch(const IrCode *const *codes, uint8_t count, IRsend &irse
     progressHandler(count, count);
 }
 
-// Send raw codes (32-bit times - cast to uint16_t for sendRaw)
+// Send raw codes (32-bit times - cast to uint16_t for sendRaw, no multiplication)
 void sendRawCodeBatch(const RawIrCode *const *codes, uint8_t count, IRsend &irsend) {
     uint16_t rawData[300];
 
@@ -204,11 +204,12 @@ void sendRawCodeBatch(const RawIrCode *const *codes, uint8_t count, IRsend &irse
 
         const uint8_t freq = rawPowerCode->timer_val;
         const uint8_t numpairs = rawPowerCode->numpairs;
-        const uint8_t bitcompression = rawPowerCode->bitcompression;
 
         for (uint8_t k = 0; k < numpairs; k++) {
-            rawData[k * 2] = (uint16_t)(rawPowerCode->times[k * 2] * 10);
-            rawData[(k * 2) + 1] = (uint16_t)(rawPowerCode->times[(k * 2) + 1] * 10);
+            // Raw data is already in correct format - no multiplication needed
+            // Values > 65535 are truncated, matching the custom IR loader behavior
+            rawData[k * 2] = (uint16_t)(rawPowerCode->times[k * 2]);
+            rawData[(k * 2) + 1] = (uint16_t)(rawPowerCode->times[(k * 2) + 1]);
         }
 
         if (i % 5 == 0) {
