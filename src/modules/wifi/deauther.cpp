@@ -96,8 +96,8 @@ void cacheSameSSIDAPs() {
     for (int i = 0; i < n; i++) {
         if (WiFi.SSID(i) == currentSSID) {
             APInfo info;
-            memcpy(info.bssid, WiFi.BSSID(i), 6);
-            info.channel = WiFi.channel(i);
+            memcpy(info.bssid, WiFi.BSSID((uint8_t)i), 6);
+            info.channel = WiFi.channel((uint8_t)i);
             sameSSID_APs.push_back(info);
         }
     }
@@ -123,10 +123,10 @@ int getAPChannel(const uint8_t* target_bssid) {
     int numNetworks = WiFi.scanNetworks(false, false);
 
     for (int i = 0; i < numNetworks; i++) {
-        uint8_t* bssid_ptr = WiFi.BSSID(i);
+        uint8_t* bssid_ptr = WiFi.BSSID((uint8_t)i);
 
         if (macCompare(bssid_ptr, target_bssid)) {
-            found_channel = WiFi.channel(i);
+            found_channel = WiFi.channel((uint8_t)i);
             break;
         }
     }
@@ -269,7 +269,7 @@ void stationDeauth(Host host) {
     int n = WiFi.scanNetworks(false, false);
     bool found = false;
     for (int i = 0; i < n; i++) {
-        uint8_t* bssid_ptr = WiFi.BSSID(i);
+        uint8_t* bssid_ptr = WiFi.BSSID((uint8_t)i);
         if (macCompare(bssid_ptr, targetMAC)) {
             memcpy(gatewayMAC, bssid_ptr, 6);
             found = true;
@@ -504,8 +504,8 @@ void deauthAll() {
     
     // Use the first AP found as the target
     uint8_t gatewayMAC[6];
-    memcpy(gatewayMAC, WiFi.BSSID(0), 6);
-    int channel = WiFi.channel(0);
+    memcpy(gatewayMAC, WiFi.BSSID((uint8_t)0), 6);
+    int channel = WiFi.channel((uint8_t)0);
     WiFi.scanDelete();
     
     // Cache all APs with same SSID for mesh network targeting
@@ -661,8 +661,8 @@ void deauthTargetList(const std::vector<Host>& targets) {
     }
     
     uint8_t gatewayMAC[6];
-    memcpy(gatewayMAC, WiFi.BSSID(0), 6);
-    int channel = WiFi.channel(0);
+    memcpy(gatewayMAC, WiFi.BSSID((uint8_t)0), 6);
+    int channel = WiFi.channel((uint8_t)0);
     WiFi.scanDelete();
     
     // Cache all APs with same SSID for mesh network targeting
