@@ -647,7 +647,7 @@ Opt_Coord drawOptions(
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
 
-    /*int32_t optionsTopY = 18;
+    int32_t optionsTopY = 18;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
@@ -661,10 +661,10 @@ Opt_Coord drawOptions(
             5,
             fgcolor
         );
-    }*/
+    }
 
     tft.setTextColor(fgcolor, bgcolor);
-    tft.setTextSize(FM);
+    tft.setTextSize(3);
     //tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
     tft.setCursor(10, 18);
 
@@ -689,8 +689,8 @@ Opt_Coord drawOptions(
                 coord.bgcolor = bgcolor;
             } else text += " ";
             text += String(options[i].label) + "              ";
-           // tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 1);
-            //tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
+           tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 1);
+        tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
             cont++;
         }
         if (cont > MAX_MENU_SIZE) goto Exit;
