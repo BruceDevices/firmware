@@ -12,10 +12,10 @@
 #include <globals.h>
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C2) ||                              \
     defined(CONFIG_IDF_TARGET_ESP32S3)
-#define MAX_TX_POWER ESP_PWR_LVL_P21
+#define MAX_TX_POWER ESP_PWR_LVL_P9
 #elif defined(CONFIG_IDF_TARGET_ESP32H2) || defined(CONFIG_IDF_TARGET_ESP32C6) ||                            \
     defined(CONFIG_IDF_TARGET_ESP32C5)
-#define MAX_TX_POWER ESP_PWR_LVL_P20
+#define MAX_TX_POWER ESP_PWR_LVL_P9
 #else
 #define MAX_TX_POWER ESP_PWR_LVL_P9
 #endif
@@ -257,13 +257,13 @@ void executeSpam(EBLEPayloadType type, String customName = "") {
 
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->setScanResponseData(oScanResponseData);
-    pAdvertising->setMinInterval(32);
-    pAdvertising->setMaxInterval(48);
+    pAdvertising->setMinInterval(100));
+    pAdvertising->setMaxInterval(140);
     pAdvertising->start();
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
     pAdvertising->stop();
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -288,9 +288,9 @@ void executeCustomSpam(String spamName) {
     pAdvertising->addServiceUUID(BLEUUID("1812"));
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->start();
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     pAdvertising->stop();
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
 #if defined(CONFIG_IDF_TARGET_ESP32C5)
     esp_bt_controller_deinit();
 #else
@@ -329,9 +329,9 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     while (!check(AnyKeyPress)) {
         pAdvertising->start();
         Serial.println("Advertizing started...");
-        vTaskDelay(20 / portTICK_PERIOD_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         pAdvertising->stop();
-        vTaskDelay(5 / portTICK_PERIOD_MS);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
         Serial.println("Advertizing stop");
     }
 
