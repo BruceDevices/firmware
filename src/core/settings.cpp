@@ -453,57 +453,6 @@ void setWifiStartupConfig() {
     };
     loopOptions(options, bruceConfig.wifiAtStartup);
 }
-
-/*********************************************************************
-**  Function: addEvilWifiMenu
-**  Handles Menu to add evil wifi names into config list
-**********************************************************************/
-/*********************************************************************
-**  Function: removeEvilWifiMenu
-**  Handles Menu to remove evil wifi names from config list
-**********************************************************************/
-/*********************************************************************
-**  Function: setEvilEndpointCreds
-**  Handles menu for changing the endpoint to access captured creds
-**********************************************************************/
-/*********************************************************************
-**  Function: setEvilEndpointSsid
-**  Handles menu for changing the endpoint to change evilSsid
-**********************************************************************/
-/*********************************************************************
-**  Function: setEvilAllowGetCredentials
-**  Handles menu for toggling access to the credential list endpoint
-**********************************************************************/
-/*********************************************************************
-**  Function: setEvilAllowGetCredentials
-**  Handles menu for toggling access to the change SSID endpoint
-**********************************************************************/
-/*********************************************************************
-**  Function: setEvilAllowEndpointDisplay
-**  Handles menu for toggling the display of the Evil Portal endpoints
-**********************************************************************/
-/*********************************************************************
-** Function: setEvilPasswordMode
-** Handles menu for setting the evil portal password mode
-***********************************************************************/
-/*********************************************************************
-** Function: setEvilGatewayIp
-** Handles menu for setting the Evil Portal gateway IP
-***********************************************************************/
-/*********************************************************************
-**  Function: setRFModuleMenu
-**  Handles Menu to set the RF module in use
-**********************************************************************/
-
-/*********************************************************************
-**  Function: setRFFreqMenu
-**  Handles Menu to set the default frequency for the RF module
-**********************************************************************/
-
-/*********************************************************************
-**  Function: setRFIDModuleMenu
-**  Handles Menu to set the RFID module in use
-**********************************************************************/
 /*********************************************************************
 **  Function: addMifareKeyMenu
 **  Handles Menu to add MIFARE keys into config list
@@ -512,55 +461,6 @@ void addMifareKeyMenu() {
     String key = keyboard("", 12, "MIFARE key");
     if (key != "\x1B") bruceConfig.addMifareKey(key);
 }
-
-/*********************************************************************
-**  Function: setClock
-**  Handles Menu to set zone to NTP
-*********************************************************************/
-/***t char *ntpServer = "pool.ntp.org";
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, ntpServer, 0, 0);
-
-void setClock() {
-#if defined(HAS_RTC)
-    RTC_TimeTypeDef TimeStruct;
-#if defined(HAS_RTC_BM8563)
-    _rtc.GetBm8563Time();
-#endif
-#if defined(HAS_RTC_PCF85063A)
-    _rtc.GetPcf85063Time();
-#endif
-#endif
-
-    options = {
-        {"Via NTP Set Timezone",                                                 [&]() {
-bruceConfig.setAutomaticTimeUpdateViaNTP(true); } },
-        {"Set Time Manually",                                                    [&]() {
-bruceConfig.setAutomaticTimeUpdateViaNTP(false); }},
-        {("Daylight Savings " + String(bruceConfig.dst ? "On" : "Off")).c_str(),
-         [&]() {
-             bruceConfig.setDST(!bruceConfig.dst);
-             updateClockTimezone();
-             returnToMenu = true;
-         } },
-        {(bruceConfig.clock24hr ? "24-Hour Format" : "12-Hour Format"),          [&]() {
-        
-/*********************************************************************
-**  Function: gsetIrTxPin
-**  get or set IR Tx Pin
-**********************************************************************/
-
-/*********************************************************************
-**  Function: gsetRfTxPin
-**  get or set RF Tx Pin
-**********************************************************************/
-
-/*********************************************************************
-**  Function: gsetRfRxPin
-**  get or set FR Rx Pin
-**********************************************************************/
-
 /*********************************************************************
 **  Function: setStartupApp
 **  Handles Menu to set startup app
@@ -593,11 +493,11 @@ void setStartupApp() {
 **  Handles Menu to set the WiFi AP SSID
 **********************************************************************/
 void setWifiApSsidMenu() {
-    const bool isDefault = bruceConfig.wifiAp.ssid == "BruceNet";
+    const bool isDefault = bruceConfig.wifiAp.ssid == "Love";
 
     options = {
-        {"Default (BruceNet)",
-         [=]() { bruceConfig.setWifiApCreds("BruceNet", bruceConfig.wifiAp.pwd); },
+        {"Default (Love)",
+         [=]() { bruceConfig.setWifiApCreds("Love", bruceConfig.wifiAp.pwd); },
          isDefault                                                                            },
         {"Custom",
          [=]() {
@@ -618,11 +518,11 @@ void setWifiApSsidMenu() {
 **  Handles Menu to set the WiFi AP Password
 **********************************************************************/
 void setWifiApPasswordMenu() {
-    const bool isDefault = bruceConfig.wifiAp.pwd == "brucenet";
+    const bool isDefault = bruceConfig.wifiAp.pwd == "Khangyeu";
 
     options = {
         {"Default (brucenet)",
-         [=]() { bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, "brucenet"); },
+         [=]() { bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, "Khangyeu"); },
          isDefault                                                                             },
         {"Custom",
          [=]() {
