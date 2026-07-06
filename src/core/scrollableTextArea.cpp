@@ -4,7 +4,9 @@ ScrollableTextArea::ScrollableTextArea(const String &title)
     : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
       _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
       _height(tftHeight - BORDER_PAD_X - BORDER_PAD_Y) {
-    drawMainBorder();
+    //drawMainBorder();
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.drawRoundRect(2,2,tftWidth-4,tftHeight-4,3,bruceConfig.priColor);
 
     if (!_title.isEmpty()) {
         printTitle(_title);
