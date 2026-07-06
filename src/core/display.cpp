@@ -642,7 +642,7 @@ Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
 ) {
-    Opt_Coord coord;
+   // Opt_Coord coord;
     int menuSize = options.size();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
@@ -665,7 +665,7 @@ Opt_Coord drawOptions(
 
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(1);
-    //tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
+    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
     tft.setCursor(10, 18);
 
     int i = 0;
@@ -690,7 +690,7 @@ Opt_Coord drawOptions(
             } else text += " ";
             text += String(options[i].label) + "              ";
            tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 1);
-        tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
+       // tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
             cont++;
         }
         if (cont > MAX_MENU_SIZE) goto Exit;
@@ -897,7 +897,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
                 txt = ">";
             } else txt = " ";
            txt += fileList[i].filename + "                 ";
-           // tft.print(txt.substring(0, nchars));
+           tft.print(txt.substring(0, nchars));
         }
         i++;
         if (i == (start + MAX_ITEMS) || i == arraySize) break;
