@@ -3885,8 +3885,15 @@ String selectTargetFromScan(const char *title) {
                 tft.print((scrollOffset + maxVisibleDevices < (int)deviceCount) ? "v" : " ");
             }
 
-            TouchFooter(TFT_WHITE);
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
         }
+
+        TouchFooter(TFT_WHITE);
+
         delay(50);
     }
 
