@@ -878,7 +878,8 @@ void drawBatteryStatus(uint8_t bat) {
 ** Function name: listFiles
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
-#define MAX_ITEMS (int)(tftHeight - 20) / (10)
+/*
+#define MAX_ITEMS (int)(tftHeight - 30) / (10)
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     Opt_Coord coord;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
@@ -914,7 +915,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
                     fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
                 coord.bgcolor = bruceConfig.bgColor;
             } else txt = " ";
-           // txt += fileList[i].filename + "                 ";
+           txt += fileList[i].filename + "                 ";
             tft.println(txt.substring(0, nchars));
         }
         i++;
@@ -922,7 +923,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     }
     return coord;
 }
-
+*/
 // 80x80
 
 
