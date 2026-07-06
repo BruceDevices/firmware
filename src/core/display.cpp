@@ -895,12 +895,9 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
             if (index == i) {
                 txt = ">";
-            coord.x = 8;
-                coord.y = 10;
-                coord.size = nchars;
             } else txt = " ";
            txt += fileList[i].filename + "                 ";
-            tft.print(txt.substring(0, nchars));
+           // tft.print(txt.substring(0, nchars));
         }
         i++;
         if (i == (start + MAX_ITEMS) || i == arraySize) break;
