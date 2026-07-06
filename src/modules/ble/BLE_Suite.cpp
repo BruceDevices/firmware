@@ -2865,6 +2865,7 @@ String getScriptFromUser() {
                 } else if (scriptName == "Open CMD/Terminal") {
                     return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER";
                 }
+            }
         }
         delay(50);
     }
