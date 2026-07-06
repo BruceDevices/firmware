@@ -29,12 +29,13 @@ bool __attribute__((weak)) isCharging() { return false; }
 ** Function name: displayScrollingText
 ** Description:   Scroll large texts into screen
 ***************************************************************************************/
+/*
 void displayScrollingText(const String &text, Opt_Coord &coord) {
 tft.setTextColor(coord.fgcolor, coord.bgcolor);
 tft.fillRect(coord.x, coord.y, (coord.size - 1) * LW * tft.getTextSize(), LH * tft.getTextSize(), bruceConfig.bgColor);
 tft.setCursor(coord.x, coord.y);
 if (text.length() > coord.size - 1) {tft.print(text.substring(0, coord.size - 1));
-} else {tft.print(text);}}
+} else {tft.print(text);}}*/
 /***************************************************************************************
 ** Function name: TouchFooter
 ** Description:   Draw touch screen footer
