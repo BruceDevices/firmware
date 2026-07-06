@@ -914,7 +914,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
                     fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
                 coord.bgcolor = bruceConfig.bgColor;
             } else txt = " ";
-            txt += fileList[i].filename + "                 ";
+           // txt += fileList[i].filename + "                 ";
             tft.println(txt.substring(0, nchars));
         }
         i++;
