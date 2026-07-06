@@ -10,7 +10,6 @@ void FileMenu::optionsMenu() {
     options.clear();
     if (setupSdCard()) options.push_back({"SD Card", [=]() { loopSD(SD); }});
     options.push_back({"LittleFS", [=]() { loopSD(LittleFS); }});
-    options.push_back({"WebUI", loopOptionsWebUi});
 
 #if !defined(LITE_VERSION)
     options.push_back({"Connect", [=]() {
