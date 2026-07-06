@@ -642,7 +642,7 @@ Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
 ) {
-   // Opt_Coord coord;
+   Opt_Coord coord;
     int menuSize = options.size();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
@@ -689,7 +689,8 @@ Opt_Coord drawOptions(
                 coord.bgcolor = bgcolor;
             } else text += " ";
             text += String(options[i].label) + "              ";
-           tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 1);
+           int y = 10 + (i - init) * 10;
+           tft.setCursor(8, y);
        // tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
             cont++;
         }
