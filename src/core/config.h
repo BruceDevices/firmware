@@ -48,7 +48,7 @@ public:
 #endif
 
     // Wifi
-    WiFiCredential wifiAp = {"Love", "Khangyeu"};
+    WiFiCredential wifiAp = {"Love", "Love"};
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
