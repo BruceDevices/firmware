@@ -614,7 +614,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
 #endif
             redraw = false;
         }
-        tft.print(fileList[index].filename);
+       // tft.print(fileList[index].filename);
 
         // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
         // This condition is important for StickCPlus, Core and other 3 Btn devices
