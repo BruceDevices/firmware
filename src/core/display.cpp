@@ -646,7 +646,7 @@ Opt_Coord drawOptions(
     int menuSize = options.size();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
-    int32_t optionsTopY = 18;
+   /*int32_t optionsTopY = 18;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
@@ -660,7 +660,7 @@ Opt_Coord drawOptions(
             5,
             fgcolor
         );
-    }
+    }*/
 
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
@@ -833,7 +833,7 @@ void printFootnote(String text) {
 void printCenterFootnote(String text) {
     tft.fillRect(10, tftHeight - BORDER_PAD_X - FP * LH, tftWidth - 20, FP * LH, bruceConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
+    tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH - 3, SMOOTH_FONT);
 }
 
 void drawBatteryStatus(uint8_t bat) {
