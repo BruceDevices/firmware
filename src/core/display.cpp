@@ -636,7 +636,7 @@ void progressHandler(int progress, size_t total, String message) {
 ** Function name: drawOptions
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
-/*
+
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
@@ -699,7 +699,7 @@ Exit:
     TouchFooter();
 #endif
     return coord;
-}*/
+}
 
 /***************************************************************************************
 ** Function name: drawSubmenu
@@ -893,15 +893,15 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
             if (index == i) {
                 txt = ">";
-            /**  coord.x = 10 + 6;
+            coord.x = 10 + 6;
                 coord.y = tft.getCursorY();
                 coord.size = nchars;
                 coord.fgcolor =
                     fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;**/
+                coord.bgcolor = bruceConfig.bgColor;
             } else txt = " ";
            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
+            tft.print(txt.substring(0, nchars));
         }
         i++;
         if (i == (start + MAX_ITEMS) || i == arraySize) break;
