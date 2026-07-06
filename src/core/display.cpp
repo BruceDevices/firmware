@@ -878,10 +878,9 @@ void drawBatteryStatus(uint8_t bat) {
 ** Function name: listFiles
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
-/*
 #define MAX_ITEMS (int)(tftHeight - 30) / (10)
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
-    Opt_Coord coord;
+   // Opt_Coord coord;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (index == 0) {
         tft.fillScreen(bruceConfig.bgColor);
@@ -923,7 +922,6 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     }
     return coord;
 }
-*/
 // 80x80
 
 
