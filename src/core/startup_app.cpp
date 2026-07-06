@@ -9,7 +9,6 @@
 #include "startup_app.h"
 
 #include "core/settings.h" // clock
-#include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include "modules/wifi/sniffer.h"
 #ifdef SOC_USB_OTG_SUPPORTED

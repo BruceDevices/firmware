@@ -130,7 +130,6 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "core/sd_functions.h"
 #include "core/serialcmds.h"
 #include "core/settings.h"
-#include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include <Wire.h>
 

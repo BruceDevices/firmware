@@ -5,7 +5,6 @@
 #include "core/net_utils.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "core/wifi/webInterface.h"
 #include "scan_hosts.h"
 #include "wifi_atks.h"
 #include <esp_wifi.h>

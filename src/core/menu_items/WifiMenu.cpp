@@ -2,7 +2,6 @@
 #include "core/display.h"
 #include "core/settings.h"
 #include "core/utils.h"
-#include "core/wifi/webInterface.h"
 #include "core/wifi/wg.h"
 #include "core/wifi/wifi_common.h"
 #include "core/wifi/wifi_mac.h"

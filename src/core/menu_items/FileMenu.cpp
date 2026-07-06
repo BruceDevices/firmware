@@ -3,7 +3,6 @@
 #include "core/massStorage.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
-#include "core/wifi/webInterface.h"
 #include "core/connect/file_sharing.h"
 #include "core/connect/serial_commands.h"
 
