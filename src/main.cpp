@@ -125,7 +125,6 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #endif
 
 #include "core/display.h"
-#include "core/led_control.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/serialcmds.h"
