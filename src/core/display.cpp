@@ -920,7 +920,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         i++;
         if (i == (start + MAX_ITEMS) || i == arraySize) break;
     }
-   // return coord;
+    return coord;
 }
 // 80x80
 
