@@ -664,7 +664,7 @@ Opt_Coord drawOptions(
     }
 
     tft.setTextColor(fgcolor, bgcolor);
-    tft.setTextSize(3);
+    tft.setTextSize(1);
     //tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
     tft.setCursor(10, 18);
 
@@ -874,8 +874,8 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         tft.fillScreen(bruceConfig.bgColor);
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     }
-    tft.setCursor(10, 10);
-    tft.setTextSize(2);
+    //tft.setCursor(10, 10);
+    tft.setTextSize(1);
     int i = 0;
     int arraySize = fileList.size();
     int start = 0;
@@ -895,12 +895,12 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
             if (index == i) {
                 txt = ">";
-            /**coord.x = 10 + 6;
+            coord.x = 10 + 6;
                 coord.y = tft.getCursorY();
                 coord.size = nchars;
                 coord.fgcolor =
                     fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;*/
+                coord.bgcolor = bruceConfig.bgColor;
             } else txt = " ";
            txt += fileList[i].filename + "                 ";
             tft.print(txt.substring(0, nchars));
