@@ -637,7 +637,7 @@ void progressHandler(int progress, size_t total, String message) {
 ** Function name: drawOptions
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
-
+/** 
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
@@ -646,7 +646,8 @@ Opt_Coord drawOptions(
     int menuSize = options.size();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
 
-   /*int32_t optionsTopY = 18;
+
+    int32_t optionsTopY = 18;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
@@ -660,7 +661,7 @@ Opt_Coord drawOptions(
             5,
             fgcolor
         );
-    }*/
+    }
 
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
@@ -700,7 +701,7 @@ Exit:
     TouchFooter();
 #endif
     return coord;
-}
+}*/
 
 /***************************************************************************************
 ** Function name: drawSubmenu
