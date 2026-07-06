@@ -154,12 +154,10 @@ void resetGlobalState() {
 ** @brief: Broadcasts deauth frames
 ***************************************************************************************/
 void send_raw_frame(const uint8_t *frame_buffer, int size) {
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_RATE_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_PERIOD_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    for (int i = 0; i < 3; i++) {
+        wifiRawTx(WIFI_IF_AP, frame_buffer, size); // respects TX buffers backpressure
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 }
 
 /***************************************************************************************
@@ -931,7 +929,7 @@ void beaconSpamList(const char list[]) {
 
         // send 2 packets instead of 3 (makes devices show more networks)
         for (int k = 0; k < 2; k++) {
-            esp_wifi_80211_tx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN, 0);
+            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 
@@ -961,7 +959,7 @@ void beaconSpamSingle(String baseSSID) {
 
         // send 2 packets
         for (int k = 0; k < 2; k++) {
-            esp_wifi_80211_tx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN, 0);
+            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 

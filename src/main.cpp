@@ -7,6 +7,7 @@
 #include "core/utils.h"
 #include "current_year.h"
 #include "esp32-hal-psram.h"
+#include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
 #include <functional>
@@ -421,11 +422,20 @@ void setup() {
 
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
-    if (psramInit()) log_d("PSRAM Started");
-    if (psramFound()) log_d("PSRAM Found");
-    else log_d("PSRAM Not Found");
-    log_d("Total PSRAM: %d", ESP.getPsramSize());
-    log_d("Free PSRAM: %d", ESP.getFreePsram());
+    bool psramStarted = psramInit();
+    // Printed unconditionally (boards force CORE_DEBUG_LEVEL=1, so log_d is invisible).
+    // If PSRAM fails to init, a PSRAM board effectively becomes a no-PSRAM board and
+    // Wi-Fi + BLE cannot coexist. This one boot line makes that failure mode observable.
+    Serial.printf(
+        "[PSRAM] init=%d found=%d total=%u free=%u | internal free=%u largest=%u\n",
+        psramStarted,
+        psramFound(),
+        (unsigned)ESP.getPsramSize(),
+        (unsigned)ESP.getFreePsram(),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)
+    );
+    Serial.flush();
 
     RAM_LOG("setup-start");
 

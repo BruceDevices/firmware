@@ -2,6 +2,8 @@
 #include "ducky_typer.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
+#include "core/ram_profile.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #if defined(USB_as_HID)
@@ -407,6 +409,14 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 displayError("Restart your Device");
                 returnToMenu = true;
             }
+            // No-PSRAM guard: bringing the BLE stack up when Wi-Fi (+SD) already
+            // hold the internal DRAM makes the BT controller malloc fail
+            // (E BLE_INIT: Malloc failed). Bail cleanly instead.
+            if (!radioHasMemForBle()) {
+                displayError("Low RAM: free WiFi/SD first", true);
+                returnToMenu = true;
+                return;
+            }
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
         } else {
 #if defined(USB_as_HID)
@@ -430,6 +440,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
     if (ble) {
         if (hid->isConnected()) {
             // If connected as media controller and switch to BadBLE, changes the layout
+            Serial.println("BLE Already connected, changing layout and delay");
             hid->setLayout(keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
             return;
@@ -638,6 +649,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
             DuckyCommand *ArgCmd = findDuckyCommand(Argument.c_str());
 
             if (PriCmd != nullptr) {
+                vTaskDelay(1); // Allow other tasks to run
                 // REM comment lines are processed here
                 if (PriCmd->type == DuckyCommandType_Comment) {
                     // Do nothing for comments
@@ -947,14 +959,18 @@ EXIT:
 
 // Send media commands through BLE or USB HID
 void MediaCommands(HIDInterface *hid, bool ble) {
-    if (_Ask_for_restart == 2) return;
-    _Ask_for_restart = 1; // arm the flag
+    if (_Ask_for_restart == 2) {
+        displayWarning("Restart your Device", true);
+        return;
+    }
 
     ducky_startKb(hid, true);
 
     displayTextLine("Pairing...");
 
-    while (!hid->isConnected() && !check(EscPress));
+    while (!hid->isConnected() && !check(EscPress)) { delay(50); };
+
+    _Ask_for_restart = 1; // arm the flag
 
     if (hid->isConnected()) {
         BLEConnected = true;

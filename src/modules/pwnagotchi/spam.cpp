@@ -14,6 +14,7 @@ Thanks to @bmorcelli for his help doing a better code.
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
+#include "core/wifi/wifi_common.h"
 #include "spam.h"
 #include "ui.h"
 
@@ -103,7 +104,7 @@ void send_pwnagotchi_beacon(uint8_t channel, const char *face, const char *name)
 
     // Définir le canal et envoyer la trame
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_80211_tx(WIFI_IF_AP, beacon_frame, sizeof(beacon_frame), false);
+    wifiRawTx(WIFI_IF_AP, beacon_frame, sizeof(beacon_frame));
 }
 
 const char *pwnd_faces[] = {

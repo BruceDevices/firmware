@@ -61,9 +61,9 @@ static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
     if (buffer == nullptr || len <= 0) return false;
     if (!ensureKarmaApInterface(channel)) return false;
 
-    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_AP, buffer, len, false);
+    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
     if (err != ESP_OK) {
-        Serial.printf("[KARMA] esp_wifi_80211_tx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
+        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
         return false;
     }
 
