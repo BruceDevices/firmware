@@ -28,8 +28,6 @@ bool showHiddenNetworks = false;
 void WifiMenu::optionsMenu() {
     returnToMenu = false;
     options.clear();
-    // Note: WiFi features will cleanly stop WebUI automatically when they start
-    // User can navigate menu normally even with WebUI active
     if (WiFi.status() != WL_CONNECTED) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},

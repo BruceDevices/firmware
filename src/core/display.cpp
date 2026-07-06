@@ -117,8 +117,6 @@ bool wakeUpScreen() {
 ***************************************************************************************/
 void displayRedStripe(String text, uint16_t fgcolor, uint16_t bgcolor) {
     // detect if not running in interactive mode -> show nothing onscreen and return immediately
-    // if (server || isSleeping || isScreenOff) return; // webui is running
-
     int size;
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
     if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) size = FM;

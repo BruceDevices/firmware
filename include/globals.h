@@ -96,7 +96,7 @@ struct Option {
     bool enabled = true;
     bool (*hover)(void *hoverPointer, bool shouldRender);
     void *hoverPointer;
-    bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
+    bool hovered; // return to the remote ( or app) if it is hovered on the loopoptions
 
     Option(
         String lbl, const std::function<void()> &op, bool sel = false,

@@ -431,7 +431,7 @@ void setup() {
         );
     }
 #endif
-    //  start a task to handle serial commands while the webui is running
+    //  start a task to handle serial commands while the  is running
     startSerialCommandsHandlerTask(true);
 
     wakeUpScreen();
@@ -465,7 +465,7 @@ void loop() {
         "██████  ██   ██  ██████   ██████ ███████ \n"
         "                                         \n"
         "         PREDATORY FIRMWARE\n\n"
-        "Tips: Connect to the WebUI for better experience\n"
+        "Tips: Connect to the  for better experience\n"
         "      Add your network by sending: wifi add ssid password\n\n"
         "At your command:"
     );

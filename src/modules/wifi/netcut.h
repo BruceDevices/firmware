@@ -12,7 +12,7 @@
  *   - Reuses Bruce's ARPScanner infrastructure for device discovery
  *   - All UI via Bruce's loopOptions() — no custom display drawing
  *   - Troll Mode is BLOCKING — stops when user presses EscPress/Back
- *   - No WebUI — control exclusively via T-Embed screen + encoder
+ *   - No — control exclusively via T-Embed screen + encoder
  *   - VIP persistence via LittleFS (Bruce's standard config system)
  *
  * @note Requires active WiFi STA connection before use.
