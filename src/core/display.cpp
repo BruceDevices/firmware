@@ -893,12 +893,12 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
             if (index == i) {
                 txt = ">";
-            coord.x = 10 + 6;
+            /*coord.x = 10 + 6;
                 coord.y = tft.getCursorY();
                 coord.size = nchars;
                 coord.fgcolor =
                     fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;
+                coord.bgcolor = bruceConfig.bgColor;*/
             } else txt = " ";
            txt += fileList[i].filename + "                 ";
             tft.print(txt.substring(0, nchars));
