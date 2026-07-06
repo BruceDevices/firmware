@@ -28,16 +28,8 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
-            {"Audio Config",  [this]() { audioMenu(); }    },
             {"System Config", [this]() { systemMenu(); }   },
-            {"Power",         [this]() { powerMenu(); }    },
         };
-
-#if !defined(LITE_VERSION)
-        if (!appStoreInstalled()) {
-            localOptions.push_back({"Install App Store", []() { installAppStoreJS(); }});
-        }
-#endif
 
         if (bruceConfig.devMode) {
             localOptions.push_back({"Dev Mode", [this]() { devMenu(); }});
@@ -117,37 +109,6 @@ void ConfigMenu::ledMenu() {
     }
 }
 #endif
-/*********************************************************************
-**  Function: audioMenu
-**  Audio configuration submenu with auto-rebuild for toggles
-**********************************************************************/
-void ConfigMenu::audioMenu() {
-    while (true) {
-        std::vector<Option> localOptions = {
-#if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR)
-
-            {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
-                                                             [this]() {
-                 // Toggle sound setting
-                 bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
-                 bruceConfig.saveFile();
-             }                                                                                                                                            },
-#if defined(HAS_NS4168_SPKR)
-            {"Sound Volume",                                                [this]() { setSoundVolume(); }},
-#endif  // BUZZ_PIN || HAS_NS4168_SPKR
-#endif  //  HAS_NS4168_SPKR
-#endif  //  LITE_VERSION
-            {"Back",                                                        []() {}                       },
-        };
-
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Audio Config");
-
-        // Exit only if user pressed Back or ESC
-        if (selected == -1 || selected == localOptions.size() - 1) { return; }
-        // Menu rebuilds to update toggle label
-    }
-}
 
 /*********************************************************************
 **  Function: systemMenu

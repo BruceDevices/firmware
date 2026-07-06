@@ -41,36 +41,6 @@ bool isValidAscii(const String &text) {
     return true; // All characters are valid
 }
 
-/* OLD:
-String readDecryptedFileOLD(FS &fs, String filepath) {
-  String cyphertext = readSmallFile(fs, filepath);
-  if(cyphertext.length() == 0) return "";
-
-  if(cachedPassword.length()==0) {
-    cachedPassword = keyboard("", 32, "Password:", true);
-    if(cachedPassword.length()==0) return "";  // cancelled
-  }
-
-  //Serial.println(cyphertext);
-  //Serial.println(cachedPassword);
-
-  // else try to decrypt
-  String plaintext = decryptString(cyphertext, cachedPassword);
-
-  // check if really plaintext
-  if(!isValidAscii(plaintext)) {
-    // invalidate cached password -> will ask again on the next try
-    cachedPassword = "";
-    Serial.println("invalid password");
-    //Serial.println(plaintext);
-    return "";
-  }
-
-  // else
-  return plaintext;
-}
-*/
-
 String readDecryptedFile(FS &fs, String filepath) {
 
     if (cachedPassword.length() == 0) {
