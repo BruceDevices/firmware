@@ -3821,9 +3821,12 @@ String selectTargetFromScan(const char *title) {
 
             tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
             tft.setCursor(20, 40);
-            tft.print("Found: ");
-            tft.print(deviceCount);
-            tft.print(" devices");
+            // tft.print("Found: ");
+            // tft.print(deviceCount);
+            // tft.print(" devices");
+            char deviceStr[32];
+            snprintf(deviceStr, sizeof(deviceStr), "Found: %d devices", (int)deviceCount);
+            tft.print(deviceStr);
 
             for (int i = 0; i < maxVisibleDevices && (scrollOffset + i) < (int)deviceCount; i++) {
                 String displayName, address;
@@ -5116,8 +5119,8 @@ bool confirmAttack(const char *targetName) {
     tft.setCursor(20, 90);
     tft.println("FastPair buffer overflow exploit");
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 35);
+    tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+    tft.setCursor(20, tftHeight - 30);
     tft.print("SEL: Yes  NEXT: No  ESC: Cancel");
 
     while (true) {
