@@ -19,7 +19,7 @@ StartupApp::StartupApp() {
 
     _startupApps["Sniffer"] = []() { sniffer_setup(); };
     _startupApps["Mass Storage"] = []() { MassStorage(); };
-
+}
 bool StartupApp::startApp(const String &appName) const {
     auto it = _startupApps.find(appName);
     if (it == _startupApps.end()) {
