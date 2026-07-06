@@ -745,20 +745,6 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 
 
 // Selected item
-/*** int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) + 5 ? 1 : 1;
-tft.setTextSize(1);
-tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 10, bruceConfig.bgColor);
-tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 10, bruceConfig.bgColor);
-tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 10, bruceConfig.bgColor);
-tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 2, SMOOTH_FONT);
-
-tft.drawFastHLine(
-    tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2 - 1,
-    middle + selectedTextSize * LH / 2 + 1,
-    strlen(options[index].label.c_str()) * selectedTextSize * LW,
-    bruceConfig.priColor
-);**/
 int selectedTextSize = options[index].label.length() <= tftWidth / (LW * 2) + 5 ? 1 : 1;
 tft.setTextSize(1);
 tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
@@ -766,24 +752,10 @@ tft.fillRect(6, middle - 2 * LH / 2 - 1, tftWidth - 12, 10, bruceConfig.bgColor)
 // FIX TRÀN CHỮ
 String label = options[index].label;
 int maxChars = (tftWidth - 20) / LW;
-
-if (label.length() > maxChars) {
-    label = label.substring(0, maxChars - 2) + "..";
-    }
-
-    tft.drawCentreString(
-        label,
-            tftWidth / 2,
-                middle - selectedTextSize * LH / 2 - 2,
-                    SMOOTH_FONT
-                    );
-
+if (label.length() > maxChars) {label = label.substring(0, maxChars - 2) + "..";}
+    tft.drawCentreString(label, tftWidth / 2, middle - selectedTextSize * LH / 2 - 2, SMOOTH_FONT);
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(label.c_str()) * selectedTextSize * LW / 2 - 1,
-        middle + selectedTextSize * LH / 2 + 1,
-        strlen(label.c_str()) * selectedTextSize * LW,
-        bruceConfig.priColor
-    );
+    tftWidth / 2 - strlen(label.c_str()) * selectedTextSize * LW / 2 - 1, middle + selectedTextSize * LH / 2 + 1, strlen(label.c_str()) * selectedTextSize * LW, bruceConfig.priColor);
 
     // Next Item
     int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
@@ -906,7 +878,7 @@ void drawBatteryStatus(uint8_t bat) {
 ** Function name: listFiles
 ** Description:   Função para desenhar e mostrar o menu principal
 ***************************************************************************************/
-#define MAX_ITEMS (int)(tftHeight - 50) / (LH * FM)
+#define MAX_ITEMS (int)(tftHeight - 20) / (10)
 Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     Opt_Coord coord;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
@@ -915,7 +887,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     }
     tft.setCursor(10, 10);
-    tft.setTextSize(3);
+    tft.setTextSize(1);
     int i = 0;
     int arraySize = fileList.size();
     int start = 0;
@@ -935,7 +907,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
 
             if (index == i) {
                 txt = ">";
-                coord.x = 10 + FM * LW;
+                coord.x = 10 + 6;
                 coord.y = tft.getCursorY();
                 coord.size = nchars;
                 coord.fgcolor =
