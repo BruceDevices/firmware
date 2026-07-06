@@ -518,11 +518,11 @@ void setWifiApSsidMenu() {
 **  Handles Menu to set the WiFi AP Password
 **********************************************************************/
 void setWifiApPasswordMenu() {
-    const bool isDefault = bruceConfig.wifiAp.pwd == "Khangyeu";
+    const bool isDefault = bruceConfig.wifiAp.pwd == "Love";
 
     options = {
-        {"Default (brucenet)",
-         [=]() { bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, "Khangyeu"); },
+        {"Default (Love)",
+         [=]() { bruceConfig.setWifiApCreds(bruceConfig.wifiAp.ssid, "Love"); },
          isDefault                                                                             },
         {"Custom",
          [=]() {
