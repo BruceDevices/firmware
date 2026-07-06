@@ -143,8 +143,6 @@ void stationDeauth(Host host) {
         displayError("Not connected to WiFi", true);
         return;
     }
-    // Stop WebUI before setting WiFi mode for station deauth
-    cleanlyStopWebUiForWiFiFeature();
     uint8_t targetMAC[6];
 
     uint8_t gatewayMAC[6];

