@@ -126,7 +126,6 @@ void ConfigMenu::systemMenu() {
                  bruceConfig.wifiAtStartup = !bruceConfig.wifiAtStartup;
                  bruceConfig.saveFile();
              }                                                                                                           },
-            {"Startup App",                                                         [this]() { setStartupApp(); }        },
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {String("Keyboard Language: ") + bruceConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
