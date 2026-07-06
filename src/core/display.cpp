@@ -30,26 +30,11 @@ bool __attribute__((weak)) isCharging() { return false; }
 ** Description:   Scroll large texts into screen
 ***************************************************************************************/
 void displayScrollingText(const String &text, Opt_Coord &coord) {
-
-        tft.setTextColor(coord.fgcolor, coord.bgcolor);
-
-            tft.fillRect(
-                    coord.x,
-                            coord.y,
-                                    (coord.size - 1) * LW * tft.getTextSize(),
-                                            LH * tft.getTextSize(),
-                                                    bruceConfig.bgColor
-                                                        );
-
-                                                            tft.setCursor(coord.x, coord.y);
-
-                                                                if (text.length() > coord.size - 1) {
-                                                                        tft.print(text.substring(0, coord.size - 1));
-                                                                            } else {
-                                                                                    tft.print(text);
-                                                                                        }
-                                                                                        }
-
+tft.setTextColor(coord.fgcolor, coord.bgcolor);
+tft.fillRect(coord.x, coord.y, (coord.size - 1) * LW * tft.getTextSize(), LH * tft.getTextSize(), bruceConfig.bgColor);
+tft.setCursor(coord.x, coord.y);
+if (text.length() > coord.size - 1) {tft.print(text.substring(0, coord.size - 1));
+} else {tft.print(text);}}
 /***************************************************************************************
 ** Function name: TouchFooter
 ** Description:   Draw touch screen footer
@@ -651,6 +636,7 @@ void progressHandler(int progress, size_t total, String message) {
 ** Function name: drawOptions
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
+/*
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender
@@ -713,7 +699,7 @@ Exit:
     TouchFooter();
 #endif
     return coord;
-}
+}*/
 
 /***************************************************************************************
 ** Function name: drawSubmenu
