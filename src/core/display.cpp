@@ -875,7 +875,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
         tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     }
     tft.setCursor(10, 10);
-    tft.setTextSize(1);
+    tft.setTextSize(2);
     int i = 0;
     int arraySize = fileList.size();
     int start = 0;
