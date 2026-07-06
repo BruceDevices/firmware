@@ -933,8 +933,6 @@ static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems
 
 //===== SETUP =====//
 void sniffer_setup() {
-    // Stop WebUI before setting WiFi mode for sniffer
-    cleanlyStopWebUiForWiFiFeature();
 
     FS *Fs;
     int redraw = true;

@@ -363,8 +363,6 @@ void wifi_atk_menu() {
 }
 
 void deauthFloodAttack() {
-    // Stop WebUI before setting WiFi mode for attack
-    cleanlyStopWebUiForWiFiFeature();
     resetGlobalState();
     if (!wifi_atk_setWifi()) return;
 
@@ -441,8 +439,6 @@ uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filt
 #if !defined(LITE_VERSION)
 void capture_handshake(String tssid, String mac, uint8_t channel) {
 
-    // Stop WebUI before setting WiFi mode for handshake capture
-    cleanlyStopWebUiForWiFiFeature();
 
     hsTracker = HandshakeTracker(); // Reset tracker for each new capture
 
@@ -731,8 +727,6 @@ AGAIN:
 ***************************************************************************************/
 void target_atk(String tssid, String mac, uint8_t channel) {
     resetGlobalState();
-    // Stop WebUI before setting WiFi mode for attack
-    cleanlyStopWebUiForWiFiFeature();
     if (!wifi_atk_setWifi()) return;
 
     // Prepare deauth frame

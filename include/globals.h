@@ -73,20 +73,13 @@ extern SerialDevice *serialDevice;
 extern USBSerial USBserial;
 extern StartupApp startupApp;
 
-extern char timeStr[16];
 extern SPIClass sdcardSPI;
-extern bool clock_set;
-extern time_t localTime;
-extern struct tm *timeInfo;
-extern ESP32Time rtc;
-extern NTPClient timeClient;
 
 extern int prog_handler; // 0 - Flash, 1 - LittleFS, 2 - Download
 
 extern bool sdcardMounted; // inform if SD Cardis active or not
 
 extern bool wifiConnected; // inform if wifi is active or not
-extern bool isWebUIActive; // inform if WebUI is active or not
 
 extern volatile int tftWidth;
 extern volatile int tftHeight;

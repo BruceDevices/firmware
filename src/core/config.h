@@ -48,9 +48,7 @@ public:
 #endif
 
     // Wifi
-    Credential webUI = {"admin", "bruce"};
-    std::vector<String> webUISessions = {}; // FIFO queue of session tokens
-    WiFiCredential wifiAp = {"BruceNet", "brucenet"};
+    WiFiCredential wifiAp = {"Love", "Khangyeu"};
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
@@ -129,7 +127,6 @@ public:
 #endif
 
     // Wifi
-    void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
     void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
@@ -154,10 +151,6 @@ public:
     void setBadUSBBLEShowOutput(bool value);
     void addDisabledMenu(String value);
     // TODO: removeDisabledMenu(String value);
-
-    void addWebUISession(const String &token);
-    void removeWebUISession(const String &token);
-    bool isValidWebUISession(const String &token);
 };
 
 #endif
