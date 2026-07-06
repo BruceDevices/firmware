@@ -257,7 +257,7 @@ void executeSpam(EBLEPayloadType type, String customName = "") {
 
     pAdvertising->setAdvertisementData(advertisementData);
     pAdvertising->setScanResponseData(oScanResponseData);
-    pAdvertising->setMinInterval(100));
+    pAdvertising->setMinInterval(100);
     pAdvertising->setMaxInterval(140);
     pAdvertising->start();
     vTaskDelay(100 / portTICK_PERIOD_MS);
