@@ -1,5 +1,4 @@
 #include "theme.h"
-#include "core/led_control.h"
 #include "display.h"
 
 struct ThemeEntry {
