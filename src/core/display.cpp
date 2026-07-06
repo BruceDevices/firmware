@@ -893,7 +893,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
             else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
             else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
 
-            if {
+            if (index == i) {
                 txt = ">";
             coord.x = 8;
                 coord.y = 10;
