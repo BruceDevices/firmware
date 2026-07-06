@@ -191,7 +191,7 @@ void printSubtitle(String subtitle, bool withLine = true);
 void printFootnote(String text);
 void printCenterFootnote(String text);
 
-void listFiles(int index, std::vector<FileList> fileList);
+Opt_Coord listFiles(int index, std::vector<FileList> fileList);
 
 void drawWireguardStatus(int x, int y);
 
