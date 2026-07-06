@@ -899,7 +899,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
     String txt = ">";
     while (i < arraySize) {
         if (i >= start) {
-            tft.setCursor(10, 18 + ((i - start) * 11));
+            tft.setCursor(8, 10 + ((i - start) * 10));
             if (fileList[i].folder == true)
                 tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
             else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
