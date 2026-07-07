@@ -410,7 +410,7 @@ private:
             fs = &SD;
             return true;
         }
-        if (!LittleFS.begin()) return false;
+        if (!setupLittleFS()) return false;
         fs = &LittleFS;
         return true;
     }

@@ -2,6 +2,7 @@
 #include "core/display.h"    // using displayRedStripe as error msg
 #include "core/mykeyboard.h" // using keyboard when calling rename
 #include "core/passwords.h"
+#include "core/ram_profile.h"
 #include "core/sd_functions.h" // using sd functions called to rename and manage sd files
 #include "core/serialcmds.h"
 #include "core/settings.h"
@@ -291,7 +292,7 @@ void drawWebUiScreen(bool mode_ap) {
     }
 
     tft.setCursor(padX, currentY);
-    tft.print("Url: http://bruce.local");
+    if (mdnsRunning) tft.print("Url: http://bruce.local");
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
@@ -376,22 +377,15 @@ void serveWebUIFile(
 **  Try to start mDNS only if there is enough internal heap available
 **********************************************************************/
 static bool startMdnsResponder() {
-    constexpr size_t kMinInternalHeap = 20 * 1024; // bytes reserved for mDNS buffers
-    size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    if (freeInternalHeap < kMinInternalHeap) {
-        log_e(
-            "Skipping mDNS responder. Only %lu bytes of internal heap available (need %lu).\n",
-            static_cast<unsigned long>(freeInternalHeap),
-            static_cast<unsigned long>(kMinInternalHeap)
-        );
-        return false;
-    }
+    RAM_LOG("before MDNS");
 
     if (!MDNS.begin(host)) {
-        log_e("Error setting up MDNS responder!");
+        RAM_LOG("MDNS failed");
+        Serial.printf("Error setting up MDNS responder!\n");
         return false;
     }
 
+    RAM_LOG("after MDNS");
     return true;
 }
 

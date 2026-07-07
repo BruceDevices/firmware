@@ -1619,7 +1619,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
         if (redrawRows) {
             int rowH = max(12, FP * LH + 4);
             int rowStart = BORDER_PAD_Y + FM * LH + 10;
-            int startRowY = rowStart + rowH * 4 + rowH;
+            int startRowY = rowStart + rowH * 4 + (tftHeight > 135) ? rowH : 0;
 
             bleSpamRenderConfigRows(config, cursor, editState, rowStart, rowH);
 

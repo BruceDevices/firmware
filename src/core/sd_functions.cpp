@@ -26,10 +26,29 @@ String fileToCopy;
 std::vector<FileList> fileList;
 
 /***************************************************************************************
+** Function name: setupLittleFS
+** Description:   Start LittleFS
+***************************************************************************************/
+bool setupLittleFS(uint8_t maxFiles) {
+    if (maxFiles < 1) { maxFiles = 1; }
+    return LittleFS.begin(false, "/littlefs", maxFiles);
+}
+
+/***************************************************************************************
+** Function name: closeLittleFS
+** Description:   Turn Off LittleFS, set littlefsMounted state to false
+***************************************************************************************/
+void closeLittleFS() {
+    LittleFS.end();
+    Serial.println("LittleFS Unmounted...");
+}
+
+/***************************************************************************************
 ** Function name: setupSdCard
 ** Description:   Start SD Card
 ***************************************************************************************/
-bool setupSdCard() {
+bool setupSdCard(uint8_t maxFiles) {
+    if (maxFiles < 1) { maxFiles = 1; }
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0) {
         sdcardMounted = false;
@@ -44,14 +63,14 @@ bool setupSdCard() {
     task = true;
 #endif
 #ifdef USE_SD_MMC
-    if (!SD.begin("/sdcard", true)) {
+    if (!SD.begin("/sdcard", true, false, BOARD_MAX_SDMMC_FREQ, maxFiles)) {
         sdcardMounted = false;
         result = false;
     }
 #else
     // Not using InputHandler (SdCard on default &SPI bus)
     if (task) {
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, SPI, 4000000UL, "/sd", maxFiles)) result = false;
         // Serial.println("Task not activated");
     }
     // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
@@ -61,7 +80,7 @@ bool setupSdCard() {
     ) {
         Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
 #if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
-        if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
+        if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance(), 4000000UL, "/sd", maxFiles)) {
             result = false;
             Serial.println("SDCard in the same Bus as TFT, but failed to mount");
         }
@@ -73,15 +92,18 @@ bool setupSdCard() {
     // If not using TFT Bus, use a specific bus
     else {
     NEXT:
-        sdcardSPI.begin(
-            (int8_t)bruceConfigPins.SDCARD_bus.sck,
-            (int8_t)bruceConfigPins.SDCARD_bus.miso,
-            (int8_t)bruceConfigPins.SDCARD_bus.mosi,
-            (int8_t)bruceConfigPins.SDCARD_bus.cs
-        ); // start SPI communications
-        delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+        if (!sdcardSPI.begin(
+                (int8_t)bruceConfigPins.SDCARD_bus.sck,
+                (int8_t)bruceConfigPins.SDCARD_bus.miso,
+                (int8_t)bruceConfigPins.SDCARD_bus.mosi,
+                (int8_t)bruceConfigPins.SDCARD_bus.cs
+            )) {
+            Serial.println("Failed starting SPI Bus");
+        } // start SPI communications
+        delay(20);
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI, 4000000UL, "/sd", maxFiles)) {
             result = false;
+            Serial.println("SDCard in a different Bus, sdcardSPI failed to mount");
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
             // If using Shared SPI, do not stop the bus if SDCard is not present
             // If using Legacy, release the pins from this SPI Bus
@@ -94,6 +116,13 @@ bool setupSdCard() {
 
     if (result == false) {
         Serial.println("SDCARD NOT mounted, check wiring and format");
+        Serial.printf(
+            "Pins: SCK=%d, MISO=%d, MOSI=%d, CS=%d\n",
+            bruceConfigPins.SDCARD_bus.sck,
+            bruceConfigPins.SDCARD_bus.miso,
+            bruceConfigPins.SDCARD_bus.mosi,
+            bruceConfigPins.SDCARD_bus.cs
+        );
         sdcardMounted = false;
         return false;
     } else {
@@ -189,8 +218,11 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
             return false;
         }
     }
-
-    if (!LittleFS.begin()) {
+    /*
+    begin(bool formatOnFail = false, const char *basePath = "/littlefs", uint8_t maxOpenFiles = (uint8_t)10U,
+    const char *partitionLabel = "spiffs")
+    */
+    if (!setupLittleFS()) {
         Serial.println("LittleFS not mounted");
         return false;
     }

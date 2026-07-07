@@ -14,7 +14,9 @@ struct FileList {
 
 // extern SPIClass sdcardSPI;
 
-bool setupSdCard();
+bool setupLittleFS(uint8_t maxFiles = 3);
+
+bool setupSdCard(uint8_t maxFiles = 3);
 
 void closeSdCard();
 

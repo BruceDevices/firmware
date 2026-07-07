@@ -148,6 +148,7 @@ jobs:
 
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             version=${{ github.ref_name }}
+            sed -i "s/-D ENABLE_RAM_LOGGING=1/;-D ENABLE_RAM_LOGGING=1'\"$version\"' ; /g" ./platformio.ini
           else
             version="${GITHUB_SHA::7}"
           fi

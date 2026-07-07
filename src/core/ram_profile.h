@@ -1,12 +1,6 @@
 #ifndef __RAM_PROFILE_H__
 #define __RAM_PROFILE_H__
 
-// RAM profiling instrumentation (Milestone 1 of .idea/plan.md).
-//
-// Enabled only when ENABLE_RAM_LOGGING is defined (see the build_src_flags
-// section of boards/m5stack-cardputer/m5stack-cardputer.ini). When the macro is
-// not defined, RAM_LOG() compiles to nothing and has zero cost.
-//
 // Usage: RAM_LOG("stage-name"); at each boot stage you want to measure.
 
 #if defined(ENABLE_RAM_LOGGING)

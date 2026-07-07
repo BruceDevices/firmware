@@ -1727,7 +1727,7 @@ bool DuckyScriptEngine::parseLine(String line) {
 
 bool DuckyScriptEngine::loadFromSD(const String &filename) {
     commands.clear();
-    if (!SD.begin()) return false;
+    if (!setupSdCard()) return false;
     File file = SD.open(filename);
     if (!file) return false;
 
@@ -2885,7 +2885,7 @@ bool DoSAttackServiceClass::advertisingSpam(NimBLEAddress target) {
 //=============================================================================
 
 String selectFileFromSD() {
-    if (!SD.begin()) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card not found");
         return "";
     }
@@ -3010,7 +3010,7 @@ String selectFileFromSD() {
 }
 
 bool loadScriptFromSD(const String &filename) {
-    if (!SD.begin()) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card failed");
         return false;
     }
@@ -3985,7 +3985,7 @@ void BLE_Sniffer() {
 
             if (getFsStorage(fs) && fs == &SD) {
                 storageType = "SD";
-            } else if (LittleFS.begin()) {
+            } else if (setupLittleFS()) {
                 fs = &LittleFS;
                 storageType = "LittleFS";
             }

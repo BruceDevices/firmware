@@ -1808,7 +1808,7 @@ void loadPortalTemplates() {
     portalTemplates.clear();
     portalTemplates.push_back({"Google Login", "", true, false});
     portalTemplates.push_back({"Router Update", "", true, true});
-    if (LittleFS.begin()) {
+    if (setupLittleFS()) {
         if (!LittleFS.exists("/PortalTemplates")) LittleFS.mkdir("/PortalTemplates");
         if (LittleFS.exists("/PortalTemplates")) {
             File root = LittleFS.open("/PortalTemplates");
@@ -1923,7 +1923,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
              directOptions.push_back(
                  {"LittleFS", [=]() {
                       drawMainBorderWithTitle("BROWSE LITTLEFS");
-                      if (LittleFS.begin()) {
+                      if (setupLittleFS()) {
                           String templateFile = loopSD(LittleFS, true, "HTML", "/");
                           if (templateFile.length() > 0) {
                               PortalTemplate customTmpl;
