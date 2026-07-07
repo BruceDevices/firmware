@@ -4101,7 +4101,7 @@ void BleSuiteMenu() {
 const char *getScanTitle(int attackIndex) {
     switch (attackIndex) {
         case 0: return "SELECT TARGET";
-        case 1: return "SELECT TARGET TO \n PROFILE";
+        case 1: return "SELECT TARGET TO PROFILE";
         case 2: return "SELECT FASTPAIR DEVICE";
         case 3: return "SELECT HFP DEVICE";
         case 4: return "SELECT AUDIO DEVICE";
