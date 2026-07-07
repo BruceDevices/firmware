@@ -4099,6 +4099,7 @@ void BleSuiteMenu() {
 //=============================================================================
 
 const char *getScanTitle(int attackIndex) {
+    /*
     switch (attackIndex) {
         case 0: return "SELECT TARGET";
         case 1: return "SELECT TARGET TO PROFILE";
@@ -4113,6 +4114,8 @@ const char *getScanTitle(int attackIndex) {
         case 10: return "SELECT UNIVERSAL TARGET";
         default: return "SELECT TARGET";
     }
+        */
+    return "SCANNING";
 }
 
 void executeAttackWithTargetScan(int attackIndex) {
