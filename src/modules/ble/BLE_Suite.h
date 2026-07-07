@@ -196,18 +196,13 @@ struct FastPairModelInfo {
 };
 
 // v3.1: Samsung MAC OUI detection
-extern const char* SAMSUNG_MAC_OUIS[];
+extern const char *SAMSUNG_MAC_OUIS[];
 extern const int SAMSUNG_MAC_OUIS_COUNT;
 bool isSamsungDevice(const NimBLEAddress &address);
 bool isSamsungDevice(const String &mac);
 
 // v3.1: FastPair version detection
-enum FastPairVersion {
-    FP_VERSION_UNKNOWN = 0,
-    FP_VERSION_1,
-    FP_VERSION_2,
-    FP_VERSION_3
-};
+enum FastPairVersion { FP_VERSION_UNKNOWN = 0, FP_VERSION_1, FP_VERSION_2, FP_VERSION_3 };
 
 FastPairVersion detectFastPairVersion(NimBLEAddress target);
 
@@ -503,6 +498,9 @@ bool loadScriptFromSD(String filename);
 
 // Forward declarations for submenu functions
 void showFastPairSubMenu(NimBLEAddress target);
+void NewFunction(
+    int choice, NimBLEClient *&pClient, const NimBLEAddress &target, NimBLERemoteCharacteristic *&pKbpChar
+);
 void showHFPSubMenu(NimBLEAddress target);
 void showAudioSubMenu(NimBLEAddress target);
 void showHIDSubMenu(NimBLEAddress target);

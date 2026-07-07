@@ -111,20 +111,75 @@ bool isBLEInitialized() {
 //=============================================================================
 
 const FastPairModelInfo fastpair_models[] = {
-    {0x000047, "Pixel Buds Pro",      "Headphones"},
-    {0x000048, "Pixel Buds A-Series", "Headphones"},
-    {0x00000A, "Galaxy Buds Live",    "Headphones"},
-    {0x0000F0, "Galaxy Buds2",        "Headphones"},
-    {0x000006, "AirPods Pro",         "Headphones"},
-    {0xF00100, "Fun Device 1",        "Fun"       },
-    {0xF00101, "Fun Device 2",        "Fun"       },
-    {0xF00103, "Fun Device 3",        "Fun"       },
-    {0xF00104, "Fun Device 4",        "Fun"       },
-    {0xF00105, "Fun Device 5",        "Fun"       },
-    {0xF01011, "Prank Device 1",      "Prank"     },
-    {0xF38C02, "Prank Device 2",      "Prank"     },
-    {0xF00106, "Prank Device 3",      "Prank"     },
-    {0,        nullptr,               nullptr     }
+    {0x000047, "Pixel Buds Pro",                "Headphones"   },
+    {0x000048, "Pixel Buds A-Series",           "Headphones"   },
+    {0x00000A, "Galaxy Buds Live",              "Headphones"   },
+    {0x0000F0, "Galaxy Buds2",                  "Headphones"   },
+    {0x000006, "AirPods Pro",                   "Headphones"   },
+    {0xF00100, "Fun Device 1",                  "Fun"          },
+    {0xF00101, "Fun Device 2",                  "Fun"          },
+    {0xF00103, "Fun Device 3",                  "Fun"          },
+    {0xF00104, "Fun Device 4",                  "Fun"          },
+    {0xF00105, "Fun Device 5",                  "Fun"          },
+    {0xF01011, "Prank Device 1",                "Prank"        },
+    {0xF38C02, "Prank Device 2",                "Prank"        },
+    {0xF00106, "Prank Device 3",                "Prank"        },
+    // --- Additional models ---
+    {0x72EF8D, "Razer Hammerhead TWS X",        "Headphones"   },
+    {0x0E30C3, "Razer Hammerhead TWS",          "Headphones"   },
+    {0xF00000, "Bose QuietComfort 35 II",       "Headphones"   },
+    {0x003B41, "M&D MW65",                      "Headphones"   },
+    {0x003D8A, "Cleer FLOW II",                 "Headphones"   },
+    {0x005BC3, "Panasonic RP-HD610N",           "Headphones"   },
+    {0x008F7D, "Soundcore Glow Mini",           "Headphones"   },
+    {0x00A168, "boAt Airdopes 621",             "Headphones"   },
+    {0x00AA48, "Jabra Elite 2",                 "Headphones"   },
+    {0x00AA91, "Beoplay E8 2.0",                "Headphones"   },
+    {0x00C95C, "Sony WF-1000X",                 "Headphones"   },
+    {0x00FA72, "Pioneer SE-MS9BN",              "Headphones"   },
+    {0x011242, "Nirvana Ion",                   "Headphones"   },
+    {0x01EEB4, "Sony WH-1000XM4",               "Headphones"   },
+    {0x02D815, "Audio-Technica ATH-CK1TW",      "Headphones"   },
+    {0x02E2A9, "TCL MOVEAUDIO S200",            "Headphones"   },
+    {0x038B91, "Denon AH-C830NCW",              "Headphones"   },
+    {0x038F16, "Beats Studio Buds",             "Headphones"   },
+    {0x03AA91, "B&O Beoplay H8i",               "Headphones"   },
+    {0x03C99C, "Motorola Moto Buds 135",        "Headphones"   },
+    {0x04AA91, "Beoplay H4",                    "Headphones"   },
+    {0x04C95C, "Sony WI-1000X",                 "Headphones"   },
+    {0x050F0C, "Sennheiser Momentum III Voice", "Headphones"   },
+    {0x052CC7, "AKG MINOR III",                 "Headphones"   },
+    {0x0582FD, "Pixel Buds",                    "Headphones"   },
+    {0x058D08, "Sony WH-1000XM4",               "Headphones"   },
+    {0x05A963, "Ultimate Ears WONDERBOOM 3",    "Speaker"      },
+    {0x05AA91, "B&O Beoplay E6",                "Headphones"   },
+    {0x05C95C, "Sony WI-1000X",                 "Headphones"   },
+    {0x06C197, "OPPO Enco Air3 Pro",            "Headphones"   },
+    {0x06C95C, "Sony WH-1000XM2",               "Headphones"   },
+    {0x06D8FC, "Soundcore Liberty 4 NC",        "Headphones"   },
+    {0x0744B6, "Technics EAH-AZ60M2",           "Headphones"   },
+    {0x07A41C, "Sony WF-C700N",                 "Headphones"   },
+    {0x07C95C, "Sony WH-1000XM2",               "Headphones"   },
+    {0x07F426, "Google Nest Hub Max",           "Smart Display"},
+    {0xCD8256, "Bose NC 700",                   "Headphones"   },
+    {0xF52494, "JBL Buds Pro",                  "Headphones"   },
+    {0x718FA4, "JBL Live 300TWS",               "Headphones"   },
+    {0x821F66, "JBL Flip 6",                    "Speaker"      },
+    {0x92BBBD, "Pixel Buds",                    "Headphones"   },
+    {0xD446A7, "Sony WF-1000XM5",               "Headphones"   },
+    {0x2D7A23, "Sony WF-1000XM4",               "Headphones"   },
+    {0x72FB00, "Soundcore Spirit Pro GVA",      "Headphones"   },
+    {0x02D886, "JBL Reflect Mini NC",           "Headphones"   },
+    {0x02DD4F, "JBL Tune 770NC",                "Headphones"   },
+    {0x02F637, "JBL Live Flex",                 "Headphones"   },
+    {0x038CC7, "JBL Tune 760NC",                "Headphones"   },
+    {0x04ACFC, "JBL Wave Beam",                 "Headphones"   },
+    {0x04AFB8, "JBL Tune 720BT",                "Headphones"   },
+    {0x054B2D, "JBL Tune 125TWS",               "Headphones"   },
+    {0x05C452, "JBL Live 220BT",                "Headphones"   },
+    {0x0660D7, "JBL Live 770NC",                "Headphones"   },
+    // End of additions
+    {0,        nullptr,                         nullptr        }
 };
 
 //=============================================================================
@@ -3632,7 +3687,7 @@ String selectTargetFromScan(const char *title) {
     tft.print(title);
     tft.setTextSize(1);
 
-    tft.setCursor(20, 60);
+    tft.setCursor(20, 40);
     tft.print("Initializing BLE...");
 
     if (isBLEInitialized()) {
@@ -3663,12 +3718,12 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(67);
     pBLEScan->setDuplicateFilter(false);
 
-    tft.setCursor(20, 85);
+    tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    const int ACTIVE_SCAN_TIME = 10, PASSIVE_SCAN_TIME = 10;
+    const int ACTIVE_SCAN_TIME = 15, PASSIVE_SCAN_TIME = 15;
 
-    tft.setCursor(20, 110);
+    tft.setCursor(20, 80);
     tft.print("Active scan (15s)...");
 
 #ifdef NIMBLE_V2_PLUS
@@ -3677,7 +3732,7 @@ String selectTargetFromScan(const char *title) {
     NimBLEScanResults results = pBLEScan->start(ACTIVE_SCAN_TIME, false);
 #endif
 
-    tft.setCursor(20, 140);
+    tft.setCursor(20, 100);
     tft.print("Passive scan (15s)...");
     pBLEScan->setActiveScan(false);
 
@@ -4046,7 +4101,7 @@ void BleSuiteMenu() {
 const char *getScanTitle(int attackIndex) {
     switch (attackIndex) {
         case 0: return "SELECT TARGET";
-        case 1: return "SELECT TARGET TO PROFILE";
+        case 1: return "SELECT TARGET TO \n PROFILE";
         case 2: return "SELECT FASTPAIR DEVICE";
         case 3: return "SELECT HFP DEVICE";
         case 4: return "SELECT AUDIO DEVICE";
@@ -4100,6 +4155,7 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
 
     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
     tft.setTextSize(2);
+    tft.setTextWrap(true, true);
     tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
     tft.print(title);
     tft.setTextSize(1);
@@ -4206,18 +4262,7 @@ void showFastPairSubMenu(NimBLEAddress target) {
     NimBLEClient *pClient = nullptr;
     NimBLERemoteCharacteristic *pKbpChar = nullptr;
 
-    if (choice <= 5 || choice == 7) {
-        String connectionMethod = "";
-        pClient = attemptConnectionWithStrategies(target, connectionMethod);
-        if (pClient) {
-            BLEStateManager::registerClient(pClient);
-            NimBLERemoteService *pService = pClient->getService(NimBLEUUID((uint16_t)0xFE2C));
-            if (pService) {
-                WhisperPairExploit whisper;
-                pKbpChar = whisper.findKBPCharacteristic(pService);
-            }
-        }
-    }
+    NewFunction(choice, pClient, target, pKbpChar);
 
     switch (choice) {
         case 0: fpEngine.testVulnerability(target); break;
@@ -4261,6 +4306,23 @@ void showFastPairSubMenu(NimBLEAddress target) {
         pClient->disconnect();
         BLEStateManager::unregisterClient(pClient);
         NimBLEDevice::deleteClient(pClient);
+    }
+}
+
+void NewFunction(
+    int choice, NimBLEClient *&pClient, const NimBLEAddress &target, NimBLERemoteCharacteristic *&pKbpChar
+) {
+    if (choice <= 5 || choice == 7) {
+        String connectionMethod = "";
+        pClient = attemptConnectionWithStrategies(target, connectionMethod);
+        if (pClient) {
+            BLEStateManager::registerClient(pClient);
+            NimBLERemoteService *pService = pClient->getService(NimBLEUUID((uint16_t)0xFE2C));
+            if (pService) {
+                WhisperPairExploit whisper;
+                pKbpChar = whisper.findKBPCharacteristic(pService);
+            }
+        }
     }
 }
 
