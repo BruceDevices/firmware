@@ -32,7 +32,9 @@ void WDGoWars::_display_banner() {
     padprintln("\n");
 }
 
-void WDGoWars::_send_upload_headers(WiFiClientSecure &client, String filename, int filesize, String boundary) {
+void WDGoWars::_send_upload_headers(
+    WiFiClientSecure &client, const String &filename, int filesize, const String &boundary
+) {
     int cd_header_len = 147 - 45 - 8 + filename.length() + 2 * (boundary.length() + 2);
 
     client.print("POST ");
@@ -58,7 +60,7 @@ void WDGoWars::_send_upload_headers(WiFiClientSecure &client, String filename, i
     client.println();
 }
 
-bool WDGoWars::upload(FS *fs, String filepath, bool auto_delete) {
+bool WDGoWars::upload(FS *fs, const String &filepath, bool auto_delete) {
     _display_banner();
 
     if (!fs || !_check_api_key()) return false;
@@ -84,7 +86,7 @@ bool WDGoWars::upload(FS *fs, String filepath, bool auto_delete) {
     return true;
 }
 
-bool WDGoWars::upload_all(FS *fs, String folder, bool auto_delete) {
+bool WDGoWars::upload_all(FS *fs, const String &folder, bool auto_delete) {
     _display_banner();
 
     if (!fs || !_check_api_key()) return false;
@@ -131,7 +133,7 @@ bool WDGoWars::upload_all(FS *fs, String folder, bool auto_delete) {
     return true;
 }
 
-bool WDGoWars::_upload_file(File file, String upload_message) {
+bool WDGoWars::_upload_file(File file, const String &upload_message) {
     WiFiClientSecure client;
     client.setInsecure();
     if (!client.connect(host, 443)) {

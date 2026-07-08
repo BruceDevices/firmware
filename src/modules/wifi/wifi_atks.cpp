@@ -154,12 +154,10 @@ void resetGlobalState() {
 ** @brief: Broadcasts deauth frames
 ***************************************************************************************/
 void send_raw_frame(const uint8_t *frame_buffer, int size) {
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_RATE_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_PERIOD_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    for (int i = 0; i < 3; i++) {
+        wifiRawTx(WIFI_IF_AP, frame_buffer, size); // respects TX buffers backpressure
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 }
 
 /***************************************************************************************
@@ -193,7 +191,7 @@ void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan
 ** function: wifi_atk_info
 ** @brief: Open Wifi information screen
 ***************************************************************************************/
-void wifi_atk_info(String tssid, String mac, uint8_t channel) {
+void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     // desenhar a tela
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
@@ -445,7 +443,7 @@ ScanNets:
 uint8_t targetBssid[6]; // Just the target AP MAC to pass onto sniff.cpp to filter out EAPOL frames of
                         // unrelated APs
 #if !defined(LITE_VERSION)
-void capture_handshake(String tssid, String mac, uint8_t channel) {
+void capture_handshake(const String &tssid, const String &mac, uint8_t channel) {
 
     // Stop WebUI before setting WiFi mode for handshake capture
     cleanlyStopWebUiForWiFiFeature();
@@ -717,7 +715,7 @@ void capture_handshake(String tssid, String mac, uint8_t channel) {
 ** function: target_atk_menu
 ** @brief: Open menu to choose which AP Attack
 ***************************************************************************************/
-void target_atk_menu(String tssid, String mac, uint8_t channel) {
+void target_atk_menu(const String &tssid, const String &mac, uint8_t channel) {
 AGAIN:
     options = {
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
@@ -741,7 +739,7 @@ AGAIN:
 ** function: target_atk
 ** @brief: Deploy Target deauth
 ***************************************************************************************/
-void target_atk(String tssid, String mac, uint8_t channel) {
+void target_atk(const String &tssid, const String &mac, uint8_t channel) {
     resetGlobalState();
     // Stop WebUI before setting WiFi mode for attack
     cleanlyStopWebUiForWiFiFeature();
@@ -931,7 +929,7 @@ void beaconSpamList(const char list[]) {
 
         // send 2 packets instead of 3 (makes devices show more networks)
         for (int k = 0; k < 2; k++) {
-            esp_wifi_80211_tx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN, 0);
+            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 
@@ -961,7 +959,7 @@ void beaconSpamSingle(String baseSSID) {
 
         // send 2 packets
         for (int k = 0; k < 2; k++) {
-            esp_wifi_80211_tx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN, 0);
+            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 

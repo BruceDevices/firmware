@@ -1960,7 +1960,7 @@ static String _bytesToHex(const uint8_t *data, size_t len) {
 }
 
 // dump no formato .nfc do Flipper Zero.
-int ST25R3916::saveFlipper(String filename) {
+int ST25R3916::saveFlipper(const String &filename) {
     if (mfcLoaded || isMifareClassicSak(uid.sak)) return _saveMifareClassicFlipper(filename);
 
     FS *fs;
@@ -2006,7 +2006,7 @@ int ST25R3916::saveFlipper(String filename) {
     return SUCCESS;
 }
 
-int ST25R3916::save(String filename) {
+int ST25R3916::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 
@@ -2423,6 +2423,7 @@ void ST25R3916::_mfcRebuildStrAllPages() {
 }
 
 int ST25R3916::_readMifareClassic(rfalNfcDevice *dev) {
+    bruceConfig.ensureMifareKeysLoaded();
     memset(&mfcDump, 0, sizeof(mfcDump));
     _mfcAuthed = false;
 
@@ -2451,15 +2452,15 @@ int ST25R3916::_readMifareClassic(rfalNfcDevice *dev) {
 
         bool authed = false;
         bool usedKeyB = false;
-        int usedKeyIdx = -1;
+        uint8_t usedKeyBytes[6] = {0};
 
-        // Try Key A then Key B from the dictionary against the sector trailer.
+        // Try Key A then Key B from the builtin dictionary.
         for (int useB = 0; useB <= 1 && !authed; useB++) {
             for (int kidx = 0; kidx < nKeys; kidx++) {
                 if (_mifareAuth(trailer, keys[kidx], useB != 0)) {
                     authed = true;
                     usedKeyB = (useB != 0);
-                    usedKeyIdx = kidx;
+                    memcpy(usedKeyBytes, keys[kidx], 6);
                     break;
                 }
                 // A failed auth leaves the field/cipher dirty: halt + reselect.
@@ -2476,16 +2477,43 @@ int ST25R3916::_readMifareClassic(rfalNfcDevice *dev) {
             }
         }
 
+        // Fallback: try user keys from bruceConfig.mifareKeys (custom dictionary).
+        if (!authed) {
+            for (int useB = 0; useB <= 1 && !authed; useB++) {
+                for (const auto &mifKey : bruceConfig.mifareKeys) {
+                    uint8_t k[6];
+                    for (int i = 0; i < 6; i++)
+                        k[i] = (uint8_t)strtoul(mifKey.substring(i * 2, i * 2 + 2).c_str(), nullptr, 16);
+                    if (_mifareAuth(trailer, k, useB != 0)) {
+                        authed = true;
+                        usedKeyB = (useB != 0);
+                        memcpy(usedKeyBytes, k, 6);
+                        break;
+                    }
+                    _mfcHalt();
+                    _nfc->rfalNfcDeactivate(false);
+                    delay(5);
+                    rfalNfcDevice *d2 = nullptr;
+                    if (!_pollForTag(&d2, 500)) {
+                        pageReadStatus = FAILURE;
+                        return FAILURE;
+                    }
+                    _parseDevice(d2);
+                    _mfcAuthed = false;
+                }
+            }
+        }
+
         if (!authed) {
             ST25R_LOG("mfc sector %u: no key found", s);
             continue;
         }
 
         if (usedKeyB) {
-            memcpy(mfcDump.keyB[s], keys[usedKeyIdx], 6);
+            memcpy(mfcDump.keyB[s], usedKeyBytes, 6);
             mfcDump.keyBFound[s] = true;
         } else {
-            memcpy(mfcDump.keyA[s], keys[usedKeyIdx], 6);
+            memcpy(mfcDump.keyA[s], usedKeyBytes, 6);
             mfcDump.keyAFound[s] = true;
         }
 

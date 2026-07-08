@@ -1171,14 +1171,14 @@ void runSessionUiLoop(const String &title) {
 }
 } // namespace
 
-char *stringTochar(String s) {
+char *stringTochar(const String &s) {
     static char arr[128];
     memset(arr, 0, sizeof(arr));
     s.toCharArray(arr, sizeof(arr));
     return arr;
 }
 
-void ssh_setup(String host) {
+void ssh_setup(const String &host) {
     if (!wifiConnected) wifiConnectMenu();
     if (!initClientMutex()) {
         displayError("SSH mutex creation failed.", true);

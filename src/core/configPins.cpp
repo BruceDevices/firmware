@@ -89,6 +89,8 @@ void BruceConfigPins::fromJson(JsonObject obj) {
     }
     if (!root["rfFxdFreq"].isNull()) {
         rfFxdFreq = root["rfFxdFreq"].as<int>();
+        if (rfFxdFreq > 1) rfFxdFreq = 1;
+        if (rfFxdFreq < 0) rfFxdFreq = 0;
     } else {
         count++;
         log_e("Fail");
@@ -518,12 +520,12 @@ void BruceConfigPins::validateRfModuleValue() {
 
 void BruceConfigPins::setRfFreq(float value, int fxdFreq) {
     rfFreq = value;
-    if (fxdFreq > 1) rfFxdFreq = fxdFreq;
+    if (fxdFreq >= 1) rfFxdFreq = 1;
     saveFile();
 }
 
 void BruceConfigPins::setRfFxdFreq(float value) {
-    rfFxdFreq = value;
+    rfFxdFreq = value > 0 ? 1 : 0;
     saveFile();
 }
 
@@ -545,11 +547,11 @@ void BruceConfigPins::setRfidModule(RFIDModules value) {
 }
 
 void BruceConfigPins::validateRfidModuleValue() {
-    if (rfidModule != M5_RFID2_MODULE && rfidModule != PN532_I2C_MODULE && rfidModule != PN532_SPI_MODULE &&
+    if (
+        rfidModule != M5_RFID2_MODULE && rfidModule != PN532_I2C_MODULE && rfidModule != PN532_SPI_MODULE &&
         rfidModule != RC522_SPI_MODULE && rfidModule != PN532_I2C_SPI_MODULE
 #if !defined(LITE_VERSION)
-        && rfidModule != ST25R3916_SPI_MODULE
-        && rfidModule != ST25R3916_I2C_MODULE
+        && rfidModule != ST25R3916_SPI_MODULE && rfidModule != ST25R3916_I2C_MODULE
 #endif
     ) {
         rfidModule = M5_RFID2_MODULE;

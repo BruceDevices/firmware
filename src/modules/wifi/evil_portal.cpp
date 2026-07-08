@@ -696,7 +696,7 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
     totalCapturedCredentials++;
 }
 
-String EvilPortal::getHtmlTemplate(String body) {
+String EvilPortal::getHtmlTemplate(const String &body) {
     return String(
         "<!DOCTYPE html>"
         "<html>"

@@ -117,7 +117,7 @@ float rf_freq_scan() {
                         if (best_frequencies[i].rssi > best_frequencies[max_index].rssi) { max_index = i; }
                     }
 
-                    bruceConfigPins.setRfFreq(best_frequencies[max_index].freq, 0);
+                    bruceConfigPins.setRfFreq(best_frequencies[max_index].freq, 1);
                     frequency = best_frequencies[max_index].freq;
                     Serial.println("Frequency Found: " + String(frequency));
                     deinitRfModule();
@@ -128,7 +128,7 @@ float rf_freq_scan() {
         } else {
 
             frequency = 433.92;
-            bruceConfigPins.setRfFreq(433.92, 2);
+            bruceConfigPins.setRfFreq(433.92, 1);
         }
     }
     return frequency;

@@ -2,10 +2,12 @@
 #include <globals.h>
 
 #include "core/powerSave.h"
+#include "core/ram_profile.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
 #include "current_year.h"
 #include "esp32-hal-psram.h"
+#include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
 #include <functional>
@@ -161,7 +163,11 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
  **  Config LittleFS and SD storage
  *********************************************************************/
 void begin_storage() {
-    if (!LittleFS.begin(true)) { LittleFS.format(), LittleFS.begin(); }
+    if (!setupLittleFS()) {
+        LittleFS.format();
+        setupLittleFS();
+    }
+    RAM_LOG("after LittleFS");
     bool checkFS = setupSdCard();
     bruceConfig.fromFile(checkFS);
     bruceConfigPins.fromFile(checkFS);
@@ -420,11 +426,22 @@ void setup() {
 
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
-    if (psramInit()) log_d("PSRAM Started");
-    if (psramFound()) log_d("PSRAM Found");
-    else log_d("PSRAM Not Found");
-    log_d("Total PSRAM: %d", ESP.getPsramSize());
-    log_d("Free PSRAM: %d", ESP.getFreePsram());
+    bool psramStarted = psramInit();
+    // Printed unconditionally (boards force CORE_DEBUG_LEVEL=1, so log_d is invisible).
+    // If PSRAM fails to init, a PSRAM board effectively becomes a no-PSRAM board and
+    // Wi-Fi + BLE cannot coexist. This one boot line makes that failure mode observable.
+    Serial.printf(
+        "[PSRAM] init=%d found=%d total=%u free=%u | internal free=%u largest=%u\n",
+        psramStarted,
+        psramFound(),
+        (unsigned)ESP.getPsramSize(),
+        (unsigned)ESP.getFreePsram(),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)
+    );
+    Serial.flush();
+
+    RAM_LOG("setup-start");
 
     // declare variables
     prog_handler = 0;
@@ -441,15 +458,20 @@ void setup() {
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
     tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
     tft.begin();
 #endif
     begin_storage();
+    RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
     begin_tft();
     init_clock();
     init_led();
+    RAM_LOG("after-tft-clock-led");
 
     options.reserve(20); // preallocate some options space to avoid fragmentation
+
+    RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
     // Set WiFi country to avoid warnings and ensure max power
     const wifi_country_t country = {
@@ -508,6 +530,8 @@ void setup() {
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }
+
+    RAM_LOG("setup-end");
 }
 
 /**********************************************************************
@@ -532,6 +556,14 @@ void loop() {
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);
+
+#if defined(ENABLE_RAM_LOGGING)
+    static bool ramLoggedFirstMenu = false;
+    if (!ramLoggedFirstMenu) {
+        RAM_LOG("first-mainMenu");
+        ramLoggedFirstMenu = true;
+    }
+#endif
 
     mainMenu.begin();
     delay(1);

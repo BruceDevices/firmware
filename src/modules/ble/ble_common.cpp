@@ -1,5 +1,7 @@
 #include "ble_common.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
+#include "core/ram_profile.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
 #include "esp_mac.h"
@@ -13,6 +15,26 @@
 
 BLEScan *pBLEScan = nullptr;
 int scanTime = SCANTIME; // In seconds
+
+bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries) {
+    if (chr == nullptr) return false;
+    if (chr->notify(value, length)) return true;
+    for (uint8_t i = 0; i < retries; i++) {
+        vTaskDelay(1); // let the host drain the pool MSYS and retry
+        if (chr->notify(value, length)) return true;
+    }
+    return false;
+}
+
+bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries) {
+    if (chr == nullptr) return false;
+    if (chr->notify()) return true;
+    for (uint8_t i = 0; i < retries; i++) {
+        vTaskDelay(1); // let the host drain the pool MSYS and retry
+        if (chr->notify()) return true;
+    }
+    return false;
+}
 
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
@@ -44,7 +66,7 @@ uint8_t sta_mac[6];
 char strID[18];
 char strAddl[200];
 
-void ble_info(String name, String address, String signal) {
+void ble_info(const String &name, const String &address, const String &signal) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
     tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);
@@ -121,7 +143,7 @@ void stopBLEStack() {
 #endif
 }
 
-void ble_scan_setup() {
+bool ble_scan_setup() {
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
             wifiDisconnect();
@@ -132,7 +154,14 @@ void ble_scan_setup() {
         delay(100);
     }
 
+    RAM_LOG("ble-scan pre-init");
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        returnToMenu = true;
+        return false;
+    }
     BLEDevice::init("");
+    RAM_LOG("ble-scan post-init");
     pBLEScan = BLEDevice::getScan();
 #ifdef NIMBLE_V2_PLUS
     pBLEScan->setScanCallbacks(new NimBLEScanCallbacks());
@@ -164,13 +193,20 @@ void ble_scan_setup() {
         sta_mac[5]
     );
     vTaskDelay(100 / portTICK_PERIOD_MS);
+    return true;
 }
 
 void ble_scan() {
     displayTextLine("Scanning..");
 
     options = {};
-    ble_scan_setup();
+    bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
+#if !defined(LITE_VERSION)
+    bleWasActiveBefore =
+        bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
+#endif
+
+    if (!ble_scan_setup() || pBLEScan == nullptr) return;
 #ifdef NIMBLE_V2_PLUS
     BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
     for (int i = 0; i < foundDevices.getCount(); i++) {
@@ -206,6 +242,8 @@ void ble_scan() {
 
     // Delete results fromBLEScan buffer to release memory
     pBLEScan->clearResults();
+    pBLEScan->stop();
+    if (!bleWasActiveBefore) { stopBLEStack(); }
 }
 
 bool initBLEServer() {

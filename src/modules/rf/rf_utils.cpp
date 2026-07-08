@@ -145,7 +145,6 @@ void cc1101ApplyPreciseCalibration(float frequency, bool isTx) {
 }
 
 void cc1101ApplyFixedFreqOokPreset(bool isTx) {
-    ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x47);
     ELECHOUSE_cc1101.SpiWriteReg(CC1101_FSCTRL1, 0x06);
     ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG0, 0x00);
     ELECHOUSE_cc1101.SpiWriteReg(CC1101_MDMCFG1, 0x00);
@@ -156,17 +155,25 @@ void cc1101ApplyFixedFreqOokPreset(bool isTx) {
     ELECHOUSE_cc1101.SpiWriteReg(CC1101_FOCCFG, 0x18);
     ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND0, 0x11);
     if (isTx) {
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x47);
         ELECHOUSE_cc1101.setPA(12);
     } else {
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_FIFOTHR, 0x07);
         ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL0, 0x40);
-        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL1, 0x00);
-        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0x03);
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL1, 0x01);
+        ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0xC7);
         ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND1, 0xB6);
     }
 }
 
-RfCodes recent_rfcodes[16];       // TODO: save/load in EEPROM
-int recent_rfcodes_last_used = 0; // TODO: save/load in EEPROM
+// Circular buffer (FIFO eviction) of the last RF signals sent/scanned, capped at
+// RECENT_RFCODES_MAX so it survives navigating back to the Main menu (unlike the
+// previous refcounted alloc-on-enter/free-on-exit scheme). An empty std::vector
+// costs only the container header, so this stays cheap when RF is unused.
+// TODO: save/load in EEPROM.
+static constexpr size_t RECENT_RFCODES_MAX = 15;
+std::vector<RfCodes> recent_rfcodes;
+
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 static uint8_t cc1101_mode_hint = 0;
@@ -293,10 +300,8 @@ bool initRfModule(String mode, float frequency) {
         }
         // else
         // ELECHOUSE_cc1101.setRxBW(812.50);  // reset to default
-        if (bruceConfigPins.rfFxdFreq == 1) {
-            cc1101_mode_hint = (mode == "tx") ? 1 : ((mode == "rx") ? 2 : 0);
-            cc1101ApplyFixedFreqOokPreset(cc1101_mode_hint == 1);
-        } else {
+        const bool fixedFreq = bruceConfigPins.rfFxdFreq;
+        if (!fixedFreq) {
             ELECHOUSE_cc1101.setRxBW(256); // generic profile for scan/hopping
             ELECHOUSE_cc1101.setDRate(50);
         }
@@ -316,6 +321,10 @@ bool initRfModule(String mode, float frequency) {
         setMHZ(frequency);
         cc1101_mode_hint = 0;
         Serial.println("cc1101 setMHZ(frequency);");
+        if (fixedFreq) {
+            cc1101_mode_hint = (mode == "tx") ? 1 : ((mode == "rx") ? 2 : 0);
+            cc1101ApplyFixedFreqOokPreset(cc1101_mode_hint == 1);
+        }
 
         /* MEMO: cannot change other params after this is executed */
         if (mode == "tx") {
@@ -329,7 +338,7 @@ bool initRfModule(String mode, float frequency) {
         } else if (mode == "rx") {
             ioExpander.turnPinOnOff(IO_EXP_CC_RX, HIGH);
             ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT_PULLUP);
+            pinMode(bruceConfigPins.CC1101_bus.io0, INPUT);
             ELECHOUSE_cc1101.SetRx();
             Serial.println("cc1101 SetRx();");
         }
@@ -354,7 +363,7 @@ bool initRfModule(String mode, float frequency) {
             gsetRfRxPin(false);
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
-            pinMode(bruceConfigPins.rfRx, INPUT_PULLUP);
+            pinMode(bruceConfigPins.rfRx, INPUT);
         }
     }
     // no error
@@ -430,7 +439,7 @@ void setMHZ(float frequency) {
             vTaskDelay(10 / portTICK_PERIOD_MS); // time to settle the antenna signal
         }
 #endif
-        const bool preciseCalibration = (bruceConfigPins.rfFxdFreq == 1);
+        const bool preciseCalibration = (bruceConfigPins.rfFxdFreq);
         const uint8_t previousMode = preciseCalibration ? ELECHOUSE_cc1101.getMode() : 0;
         const uint8_t targetMode =
             preciseCalibration ? (previousMode != 0 ? previousMode : cc1101_mode_hint) : 0;
@@ -501,25 +510,27 @@ uint64_t crc64_ecma(const std::vector<int> &data) {
 }
 
 void addToRecentCodes(struct RfCodes rfcode) {
-    // copy rfcode -> recent_rfcodes[recent_rfcodes_last_used]
-    recent_rfcodes[recent_rfcodes_last_used] = rfcode;
-    recent_rfcodes_last_used += 1;
-    if (recent_rfcodes_last_used == 16) recent_rfcodes_last_used = 0; // cycle
+    recent_rfcodes.push_back(rfcode);
+    if (recent_rfcodes.size() > RECENT_RFCODES_MAX) {
+        recent_rfcodes.erase(recent_rfcodes.begin()); // evict oldest
+    }
 }
 
 struct RfCodes selectRecentRfMenu() {
     options = {};
-    bool exit = false;
     struct RfCodes selected_code;
 
-    for (int i = 0; i < 16; i++) {
+    for (size_t i = 0; i < recent_rfcodes.size(); i++) {
         if (recent_rfcodes[i].filepath == "") continue; // not inited
 
         options.emplace_back(recent_rfcodes[i].filepath.c_str(), [i, &selected_code]() {
             selected_code = recent_rfcodes[i];
         });
     }
-    options.emplace_back("Main Menu", [&]() { exit = true; });
+    if (!recent_rfcodes.empty()) {
+        options.emplace_back("Clear Recent", []() { recent_rfcodes.clear(); });
+    }
+    options.emplace_back("Main Menu", []() {});
 
     loopOptions(options);
     options.clear();
@@ -570,7 +581,7 @@ void rf_range_selection(float currentFrequency) {
     int option = 0;
     options = {
         {String("Fixed [" + String(bruceConfigPins.rfFreq) + "]").c_str(),
-         [=]() { bruceConfigPins.setRfFreq(bruceConfigPins.rfFreq, 2); }                                               },
+         [=]() { bruceConfigPins.setRfFreq(bruceConfigPins.rfFreq, 1); }                                               },
         {String("Choose Fixed").c_str(),                                   [&]() { option = 1; }                       },
         {subghz_frequency_ranges[0],                                       [=]() { bruceConfigPins.setRfScanRange(0); }},
         {subghz_frequency_ranges[1],                                       [=]() { bruceConfigPins.setRfScanRange(1); }},
@@ -588,7 +599,7 @@ void rf_range_selection(float currentFrequency) {
         for (int i = 0; i < arraySize; i++) {
             String tmp = String(subghz_frequency_list[i], 2) + "Mhz";
             options.push_back({tmp.c_str(), [=]() {
-                                   bruceConfigPins.setRfFreq(subghz_frequency_list[i], 2);
+                                   bruceConfigPins.setRfFreq(subghz_frequency_list[i], 1);
                                }});
             if (int(currentFrequency * 100) == int(subghz_frequency_list[i] * 100)) ind = i;
         }

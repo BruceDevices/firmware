@@ -88,7 +88,7 @@ void IrRead::setup() {
     }
     if (count == 0) gsetIrRxPin(true);
 
-    setup_ir_pin(bruceConfigPins.irRx, INPUT_PULLUP);
+    setup_ir_pin(bruceConfigPins.irRx, INPUT);
     if (headless) return;
     returnToMenu = true;
     std::vector<Option> quickRemoteOptions = {
@@ -329,7 +329,7 @@ String IrRead::parse_raw_signal() {
     return signal_code;
 }
 
-void IrRead::append_to_file_str(String btn_name) {
+void IrRead::append_to_file_str(const String &btn_name) {
     strDeviceContent += "name: " + btn_name + "\n";
 
     if (raw) {

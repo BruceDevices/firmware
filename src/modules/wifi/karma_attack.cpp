@@ -61,9 +61,9 @@ static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
     if (buffer == nullptr || len <= 0) return false;
     if (!ensureKarmaApInterface(channel)) return false;
 
-    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_AP, buffer, len, false);
+    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
     if (err != ESP_OK) {
-        Serial.printf("[KARMA] esp_wifi_80211_tx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
+        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
         return false;
     }
 
@@ -1808,7 +1808,7 @@ void loadPortalTemplates() {
     portalTemplates.clear();
     portalTemplates.push_back({"Google Login", "", true, false});
     portalTemplates.push_back({"Router Update", "", true, true});
-    if (LittleFS.begin()) {
+    if (setupLittleFS()) {
         if (!LittleFS.exists("/PortalTemplates")) LittleFS.mkdir("/PortalTemplates");
         if (LittleFS.exists("/PortalTemplates")) {
             File root = LittleFS.open("/PortalTemplates");
@@ -1923,7 +1923,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
              directOptions.push_back(
                  {"LittleFS", [=]() {
                       drawMainBorderWithTitle("BROWSE LITTLEFS");
-                      if (LittleFS.begin()) {
+                      if (setupLittleFS()) {
                           String templateFile = loopSD(LittleFS, true, "HTML", "/");
                           if (templateFile.length() > 0) {
                               PortalTemplate customTmpl;
@@ -1984,7 +1984,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
     return templateSelected;
 }
 
-void saveCredentialsToFile(String ssid, String password) {
+void saveCredentialsToFile(const String &ssid, const String &password) {
     FS *saveFs = nullptr;
     if (!getFsStorage(saveFs)) return;
     String filename = "/ProbeData/credentials.txt";

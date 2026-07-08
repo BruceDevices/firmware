@@ -290,7 +290,7 @@ public:
     void setRfRxPin(int value);
     void setRfModule(RFModules value);
     void validateRfModuleValue();
-    void setRfFreq(float value, int fxdFreq = 2);
+    void setRfFreq(float value, int fxdFreq = 1);
     void setRfFxdFreq(float value);
     void setRfScanRange(int value, int fxdFreq = 0);
     void validateRfScanRangeValue();

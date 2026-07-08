@@ -1330,7 +1330,7 @@ void setKeyboardLanguage() {
 /// This calls the keyboard. The keyset is chosen based on bruceConfig.keyboardLang.
 /// Supported values: "QWERTY" (default), "AZERTY" (French), "QWERTZ" (German).
 /// Returns the user typed string, or the ASCII ESC character if cancelled.
-String keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     String lang = bruceConfig.keyboardLang;
     if (lang == "AZERTY") {
         return generalKeyboard<azerty_keyboard_height, azerty_keyboard_width>(
@@ -1350,7 +1350,7 @@ String keyboard(String current_text, int max_size, String textbox_title, bool ma
 
 /// This calls a keyboard with the characters useful to write hexadecimal codes.
 /// Returns the user typed strings, return the ASCII ESC character if the operation was cancelled
-String hex_keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String hex_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<hex_keyboard_height, hex_keyboard_width>(
         current_text, max_size, textbox_title, hex_keyset, mask_input
     );
@@ -1358,7 +1358,7 @@ String hex_keyboard(String current_text, int max_size, String textbox_title, boo
 
 /// This calls a numbers only keyboard. Returns the user typed strings, return the ASCII ESC character
 /// if the operation was cancelled
-String num_keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String num_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<numpad_keyboard_height, numpad_keyboard_width>(
         current_text, max_size, textbox_title, numpad_keyset, mask_input
     );

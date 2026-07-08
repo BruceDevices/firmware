@@ -72,7 +72,7 @@ void drawTime() {
     tft.drawString(right_str, display_w, 3);
 }
 
-void drawFooterData(uint8_t friends_run, uint8_t friends_tot, String last_friend_name, signed int rssi) {
+void drawFooterData(uint8_t friends_run, uint8_t friends_tot, const String &last_friend_name, signed int rssi) {
     tft.drawPixel(0, 0, 0);
     tft.fillRect(0, canvas_bot_h + 1, display_w - 50, canvas_bot_h + 10, bruceConfig.bgColor);
     tft.setTextSize(1);
@@ -141,7 +141,7 @@ void drawBottomCanvas() {
     tft.drawLine(0, canvas_bot_h, display_w, canvas_bot_h, bruceConfig.priColor);
 }
 
-void drawMood(String face, String phrase, bool broken) {
+void drawMood(const String &face, const String &phrase, bool broken) {
     // prepare canvas
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FG + 1);

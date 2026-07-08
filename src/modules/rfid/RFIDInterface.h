@@ -102,8 +102,8 @@ public:
     // .rfid parser; drivers may override it for richer handling (e.g. MIFARE
     // Classic blocks/keys, NTAG version/signature/counters in ST25R3916).
     virtual int loadFromFile(const String &filepath);
-    virtual int save(String filename) = 0;
-    virtual int saveFlipper(String filename) { return NOT_IMPLEMENTED; }
+    virtual int save(const String &filename) = 0;
+    virtual int saveFlipper(const String &filename) { return NOT_IMPLEMENTED; }
 
     // Build `ndefMessage` from a type ("url"/"text") and value. Shared by the
     // serial `rfid ndef` and `rfid emulate t4t` paths so the encoding is

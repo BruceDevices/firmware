@@ -106,10 +106,6 @@ uint64_t getWindowsTimestamp() {
     return ((tv.tv_sec + EPOCH_DIFF) * 10000000ULL + (tv.tv_usec * 10ULL));
 }
 
-// Buffer pour le NTLM Type 2 généré dynamiquement
-uint8_t ntlmType2Buffer[512];
-uint16_t ntlmType2Len = 0;
-
 void buildNTLMType2Msg(uint8_t *challenge, uint8_t *buffer, uint16_t *len) {
     uint8_t avPairs[512];
     int offset = 0;
@@ -373,6 +369,9 @@ void sendSMB1NegotiateResponse(uint8_t *req) {
 }
 
 void sendSMB1Type2(uint8_t *req, uint8_t *ntlm1) {
+    uint8_t ntlmType2Buffer[512];
+    uint16_t ntlmType2Len = 0;
+
     // 1) Génère un challenge aléatoire de 8 octets
     for (int i = 0; i < 8; ++i) { smbState.challenge[i] = (uint8_t)(esp_random() & 0xFF); }
 
@@ -937,6 +936,9 @@ void responder() {
                                                 Serial.println(F(
                                                     "NTLMSSP Type 1 received, sending Type 2 (challenge)..."
                                                 ));
+
+                                                uint8_t ntlmType2Buffer[512];
+                                                uint16_t ntlmType2Len = 0;
 
                                                 // 1) Génère un challenge aléatoire de 8 octets
                                                 for (int i = 0; i < 8; ++i) {

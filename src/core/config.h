@@ -106,6 +106,11 @@ public:
     BruceConfig() {};
     // ~BruceConfig();
 
+private:
+    bool _mifareKeysLoaded = false;
+
+public:
+
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
@@ -174,6 +179,7 @@ public:
     void validateEvilGatewayIp();
 
     // RFID
+    void ensureMifareKeysLoaded();
     void addMifareKey(String value);
     void validateMifareKeysItems();
 

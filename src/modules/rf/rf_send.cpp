@@ -231,7 +231,7 @@ void display_info(RfCodes &data) {
     padprintln("Press [Mid] to send or [Next] for options");
 }
 
-bool readSubFile(FS *fs, String filepath, RfCodes &data) {
+bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
     struct RfCodes selected_code;
     File databaseFile;
     String line;

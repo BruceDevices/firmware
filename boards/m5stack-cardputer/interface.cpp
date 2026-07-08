@@ -142,6 +142,13 @@ void _post_setup_gpio() {
     bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
     bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
 
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
+
     tca.matrix(7, 8);
     tca.flush();
     pinMode(11, INPUT);

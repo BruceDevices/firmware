@@ -24,7 +24,7 @@
 
 namespace {
 
-static constexpr uint8_t kU2fReportId = 0x00;
+static constexpr uint8_t kU2fReportId = HID_REPORT_ID_VENDOR;
 static constexpr uint32_t kBroadcastCid = 0xFFFFFFFFu;
 static constexpr uint16_t kInitPayloadSize = 57; // 64 - 7
 static constexpr uint16_t kContPayloadSize = 59; // 64 - 5
@@ -76,22 +76,23 @@ static constexpr size_t kKeyHandleMacLen = 32;
 static constexpr size_t kKeyHandleLen = 1 + kKeyHandleNonceLen + kKeyHandleMacLen;
 
 static const uint8_t U2F_REPORT_DESCRIPTOR[] = {
-    0x06, 0xD0, 0xF1, // USAGE_PAGE (FIDO Alliance)
-    0x09, 0x01,       // USAGE (U2F Authenticator Device)
-    0xA1, 0x01,       // COLLECTION (Application)
-    0x09, 0x20,       //   USAGE (Input Report Data)
-    0x15, 0x00,       //   LOGICAL_MINIMUM (0)
-    0x26, 0xFF, 0x00, //   LOGICAL_MAXIMUM (255)
-    0x75, 0x08,       //   REPORT_SIZE (8)
-    0x95, 0x40,       //   REPORT_COUNT (64)
-    0x81, 0x02,       //   INPUT (Data,Var,Abs)
-    0x09, 0x21,       //   USAGE (Output Report Data)
-    0x15, 0x00,       //   LOGICAL_MINIMUM (0)
-    0x26, 0xFF, 0x00, //   LOGICAL_MAXIMUM (255)
-    0x75, 0x08,       //   REPORT_SIZE (8)
-    0x95, 0x40,       //   REPORT_COUNT (64)
-    0x91, 0x02,       //   OUTPUT (Data,Var,Abs)
-    0xC0              // END_COLLECTION
+    0x06, 0xD0,         0xF1, // USAGE_PAGE (FIDO Alliance)
+    0x09, 0x01,               // USAGE (U2F Authenticator Device)
+    0xA1, 0x01,               // COLLECTION (Application)
+    0x85, kU2fReportId,       //   REPORT_ID
+    0x09, 0x20,               //   USAGE (Input Report Data)
+    0x15, 0x00,               //   LOGICAL_MINIMUM (0)
+    0x26, 0xFF,         0x00, //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,               //   REPORT_SIZE (8)
+    0x95, 0x40,               //   REPORT_COUNT (64)
+    0x81, 0x02,               //   INPUT (Data,Var,Abs)
+    0x09, 0x21,               //   USAGE (Output Report Data)
+    0x15, 0x00,               //   LOGICAL_MINIMUM (0)
+    0x26, 0xFF,         0x00, //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,               //   REPORT_SIZE (8)
+    0x95, 0x40,               //   REPORT_COUNT (64)
+    0x91, 0x02,               //   OUTPUT (Data,Var,Abs)
+    0xC0                      // END_COLLECTION
 };
 
 struct RxMessageState {
@@ -409,7 +410,7 @@ private:
             fs = &SD;
             return true;
         }
-        if (!LittleFS.begin()) return false;
+        if (!setupLittleFS()) return false;
         fs = &LittleFS;
         return true;
     }
@@ -1658,7 +1659,13 @@ private:
     }
 };
 
-U2fHidDevice g_u2f;
+// Do not create the object at boot time, otherwise it will break the BadUSB HID
+U2fHidDevice *g_u2f = nullptr;
+
+U2fHidDevice &u2fDevice() {
+    if (g_u2f == nullptr) { g_u2f = new U2fHidDevice(); }
+    return *g_u2f;
+}
 
 void drawU2fStatusScreen() {
     tft.fillScreen(bruceConfig.bgColor);
@@ -1687,23 +1694,24 @@ void updateU2fRuntimeInfo(const U2fHidDevice &device) {
 } // namespace
 
 void u2f_setup() {
-    g_u2f.begin();
+    U2fHidDevice &device = u2fDevice();
+    device.begin();
     drawU2fStatusScreen();
 
     uint32_t lastDrawMs = 0;
     while (!check(EscPress) && !returnToMenu) {
         InputHandler();
         wakeUpScreen();
-        g_u2f.poll();
+        device.poll();
 
         if (millis() - lastDrawMs > 250) {
-            updateU2fRuntimeInfo(g_u2f);
+            updateU2fRuntimeInfo(device);
             lastDrawMs = millis();
         }
         delay(10);
     }
 
-    g_u2f.end();
+    device.end();
 }
 
 #else

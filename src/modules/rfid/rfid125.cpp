@@ -245,18 +245,19 @@ void RFID125::save_file() {
     set_state(READ_MODE);
 }
 
-bool RFID125::write_file(String filename) {
+bool RFID125::write_file(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return false;
 
+    String fname = filename;
     if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
-    if ((*fs).exists("/BruceRFID/" + filename + ".rfidlf")) {
+    if ((*fs).exists("/BruceRFID/" + fname + ".rfidlf")) {
         int i = 1;
-        filename += "_";
-        while ((*fs).exists("/BruceRFID/" + filename + String(i) + ".rfidlf")) i++;
-        filename += String(i);
+        fname += "_";
+        while ((*fs).exists("/BruceRFID/" + fname + String(i) + ".rfidlf")) i++;
+        fname += String(i);
     }
-    File file = (*fs).open("/BruceRFID/" + filename + ".rfidlf", FILE_WRITE);
+    File file = (*fs).open("/BruceRFID/" + fname + ".rfidlf", FILE_WRITE);
 
     if (!file) { return false; }
 

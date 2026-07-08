@@ -107,7 +107,7 @@ bool RFScan::fast_scan() {
                 if (_freqs[i].rssi > _freqs[max_index].rssi) { max_index = i; }
             }
 
-            bruceConfigPins.setRfFreq(_freqs[max_index].freq, 2); // change to fixed frequency
+            bruceConfigPins.setRfFreq(_freqs[max_index].freq, 1); // change to fixed frequency
             frequency = _freqs[max_index].freq;
             setMHZ(frequency);
             Serial.println("Frequency Found: " + String(frequency));
@@ -432,7 +432,8 @@ static void rf_info_line(bool headless, const String &s) {
 }
 
 void display_info(
-    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title, bool headless
+    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, const String &title,
+    bool headless
 ) {
     if (!headless) {
         if (title != "") drawMainBorderWithTitle(title);
@@ -474,8 +475,7 @@ void display_signal_data(RfCodes received, bool headless) {
     if (received.preset != "") {
         if (received.fix != 0) {
             rf_info_line(headless, "Protocol: KeeLoq");
-        } else
-            rf_info_line(headless, "Protocol: " + String(received.protocol) + "(" + received.preset + ")");
+        } else rf_info_line(headless, "Protocol: " + String(received.protocol) + "(" + received.preset + ")");
     } else rf_info_line(headless, "Protocol: " + String(received.protocol));
 
     if (received.key > 0) {

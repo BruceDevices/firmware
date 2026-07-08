@@ -1,5 +1,6 @@
 #if !defined(LITE_VERSION)
 #include "BLESerialService.h"
+#include "modules/ble/ble_common.h" // bleNotifyRetry
 #include <NimBLEDevice.h>
 
 BLESerialService::BLESerialService() : BruceBLEService() {}
@@ -40,13 +41,13 @@ int BLESerialService::available() {
 
 size_t BLESerialService::println(const String &s) {
     String toSend = s + "\r\n";
-    serial_char->notify(toSend);
+    bleNotifyRetry(serial_char, reinterpret_cast<const uint8_t *>(toSend.c_str()), toSend.length());
     vTaskDelay(pdMS_TO_TICKS(10)); // Add some delay to ensure data is read by the client
     return toSend.length();
 }
 
 size_t BLESerialService::print(const String &s) {
-    serial_char->notify(s);
+    bleNotifyRetry(serial_char, reinterpret_cast<const uint8_t *>(s.c_str()), s.length());
     vTaskDelay(pdMS_TO_TICKS(10));
     return s.length();
 }
@@ -61,7 +62,7 @@ void BLESerialService::vprintf(const char *fmt, va_list args) {
     char str[BUFFER_SIZE];
     sprintf(str, fmt, args);
 
-    serial_char->notify(reinterpret_cast<const uint8_t *>(str), size);
+    bleNotifyRetry(serial_char, reinterpret_cast<const uint8_t *>(str), size);
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
@@ -94,7 +95,7 @@ size_t BLESerialService::println(const int n, int format) {
 size_t BLESerialService::println() { return println(""); }
 
 size_t BLESerialService::write(uint8_t *str, size_t size) {
-    serial_char->notify(str, size);
+    bleNotifyRetry(serial_char, str, size);
     vTaskDelay(pdMS_TO_TICKS(10));
     return size;
 }

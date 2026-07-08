@@ -103,7 +103,7 @@ private:
     void saveToCSV(const String &csvLine, bool IsAPname = false);
     void drawScreen(void);
 
-    String getHtmlTemplate(String body);
+    String getHtmlTemplate(const String &body);
     String creds_GET(void);
     String ssid_GET(void);
     String ssid_POST(void);

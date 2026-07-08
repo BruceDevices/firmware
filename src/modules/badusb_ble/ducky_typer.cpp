@@ -2,6 +2,8 @@
 #include "ducky_typer.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
+#include "core/ram_profile.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #if defined(USB_as_HID)
@@ -407,6 +409,14 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 displayError("Restart your Device");
                 returnToMenu = true;
             }
+            // No-PSRAM guard: bringing the BLE stack up when Wi-Fi (+SD) already
+            // hold the internal DRAM makes the BT controller malloc fail
+            // (E BLE_INIT: Malloc failed). Bail cleanly instead.
+            if (!radioHasMemForBle()) {
+                displayError("Low RAM: free WiFi/SD first", true);
+                returnToMenu = true;
+                return;
+            }
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
         } else {
 #if defined(USB_as_HID)
@@ -430,6 +440,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
     if (ble) {
         if (hid->isConnected()) {
             // If connected as media controller and switch to BadBLE, changes the layout
+            Serial.println("BLE Already connected, changing layout and delay");
             hid->setLayout(keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
             return;
@@ -550,7 +561,7 @@ EXIT:
 }
 
 // Parses a file to run in the badUSBBLE
-void key_input(FS fs, String bad_script, HIDInterface *_hid) {
+void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     if (!fs.exists(bad_script) || bad_script == "") return;
     File payloadFile = fs.open(bad_script, "r");
     if (!payloadFile) return;
@@ -638,6 +649,7 @@ void key_input(FS fs, String bad_script, HIDInterface *_hid) {
             DuckyCommand *ArgCmd = findDuckyCommand(Argument.c_str());
 
             if (PriCmd != nullptr) {
+                vTaskDelay(1); // Allow other tasks to run
                 // REM comment lines are processed here
                 if (PriCmd->type == DuckyCommandType_Comment) {
                     // Do nothing for comments
@@ -748,7 +760,7 @@ EXIT:
 }
 
 // Sends a simple command
-void key_input_from_string(String text) {
+void key_input_from_string(const String &text) {
     ducky_startKb(hid_usb, false);
 
     hid_usb->print(text.c_str()); // buggy with some special chars
@@ -947,14 +959,18 @@ EXIT:
 
 // Send media commands through BLE or USB HID
 void MediaCommands(HIDInterface *hid, bool ble) {
-    if (_Ask_for_restart == 2) return;
-    _Ask_for_restart = 1; // arm the flag
+    if (_Ask_for_restart == 2) {
+        displayWarning("Restart your Device", true);
+        return;
+    }
 
     ducky_startKb(hid, true);
 
     displayTextLine("Pairing...");
 
-    while (!hid->isConnected() && !check(EscPress));
+    while (!hid->isConnected() && !check(EscPress)) { delay(50); };
+
+    _Ask_for_restart = 1; // arm the flag
 
     if (hid->isConnected()) {
         BLEConnected = true;
@@ -1065,11 +1081,11 @@ void printTextAtPosition(uint16_t xOffset, uint16_t yOffset, const String &text)
     tft.setCursor(currentTextCursorX, currentTextCursorY);
 }
 
-void printStatusBadUSBBLE(String text) { printTextAtPosition(8, 2, text); }
+void printStatusBadUSBBLE(const String &text) { printTextAtPosition(8, 2, text); }
 
 void printDecimalTime(uint32_t timeElapsed) { printTextAtPosition(10, 3, formatTimeDecimal(timeElapsed)); }
 
-void printHeaderBadUSBBLE(String bad_script) {
+void printHeaderBadUSBBLE(const String &bad_script) {
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
 
@@ -1087,7 +1103,7 @@ void printHeaderBadUSBBLE(String bad_script) {
     tft.println("Status:");
 }
 
-void printTFTBadUSBBLE(String text, uint16_t color, bool newline) {
+void printTFTBadUSBBLE(const String &text, uint16_t color, bool newline) {
     if (!bruceConfig.badUSBBLEShowOutput) return;
 
     static int bottomHalfStartY = tftHeight / 2;
