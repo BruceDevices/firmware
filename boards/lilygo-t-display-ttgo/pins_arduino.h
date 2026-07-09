@@ -20,27 +20,6 @@
 #define SDCARD_MISO SPI_MISO_PIN
 #define SDCARD_MOSI SPI_MOSI_PIN
 
-#define USE_CC1101_VIA_SPI
-#define CC1101_GDO0_PIN 39
-#define CC1101_SS_PIN 32
-#define CC1101_MOSI_PIN SPI_MOSI_PIN
-#define CC1101_SCK_PIN SPI_SCK_PIN
-#define CC1101_MISO_PIN SPI_MISO_PIN
-
-#define USE_NRF24_VIA_SPI
-#define NRF24_CE_PIN 37
-#define NRF24_SS_PIN 38
-#define NRF24_MOSI_PIN SPI_MOSI_PIN
-#define NRF24_SCK_PIN SPI_SCK_PIN
-#define NRF24_MISO_PIN SPI_MISO_PIN
-
-#define USE_W5500_VIA_SPI
-#define W5500_SS_PIN 38
-#define W5500_MOSI_PIN SPI_MOSI_PIN
-#define W5500_SCK_PIN SPI_SCK_PIN
-#define W5500_MISO_PIN SPI_MISO_PIN
-#define W5500_INT_PIN 37
-
 static const uint8_t SS = SPI_SS_PIN;
 static const uint8_t MOSI = SPI_MOSI_PIN;
 static const uint8_t SCK = SPI_MISO_PIN;
@@ -96,10 +75,6 @@ static const uint8_t SCL = GROVE_SCL;
 #define UP_BTN 0
 #define DW_BTN 35
 #define BTN_ACT LOW
-
-// IR pins
-#define TXLED 2
-#define RXLED 15
 
 #define LED_ON HIGH
 #define LED_OFF LOW
