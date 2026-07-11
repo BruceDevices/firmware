@@ -21,6 +21,12 @@
 
 #define USB_HID_DEVICES_MAX 10
 
+#ifdef CFG_TUD_ENDPOINT_SIZE
+#define BRUCE_TUD_EP_SIZE CFG_TUD_ENDPOINT_SIZE
+#else
+#define BRUCE_TUD_EP_SIZE CFG_TUD_ENDOINT_SIZE
+#endif
+
 ESP_EVENT_DEFINE_BASE(ARDUINO_USB_HID_EVENTS);
 esp_err_t arduino_usb_event_post(
     esp_event_base_t event_base, int32_t event_id, void *event_data, size_t event_data_size,
@@ -214,7 +220,7 @@ extern "C" uint16_t tusb_hid_load_descriptor(uint8_t *dst, uint8_t *itf) {
             tinyusb_hid_device_descriptor_len,
             ep_out,
             (uint8_t)(0x80 | ep_in),
-            CFG_TUD_ENDOINT_SIZE,
+            BRUCE_TUD_EP_SIZE,
             1
         )
     };
