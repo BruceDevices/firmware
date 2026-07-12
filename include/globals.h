@@ -233,6 +233,22 @@ extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
 #ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
+#ifdef HAS_ENCODER
+    // NextPress/PrevPress here are rotary-encoder-derived, not raw mechanical
+    // button reads -- the encoder's own quadrature decode already rejects
+    // bounce, so the extra software debounce delay below is redundant for
+    // these two flags and only adds latency to every scroll step. Skip it
+    // for them; every other flag (SelPress, EscPress, etc.) keeps the
+    // original suspend+delay+resume debounce untouched.
+    if (&btn == &NextPress || &btn == &PrevPress) {
+        if (resetButtonStatus) {
+            btn = false;
+            AnyKeyPress = false;
+            SerialCmdPress = false;
+        }
+        return true;
+    }
+#endif
     vTaskSuspend(xHandle);
     if (resetButtonStatus) {
         btn = false;
