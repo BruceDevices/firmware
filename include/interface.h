@@ -38,6 +38,16 @@ void _setBrightness(uint8_t brightval);
 **********************************************************************/
 void InputHandler(void);
 
+/*********************************************************************
+** Function: pollEncoder
+** location: interface.cpp (per board)
+** Samples the rotary encoder A/B lines unconditionally, every task tick,
+** decoupled from AnyKeyPress consumption -- mirrors how the Flipper
+** port's encoder_poll() is never gated behind whether the previous
+** input event was consumed. No-op on boards without HAS_ENCODER.
+**********************************************************************/
+void __attribute__((weak)) pollEncoder(void);
+
 
 /*********************************************************************
 ** Function: powerOff
