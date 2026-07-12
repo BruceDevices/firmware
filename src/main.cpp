@@ -58,6 +58,25 @@ TouchPoint touchPoint;
 
 keyStroke KeyStroke;
 
+#ifdef HAS_ENCODER
+// Default no-op: boards that define HAS_ENCODER but don't implement
+// pollEncoder() (shouldn't happen, but keeps the linker happy either way).
+void __attribute__((weak)) pollEncoder(void) {}
+
+// Dedicated, high-priority, tight-cadence task that does nothing but sample
+// the rotary encoder A/B lines -- mirrors the Flipper port's input_srv,
+// which runs encoder_poll() on its own thread every 4ms, decoupled from
+// GUI/app work so the raw quadrature read is never delayed by rendering
+// or by whether the previous input event has been consumed yet. Only
+// exists on HAS_ENCODER boards; other boards pay zero cost for this.
+static void taskEncoderPoll(void *parameter) {
+    while (true) {
+        pollEncoder();
+        vTaskDelay(pdMS_TO_TICKS(4));
+    }
+}
+#endif
+
 TaskHandle_t xHandle;
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
@@ -500,6 +519,19 @@ void setup() {
         2,                             // Task priority (0 to 3), loopTask has priority 2.
         &xHandle                       // Task handle (not used)
     );
+#ifdef HAS_ENCODER
+    // Dedicated encoder sampling task, higher priority than loopTask so a
+    // busy render/redraw pass can never delay reading the A/B lines.
+    // Only created on boards with a rotary encoder.
+    xTaskCreate(
+        taskEncoderPoll, // Task function
+        "EncoderPoll",   // Task Name
+        2048,            // Stack size
+        NULL,            // Task parameters
+        3,               // Task priority (0 to 3), higher than loopTask's 2
+        NULL             // Task handle (not used)
+    );
+#endif
     // #endif
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
