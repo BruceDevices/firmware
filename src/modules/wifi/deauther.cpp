@@ -691,10 +691,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
 
 void deauthAllFromScan() {
     WiFiState savedState = saveWiFiState();
-    drawMainBorder();
-    tft.setCursor(10, 28);
-    tft.setTextColor(bruceConfig.priColor);
-    tft.print("Select AP");
+    drawMainBorderWithTitle("Select AP");
     
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
@@ -702,14 +699,17 @@ void deauthAllFromScan() {
         displayError("No networks found", true);
         return;
     }
+    
     options.clear();
     for (int i = 0; i < n; i++) {
         String ssid = WiFi.SSID(i);
         String bssid = WiFi.BSSIDstr(i);
         int channel = WiFi.channel(i);
         int rssi = WiFi.RSSI(i);
+        
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
         String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        
         options.push_back({optionText.c_str(), [=]() {
             uint8_t targetMAC[6];
             memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
@@ -726,15 +726,14 @@ void deauthAllFromScan() {
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select AP");
+    
+    addOptionToMainMenu();
+    loopOptions(options);
 }
 
 void deauthAllByChannel() {
     WiFiState savedState = saveWiFiState();
-    drawMainBorder();
-    tft.setCursor(10, 28);
-    tft.setTextColor(bruceConfig.priColor);
-    tft.print("Select Channel");
+    drawMainBorderWithTitle("Select Channel");
     
     options.clear();
     for (int ch = 1; ch <= 14; ch++) {
@@ -753,14 +752,13 @@ void deauthAllByChannel() {
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select Channel");
+    
+    addOptionToMainMenu();
+    loopOptions(options);
 }
 
 void deauthAllMenu() {
-    drawMainBorder();
-    tft.setCursor(10, 28);
-    tft.setTextColor(bruceConfig.priColor);
-    tft.print("Deauth All");
+    drawMainBorderWithTitle("Deauth All");
     
     options = {
         {"Select from Scan", [=]() { deauthAllFromScan(); }},
@@ -881,11 +879,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
 
 void showAPSelectionForClientDeauth() {
     WiFiState savedState = saveWiFiState();
-    
-    drawMainBorder();
-    tft.setCursor(10, 28);
-    tft.setTextColor(bruceConfig.priColor);
-    tft.print("Select AP");
+    drawMainBorderWithTitle("Select AP");
     
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
@@ -921,7 +915,8 @@ void showAPSelectionForClientDeauth() {
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
     
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select AP");
+    addOptionToMainMenu();
+    loopOptions(options);
 }
 
 void scanClientsOnAP(uint8_t* targetMAC, int channel) {
@@ -1031,9 +1026,51 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
     
     options.push_back({"Back", []() { returnToMenu = true; }});
     
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select Client to Deauth");
+    addOptionToMainMenu();
+    loopOptions(options);
 }
 
 void deauthTargetListMenu() {
     showAPSelectionForClientDeauth();
+}
+
+void showTargetSelection() {
+    drawMainBorderWithTitle("Select Target");
+    
+    displayTextLine("Scanning for networks...");
+    
+    int n = WiFi.scanNetworks(false, true);
+    if (n == 0) {
+        displayError("No networks found", true);
+        return;
+    }
+    
+    options.clear();
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        String bssid = WiFi.BSSIDstr(i);
+        int channel = WiFi.channel(i);
+        int rssi = WiFi.RSSI(i);
+        
+        String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
+        String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        
+        options.push_back({optionText.c_str(), [=]() {
+            uint8_t mac[6];
+            sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+            eth_addr eth;
+            memcpy(eth.addr, mac, 6);
+            
+            ip4_addr_t ip;
+            ip.addr = 0;
+            
+            Host target(&ip, &eth);
+            stationDeauth(target);
+        }});
+    }
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    
+    addOptionToMainMenu();
+    loopOptions(options);
 }
