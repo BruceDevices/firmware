@@ -5,10 +5,10 @@
 #include <interface.h>
 
 // Rotary encoder
-#include <RotaryEncoder.h>
-extern RotaryEncoder *encoder;
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() { encoder->tick(); }
+#include <rotary_decoder.h>
+extern RotaryDecoder *encoder;
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 // Battery libs
 #if defined(T_EMBED_1101)
@@ -104,9 +104,10 @@ void _setup_gpio() {
     pinMode(BK_BTN, INPUT);
 #endif
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::TWO03);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
 }
 
 /***************************************************************************************
