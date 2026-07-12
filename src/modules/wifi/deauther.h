@@ -4,7 +4,6 @@
 #include "scan_hosts.h"
 #include <vector>
 
-// WiFi state for save/restore
 struct WiFiState {
     bool was_connected = false;
     String ssid = "";
@@ -18,8 +17,25 @@ void stationDeauth(Host host);
 void deauthAll();
 void deauthTargetList(const std::vector<Host>& targets);
 
-// Helper functions for WiFi state management
 WiFiState saveWiFiState();
 void restoreWiFiState(const WiFiState& state);
+
+// Enhanced deauth menu functions
+void enhancedDeauthMenu();
+void showTargetSelection();
+std::vector<Host> buildTargetListFromScan();
+
+// Deauth All submenu functions
+void deauthAllMenu();
+void deauthAllFromScan();
+void deauthAllByChannel();
+void runDeauthAll(uint8_t* targetMAC, int channel);
+
+// Deauth Target List submenu functions
+void deauthTargetListMenu();
+void showAPSelectionForClientDeauth();
+void scanClientsOnAP(uint8_t* targetMAC, int channel);
+void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* targetMAC, int channel);
+void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, int channel);
 
 #endif
