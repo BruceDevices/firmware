@@ -29,6 +29,16 @@
 #include <lwip/timeouts.h>
 #include <sstream>
 
+// WiFi header structure for parsing packets
+struct wifi_header_t {
+    uint16_t frame_ctrl;
+    uint16_t duration;
+    uint8_t addr1[6];
+    uint8_t addr2[6];
+    uint8_t addr3[6];
+    uint16_t seq_ctrl;
+} __attribute__((packed));
+
 static const uint8_t DEAUTH_REASONS[] = {
     0x01, 0x04, 0x06, 0x07, 0x08, 0x0A, 0x0D, 0x0F, 0x12, 0x28
 };
@@ -940,7 +950,9 @@ void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
             
             bool exists = false;
             for (auto& c : detectedClients) {
-                if (memcmp(c.mac, clientMAC, 6) == 0) {
+                uint8_t existingMAC[6];
+                stringToMAC(c.mac.c_str(), existingMAC);
+                if (memcmp(existingMAC, clientMAC, 6) == 0) {
                     exists = true;
                     break;
                 }
