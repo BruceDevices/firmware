@@ -334,7 +334,7 @@ void stationDeauth(Host host) {
         }
     }
     padprintln("");
-    padprintln("Press Any key to STOP.");
+    padprintln("Press BACK to STOP.");
     
     SelPress = false;
     EscPress = false;
@@ -351,7 +351,7 @@ void stationDeauth(Host host) {
     bool storm_active = false;
     uint32_t burst_counter = 0;
     uint8_t consecutive_failures = 0;
-    while (!check(AnyKeyPress)) {
+    while (!check(EscPress)) {
         if (cont % 20 == 0) {
             int reason_count = 0;
             const uint8_t* reasons = getDeauthReasons(band, &reason_count);
@@ -597,7 +597,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
         padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
     }
     padprintln("");
-    padprintln("Press ANY key to STOP.");
+    padprintln("Press BACK to STOP.");
     
     SelPress = false;
     EscPress = false;
@@ -613,7 +613,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     int reason_index = 0;
     bool storm_active = false;
     uint32_t burst_counter = 0;
-    while (!check(AnyKeyPress)) {
+    while (!check(EscPress)) {
         if (total_frames % 20 == 0) {
             int reason_count = 0;
             const uint8_t* reasons = getDeauthReasons(band, &reason_count);
@@ -715,6 +715,13 @@ void deauthAllFromScan() {
             memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
             int ch = WiFi.channel((uint8_t)i);
             WiFi.scanDelete();
+            
+            SelPress = false;
+            EscPress = false;
+            PrevPress = false;
+            NextPress = false;
+            delay(100);
+            
             runDeauthAll(targetMAC, ch);
         }});
     }
@@ -735,6 +742,13 @@ void deauthAllByChannel() {
         String optionText = "Channel " + String(ch) + " (" + band + ")";
         options.push_back({optionText.c_str(), [=]() {
             uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+            
+            SelPress = false;
+            EscPress = false;
+            PrevPress = false;
+            NextPress = false;
+            delay(100);
+            
             runDeauthAll(broadcast_mac, ch);
         }});
     }
@@ -786,7 +800,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
         padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
     }
     padprintln("");
-    padprintln("Press ANY key to STOP.");
+    padprintln("Press BACK to STOP.");
     
     SelPress = false;
     EscPress = false;
@@ -800,7 +814,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     int ap_index = 0;
     bool storm_active = false;
     uint32_t burst_counter = 0;
-    while (!check(AnyKeyPress)) {
+    while (!check(EscPress)) {
         if (target_index >= targets.size()) {
             target_index = 0;
         }
@@ -895,6 +909,13 @@ void showAPSelectionForClientDeauth() {
             memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
             int ch = WiFi.channel((uint8_t)i);
             WiFi.scanDelete();
+            
+            SelPress = false;
+            EscPress = false;
+            PrevPress = false;
+            NextPress = false;
+            delay(100);
+            
             scanClientsOnAP(targetMAC, ch);
         }});
     }
@@ -910,7 +931,7 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     tft.setTextSize(FP);
     padprintln("Scanning for clients on CH " + String(channel));
     padprintln("");
-    padprintln("Press ANY key to stop");
+    padprintln("Press BACK to stop");
     
     std::vector<Host> detectedClients;
     
@@ -933,7 +954,7 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     NextPress = false;
     delay(100);
     
-    while (!check(AnyKeyPress) && millis() - startTime < 8000) {
+    while (!check(EscPress) && millis() - startTime < 8000) {
         if (millis() - startTime > scanCount * 1000) {
             wifiRawTx(WIFI_IF_STA, frame, 26);
             scanCount++;
@@ -953,7 +974,7 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
                 padprintln("  2. Laptop   AA:BB:CC:DD:EE:02");
                 padprintln("  3. Tablet   AA:BB:CC:DD:EE:03");
                 padprintln("");
-                padprintln("Press ANY key to continue");
+                padprintln("Press BACK to continue");
             }
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
