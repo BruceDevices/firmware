@@ -8,6 +8,7 @@
 #include "core/wifi/wifi_common.h"
 #include "scan_hosts.h"
 #include "wifi_atks.h"
+#include "modules/wifi/sniffer.h"
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
 #include <globals.h>
@@ -26,7 +27,6 @@
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
 #include <lwip/timeouts.h>
-#include <modules/wifi/sniffer.h>
 #include <sstream>
 
 static const uint8_t DEAUTH_REASONS[] = {
@@ -47,6 +47,11 @@ struct APInfo {
     int frequency;
 };
 static std::vector<APInfo> sameSSID_APs;
+
+// Client detection globals
+static std::vector<Host> detectedClients;
+static uint8_t scanTargetBSSID[6];
+static bool clientScanActive = false;
 
 WiFiState saveWiFiState() {
     WiFiState state;
@@ -919,6 +924,39 @@ void showAPSelectionForClientDeauth() {
     loopOptions(options);
 }
 
+// Client detection sniffer callback
+void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
+    if (!clientScanActive) return;
+    
+    wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
+    wifi_header_t* header = (wifi_header_t*)pkt->payload;
+    
+    if (type == WIFI_PKT_DATA) {
+        uint8_t clientMAC[6];
+        memcpy(clientMAC, header->addr2, 6);
+        
+        if (memcmp(header->addr1, scanTargetBSSID, 6) == 0 ||
+            memcmp(header->addr3, scanTargetBSSID, 6) == 0) {
+            
+            bool exists = false;
+            for (auto& c : detectedClients) {
+                if (memcmp(c.mac, clientMAC, 6) == 0) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                ip4_addr_t ip;
+                ip.addr = 0;
+                eth_addr eth;
+                memcpy(eth.addr, clientMAC, 6);
+                Host client(&ip, &eth);
+                detectedClients.push_back(client);
+            }
+        }
+    }
+}
+
 void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     WiFiState savedState = saveWiFiState();
     
@@ -928,13 +966,18 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     padprintln("");
     padprintln("Press BACK to stop");
     
-    std::vector<Host> detectedClients;
+    detectedClients.clear();
+    memcpy(scanTargetBSSID, targetMAC, 6);
+    clientScanActive = true;
     
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
         displayError("Failed to enter monitor mode", true);
+        clientScanActive = false;
         return;
     }
+    
+    esp_wifi_set_promiscuous_rx_cb(clientSnifferCallback);
     
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t frame[26];
@@ -958,48 +1001,23 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
             tft.setCursor(10, 80);
             padprintln("Scanning... (" + String(scanCount) + "s)");
             padprintln("");
-            padprintln("Looking for clients...");
+            padprintln("Clients found: " + String(detectedClients.size()));
+            padprintln("");
             
-            if (scanCount >= 3) {
-                tft.fillRect(0, 80, tftWidth, tftHeight - 100, TFT_BLACK);
-                tft.setCursor(10, 80);
-                padprintln("Scanning complete! Found 3 clients:");
-                padprintln("");
-                padprintln("  1. Phone    AA:BB:CC:DD:EE:01");
-                padprintln("  2. Laptop   AA:BB:CC:DD:EE:02");
-                padprintln("  3. Tablet   AA:BB:CC:DD:EE:03");
-                padprintln("");
-                padprintln("Press BACK to continue");
-            }
+            String spinner = "|/-\\";
+            int idx = (scanCount % 4);
+            padprintln("  " + String(spinner[idx]) + " Scanning...");
+            padprintln("");
+            padprintln("Press BACK to stop");
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     
+    clientScanActive = false;
     if (enhanced_mode) {
         esp_wifi_set_promiscuous(false);
     }
-    
-    if (scanCount >= 3) {
-        ip4_addr_t ip;
-        ip.addr = 0;
-        
-        uint8_t mac1[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01};
-        uint8_t mac2[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02};
-        uint8_t mac3[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x03};
-        
-        eth_addr eth1, eth2, eth3;
-        memcpy(eth1.addr, mac1, 6);
-        memcpy(eth2.addr, mac2, 6);
-        memcpy(eth3.addr, mac3, 6);
-        
-        Host client1(&ip, &eth1);
-        Host client2(&ip, &eth2);
-        Host client3(&ip, &eth3);
-        
-        detectedClients.push_back(client1);
-        detectedClients.push_back(client2);
-        detectedClients.push_back(client3);
-    }
+    esp_wifi_set_promiscuous_rx_cb(NULL);
     
     showClientSelectionForDeauth(detectedClients, targetMAC, channel);
 }
@@ -1073,4 +1091,26 @@ void showTargetSelection() {
     
     addOptionToMainMenu();
     loopOptions(options);
+}
+
+std::vector<Host> buildTargetListFromScan() {
+    std::vector<Host> targets;
+    int n = WiFi.scanNetworks(false, true);
+    
+    for (int i = 0; i < n; i++) {
+        String bssid = WiFi.BSSIDstr(i);
+        
+        uint8_t mac[6];
+        sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+        eth_addr eth;
+        memcpy(eth.addr, mac, 6);
+        
+        ip4_addr_t ip;
+        ip.addr = 0;
+        
+        Host host(&ip, &eth);
+        targets.push_back(host);
+    }
+    return targets;
 }
