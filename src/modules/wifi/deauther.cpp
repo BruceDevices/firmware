@@ -719,7 +719,6 @@ void deauthAllByChannel() {
 }
 
 void deauthAllMenu() {
-    resetGlobalState();
     options = {
         {"Select from Scan", [=]() { deauthAllFromScan(); }},
         {"Select Channel", [=]() { deauthAllByChannel(); }},
@@ -917,14 +916,25 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
         esp_wifi_set_promiscuous(false);
     }
     
+    // Create dummy clients for demonstration
     if (scanCount >= 3) {
-        Host client1, client2, client3;
+        // Use proper Host construction
+        ip4_addr_t ip;
+        ip.addr = 0;
+        
         uint8_t mac1[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01};
         uint8_t mac2[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02};
         uint8_t mac3[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x03};
-        memcpy(client1.mac, mac1, 6);
-        memcpy(client2.mac, mac2, 6);
-        memcpy(client3.mac, mac3, 6);
+        
+        eth_addr eth1, eth2, eth3;
+        memcpy(eth1.addr, mac1, 6);
+        memcpy(eth2.addr, mac2, 6);
+        memcpy(eth3.addr, mac3, 6);
+        
+        Host client1(&ip, &eth1);
+        Host client2(&ip, &eth2);
+        Host client3(&ip, &eth3);
+        
         detectedClients.push_back(client1);
         detectedClients.push_back(client2);
         detectedClients.push_back(client3);
@@ -938,7 +948,8 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
     
     if (!clients.empty()) {
         for (auto& client : clients) {
-            String clientMac = macToString(client.mac);
+            // client.mac is a String, use it directly
+            String clientMac = client.mac;
             options.push_back({clientMac.c_str(), [=]() {
                 stationDeauth(client);
             }});
@@ -959,6 +970,5 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
 }
 
 void deauthTargetListMenu() {
-    resetGlobalState();
     showAPSelectionForClientDeauth();
 }
