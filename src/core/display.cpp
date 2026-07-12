@@ -629,7 +629,14 @@ int loopOptions(
             }
             redraw = true;
         }
+#ifdef HAS_ENCODER
+        // Match the rotary encoder's own poll cadence here instead of the
+        // generic 10ms menu-loop pacing, so a backed-up run of detents can
+        // drain without an artificial per-iteration floor on top of it.
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+#else
         vTaskDelay(10 / portTICK_PERIOD_MS);
+#endif
 
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
