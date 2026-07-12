@@ -1082,12 +1082,6 @@ void beaconAttack() {
 void enhancedDeauthMenu() {
     resetGlobalState();
     
-    if (WiFi.status() != WL_CONNECTED) {
-        displayError("Please connect to WiFi first", true);
-        delay(2000);
-        return;
-    }
-    
     options = {
         {"Station Deauth (Single)", [=]() {
             showTargetSelection();
