@@ -69,6 +69,99 @@ struct APInfo {
 };
 static std::vector<APInfo> sameSSID_APs;
 
+// ===== WiFi State Management =====
+WiFiState saveWiFiState() {
+    WiFiState state;
+    
+    // Save STA mode state
+    state.was_connected = WiFi.isConnected();
+    
+    if (state.was_connected) {
+        state.ssid = WiFi.SSID();
+        state.bssid = WiFi.BSSIDstr();
+        state.channel = WiFi.channel();
+        Serial.printf("[DEAUTH] Saved WiFi state - SSID: %s, CH: %d\n", 
+                      state.ssid.c_str(), state.channel);
+    }
+    
+    // Save AP state if active
+    state.ap_active = WiFi.softAPgetStationNum() > 0 || WiFi.softAPSSID() != "";
+    if (state.ap_active) {
+        state.ap_ssid = WiFi.softAPSSID();
+        Serial.printf("[DEAUTH] Saved AP state - SSID: %s\n", state.ap_ssid.c_str());
+    }
+    
+    return state;
+}
+
+bool reconnectToWiFi(const String& ssid, const String& bssid) {
+    if (ssid.length() == 0) return false;
+    
+    Serial.printf("[DEAUTH] Attempting reconnect to: %s\n", ssid.c_str());
+    
+    // Get password from stored credentials
+    String password = bruceConfig.getWifiPassword(ssid);
+    if (password == "") {
+        Serial.println("[DEAUTH] No stored password for this network");
+        return false;
+    }
+    
+    // Use wifi_common's connection method
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+        attempts++;
+        if (attempts % 5 == 0) {
+            Serial.printf("[DEAUTH] Reconnect attempt %d/30\n", attempts);
+        }
+    }
+    
+    bool connected = WiFi.status() == WL_CONNECTED;
+    if (connected) {
+        wifiConnected = true;
+        wifiIP = WiFi.localIP().toString();
+        Serial.printf("[DEAUTH] Reconnected! IP: %s\n", wifiIP.c_str());
+        drawStatusBar();
+    } else {
+        Serial.println("[DEAUTH] Failed to reconnect");
+        wifiConnected = false;
+    }
+    
+    return connected;
+}
+
+void restoreWiFiState(const WiFiState& state) {
+    Serial.println("[DEAUTH] Restoring WiFi state...");
+    
+    // If we had STA connection, restore it
+    if (state.was_connected && state.ssid.length() > 0) {
+        reconnectToWiFi(state.ssid, state.bssid);
+    }
+    
+    // If we had AP mode active, restore it
+    if (state.ap_active && state.ap_ssid.length() > 0) {
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAP(state.ap_ssid.c_str(), bruceConfig.wifiAp.pwd, state.channel, 0, 4, false);
+        Serial.printf("[DEAUTH] AP restored: %s\n", state.ap_ssid.c_str());
+    }
+    
+    // If nothing was connected, just set to STA mode
+    if (!state.was_connected && !state.ap_active) {
+        WiFi.mode(WIFI_STA);
+    }
+    
+    // Update global state
+    if (WiFi.isConnected()) {
+        wifiConnected = true;
+        wifiIP = WiFi.localIP().toString();
+    }
+    
+    drawStatusBar();
+}
+
 // Função para obter o MAC do gateway (ORIGINAL - DON'T CHANGE)
 void getGatewayMAC(uint8_t gatewayMAC[6]) {
     wifi_ap_record_t ap_info;
@@ -284,10 +377,15 @@ void sendDeauthToAP(APInfo& ap, const uint8_t* targetMAC, bool enhanced_mode, in
 }
 
 void stationDeauth(Host host) {
+    // ===== SAVE WIFI STATE =====
+    WiFiState savedState = saveWiFiState();
+    
     if (WiFi.status() != WL_CONNECTED) {
         displayError("Not connected to WiFi", true);
+        restoreWiFiState(savedState);
         return;
     }
+    
     // Stop WebUI before setting WiFi mode for station deauth
     cleanlyStopWebUiForWiFiFeature();
     uint8_t targetMAC[6];
@@ -301,6 +399,7 @@ void stationDeauth(Host host) {
 
     if (isMACZero(targetMAC)) {
         displayError("Invalid MAC address", true);
+        restoreWiFiState(savedState);
         return;
     }
 
@@ -308,6 +407,7 @@ void stationDeauth(Host host) {
 
     if (isMACZero(gatewayMAC)) {
         displayError("Could not get gateway MAC", true);
+        restoreWiFiState(savedState);
         return;
     }
 
@@ -357,6 +457,7 @@ void stationDeauth(Host host) {
         if (!WiFi.softAP(currentSsid.c_str(), emptyString, channel, 1, 4, false)) {
             Serial.println("Fail Starting AP Mode");
             displayError("Fail starting Deauth", true);
+            restoreWiFiState(savedState);
             return;
         }
     }
@@ -665,6 +766,9 @@ void stationDeauth(Host host) {
         esp_wifi_set_promiscuous(false);
     }
 
+    // ===== RESTORE WIFI STATE =====
+    restoreWiFiState(savedState);
+
     wifiDisconnect();
     WiFi.mode(WIFI_STA);
 
@@ -678,13 +782,23 @@ void stationDeauth(Host host) {
     if (has_multiple_bands) {
         padprintln("Multi-band attack used");
     }
+    // Show reconnect status
+    if (savedState.was_connected && WiFi.isConnected()) {
+        padprintln("WiFi reconnected ✓");
+    } else if (savedState.was_connected) {
+        padprintln("WiFi reconnect failed ✗");
+    }
     delay(1000);
 }
 
 // Deauth all clients on the network
 void deauthAll() {
+    // ===== SAVE WIFI STATE =====
+    WiFiState savedState = saveWiFiState();
+    
     if (WiFi.status() != WL_CONNECTED) {
         displayError("Not connected to WiFi", true);
+        restoreWiFiState(savedState);
         return;
     }
     
@@ -694,6 +808,7 @@ void deauthAll() {
     getGatewayMAC(gatewayMAC);
     if (isMACZero(gatewayMAC)) {
         displayError("Could not get gateway MAC", true);
+        restoreWiFiState(savedState);
         return;
     }
     
@@ -716,6 +831,7 @@ void deauthAll() {
         WiFi.mode(WIFI_AP);
         if (!WiFi.softAP("DEAUTH_ALL", emptyString, channel, 1, 4, false)) {
             displayError("Failed to start Deauth", true);
+            restoreWiFiState(savedState);
             return;
         }
     }
@@ -823,6 +939,9 @@ void deauthAll() {
         esp_wifi_set_promiscuous(false);
     }
     
+    // ===== RESTORE WIFI STATE =====
+    restoreWiFiState(savedState);
+    
     wifiDisconnect();
     WiFi.mode(WIFI_STA);
     delay(500);
@@ -830,6 +949,9 @@ void deauthAll() {
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
+    if (savedState.was_connected && WiFi.isConnected()) {
+        padprintln("WiFi reconnected ✓");
+    }
     delay(1500);
 }
 
@@ -845,12 +967,16 @@ void deauthTargetList(const std::vector<Host>& targets) {
         return;
     }
     
+    // ===== SAVE WIFI STATE =====
+    WiFiState savedState = saveWiFiState();
+    
     cleanlyStopWebUiForWiFiFeature();
     
     uint8_t gatewayMAC[6];
     getGatewayMAC(gatewayMAC);
     if (isMACZero(gatewayMAC)) {
         displayError("Could not get gateway MAC", true);
+        restoreWiFiState(savedState);
         return;
     }
     
@@ -872,6 +998,7 @@ void deauthTargetList(const std::vector<Host>& targets) {
         WiFi.mode(WIFI_AP);
         if (!WiFi.softAP("DEAUTH_LIST", emptyString, channel, 1, 4, false)) {
             displayError("Failed to start Deauth", true);
+            restoreWiFiState(savedState);
             return;
         }
     }
@@ -963,6 +1090,9 @@ void deauthTargetList(const std::vector<Host>& targets) {
         esp_wifi_set_promiscuous(false);
     }
     
+    // ===== RESTORE WIFI STATE =====
+    restoreWiFiState(savedState);
+    
     wifiDisconnect();
     WiFi.mode(WIFI_STA);
     delay(500);
@@ -970,5 +1100,8 @@ void deauthTargetList(const std::vector<Host>& targets) {
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
+    if (savedState.was_connected && WiFi.isConnected()) {
+        padprintln("WiFi reconnected ✓");
+    }
     delay(1000);
 }
