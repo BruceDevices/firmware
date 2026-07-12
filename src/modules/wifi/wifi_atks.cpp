@@ -1082,14 +1082,10 @@ void beaconAttack() {
 void enhancedDeauthMenu() {
     resetGlobalState();
     
-    // Check if connected to WiFi
     if (WiFi.status() != WL_CONNECTED) {
-        displayTextLine("Connecting to WiFi...");
-        if (!wifiConnecttoKnownNet()) {
-            displayError("Could not connect to WiFi", true);
-            delay(2000);
-            return;
-        }
+        displayError("Please connect to WiFi first", true);
+        delay(2000);
+        return;
     }
     
     options = {
