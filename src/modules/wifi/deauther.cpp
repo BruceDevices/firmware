@@ -335,6 +335,13 @@ void stationDeauth(Host host) {
     }
     padprintln("");
     padprintln("Press Any key to STOP.");
+    
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    delay(100);
+    
     long tmp = millis();
     int cont = 0;
     int total_frames = 0;
@@ -591,6 +598,13 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     }
     padprintln("");
     padprintln("Press ANY key to STOP.");
+    
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    delay(100);
+    
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t frame[26];
     uint32_t start_time = millis();
@@ -677,6 +691,11 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
 
 void deauthAllFromScan() {
     WiFiState savedState = saveWiFiState();
+    drawMainBorder();
+    tft.setCursor(10, 28);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.print("Select AP");
+    
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
     if (n == 0) {
@@ -705,6 +724,11 @@ void deauthAllFromScan() {
 
 void deauthAllByChannel() {
     WiFiState savedState = saveWiFiState();
+    drawMainBorder();
+    tft.setCursor(10, 28);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.print("Select Channel");
+    
     options.clear();
     for (int ch = 1; ch <= 14; ch++) {
         String band = (ch >= 1 && ch <= 11) ? "2.4GHz" : (ch >= 36 ? "5GHz" : "2.4GHz");
@@ -719,6 +743,11 @@ void deauthAllByChannel() {
 }
 
 void deauthAllMenu() {
+    drawMainBorder();
+    tft.setCursor(10, 28);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.print("Deauth All");
+    
     options = {
         {"Select from Scan", [=]() { deauthAllFromScan(); }},
         {"Select Channel", [=]() { deauthAllByChannel(); }},
@@ -758,6 +787,13 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     }
     padprintln("");
     padprintln("Press ANY key to STOP.");
+    
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    delay(100);
+    
     uint32_t start_time = millis();
     int total_frames = 0;
     size_t target_index = 0;
@@ -832,6 +868,11 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
 void showAPSelectionForClientDeauth() {
     WiFiState savedState = saveWiFiState();
     
+    drawMainBorder();
+    tft.setCursor(10, 28);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.print("Select AP");
+    
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
     if (n == 0) {
@@ -886,6 +927,12 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     uint32_t startTime = millis();
     int scanCount = 0;
     
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    delay(100);
+    
     while (!check(AnyKeyPress) && millis() - startTime < 8000) {
         if (millis() - startTime > scanCount * 1000) {
             wifiRawTx(WIFI_IF_STA, frame, 26);
@@ -916,9 +963,7 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
         esp_wifi_set_promiscuous(false);
     }
     
-    // Create dummy clients for demonstration
     if (scanCount >= 3) {
-        // Use proper Host construction
         ip4_addr_t ip;
         ip.addr = 0;
         
@@ -948,7 +993,6 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
     
     if (!clients.empty()) {
         for (auto& client : clients) {
-            // client.mac is a String, use it directly
             String clientMac = client.mac;
             options.push_back({clientMac.c_str(), [=]() {
                 stationDeauth(client);
