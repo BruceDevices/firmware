@@ -38,4 +38,7 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel);
 void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* targetMAC, int channel);
 void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, int channel);
 
+// Client sniffer callback
+void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type);
+
 #endif
