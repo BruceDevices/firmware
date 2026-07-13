@@ -54,6 +54,11 @@ void InputHandler(void) {
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
         lastPos = newPos;
         lastEncoderMoveMs = millis();
     } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
