@@ -1193,10 +1193,33 @@ String generalKeyboard(
             if ((check(SelPress) || selection_made) && touchPoint.pressed == false) {
                 LongPress = false;
                 selection_made = true;
+            } else if (touchPoint.pressed) {
+                // Touchscreen is prioritized on boards with both -- discard
+                // any encoder movement that piled up while touch was active
+                // instead of queuing it up to suddenly fire once released.
+                drainRotarySteps();
+                check(NextPress);
+                check(PrevPress);
             } else {
-                /* NEXT "Btn" to move forward on th X axis (to the right) */
+                // Drain the exact number of pending encoder steps in one
+                // pass, same idea as the menu list navigation, so a fast
+                // spin moves the cursor by its true net amount before the
+                // next redraw, and a spin forward then back lands on the
+                // same key. Falls back to a single step if NextPress/
+                // PrevPress was set by something other than the encoder.
+                bool altNext = NextPress;
+                bool altPrev = PrevPress;
+                int32_t steps = drainRotarySteps();
+                check(NextPress);
+                check(PrevPress);
+                if (steps == 0) {
+                    if (altNext) steps = -1;
+                    else if (altPrev) steps = 1;
+                }
+
                 // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
-                if (check(NextPress) && touchPoint.pressed == false) {
+                auto stepNext = [&]() {
+                    /* NEXT "Btn" to move forward on th X axis (to the right) */
                     if (EscPress) {
                         y++;
                     } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
@@ -1228,11 +1251,9 @@ String generalKeyboard(
                             }
                         }
                     }
-
-                    redraw = true;
-                }
-                /* PREV "Btn" to move backwards on th X axis (to the left) */
-                if (check(PrevPress) && touchPoint.pressed == false) {
+                };
+                auto stepPrev = [&]() {
+                    /* PREV "Btn" to move backwards on th X axis (to the left) */
                     if (EscPress) {
                         y--;
                     } else if (x <= 0) {
@@ -1263,7 +1284,16 @@ String generalKeyboard(
                             }
                         }
                     }
+                };
 
+                while (steps < 0) {
+                    stepNext();
+                    steps++;
+                    redraw = true;
+                }
+                while (steps > 0) {
+                    stepPrev();
+                    steps--;
                     redraw = true;
                 }
             }
