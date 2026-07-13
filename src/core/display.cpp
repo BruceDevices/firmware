@@ -625,64 +625,85 @@ int loopOptions(
             break;
         }
 
-        if (PrevPress || check(UpPress)) {
-            devModeCounter = 0;
-#ifdef HAS_KEYBOARD
+#ifdef HAS_ENCODER
+        int32_t rotarySteps = drainRotarySteps();
+        if (rotarySteps != 0) {
             check(PrevPress);
-            int prevEnabled = findNextEnabled(index, -1);
-            if (prevEnabled >= 0) index = prevEnabled;
-            redraw = true;
-#else
-            long _tmp = millis();
-#ifndef HAS_ENCODER // T-Embed doesn't need it
-            LongPress = true;
-            while (PrevPress && menuType != MENU_TYPE_MAIN) {
-                if (millis() - _tmp > 200)
-                    tft.drawArc(
-                        tftWidth / 2,
-                        tftHeight / 2,
-                        25,
-                        15,
-                        0,
-                        360 * (millis() - (_tmp + 200)) / 500,
-                        getColorVariation(bruceConfig.priColor),
-                        bruceConfig.bgColor
-                    );
-                vTaskDelay(10 / portTICK_RATE_MS);
+            check(NextPress);
+            check(UpPress);
+            check(DownPress);
+            devModeCounter = 0;
+            while (rotarySteps > 0) {
+                int prevEnabled = findNextEnabled(index, -1);
+                if (prevEnabled < 0) break;
+                index = prevEnabled;
+                rotarySteps--;
+                redraw = true;
             }
-            tft.drawArc(
-                tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
-            );
-            LongPress = false;
+            while (rotarySteps < 0) {
+                int nextEnabled = findNextEnabled(index, +1);
+                if (nextEnabled < 0) break;
+                if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
+                index = nextEnabled;
+                rotarySteps++;
+                redraw = true;
+            }
+            vTaskDelay(4 / portTICK_PERIOD_MS);
+        } else
 #endif
-            if (millis() - _tmp > 700) { // longpress detected to exit
-                index = -1;
-                break;
-            } else {
+        {
+            if (PrevPress || check(UpPress)) {
+                devModeCounter = 0;
+#ifdef HAS_KEYBOARD
                 check(PrevPress);
                 int prevEnabled = findNextEnabled(index, -1);
                 if (prevEnabled >= 0) index = prevEnabled;
                 redraw = true;
-            }
-#endif
-        }
-        /* DW Btn to next item */
-        if (check(NextPress) || check(DownPress)) {
-            int nextEnabled = findNextEnabled(index, +1);
-            if (nextEnabled >= 0) {
-                if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
-                index = nextEnabled;
-            }
-            redraw = true;
-        }
-#ifdef HAS_ENCODER
-        // Match the rotary encoder's own poll cadence here instead of the
-        // generic 10ms menu-loop pacing, so a backed-up run of detents can
-        // drain without an artificial per-iteration floor on top of it.
-        vTaskDelay(4 / portTICK_PERIOD_MS);
 #else
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+                long _tmp = millis();
+#ifndef HAS_ENCODER // T-Embed doesn't need it
+                LongPress = true;
+                while (PrevPress && menuType != MENU_TYPE_MAIN) {
+                    if (millis() - _tmp > 200)
+                        tft.drawArc(
+                            tftWidth / 2,
+                            tftHeight / 2,
+                            25,
+                            15,
+                            0,
+                            360 * (millis() - (_tmp + 200)) / 500,
+                            getColorVariation(bruceConfig.priColor),
+                            bruceConfig.bgColor
+                        );
+                    vTaskDelay(10 / portTICK_RATE_MS);
+                }
+                tft.drawArc(
+                    tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
+                );
+                LongPress = false;
 #endif
+                if (millis() - _tmp > 700) { // longpress detected to exit
+                    index = -1;
+                    break;
+                } else {
+                    check(PrevPress);
+                    int prevEnabled = findNextEnabled(index, -1);
+                    if (prevEnabled >= 0) index = prevEnabled;
+                    redraw = true;
+                }
+#endif
+            }
+            /* DW Btn to next item */
+            if (check(NextPress) || check(DownPress)) {
+                int nextEnabled = findNextEnabled(index, +1);
+                if (nextEnabled >= 0) {
+                    if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
+                    index = nextEnabled;
+                }
+                redraw = true;
+            }
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
 
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu

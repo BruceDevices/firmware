@@ -1194,77 +1194,143 @@ String generalKeyboard(
                 LongPress = false;
                 selection_made = true;
             } else {
-                /* NEXT "Btn" to move forward on th X axis (to the right) */
-                // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
-                if (check(NextPress) && touchPoint.pressed == false) {
-                    if (EscPress) {
-                        y++;
-                    } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
-                        // if we are at the end of the current line
-                        y++;   // next line
-                        x = 0; // reset to first key
-                    } else x++;
+                int32_t rotarySteps = drainRotarySteps();
+                if (rotarySteps != 0 && touchPoint.pressed == false) {
+                    check(NextPress);
+                    check(PrevPress);
+                    while (rotarySteps < 0) {
+                        if (EscPress) {
+                            y++;
+                        } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
+                            y++;
+                            x = 0;
+                        } else x++;
 
-                    if (y >= KeyboardHeight)
-                        y = -1; // if we are at the end of the keyboard, then return to the top
+                        if (y >= KeyboardHeight) y = -1;
+                        if (y == -1 && x >= buttons_number) x = 0;
 
-                    // If we move to a new line using the ESC-press navigation and the previous x coordinate
-                    // is greater than the number of available buttons_strings on the new line, reset x to
-                    // avoid out-of-bounds behavior, this can only happen when switching to the first line, as
-                    // the others have all the same number of keys
-                    if (y == -1 && x >= buttons_number) x = 0;
-
-                    // Skip over keys with '\0' value
-                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                        while (keys[y][x][caps] == '\0') {
-                            x++;
-                            if (x >= KeyboardWidth) {
-                                x = 0;
-                                y++;
-                                if (y >= KeyboardHeight) {
-                                    y = -1;
-                                    break;
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x++;
+                                if (x >= KeyboardWidth) {
+                                    x = 0;
+                                    y++;
+                                    if (y >= KeyboardHeight) {
+                                        y = -1;
+                                        break;
+                                    }
                                 }
                             }
                         }
+
+                        rotarySteps++;
+                        redraw = true;
                     }
+                    while (rotarySteps > 0) {
+                        if (EscPress) {
+                            y--;
+                        } else if (x <= 0) {
+                            y--;
+                            if (y == -1) x = buttons_number - 1;
+                            else x = KeyboardWidth - 1;
+                        } else x--;
 
-                    redraw = true;
-                }
-                /* PREV "Btn" to move backwards on th X axis (to the left) */
-                if (check(PrevPress) && touchPoint.pressed == false) {
-                    if (EscPress) {
-                        y--;
-                    } else if (x <= 0) {
-                        y--;
-                        if (y == -1) x = buttons_number - 1;
-                        else x = KeyboardWidth - 1;
-                    } else x--;
+                        if (y < -1) {
+                            y = KeyboardHeight - 1;
+                            x = KeyboardWidth - 1;
+                        }
 
-                    if (y < -1) { // go back to the bottom right of the keyboard
-                        y = KeyboardHeight - 1;
-                        x = KeyboardWidth - 1;
-                    }
-                    // else if (y == -1 && x >= buttons_number) x = buttons_number - 1;
-                    // else if (x < 0) x = KeyboardWidth - 1;
-
-                    // Skip over keys with '\0' value when moving backwards
-                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                        while (keys[y][x][caps] == '\0') {
-                            x--;
-                            if (x < 0) {
-                                x = KeyboardWidth - 1;
-                                y--;
-                                if (y < 0) {
-                                    y = -1;
-                                    x = buttons_number - 1;
-                                    break;
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x--;
+                                if (x < 0) {
+                                    x = KeyboardWidth - 1;
+                                    y--;
+                                    if (y < 0) {
+                                        y = -1;
+                                        x = buttons_number - 1;
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    redraw = true;
+                        rotarySteps--;
+                        redraw = true;
+                    }
+                } else {
+                    /* NEXT "Btn" to move forward on th X axis (to the right) */
+                    // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
+                    if (check(NextPress) && touchPoint.pressed == false) {
+                        if (EscPress) {
+                            y++;
+                        } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
+                            // if we are at the end of the current line
+                            y++;   // next line
+                            x = 0; // reset to first key
+                        } else x++;
+
+                        if (y >= KeyboardHeight)
+                            y = -1; // if we are at the end of the keyboard, then return to the top
+
+                        // If we move to a new line using the ESC-press navigation and the previous x coordinate
+                        // is greater than the number of available buttons_strings on the new line, reset x to
+                        // avoid out-of-bounds behavior, this can only happen when switching to the first line, as
+                        // the others have all the same number of keys
+                        if (y == -1 && x >= buttons_number) x = 0;
+
+                        // Skip over keys with '\0' value
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x++;
+                                if (x >= KeyboardWidth) {
+                                    x = 0;
+                                    y++;
+                                    if (y >= KeyboardHeight) {
+                                        y = -1;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        redraw = true;
+                    }
+                    /* PREV "Btn" to move backwards on th X axis (to the left) */
+                    if (check(PrevPress) && touchPoint.pressed == false) {
+                        if (EscPress) {
+                            y--;
+                        } else if (x <= 0) {
+                            y--;
+                            if (y == -1) x = buttons_number - 1;
+                            else x = KeyboardWidth - 1;
+                        } else x--;
+
+                        if (y < -1) { // go back to the bottom right of the keyboard
+                            y = KeyboardHeight - 1;
+                            x = KeyboardWidth - 1;
+                        }
+                        // else if (y == -1 && x >= buttons_number) x = buttons_number - 1;
+                        // else if (x < 0) x = KeyboardWidth - 1;
+
+                        // Skip over keys with '\0' value when moving backwards
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x--;
+                                if (x < 0) {
+                                    x = KeyboardWidth - 1;
+                                    y--;
+                                    if (y < 0) {
+                                        y = -1;
+                                        x = buttons_number - 1;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        redraw = true;
+                    }
                 }
             }
 #endif
@@ -1291,6 +1357,9 @@ String generalKeyboard(
 
             last_input_time = millis();
         }
+#ifdef HAS_ENCODER
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+#endif
     }
 
     // Resets screen when finished writing
