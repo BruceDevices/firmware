@@ -59,6 +59,8 @@ TouchPoint touchPoint;
 keyStroke KeyStroke;
 
 #ifdef HAS_ENCODER
+volatile int32_t RotaryNetSteps = 0;
+
 // Default no-op: boards that define HAS_ENCODER but don't implement
 // pollEncoder() (shouldn't happen, but keeps the linker happy either way).
 void __attribute__((weak)) pollEncoder(void) {}
