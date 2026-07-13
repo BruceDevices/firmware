@@ -107,7 +107,7 @@ void _setup_gpio() {
     pinMode(ENCODER_INA, INPUT_PULLUP);
     pinMode(ENCODER_INB, INPUT_PULLUP);
     encoder = new RotaryDecoder();
-    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
+    encoder->begin(ENCODER_INA, ENCODER_INB, 4);
 }
 
 /***************************************************************************************
