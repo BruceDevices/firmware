@@ -51,6 +51,7 @@ void displayScrollingText(const String &text, Opt_Coord &coord) {
             bruceConfig.bgColor
         ); // Clear display area
         tft.setCursor(coord.x, coord.y);
+        tft.setCursor(coord.x, coord.y);
         tft.print(scrollingPart);
         if (i >= scrollLen - coord.size) i = -1; // Loop back
         _lastmillis = millis();
@@ -128,40 +129,8 @@ bool wakeUpScreen() {
 }
 
 /***************************************************************************************
-** Function name: wrapText
-** Description:   Wrap text to fit within a maximum width, returning vector of lines
-***************************************************************************************/
-std::vector<String> wrapText(const String& text, int maxCharsPerLine) {
-    std::vector<String> lines;
-    if (maxCharsPerLine <= 0) return lines;
-    
-    String remaining = text;
-    while (remaining.length() > 0) {
-        if (remaining.length() <= maxCharsPerLine) {
-            lines.push_back(remaining);
-            break;
-        }
-        // Find last space within maxCharsPerLine
-        int splitPos = -1;
-        for (int i = maxCharsPerLine - 1; i >= 0; i--) {
-            if (remaining[i] == ' ' || remaining[i] == '-' || remaining[i] == '_') {
-                splitPos = i;
-                break;
-            }
-        }
-        if (splitPos <= 0) {
-            // No word boundary found, force split at max
-            splitPos = maxCharsPerLine;
-        }
-        lines.push_back(remaining.substring(0, splitPos));
-        remaining = remaining.substring(splitPos + 1);
-    }
-    return lines;
-}
-
-/***************************************************************************************
 ** Function name: displayRedStripe
-** Description:   Display Red Stripe with information (supports multi-line text wrapping)
+** Description:   Display Red Stripe with information
 ***************************************************************************************/
 void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     // detect if not running in interactive mode -> show nothing onscreen and return immediately
@@ -169,40 +138,23 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
 
     int size;
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
-    
-    // Calculate max chars per line based on font size
-    int maxCharsFM = (tftWidth - 20) / (LW * FM);
-    int maxCharsFP = (tftWidth - 20) / (LW * FP);
-    
-    // Determine if we need to wrap the text
-    std::vector<String> wrappedLines;
-    int boxHeight = 26;  // Default height for single line
-    
-    if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) {
-        // Text fits with FM font
-        size = FM;
-        wrappedLines = wrapText(text, maxCharsFM);
-    } else {
-        // Text needs FP font or larger
-        size = FP;
-        wrappedLines = wrapText(text, maxCharsFP);
-    }
-    
-    // Adjust box height based on number of lines
-    if (wrappedLines.size() > 1) {
-        boxHeight = 13 + (wrappedLines.size() * (size == FM ? 8 : 10));
-    }
-    
+    if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) size = FM;
+    else size = FP;
     tft.drawPixel(0, 0, 0);
-    tft.fillRoundRect(10, tftHeight / 2 - boxHeight / 2, tftWidth - 20, boxHeight, 7, bgcolor);
+    tft.fillRoundRect(10, tftHeight / 2 - 13, tftWidth - 20, 26, 7, bgcolor);
     tft.setTextColor(fgcolor, bgcolor);
-    tft.setTextSize(size);
-    
-    // Draw each line centered
-    int lineHeight = size == FM ? 8 : 10;
-    int startY = tftHeight / 2 - (wrappedLines.size() * lineHeight) / 2;
-    for (size_t i = 0; i < wrappedLines.size(); i++) {
-        tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + i * lineHeight);
+    if (size == FM) {
+        tft.setTextSize(FM);
+        tft.drawCentreString(text, tftWidth / 2, tftHeight / 2 - 8);
+    } else {
+        tft.setTextSize(FP);
+        int text_size = text.length();
+        if (text_size < (tftWidth - 20) / (LW * FP))
+            tft.drawCentreString(text, tftWidth / 2, tftHeight / 2 - 8);
+        else {
+            tft.drawCentreString(text.substring(0, text_size / 2), tftWidth / 2, tftHeight / 2 - 9);
+            tft.drawCentreString(text.substring(text_size / 2), tftWidth / 2, tftHeight / 2 + 1);
+        }
     }
 }
 
@@ -331,8 +283,8 @@ void displayWarning(const String &txt, bool waitKeyPress) {
     while (waitKeyPress && !check(AnyKeyPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-
 void displayInfo(const String &txt, bool waitKeyPress) {
+    // todo: add newlines to txt if too long
     displayRedStripe(txt, TFT_WHITE, TFT_BLUE);
     Serial.println("INFO: " + txt);
 #ifndef HAS_SCREEN
@@ -344,6 +296,7 @@ void displayInfo(const String &txt, bool waitKeyPress) {
 }
 
 void displaySuccess(const String &txt, bool waitKeyPress) {
+    // todo: add newlines to txt if too long
     displayRedStripe(txt, TFT_WHITE, TFT_DARKGREEN);
     Serial.println("SUCCESS: " + txt);
 #ifndef HAS_SCREEN
@@ -354,6 +307,7 @@ void displaySuccess(const String &txt, bool waitKeyPress) {
 }
 
 void displayTextLine(const String &txt, bool waitKeyPress) {
+    // todo: add newlines to txt if too long
     displayRedStripe(txt, getComplementaryColor2(bruceConfig.priColor), bruceConfig.priColor);
     Serial.println("MESSAGE: " + txt);
 #ifndef HAS_SCREEN
@@ -625,6 +579,52 @@ int loopOptions(
             break;
         }
 
+#ifdef HAS_ENCODER
+        // Drain the exact number of pending encoder steps in one pass, so a
+        // fast spin (in either direction) applies its true net movement
+        // before the next redraw, instead of being limited to one item per
+        // redraw pass. Turning N steps one way then N steps back always
+        // lands back on the same item, since findNextEnabled(+1)/(-1) are
+        // exact inverses and every real step gets applied, none skipped.
+        //
+        // PrevPress/NextPress/UpPress/DownPress can also be set by
+        // non-encoder sources on some boards (a physical keyboard on
+        // T-Lora-Pager, a touchscreen on the WaveSentry variant) which
+        // don't feed the step counter. If the counter is empty but one of
+        // those flags was set, fall back to a single step exactly like the
+        // original per-press behavior, so those input sources are unaffected.
+        bool altPrev = PrevPress || UpPress;
+        bool altNext = NextPress || DownPress;
+        int32_t steps = drainRotarySteps();
+        check(PrevPress);
+        check(NextPress);
+        check(UpPress);
+        check(DownPress);
+        if (steps == 0) {
+            if (altPrev) steps = 1;
+            else if (altNext) steps = -1;
+        }
+        if (steps != 0) devModeCounter = 0;
+        while (steps > 0) {
+            int prevEnabled = findNextEnabled(index, -1);
+            if (prevEnabled < 0) break;
+            index = prevEnabled;
+            steps--;
+            redraw = true;
+        }
+        while (steps < 0) {
+            int nextEnabled = findNextEnabled(index, +1);
+            if (nextEnabled < 0) break;
+            if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
+            index = nextEnabled;
+            steps++;
+            redraw = true;
+        }
+        // Match the rotary encoder's own poll cadence here instead of the
+        // generic 10ms menu-loop pacing, so a backed-up run of detents can
+        // drain without an artificial per-iteration floor on top of it.
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+#else
         if (PrevPress || check(UpPress)) {
             devModeCounter = 0;
 #ifdef HAS_KEYBOARD
@@ -634,7 +634,6 @@ int loopOptions(
             redraw = true;
 #else
             long _tmp = millis();
-#ifndef HAS_ENCODER // T-Embed doesn't need it
             LongPress = true;
             while (PrevPress && menuType != MENU_TYPE_MAIN) {
                 if (millis() - _tmp > 200)
@@ -654,7 +653,6 @@ int loopOptions(
                 tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
             );
             LongPress = false;
-#endif
             if (millis() - _tmp > 700) { // longpress detected to exit
                 index = -1;
                 break;
@@ -675,12 +673,6 @@ int loopOptions(
             }
             redraw = true;
         }
-#ifdef HAS_ENCODER
-        // Match the rotary encoder's own poll cadence here instead of the
-        // generic 10ms menu-loop pacing, so a backed-up run of detents can
-        // drain without an artificial per-iteration floor on top of it.
-        vTaskDelay(4 / portTICK_PERIOD_MS);
-#else
         vTaskDelay(10 / portTICK_PERIOD_MS);
 #endif
 
@@ -755,6 +747,7 @@ Opt_Coord drawOptions(
             fgcolor
         );
     }
+
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
     tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
@@ -764,30 +757,8 @@ Opt_Coord drawOptions(
     int cont = 1;
     menuSize = options.size();
     if (index >= MAX_MENU_SIZE) init = index - MAX_MENU_SIZE + 1;
-    
-    // Calculate selection highlight position
-    int selectedItemPos = -1;
-    for (int j = 0; j < index; j++) {
-        if (j >= init && cont <= MAX_MENU_SIZE) cont++;
-    }
-    selectedItemPos = cont - 1;
-    cont = 1;
-    
     for (i = 0; i < menuSize; i++) {
         if (i >= init) {
-            // Draw selection highlight bar
-            if (i == index) {
-                int16_t cursorY = tft.getCursorY();
-                tft.fillRoundRect(
-                    tftWidth * 0.10 + 2,
-                    cursorY + 2,
-                    tftWidth * 0.8 - 4,
-                    FM * 8,
-                    3,
-                    bruceConfig.priColor
-                );
-            }
-            
             if (options[i].selected) tft.setTextColor(selcolor, bgcolor); // if selected, change Text color
             else tft.setTextColor(fgcolor, bgcolor);
             if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
@@ -803,16 +774,7 @@ Opt_Coord drawOptions(
             } else text += " ";
             text += String(options[i].label) + "              ";
             tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 4);
-            
-            // Draw text with appropriate colors for selection
-            if (i == index) {
-                tft.setTextColor(bgcolor, bruceConfig.priColor);
-            }
             tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
-            
-            // Reset text color for next item
-            tft.setTextColor(fgcolor, bgcolor);
-            
             cont++;
         }
         if (cont > MAX_MENU_SIZE) goto Exit;
