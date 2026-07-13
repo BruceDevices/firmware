@@ -7,10 +7,14 @@
  */
 
 #include "tag_o_matic.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
 
+#if !defined(LITE_VERSION)
+#include "ST25R3916.h"
+#endif
 #include "PN532.h"
 #include "RFID2.h"
 
@@ -37,6 +41,7 @@ TagOMatic::~TagOMatic() {
         _scanned_tags.clear();
     }
     delete _rfid; // Deallocate memory for _rfid object
+    releaseI2CBus();
 }
 
 void TagOMatic::set_rfid_module() {
@@ -47,6 +52,10 @@ void TagOMatic::set_rfid_module() {
 #endif
         case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
         case RC522_SPI_MODULE: _rfid = new RFID2(false); break;
+#if !defined(LITE_VERSION)
+        case ST25R3916_SPI_MODULE: _rfid = new ST25R3916(ST25R3916::SPI_MODE); break;
+        case ST25R3916_I2C_MODULE: _rfid = new ST25R3916(ST25R3916::I2C_MODE); break;
+#endif
         case M5_RFID2_MODULE:
         default: _rfid = new RFID2(); break;
     }
@@ -88,6 +97,7 @@ void TagOMatic::loop() {
             case ERASE_MODE: erase_card(); break;
             case SAVE_MODE: save_file(); break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -190,6 +200,9 @@ void TagOMatic::dump_card_details() {
         padprintln("UID: " + _rfid->printableUID.uid);
         padprintln("ATQA: " + _rfid->printableUID.atqa);
         padprintln("SAK: " + _rfid->printableUID.sak);
+        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
+            padprintln("Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages));
+        }
     } else {
         padprintln("IDm: " + _rfid->printableUID.uid);
         padprintln("PMm: " + _rfid->printableUID.sak);
@@ -309,7 +322,7 @@ void TagOMatic::emulate_card() {
             set_state(EMULATE_MODE);
             break;
         case RFIDInterface::NOT_IMPLEMENTED:
-            displayError("Not implemented for this module.", true);
+            displayError("Card emulation not supported.", true);
             set_state(READ_MODE);
             break;
         case RFIDInterface::FAILURE:
@@ -325,7 +338,7 @@ void TagOMatic::emulate_card() {
 
 void TagOMatic::write_custom_uid() {
     String custom_uid = keyboard("", _rfid->uid.size * 2, "UID (hex):");
-
+    if (custom_uid == "\x1B") return;
     custom_uid.trim();
     custom_uid.replace(" ", "");
     custom_uid.toUpperCase();
@@ -354,7 +367,7 @@ void TagOMatic::erase_card() {
 
     switch (result) {
         case RFIDInterface::TAG_NOT_PRESENT: return; break;
-        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully."); break;
+        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully.", true); break;
         default: displayError("Error erasing data from tag."); break;
     }
 
@@ -420,6 +433,7 @@ void TagOMatic::create_ndef_text() {
     _rfid->ndefMessage.payload[2] = 0x6E;
 
     String ndef_data = keyboard("", NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
 
     for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 3] = ndef_data.charAt(i); }
     _rfid->ndefMessage.payloadSize = i + 3;
@@ -476,6 +490,7 @@ void TagOMatic::create_ndef_url() {
     _rfid->ndefMessage.payload[0] = uic;
 
     String ndef_data = keyboard(prefix, NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
     ndef_data = ndef_data.substring(prefix.length());
 
     for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 1] = ndef_data.charAt(i); }
@@ -496,10 +511,10 @@ void TagOMatic::load_file() {
         _read_uid = true;
 
         options = {
-            {"Clone UID",  [this]() { set_state(CLONE_MODE); }},
-            {"Write data", [this]() { set_state(WRITE_MODE); }},
-            {"Check tag",  [this]() { set_state(CHECK_MODE); }},
-            {"Emulate tag",[this]() { set_state(EMULATE_MODE); }},
+            {"Clone UID",   [this]() { set_state(CLONE_MODE); }  },
+            {"Write data",  [this]() { set_state(WRITE_MODE); }  },
+            {"Check tag",   [this]() { set_state(CHECK_MODE); }  },
+            {"Emulate tag", [this]() { set_state(EMULATE_MODE); }},
         };
 
         loopOptions(options);
@@ -513,6 +528,7 @@ void TagOMatic::save_file() {
     String uid_str = _rfid->printableUID.uid;
     uid_str.replace(" ", "");
     String filename = keyboard(uid_str, 30, "File name:");
+    if (filename == "\x1B") return;
 
     display_banner();
 
@@ -641,7 +657,7 @@ int TagOMatic::write_tag_headless(int timeout_seconds) {
     return finalResult;
 }
 
-String TagOMatic::save_file_headless(String filename) {
+String TagOMatic::save_file_headless(const String &filename) {
     if (!_rfid) return "";
 
     // Check for valid data
@@ -660,15 +676,16 @@ String TagOMatic::save_file_headless(String filename) {
     return ""; // Error
 }
 
-int TagOMatic::load_file_headless(String filename) {
+int TagOMatic::load_file_headless(const String &filename) {
     if (!_rfid) return RFIDInterface::TAG_NOT_PRESENT;
 
     FS *fs;
     if (!getFsStorage(fs)) return RFIDInterface::FAILURE;
 
-    if (!filename.endsWith(".rfid")) { filename += ".rfid"; }
+    String fname = filename;
+    if (!fname.endsWith(".rfid")) { fname += ".rfid"; }
 
-    String filepath = "/BruceRFID/" + filename;
+    String filepath = "/BruceRFID/" + fname;
 
     if (!(*fs).exists(filepath)) {
         return RFIDInterface::TAG_NOT_PRESENT; // File not found

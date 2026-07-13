@@ -8,6 +8,7 @@
 #include "modules/rf/rf_listen.h"
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_send.h"
+#include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_waterfall.h"
 
@@ -27,9 +28,8 @@ void RFMenu::optionsMenu() {
         {"Listen",          rf_listen                 }, // dev_eclipse
 #endif
         {"Bruteforce",      rf_bruteforce             }, // dev_eclipse
-        {"Jammer Itmt",     [=]() { RFJammer(false); }},
+        {"Jammer",          [=]() { RFJammer(true); } },
 #endif
-        {"Jammer Full",     [=]() { RFJammer(true); } },
         {"Config",          [this]() { configMenu(); }},
     };
     addOptionToMainMenu();

@@ -7,6 +7,7 @@
  */
 #if !defined(LITE_VERSION)
 #include "EthernetHelper.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include <ETH.h>
 #include <Network.h>
@@ -22,46 +23,14 @@ static bool connected = false;
 
 /** Select the proper SPI bus for the W5500, reusing existing shared buses when possible. */
 static SPIClass *selectEthernetSPIBus() {
-    SPIClass *selectedSPI = &SPI;
-    if (bruceConfigPins.W5500_bus.mosi == (gpio_num_t)TFT_MOSI &&
-        bruceConfigPins.W5500_bus.mosi != GPIO_NUM_NC) {
-#if TFT_MOSI > 0
-        selectedSPI = &tft.getSPIinstance();
-        Serial.println("Using TFT SPI for Ethernet");
-#else
-        Serial.println("TFT SPI unavailable, falling back to default SPI for Ethernet");
-#endif
-    } else if (bruceConfigPins.W5500_bus.mosi == bruceConfigPins.SDCARD_bus.mosi &&
-               bruceConfigPins.W5500_bus.mosi != GPIO_NUM_NC) {
-        selectedSPI = &sdcardSPI;
-        sdcardSPI.begin(
-            (int8_t)bruceConfigPins.W5500_bus.sck,
-            (int8_t)bruceConfigPins.W5500_bus.miso,
-            (int8_t)bruceConfigPins.W5500_bus.mosi,
-            (int8_t)bruceConfigPins.W5500_bus.cs
-        );
-        Serial.println("Using SDCard SPI for Ethernet");
-    } else if ((bruceConfigPins.W5500_bus.mosi == bruceConfigPins.NRF24_bus.mosi ||
-                bruceConfigPins.W5500_bus.mosi == bruceConfigPins.CC1101_bus.mosi) &&
-               bruceConfigPins.W5500_bus.mosi != GPIO_NUM_NC) {
-        selectedSPI = &CC_NRF_SPI;
-        CC_NRF_SPI.begin(
-            (int8_t)bruceConfigPins.W5500_bus.sck,
-            (int8_t)bruceConfigPins.W5500_bus.miso,
-            (int8_t)bruceConfigPins.W5500_bus.mosi,
-            (int8_t)bruceConfigPins.W5500_bus.cs
-        );
-        Serial.println("Using CC/NRF SPI for Ethernet");
-    } else {
-        SPI.begin(
-            (int8_t)bruceConfigPins.W5500_bus.sck,
-            (int8_t)bruceConfigPins.W5500_bus.miso,
-            (int8_t)bruceConfigPins.W5500_bus.mosi,
-            (int8_t)bruceConfigPins.W5500_bus.cs
-        );
-        Serial.println("Using dedicated SPI for Ethernet");
+    SPIClass *bus = acquireSPIBus(
+        bruceConfigPins.W5500_bus.sck, bruceConfigPins.W5500_bus.miso, bruceConfigPins.W5500_bus.mosi
+    );
+    if (!bus) {
+        Serial.println("No hardware SPI bus available for Ethernet, falling back to default SPI");
+        return &SPI;
     }
-    return selectedSPI;
+    return bus;
 }
 
 /** Event handler for Ethernet events */

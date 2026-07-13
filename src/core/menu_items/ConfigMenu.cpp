@@ -1,11 +1,11 @@
 #include "ConfigMenu.h"
+#include "../mykeyboard.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/main_menu.h"
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "../mykeyboard.h"
 #ifdef HAS_RGB_LED
 #include "core/led_control.h"
 #endif
@@ -32,6 +32,7 @@ void ConfigMenu::optionsMenu() {
             {"System Config", [this]() { systemMenu(); }   },
             {"Power",         [this]() { powerMenu(); }    },
         };
+
 #if !defined(LITE_VERSION)
         if (!appStoreInstalled()) {
             localOptions.push_back({"Install App Store", []() { installAppStoreJS(); }});
@@ -170,7 +171,7 @@ void ConfigMenu::systemMenu() {
             {"Startup App",                                                         [this]() { setStartupApp(); }        },
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {"Clock",                                                               [this]() { setClock(); }             },
-            {String("Keyboard Language: ") + bruceConfig.keyboardLang,             [this]() { setKeyboardLanguage(); }  },
+            {String("Keyboard Language: ") + bruceConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
             {"Back",                                                                []() {}                              },
         };
@@ -265,6 +266,7 @@ void ConfigMenu::devMenu() {
             {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
 #if !defined(LITE_VERSION)
             {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
+            {"ST25R3916 Pins",  [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
             {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
 #endif
             {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
@@ -316,7 +318,7 @@ void ConfigMenu::switchToUARTSerial() {
         bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
 
     // Configure UART pins and switch serial output

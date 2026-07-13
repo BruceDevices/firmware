@@ -214,7 +214,7 @@ extern "C" uint16_t tusb_hid_load_descriptor(uint8_t *dst, uint8_t *itf) {
             tinyusb_hid_device_descriptor_len,
             ep_out,
             (uint8_t)(0x80 | ep_in),
-            CFG_TUD_ENDOINT_SIZE,
+            CFG_TUD_ENDPOINT_SIZE,
             1
         )
     };

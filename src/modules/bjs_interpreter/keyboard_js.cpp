@@ -74,7 +74,7 @@ static JSValue keyboard_wrapper(JSContext *ctx, JSValue *argv, int argc, Keyboar
             case KEYBOARD_NUM: result = num_keyboard(""); break;
         }
     }
-
+    if (result == "\x1B") result = "";
     return JS_NewString(ctx, result.c_str());
 }
 

@@ -8,6 +8,7 @@
 
 #include "PN532.h"
 #include "apdu.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/sd_functions.h"
@@ -259,24 +260,39 @@ PN532::PN532(CONNECTION_TYPE connection_type) {
 #ifdef M5STICK
     else if (connection_type == CONNECTION_TYPE::I2C_SPI) nfc.setInterface(GPIO_NUM_26, GPIO_NUM_25);
 #endif
-    else nfc.setInterface(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_SS_PIN);
+    else
+        nfc.setInterface(
+            bruceConfigPins.PN532_bus.sck,
+            bruceConfigPins.PN532_bus.miso,
+            bruceConfigPins.PN532_bus.mosi,
+            bruceConfigPins.PN532_bus.cs
+        );
 }
 
 bool PN532::begin() {
+    TwoWire *Wire = nullptr;
 #ifdef M5STICK
     if (_connection_type == CONNECTION_TYPE::I2C_SPI) {
-        Wire.begin(GPIO_NUM_26, GPIO_NUM_25);
+        Wire = acquireI2CBus(GPIO_NUM_26, GPIO_NUM_25);
     } else if (_connection_type == CONNECTION_TYPE::I2C) {
-        Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+        Wire = acquireI2CBus();
     }
 #else
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    Wire = acquireI2CBus();
 #endif
 
+    if (_use_i2c && Wire != &::Wire) {
+        // The vendored Adafruit_PN532/Adafruit_I2CDevice libs always talk to the default global
+        // `Wire` object and have no way to be pointed at another TwoWire instance. If bus_HAL had
+        // to remap i2c_bus to Wire1 to avoid colliding with sys_i2c, PN532 can't work here.
+        displayError("I2C bus conflicts with system I2C bus", true);
+        return false;
+    }
+
     bool i2c_check = true;
-    if (_use_i2c) {
-        Wire.beginTransmission(PN532_I2C_ADDRESS);
-        int error = Wire.endTransmission();
+    if (_use_i2c && Wire != nullptr) {
+        Wire->beginTransmission(PN532_I2C_ADDRESS);
+        int error = Wire->endTransmission();
         i2c_check = (error == 0);
     }
 
@@ -425,8 +441,9 @@ int PN532::emulate() {
 
     if (_use_i2c) {
         // PN532 target mode is sensitive to ESP32 I2C timing/clock stretching.
-        Wire.setClock(100000);
-        Wire.setTimeOut(50);
+        TwoWire *Wire = acquireI2CBus();
+        Wire->setClock(100000);
+        Wire->setTimeOut(50);
     }
     // `begin()` already wakes and SAMConfig's the PN532. Avoid reusing Adafruit's I2C RDY polling path here.
 
@@ -483,9 +500,10 @@ int PN532::emulate() {
             if (p1 == ApduCommand::C_APDU_P1_SELECT_BY_ID) {
                 if (p2 != 0x0C) {
                     response = kSwOk;
-                } else if (lc == 2 && apdu.size() >= 7 && apdu[ApduCommand::C_APDU_DATA] == 0xE1 &&
-                           (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03 ||
-                            apdu[ApduCommand::C_APDU_DATA + 1] == 0x04)) {
+                } else if (
+                    lc == 2 && apdu.size() >= 7 && apdu[ApduCommand::C_APDU_DATA] == 0xE1 &&
+                    (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03 || apdu[ApduCommand::C_APDU_DATA + 1] == 0x04)
+                ) {
                     currentFile = (apdu[ApduCommand::C_APDU_DATA + 1] == 0x03) ? TagFile::CC : TagFile::NDEF;
                     response = kSwOk;
                 } else {
@@ -582,7 +600,7 @@ int PN532::load() {
     return SUCCESS;
 }
 
-int PN532::save(String filename) {
+int PN532::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 
@@ -786,6 +804,7 @@ int PN532::read_mifare_classic_data_sector(byte sector) {
 }
 
 int PN532::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     uint8_t successA = 0;
     uint8_t successB = 0;
 

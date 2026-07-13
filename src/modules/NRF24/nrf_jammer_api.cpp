@@ -99,7 +99,24 @@ void updateBLEJammer() {
         }
         if (channels && channelCount > 0) {
             currentChannelIndex = (currentChannelIndex + 1) % channelCount;
-            NRFradio.setChannel(channels[currentChannelIndex]);
+            uint8_t ch = channels[currentChannelIndex];
+            // FIX: Full power cycle required for reliable channel changes.
+            // Bare setChannel() during active CW leaves the PLL in an
+            // undefined state on many PA+LNA modules — carrier freezes
+            // or stops after the first hop.
+            NRFradio.stopConstCarrier();
+            delayMicroseconds(500);
+            NRFradio.powerDown();
+            delayMicroseconds(500);
+            NRFradio.powerUp();
+            delayMicroseconds(200);
+            NRFradio.setChannel(ch);
+            // Re-apply settings — power cycle clears radio registers
+            NRFradio.setPALevel(currentPowerLevel);
+            NRFradio.setDataRate(RF24_2MBPS);
+            NRFradio.setAddressWidth(3);
+            NRFradio.setPayloadSize(2);
+            NRFradio.startConstCarrier(currentPowerLevel, ch);
             lastChannelHop = millis();
         }
     }
@@ -108,7 +125,10 @@ void updateBLEJammer() {
 void stopBLEJammer() {
     if (!bleJammingActive) return;
     NRF24_MODE mode = nrf_setMode();
-    if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+    if (CHECK_NRF_SPI(mode)) {
+        NRFradio.stopConstCarrier();
+        NRFradio.powerDown(); // FIX: explicit power-down for clean shutdown
+    }
     bleJammingActive = false;
     isHopping = false;
     currentChannelIndex = 0;

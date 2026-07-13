@@ -54,7 +54,7 @@ void PN532KillerTools::setup() {
         bruceConfigPins.CC1101_bus.checkConflict(TXD_PIN) ||
         bruceConfigPins.NRF24_bus.checkConflict(RXD_PIN) ||
         bruceConfigPins.NRF24_bus.checkConflict(TXD_PIN)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
     pinMode(RXD_PIN, INPUT);
     pinMode(TXD_PIN, OUTPUT);

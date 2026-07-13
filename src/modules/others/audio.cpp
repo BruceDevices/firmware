@@ -1,6 +1,10 @@
 #include "audio.h"
 #include "core/mykeyboard.h"
 
+#if __has_include(<M5Unified.h>)
+#include <M5Unified.h>
+#endif
+
 #if defined(HAS_NS4168_SPKR)
 #include "AudioFileSourceFunction.h"
 #include "AudioGeneratorAAC.h"
@@ -509,6 +513,7 @@ bool playAudioFile(FS *fs, String filepath, PlaybackMode mode) {
 
         while (generator->isRunning()) {
             if (!generator->loop() || check(AnyKeyPress)) { generator->stop(); }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         audioout->stop();
@@ -577,6 +582,7 @@ bool playAudioRTTTLString(String song, PlaybackMode mode) {
 
         while (generator->isRunning()) {
             if (!generator->loop() || check(AnyKeyPress)) { generator->stop(); }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         audioout->stop();
@@ -642,7 +648,7 @@ bool tts(String text, PlaybackMode mode) {
     return true;
 }
 
-bool isAudioFile(String filepath) {
+bool isAudioFile(const String &filepath) {
     return filepath.endsWith(".opus") || filepath.endsWith(".rtttl") || filepath.endsWith(".txt") ||
            filepath.endsWith(".wav") || filepath.endsWith(".mod") || filepath.endsWith(".mp3") ||
            filepath.endsWith(".aac") || filepath.endsWith(".flac");
@@ -654,6 +660,9 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
+        if (frequency == 0 && duration > 0) {
+            delay(duration);
+        }
         _setup_codec_speaker(false);
         return;
     }
@@ -709,6 +718,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
 
     while (wav->isRunning()) {
         if (!wav->loop() || check(AnyKeyPress)) { wav->stop(); }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     delete file;
@@ -726,6 +736,17 @@ void _tone(unsigned int frequency, unsigned long duration) {
 #if defined(BUZZ_PIN)
     tone(BUZZ_PIN, frequency, duration);
 #elif defined(HAS_NS4168_SPKR)
+#if __has_include(<M5Unified.h>)
+    if (frequency == 0) {
+        if (duration > 0) delay(duration);
+    } else {
+        uint8_t m5vol = (bruceConfig.soundVolume * 255) / AUDIO_VOLUME_MAX;
+        M5.Speaker.setVolume(m5vol);
+        M5.Speaker.tone(frequency, duration);
+        if (duration > 0) delay(duration);
+    }
+#else
     playTone(frequency, duration, 0);
+#endif
 #endif
 }

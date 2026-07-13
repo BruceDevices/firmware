@@ -62,6 +62,10 @@ void RFIDMenu::optionsMenu() {
 #endif
     else if (bruceConfigPins.rfidModule == PN532_SPI_MODULE) txt += " (PN532-SPI)";
     else if (bruceConfigPins.rfidModule == RC522_SPI_MODULE) txt += " (RC522-SPI)";
+#if !defined(LITE_VERSION)
+    else if (bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE) txt += " (ST25R-SPI)";
+    else if (bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE) txt += " (ST25R-I2C)";
+#endif
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
 }
 

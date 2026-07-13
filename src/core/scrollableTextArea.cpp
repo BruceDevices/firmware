@@ -76,11 +76,11 @@ void ScrollableTextArea::show(bool force) {
 
     while (check(SelPress)) {
         update(force);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         update(force);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

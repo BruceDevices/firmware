@@ -111,6 +111,7 @@ EspSerialCmd::Message EspSerialCmd::createCmdMessage() {
     delay(500);
 
     String command = keyboard("", ESP_DATA_SIZE, "Serial Command");
+    if (command == "\x1B") command = "";
     Message msg = createMessage(command);
     printMessage(msg);
 

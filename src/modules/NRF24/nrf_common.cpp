@@ -1,4 +1,5 @@
 #include "nrf_common.h"
+#include "../../core/bus_HAL.h"
 #include "../../core/mykeyboard.h"
 
 RF24 NRFradio(bruceConfigPins.NRF24_bus.io0, bruceConfigPins.NRF24_bus.cs);
@@ -23,7 +24,7 @@ void nrf_info() {
         "things go wrong."
     );
     delay(1000);
-    while (!check(AnyKeyPress));
+    while (!check(AnyKeyPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
 }
 
 bool nrf_start(NRF24_MODE mode) {
@@ -33,7 +34,7 @@ bool nrf_start(NRF24_MODE mode) {
     if (CHECK_NRF_UART(mode)) {
         if (USBserial.getSerialOutput() == &Serial1) {
             displayError("(E) UART already in use", true);
-            return false;
+            result = false;
         }
         NRFSerial.begin(115200, SERIAL_8N1, bruceConfigPins.uart_bus.rx, bruceConfigPins.uart_bus.tx);
         Serial.println("NRF24 on Serial Started");
@@ -41,37 +42,22 @@ bool nrf_start(NRF24_MODE mode) {
     };
 
     if (!CHECK_NRF_SPI(mode)) return result;
+
+    // Always re-assert CE LOW and CS HIGH before begin() — these pins
+    // may have been left in an indeterminate state by the previous session,
+    // especially after stopConstCarrier() which can leave CE HIGH internally.
     pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
     digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
     pinMode(bruceConfigPins.NRF24_bus.io0, OUTPUT);
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+    delay(5); // Let pins settle before SPI traffic
 
-    if (bruceConfigPins.NRF24_bus.mosi == (gpio_num_t)TFT_MOSI &&
-        bruceConfigPins.NRF24_bus.mosi != GPIO_NUM_NC) { // (T_EMBED), CORE2 and others
-#if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
-        NRFSPI = &tft.getSPIinstance();
-#else
-        NRFSPI = &SPI;
-#endif
-
-    } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.SDCARD_bus.mosi) {
-        // CC1101 shares SPI with SDCard (Cardputer and CYDs)
-
-        NRFSPI = &sdcardSPI;
-    } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&
-               bruceConfigPins.NRF24_bus.mosi != bruceConfigPins.SDCARD_bus.mosi) {
-        // Smoochie board shares CC1101 and NRF24 SPI bus with different CS pins at
-        // the same time, different from StickCs that uses the same Bus, but one at a
-        // time (same CS Pin)
-        NRFSPI = &CC_NRF_SPI;
-    } else {
+    NRFSPI =
+        acquireSPIBus(bruceConfigPins.NRF24_bus.sck, bruceConfigPins.NRF24_bus.miso, bruceConfigPins.NRF24_bus.mosi);
+    if (!NRFSPI) {
+        Serial.println("No hardware SPI bus available for NRF24, falling back to default SPI");
         NRFSPI = &SPI;
     }
-    NRFSPI->begin(
-        (int8_t)bruceConfigPins.NRF24_bus.sck,
-        (int8_t)bruceConfigPins.NRF24_bus.miso,
-        (int8_t)bruceConfigPins.NRF24_bus.mosi
-    );
     delay(10);
 
     if (NRFradio.begin(
@@ -88,12 +74,33 @@ bool nrf_start(NRF24_MODE mode) {
 
 NRF24_MODE nrf_setMode() {
     NRF24_MODE mode = NRF_MODE_DISABLED;
-    options = {
-        {"SPI Mode",  [&]() { mode = NRF_MODE_SPI; } },
-        {"SPI UART",  [&]() { mode = NRF_MODE_UART; }},
-        {"SPI BOTH",  [&]() { mode = NRF_MODE_BOTH; }},
-        {"Main Menu", [=]() { returnToMenu = true; } }
-    };
-    loopOptions(options);
+    bool nrfSPI = true;
+    bool nrfUART = true;
+    if (bruceConfigPins.NRF24_bus.checkConflict(GPIO_NUM_NC)) {
+        displayError("NRF24 pins not configured", true);
+        nrfSPI = false;
+    }
+    // Serial UART oly display errors on Serial Monitor
+    if (bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
+        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
+        Serial.println("NRF24 pins conflict with UART pins");
+        nrfUART = false;
+    }
+    if (bruceConfigPins.uart_bus.checkConflict(GPIO_NUM_NC)) {
+        Serial.println("UART pins not configured");
+        nrfUART = false;
+    }
+    if (nrfSPI && nrfUART) {
+        // FIX: having both valid SPI pins AND valid UART pins is not an error.
+        // A UART-NRF can't be reliably auto-detected from pin config, so when the
+        // SPI pins are configured, default to SPI (the common case — e.g. the
+        // M5Stick RF Pack S3 with an SPI nRF24). Previously this branch wrongly
+        // raised "NRF24 pins undefined", blocking every SPI-only NRF24 device.
+        mode = NRF_MODE_SPI;
+    } else if (nrfSPI) {
+        mode = NRF_MODE_SPI;
+    } else if (nrfUART) {
+        mode = NRF_MODE_UART;
+    }
     return mode;
 }

@@ -68,15 +68,15 @@ bool Arduino_PN532_SRIX::SAMConfig() {
 
 void Arduino_PN532_SRIX::readData(uint8_t *buffer, uint8_t n) {
     delay(2);
-    Wire.requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)(n + 2));
+    _wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)(n + 2));
 
     // Discard RDY byte
-    Wire.read();
+    _wire->read();
 
     // Read data
     for (uint8_t i = 0; i < n; i++) {
         delay(1);
-        buffer[i] = Wire.read();
+        buffer[i] = _wire->read();
     }
 }
 
@@ -108,10 +108,10 @@ bool Arduino_PN532_SRIX::isReady() {
     if (_irq == 255) {
         // Request 1 byte from PN532 (Status Byte)
         delayMicroseconds(500);
-        Wire.requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
+        _wire->requestFrom((uint8_t)PN532_I2C_ADDRESS, (uint8_t)1);
 
         // If no response or bus locked, assume not ready
-        if (!Wire.available()) {
+        if (!_wire->available()) {
 #ifdef SRIX_LIB_DEBUG
             Serial.println("[PN532] isReady: No response from I2C (bus busy or chip offline)");
 #endif
@@ -119,7 +119,7 @@ bool Arduino_PN532_SRIX::isReady() {
         }
 
         // Read status byte
-        uint8_t status = Wire.read();
+        uint8_t status = _wire->read();
 
 #ifdef SRIX_LIB_DEBUG
         Serial.print("[PN532] Status byte: 0x");
@@ -169,28 +169,28 @@ void Arduino_PN532_SRIX::writeCommand(uint8_t *command, uint8_t commandLength) {
 
     delay(2); // Wakeup delay
 
-    Wire.beginTransmission(PN532_I2C_ADDRESS);
+    _wire->beginTransmission(PN532_I2C_ADDRESS);
 
     checksum = PN532_PREAMBLE + PN532_STARTCODE1 + PN532_STARTCODE2;
-    Wire.write(PN532_PREAMBLE);
-    Wire.write(PN532_STARTCODE1);
-    Wire.write(PN532_STARTCODE2);
+    _wire->write(PN532_PREAMBLE);
+    _wire->write(PN532_STARTCODE1);
+    _wire->write(PN532_STARTCODE2);
 
-    Wire.write(commandLength);
-    Wire.write(~commandLength + 1);
+    _wire->write(commandLength);
+    _wire->write(~commandLength + 1);
 
-    Wire.write(PN532_HOSTTOPN532);
+    _wire->write(PN532_HOSTTOPN532);
     checksum += PN532_HOSTTOPN532;
 
     for (uint8_t i = 0; i < commandLength - 1; i++) {
-        Wire.write(command[i]);
+        _wire->write(command[i]);
         checksum += command[i];
     }
 
-    Wire.write((uint8_t)~checksum);
-    Wire.write(PN532_POSTAMBLE);
+    _wire->write((uint8_t)~checksum);
+    _wire->write(PN532_POSTAMBLE);
 
-    Wire.endTransmission();
+    _wire->endTransmission();
 }
 
 bool Arduino_PN532_SRIX::sendCommandCheckAck(uint8_t *command, uint8_t commandLenght, uint16_t timeout) {

@@ -28,9 +28,9 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
-    CC_NRF_SPI.begin(XPT2046_SPI_BUS_SCLK_IO_NUM, XPT2046_SPI_BUS_MISO_IO_NUM, XPT2046_SPI_BUS_MOSI_IO_NUM);
-    if (!touch.begin(&CC_NRF_SPI)) { Serial.println("Touchscreen initialization failed!"); }
-    ELECHOUSE_cc1101.setSPIinstance(&CC_NRF_SPI);
+    AUX_SPI.begin(XPT2046_SPI_BUS_SCLK_IO_NUM, XPT2046_SPI_BUS_MISO_IO_NUM, XPT2046_SPI_BUS_MOSI_IO_NUM);
+    if (!touch.begin(&AUX_SPI)) { Serial.println("Touchscreen initialization failed!"); }
+    ELECHOUSE_cc1101.setSPIinstance(&AUX_SPI);
 #define TFT_BRIGHT_CHANNEL 0
 #define TFT_BRIGHT_Bits 8
 #define TFT_BRIGHT_FREQ 5000
