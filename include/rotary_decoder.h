@@ -63,10 +63,7 @@ static const int8_t ROTARY_DECODER_ENC_TABLE[16] = {
 
 class RotaryDecoder {
 public:
-    // Default of 4 matches a standard quadrature encoder (4 raw transitions
-    // per mechanical detent). Only override this if a board's specific
-    // hardware genuinely latches twice as often.
-    void begin(uint8_t pinA, uint8_t pinB, uint8_t stepsPerDetent = 4) {
+    void begin(uint8_t pinA, uint8_t pinB, uint8_t stepsPerDetent = 2) {
         _pinA = pinA;
         _pinB = pinB;
         _stepsPerDetent = stepsPerDetent;
@@ -108,7 +105,7 @@ public:
 private:
     uint8_t _pinA = 0;
     uint8_t _pinB = 0;
-    uint8_t _stepsPerDetent = 4;
+    uint8_t _stepsPerDetent = 2;
     uint8_t _abState = 0;
     int8_t _accum = 0;
     // Written by the dedicated encoder-poll task, read by InputHandler()
