@@ -148,9 +148,9 @@ struct keyStroke { // DO NOT CHANGE IT!!!!!
         fn = false;
         del = false;
         enter = false;
-        alt = false;
-        ctrl = false;
-        gui = false;
+        bool alt = false;
+        bool ctrl = false;
+        bool gui = false;
         modifiers = 0;
         word.clear();
         hid_keys.clear();
@@ -226,6 +226,25 @@ extern String menuOptionLabel;
 
 #ifdef HAS_ENCODER_LED
 extern volatile int EncoderLedChange;
+#endif
+
+#ifdef HAS_ENCODER
+// Net signed rotary encoder steps not yet applied to any menu/list index,
+// independent from the single-shot NextPress/PrevPress bools. Written by
+// each board's InputHandler() every time it reads a new encoder position;
+// drained by a consumer (e.g. loopOptions()) with drainRotarySteps() below.
+// This lets a consumer apply the *entire* pending backlog in one pass
+// instead of being limited to one step per redraw, so a fast spin followed
+// by an equal spin back lands on the exact same item instead of drifting.
+extern volatile int32_t RotaryNetSteps;
+
+// Atomically reads and clears the pending step count, without losing any
+// steps that get added concurrently between the read and the clear.
+static inline int32_t drainRotarySteps() {
+    int32_t steps = RotaryNetSteps;
+    RotaryNetSteps -= steps;
+    return steps;
+}
 #endif
 
 extern TaskHandle_t xHandle;
