@@ -1321,6 +1321,16 @@ String generalKeyboard(
 
             last_input_time = millis();
         }
+#ifdef HAS_ENCODER
+        // Without this, this loop spins as fast as the CPU allows, which can
+        // outrun InputHandler()'s own writes: it updates RotaryNetSteps and
+        // the NextPress/PrevPress bools in separate steps, not atomically,
+        // so a tight loop can observe them torn across two iterations and
+        // count the same physical detent twice (once via the drained step
+        // count, once via the bool fallback). Pacing this loop the same as
+        // the menu list's own loop closes that window.
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+#endif
     }
 
     // Resets screen when finished writing
