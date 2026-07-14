@@ -533,17 +533,10 @@ int loopOptions(
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
-        // Keyboard shortcuts are only processed on the main menu (their purpose is to start
-        // apps without navigating the menus). The menuType check MUST come first so that
-        // checkShortcutPress() is not called inside the submenu a shortcut just opened —
-        // otherwise, while the key is still held, the shortcut re-fires and opens a second
-        // nested copy of the menu (requiring an extra ESC to back out of each level).
-        //
-        // A shortcut runs an app via optionsMenu(), which refills the shared global `options`
-        // vector (held here by reference) and draws over the screen. Break so the caller
-        // (MainMenu::begin, re-invoked each loop()) rebuilds the menu from scratch — exactly
-        // what selecting an option does. Repainting in place would instead render the now-stale
-        // `options` (the app's items, which lack the main-menu hover lambda) as an overlay list.
+        // Only process shortcuts on the main menu; the menuType check must short-circuit
+        // checkShortcutPress() so a held key can't re-fire inside the submenu it just opened.
+        // Break so the caller rebuilds the menu, since the shortcut refilled the shared global
+        // `options` (like selecting an option does) rather than repainting stale options.
         if (menuType == MENU_TYPE_MAIN && checkShortcutPress()) break;
 #endif
 
