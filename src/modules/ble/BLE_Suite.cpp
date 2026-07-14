@@ -4075,10 +4075,10 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    // Simple callback class with fixed buffers to avoid memory issues
+    // Simple callback class with fixed buffers - using enum for compile-time constant
     class TargetSelectionCallbacks : public NimBLEScanCallbacks {
     public:
-        static const int MAX_DEVICES = 100;
+        enum { MAX_DEVICES = 100 };
         String names[MAX_DEVICES];
         String addresses[MAX_DEVICES];
         int rssis[MAX_DEVICES];
