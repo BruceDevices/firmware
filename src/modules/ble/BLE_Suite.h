@@ -1,14 +1,14 @@
 #ifndef BLE_SUITE_H
 #define BLE_SUITE_H
 #if !defined(LITE_VERSION)
-#include <NimBLEDevice.h>
-#include "fastpair_crypto.h"
 #include "HFP_Exploit.h"
+#include "fastpair_crypto.h"
+#include <NimBLEDevice.h>
 #include <WString.h>
-#include <vector>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <functional>
+#include <vector>
 
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
@@ -46,6 +46,12 @@
 #endif
 #ifndef TFT_DARKGREEN
 #define TFT_DARKGREEN 0x03E0
+#endif
+#ifndef TFT_PURPLE
+#define TFT_PURPLE 0x780F
+#endif
+#ifndef TFT_LIGHTGREY
+#define TFT_LIGHTGREY 0xC618
 #endif
 
 extern volatile int tftWidth;
@@ -503,6 +509,9 @@ void runFastPairHIDChain(NimBLEAddress target);
 void runUniversalAttack(NimBLEAddress target);
 String selectFileFromSD();
 bool loadScriptFromSD(const String &filename);
+
+// BLE Sniffer
+void BLE_Sniffer();
 
 // Forward declarations for submenu functions
 void showFastPairSubMenu(NimBLEAddress target);
