@@ -4075,8 +4075,8 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    const int ACTIVE_SCAN_TIME = 15;
-    const int PASSIVE_SCAN_TIME = 15;
+    const int ACTIVE_SCAN_TIME = 10;
+    const int PASSIVE_SCAN_TIME = 10;
 
     // === ACTIVE SCAN ===
     pBLEScan->setActiveScan(true);
@@ -4084,7 +4084,7 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 80);
-    tft.print("Active scan (15s)...");
+    tft.print("Active scan (10s)...");
 
 #ifdef NIMBLE_V2_PLUS
     BLEScanResults activeResults = pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
@@ -4098,7 +4098,7 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 100);
-    tft.print("Passive scan (15s)...");
+    tft.print("Passive scan (10s)...");
 
 #ifdef NIMBLE_V2_PLUS
     BLEScanResults passiveResults = pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
@@ -4175,6 +4175,7 @@ String selectTargetFromScan(const char *title) {
         );
     }
 
+    // SAFER CLEANUP - Only stop BLE if we started it
     pBLEScan->stop();
     pBLEScan->clearResults();
 
