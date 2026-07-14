@@ -486,7 +486,7 @@ int loopOptions(
         );
     if (index >= options.size()) index = 0;
     bool firstRender = true;
-    static unsigned long menuOpenTs = 0; // timestamp when menu was first rendered
+    unsigned long menuOpenTs = 0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
