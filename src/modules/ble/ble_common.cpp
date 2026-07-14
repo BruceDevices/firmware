@@ -273,7 +273,7 @@ void disPlayBLESend() {
     drawMainBorder(); // Moved up to avoid drawing screen issues
     tft.setTextSize(1);
 
-    pService->start();
+    // pService->start() is deprecated in NimBLE v2 - services start automatically with the server
     pServer->getAdvertising()->start();
 
     uint64_t chipid = ESP.getEfuseMac();
