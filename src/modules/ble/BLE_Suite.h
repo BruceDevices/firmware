@@ -1,6 +1,10 @@
 #ifndef BLE_SUITE_H
 #define BLE_SUITE_H
 #if !defined(LITE_VERSION)
+
+// Include display header FIRST so TFT color definitions are available
+#include "core/display.h"
+
 #include "HFP_Exploit.h"
 #include "fastpair_crypto.h"
 #include <NimBLEDevice.h>
@@ -14,7 +18,7 @@
 #define NIMBLE_V2_PLUS 1
 #endif
 
-// TFT color definitions are in VectorDisplay.h - do not redefine here
+// TFT color definitions are now included from display.h - do not redefine here
 
 extern volatile int tftWidth;
 extern volatile int tftHeight;
