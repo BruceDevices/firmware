@@ -4894,16 +4894,16 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
                 int idx = scrollOffset + i;
                 int yPos = 60 + (i * 25);
 
-                int availWidth =
-                    (tftWidth - 40) - 20;
+                int availWidth = (tftWidth - 40) - 20;
 
                 String displayText = options[idx];
 
-                if (tft.textWidth(displayText) > availWidth) {
+                // FIX: Use .c_str() for String to const char* conversion (required for headless ESP32-S3)
+                if (tft.textWidth(displayText.c_str()) > availWidth) {
                     String ellipsis = "...";
-                    int ellipsisWidth = tft.textWidth(ellipsis);
+                    int ellipsisWidth = tft.textWidth(ellipsis.c_str());
                     while (displayText.length() > 0 &&
-                           tft.textWidth(displayText) + ellipsisWidth > availWidth) {
+                           tft.textWidth(displayText.c_str()) + ellipsisWidth > availWidth) {
                         displayText.remove(displayText.length() - 1);
                     }
                     displayText += ellipsis;
