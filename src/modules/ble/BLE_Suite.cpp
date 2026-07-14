@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 14/07/2026
+ * Last Updated: 2026-01-24
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
@@ -4061,32 +4061,37 @@ String selectTargetFromScan(const char *title) {
     tft.setTextSize(2);
     // FIX: Truncate title if too long for small screens
     String titleStr = String(title);
-    int maxTitleWidth = tftWidth - 20; // Leave 10px padding on each side
+    int maxTitleWidth = tftWidth - 20;
     if (tft.textWidth(titleStr.c_str()) > maxTitleWidth) {
         while (titleStr.length() > 0 && tft.textWidth((titleStr + "...").c_str()) > maxTitleWidth) {
             titleStr.remove(titleStr.length() - 1);
         }
         titleStr += "...";
     }
-    tft.setCursor(10, 15); // Left align with padding
+    tft.setCursor(10, 15);
     tft.print(titleStr);
     tft.setTextSize(1);
 
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    // Custom callback class to collect devices
+    // Simple callback class with fixed buffers to avoid memory issues
     class TargetSelectionCallbacks : public NimBLEScanCallbacks {
     public:
-        std::vector<String> names;
-        std::vector<String> addresses;
-        std::vector<int> rssis;
-        std::vector<bool> fastPairs;
-        std::vector<bool> hfps;
-        std::vector<uint8_t> types;
+        static const int MAX_DEVICES = 100;
+        String names[MAX_DEVICES];
+        String addresses[MAX_DEVICES];
+        int rssis[MAX_DEVICES];
+        bool fastPairs[MAX_DEVICES];
+        bool hfps[MAX_DEVICES];
+        uint8_t types[MAX_DEVICES];
+        int count;
 
-        // FIX: Add 'const' for NimBLE v2.5 compatibility
+        TargetSelectionCallbacks() : count(0) {}
+
         void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
+            if (count >= MAX_DEVICES) return;
+
             String name = String(advertisedDevice->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 name = "Unknown";
@@ -4110,38 +4115,29 @@ String selectTargetFromScan(const char *title) {
                 if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
             }
 
-            // Check for duplicates (update RSSI if exists)
-            for (size_t i = 0; i < addresses.size(); i++) {
+            // Check for duplicates
+            for (int i = 0; i < count; i++) {
                 if (addresses[i] == address) {
-                    // Update RSSI with strongest signal
                     if (rssi > rssis[i]) rssis[i] = rssi;
                     return;
                 }
             }
 
-            names.push_back(name);
-            addresses.push_back(address);
-            rssis.push_back(rssi);
-            fastPairs.push_back(fastPair);
-            hfps.push_back(hasHFP);
-            types.push_back(deviceType);
-        }
-
-        void clear() {
-            names.clear();
-            addresses.clear();
-            rssis.clear();
-            fastPairs.clear();
-            hfps.clear();
-            types.clear();
+            names[count] = name;
+            addresses[count] = address;
+            rssis[count] = rssi;
+            fastPairs[count] = fastPair;
+            hfps[count] = hasHFP;
+            types[count] = deviceType;
+            count++;
         }
     };
 
     TargetSelectionCallbacks callbacks;
     pBLEScan->setScanCallbacks(&callbacks);
 
-    const int ACTIVE_SCAN_TIME = 15;
-    const int PASSIVE_SCAN_TIME = 15;
+    const int ACTIVE_SCAN_TIME = 10;
+    const int PASSIVE_SCAN_TIME = 10;
 
     // === ACTIVE SCAN ===
     pBLEScan->setActiveScan(true);
@@ -4149,7 +4145,7 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 80);
-    tft.print("Active scan (15s)...");
+    tft.print("Active scan (10s)...");
 
     pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
 
@@ -4159,12 +4155,12 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 100);
-    tft.print("Passive scan (15s)...");
+    tft.print("Passive scan (10s)...");
 
     pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
 
     // Transfer collected data to scannerData
-    for (size_t i = 0; i < callbacks.addresses.size(); i++) {
+    for (int i = 0; i < callbacks.count; i++) {
         scannerData.addDevice(
             callbacks.names[i],
             callbacks.addresses[i],
@@ -4175,9 +4171,14 @@ String selectTargetFromScan(const char *title) {
         );
     }
 
+    // Clear callbacks to prevent dangling pointer
+    pBLEScan->setScanCallbacks(nullptr);
     pBLEScan->stop();
     pBLEScan->clearResults();
-    if (!bleWasActiveBefore) { stopBLEStack(); }
+
+    if (!bleWasActiveBefore) {
+        stopBLEStack();
+    }
 
     size_t deviceCount = scannerData.size();
 
