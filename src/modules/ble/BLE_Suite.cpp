@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 2026-01-24
+ * Last Updated: 14/07/2026
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
