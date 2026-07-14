@@ -699,38 +699,40 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
         }
 #endif
 
-#ifdef HAS_ENCODER
-        int32_t rotarySteps = drainRotarySteps();
-        if (rotarySteps != 0) {
-            check(PrevPress);
-            check(NextPress);
-            check(UpPress);
-            check(DownPress);
-            while (rotarySteps > 0) {
-                if (index == 0) index = maxFiles;
-                else if (index > 0) index--;
-                rotarySteps--;
-                redraw = true;
-            }
-            while (rotarySteps < 0) {
-                if (index == maxFiles) index = 0;
-                else index++;
-                rotarySteps++;
-                redraw = true;
-            }
-        } else
-#endif
         {
-            if (check(PrevPress) || check(UpPress)) {
-                if (index == 0) index = maxFiles;
-                else if (index > 0) index--;
-                redraw = true;
-            }
-            /* DW Btn to next item */
-            if (check(NextPress) || check(DownPress)) {
-                if (index == maxFiles) index = 0;
-                else index++;
-                redraw = true;
+#ifdef HAS_ENCODER
+            int32_t rotarySteps = drainRotarySteps();
+            if (rotarySteps != 0) {
+                check(PrevPress);
+                check(NextPress);
+                check(UpPress);
+                check(DownPress);
+                while (rotarySteps > 0) {
+                    if (index == 0) index = maxFiles;
+                    else if (index > 0) index--;
+                    rotarySteps--;
+                    redraw = true;
+                }
+                while (rotarySteps < 0) {
+                    if (index == maxFiles) index = 0;
+                    else index++;
+                    rotarySteps++;
+                    redraw = true;
+                }
+            } else
+#endif
+            {
+                if (check(PrevPress) || check(UpPress)) {
+                    if (index == 0) index = maxFiles;
+                    else if (index > 0) index--;
+                    redraw = true;
+                }
+                /* DW Btn to next item */
+                if (check(NextPress) || check(DownPress)) {
+                    if (index == maxFiles) index = 0;
+                    else index++;
+                    redraw = true;
+                }
             }
         }
         if (check(NextPagePress)) {
