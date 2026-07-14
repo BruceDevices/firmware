@@ -533,11 +533,18 @@ int loopOptions(
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
-        if (checkShortcutPress()) {
-            // Shortcut opened a submenu that drew over the screen; force full redraw
-            redraw = true;
-            drawMainBorder();
-        }
+        // Keyboard shortcuts are only processed on the main menu (their purpose is to start
+        // apps without navigating the menus). The menuType check MUST come first so that
+        // checkShortcutPress() is not called inside the submenu a shortcut just opened —
+        // otherwise, while the key is still held, the shortcut re-fires and opens a second
+        // nested copy of the menu (requiring an extra ESC to back out of each level).
+        //
+        // A shortcut runs an app via optionsMenu(), which refills the shared global `options`
+        // vector (held here by reference) and draws over the screen. Break so the caller
+        // (MainMenu::begin, re-invoked each loop()) rebuilds the menu from scratch — exactly
+        // what selecting an option does. Repainting in place would instead render the now-stale
+        // `options` (the app's items, which lack the main-menu hover lambda) as an overlay list.
+        if (menuType == MENU_TYPE_MAIN && checkShortcutPress()) break;
 #endif
 
         if (menuType == MENU_TYPE_REGULAR) {
