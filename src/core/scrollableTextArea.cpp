@@ -3,7 +3,7 @@
 ScrollableTextArea::ScrollableTextArea(const String &title)
     : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
       _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
-      _height(tftHeight - BORDER_PAD_X - BORDER_PAD_Y) {
+      _height(tftHeight - 4 - BORDER_PAD_X - BORDER_PAD_Y) {
     drawMainBorder();
 
     if (!_title.isEmpty()) {
@@ -76,11 +76,11 @@ void ScrollableTextArea::show(bool force) {
 
     while (check(SelPress)) {
         update(force);
-        vTaskDelay(pdMS_TO_TICKS(1));
+        yield();
     }
     while (!check(SelPress)) {
         update(force);
-        vTaskDelay(pdMS_TO_TICKS(1));
+        yield();
     }
 }
 
@@ -121,7 +121,7 @@ void ScrollableTextArea::fromString(const String &text) {
         endIdx++;
     }
 
-    // Add the last line if there’s remaining text (text does not ends with \n)
+    // Add the last line if there's remaining text (text does not ends with \n)
     if (startIdx < text.length()) { addLine(text.substring(startIdx, endIdx)); }
 }
 
