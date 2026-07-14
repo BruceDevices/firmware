@@ -1,0 +1,8 @@
+{
+    "appid": "hello_bruce",
+    "name": "Hello Bruce App",
+    "version": "1.0",
+    "author": "Bruce Team",
+    "entry_point": "app_main",
+    "assets_dir": "assets"
+}

@@ -21,3 +21,10 @@ lib/mquickjs_headers/mqjs_stdlib_generator.exe
 .github/agents/Bruce-AI.agent.md
 .idea
 .ai
+
+# BAP files and builds
+*.bap
+build/
+__pycache__/
+*.o
+*.obj

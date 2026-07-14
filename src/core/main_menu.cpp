@@ -22,6 +22,7 @@ MainMenu::MainMenu() {
         &gpsMenu,
         &rfidMenu,
         &fileMenu,
+        &appsMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
 #endif

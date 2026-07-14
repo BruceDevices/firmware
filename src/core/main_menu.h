@@ -3,6 +3,7 @@
 
 #include <MenuItemInterface.h>
 
+#include "menu_items/AppsMenu.h"
 #include "menu_items/BleMenu.h"
 #include "menu_items/ClockMenu.h"
 #include "menu_items/ConfigMenu.h"
@@ -21,6 +22,7 @@
 #include "menu_items/WifiMenu.h"
 class MainMenu {
 public:
+    AppsMenu appsMenu;
     FileMenu fileMenu;
     BleMenu bleMenu;
     ClockMenu clockMenu;

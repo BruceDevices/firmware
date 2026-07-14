@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bruce UI Designer Pro</title>
+    <meta name="description" content="Low-code visual UI designer for Bruce firmware applications">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="logo">Bruce UI Designer <span>PRO</span></div>
+        <div class="topbar-center">
+            <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+            <button id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+            <span class="separator">|</span>
+            <button id="btn-duplicate" title="Duplicate selected element">⧉ Duplicate</button>
+            <button id="btn-delete" title="Delete selected element">✕ Delete</button>
+            <span class="separator">|</span>
+            <span id="size-badge" class="badge">~0 KB</span>
+        </div>
+        <div class="actions">
+            <button id="btn-load">📂 Load Project</button>
+            <button id="btn-save">💾 Save Project</button>
+            <button id="btn-copy-code">📋 Copy Code</button>
+            <button id="btn-export" class="primary">📦 Download ZIP</button>
+        </div>
+    </header>
+    
+    <div class="main-layout">
+        <!-- Left Panel -->
+        <aside class="panel left-panel">
+            <div class="section">
+                <h3>Project Settings</h3>
+                <label>App ID:</label>
+                <input type="text" id="app-id" value="my_app">
+                <label>App Name:</label>
+                <input type="text" id="app-name" value="My App">
+                <label>Author:</label>
+                <input type="text" id="app-author" value="Bruce Dev">
+
+                <label>Target Board:</label>
+                <select id="target-board">
+                    <option value="esp32">ESP32 (Cardputer)</option>
+                    <option value="esp32s3">ESP32‑S3 (Core S3)</option>
+                    <option value="esp32s2">ESP32‑S2</option>
+                    <option value="esp32c3">ESP32‑C3</option>
+                    <option value="esp32c6">ESP32‑C6</option>
+                    <option value="custom">Custom board</option>
+                </select>
+
+                <label>Screen Preset:</label>
+                <select id="screen-size">
+                    <option value="240x135">Cardputer (240×135)</option>
+                    <option value="320x240">M5Stack Core (320×240)</option>
+                    <option value="128x128">TTGO T‑Display (128×128)</option>
+                    <option value="160x128">ST7735 (160×128)</option>
+                    <option value="480x320">ILI9488 (480×320)</option>
+                    <option value="custom">Custom…</option>
+                </select>
+                <div id="custom-size-group" class="hidden">
+                    <label>Width (px):</label>
+                    <input type="number" id="custom-width" min="16" max="1024" value="240">
+                    <label>Height (px):</label>
+                    <input type="number" id="custom-height" min="16" max="1024" value="135">
+                    <button id="btn-apply-custom-size" class="small">Apply</button>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Scenes</h3>
+                <ul id="scene-list"></ul>
+                <button id="btn-add-scene">+ Add Scene</button>
+            </div>
+
+            <div class="section">
+                <h3>Global Variables</h3>
+                <ul id="var-list"></ul>
+                <button id="btn-add-var">+ Add Variable</button>
+            </div>
+            
+            <div class="section">
+                <h3>Layer Order (current scene)</h3>
+                <ul id="element-list"></ul>
+                <div class="layer-btns">
+                    <button id="btn-layer-up" class="small" title="Bring forward">▲</button>
+                    <button id="btn-layer-down" class="small" title="Send backward">▼</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center Canvas (Figma-style infinite canvas) -->
+        <main class="canvas-container" id="canvas-container">
+            <div class="toolbar">
+                <button data-tool="text" title="Text label">🔤 Text</button>
+                <button data-tool="rect" title="Rectangle outline">▭ Rect</button>
+                <button data-tool="fill_rect" title="Filled rectangle">■ Fill</button>
+                <button data-tool="border" title="Title border frame">☐ Border</button>
+                <button data-tool="line" title="Horizontal/Vertical line">— Line</button>
+                <button data-tool="circle" title="Circle outline">○ Circle</button>
+                <button data-tool="progress" title="Progress bar">▓ Progress</button>
+                <button data-tool="button" title="Interactive button bound to hardware key">⏎ Button</button>
+                <button data-tool="image" title="Drop a PNG/BMP onto canvas">🖼 Image</button>
+            </div>
+            <div class="align-bar">
+                <span class="align-label">Align:</span>
+                <button class="small" data-align="left" title="Align Left">⫷</button>
+                <button class="small" data-align="center-h" title="Center Horizontally">⫿</button>
+                <button class="small" data-align="right" title="Align Right">⫸</button>
+                <span class="separator">|</span>
+                <button class="small" data-align="top" title="Align Top">⤒</button>
+                <button class="small" data-align="center-v" title="Center Vertically">⤓</button>
+                <button class="small" data-align="bottom" title="Align Bottom">⤓</button>
+                <span class="separator">|</span>
+                <button class="small" data-align="center-both" title="Center on Screen">⊞</button>
+            </div>
+
+            <!-- Infinite pannable/zoomable world -->
+            <div class="canvas-world" id="canvas-world">
+                <!-- Scenes rendered dynamically here -->
+            </div>
+
+            <!-- Status bar -->
+            <div class="canvas-status">
+                <span id="canvas-dims">240 × 135</span>
+                <span id="cursor-pos">x: 0  y: 0</span>
+                <span class="zoom-controls">
+                    <button class="small" id="btn-zoom-out" title="Zoom out">−</button>
+                    <span id="zoom-level">100%</span>
+                    <button class="small" id="btn-zoom-in" title="Zoom in">+</button>
+                    <button class="small" id="btn-zoom-fit" title="Fit to view (0)">Fit</button>
+                </span>
+            </div>
+        </main>
+
+        <!-- Right Panel -->
+        <aside class="panel right-panel">
+            <h3>Properties</h3>
+            <div id="properties-panel">
+                <p class="muted">Select an element on the canvas</p>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Bottom Panel -->
+    <div class="bottom-panel">
+        <div class="tabs">
+            <button class="tab active" data-target="code-preview">app.c</button>
+            <button class="tab" data-target="manifest-preview">application.bam</button>
+        </div>
+        <div class="tab-content" id="code-preview">
+            <pre><code class="language-c" id="code-output"></code></pre>
+        </div>
+        <div class="tab-content hidden" id="manifest-preview">
+            <pre><code class="language-json" id="manifest-output"></code></pre>
+        </div>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="file-load" accept=".bruceproj" style="display:none">
+
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
