@@ -4063,7 +4063,7 @@ String selectTargetFromScan(const char *title) {
     String titleStr = String(title);
     int maxTitleWidth = tftWidth - 20; // Leave 10px padding on each side
     if (tft.textWidth(titleStr.c_str()) > maxTitleWidth) {
-        while (titleStr.length() > 0 && tft.textWidth(titleStr.c_str() + "...") > maxTitleWidth) {
+        while (titleStr.length() > 0 && tft.textWidth((titleStr + "...").c_str()) > maxTitleWidth) {
             titleStr.remove(titleStr.length() - 1);
         }
         titleStr += "...";
@@ -4085,7 +4085,8 @@ String selectTargetFromScan(const char *title) {
         std::vector<bool> hfps;
         std::vector<uint8_t> types;
 
-        void onResult(NimBLEAdvertisedDevice *advertisedDevice) override {
+        // FIX: Add 'const' for NimBLE v2.5 compatibility
+        void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
             String name = String(advertisedDevice->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 name = "Unknown";
