@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 2026-01-24
+ * Last Updated: 14/07/2026
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
@@ -87,7 +87,7 @@ void ScannerData::addDevice(
         for (size_t i = 0; i < deviceAddresses.size(); i++) {
             if (deviceAddresses[i] == address) {
                 isDuplicate = true;
-                deviceRssi[i] = rssi;
+                if (rssi > deviceRssi[i]) deviceRssi[i] = rssi;
                 break;
             }
         }
@@ -4038,19 +4038,20 @@ void BLE_Sniffer() {
 }
 
 //=============================================================================
-// Target Selection Functions
+// Target Selection Functions - FIXED with Active + Passive callback-based scan
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
     scannerData.clear();
 
-    // Use the BLE scan setup from ble_common which has proper RAM checks
+    // Check if BLE is already active
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
     bleWasActiveBefore =
         bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
 #endif
 
+    // Use the callback-based scan approach (same as ble_scan())
     if (!ble_scan_setup() || pBLEScan == nullptr) return "";
 
     tft.fillScreen(bruceConfig.bgColor);
@@ -4058,39 +4059,128 @@ String selectTargetFromScan(const char *title) {
 
     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
     tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
+    // FIX: Truncate title if too long for small screens
+    String titleStr = String(title);
+    int maxTitleWidth = tftWidth - 20; // Leave 10px padding on each side
+    if (tft.textWidth(titleStr.c_str()) > maxTitleWidth) {
+        while (titleStr.length() > 0 && tft.textWidth(titleStr.c_str() + "...") > maxTitleWidth) {
+            titleStr.remove(titleStr.length() - 1);
+        }
+        titleStr += "...";
+    }
+    tft.setCursor(10, 15); // Left align with padding
+    tft.print(titleStr);
     tft.setTextSize(1);
 
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    const int ACTIVE_SCAN_TIME = 15, PASSIVE_SCAN_TIME = 15;
+    // Custom callback class to collect devices
+    class TargetSelectionCallbacks : public NimBLEScanCallbacks {
+    public:
+        std::vector<String> names;
+        std::vector<String> addresses;
+        std::vector<int> rssis;
+        std::vector<bool> fastPairs;
+        std::vector<bool> hfps;
+        std::vector<uint8_t> types;
+
+        void onResult(NimBLEAdvertisedDevice *advertisedDevice) override {
+            String name = String(advertisedDevice->getName().c_str());
+            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+                name = "Unknown";
+            }
+
+            String address = String(advertisedDevice->getAddress().toString().c_str());
+            int rssi = advertisedDevice->getRSSI();
+            if (rssi == 0) rssi = -100;
+
+            bool fastPair = false, hasHFP = false;
+            uint8_t deviceType = 0;
+
+            if (advertisedDevice->haveServiceUUID()) {
+                NimBLEUUID uuid = advertisedDevice->getServiceUUID();
+                std::string uuidStr = uuid.toString();
+                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                    hasHFP = true;
+                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                    deviceType |= 0x01;
+                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+            }
+
+            // Check for duplicates (update RSSI if exists)
+            for (size_t i = 0; i < addresses.size(); i++) {
+                if (addresses[i] == address) {
+                    // Update RSSI with strongest signal
+                    if (rssi > rssis[i]) rssis[i] = rssi;
+                    return;
+                }
+            }
+
+            names.push_back(name);
+            addresses.push_back(address);
+            rssis.push_back(rssi);
+            fastPairs.push_back(fastPair);
+            hfps.push_back(hasHFP);
+            types.push_back(deviceType);
+        }
+
+        void clear() {
+            names.clear();
+            addresses.clear();
+            rssis.clear();
+            fastPairs.clear();
+            hfps.clear();
+            types.clear();
+        }
+    };
+
+    TargetSelectionCallbacks callbacks;
+    pBLEScan->setScanCallbacks(&callbacks);
+
+    const int ACTIVE_SCAN_TIME = 15;
+    const int PASSIVE_SCAN_TIME = 15;
+
+    // === ACTIVE SCAN ===
+    pBLEScan->setActiveScan(true);
+    pBLEScan->setInterval(SCAN_INT);
+    pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 80);
     tft.print("Active scan (15s)...");
 
-#ifdef NIMBLE_V2_PLUS
-    NimBLEScanResults results = pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
-#else
-    NimBLEScanResults results = pBLEScan->start(ACTIVE_SCAN_TIME, false);
-#endif
+    pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
+
+    // === PASSIVE SCAN ===
+    pBLEScan->setActiveScan(false);
+    pBLEScan->setInterval(SCAN_INT);
+    pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 100);
     tft.print("Passive scan (15s)...");
-    pBLEScan->setActiveScan(false);
 
-#ifdef NIMBLE_V2_PLUS
-    results = pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
-#else
-    results = pBLEScan->start(PASSIVE_SCAN_TIME, false);
-#endif
+    pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
 
-    if (results.getCount() == 0) {
-        pBLEScan->stop();
-        pBLEScan->clearResults();
-        if (!bleWasActiveBefore) { stopBLEStack(); }
+    // Transfer collected data to scannerData
+    for (size_t i = 0; i < callbacks.addresses.size(); i++) {
+        scannerData.addDevice(
+            callbacks.names[i],
+            callbacks.addresses[i],
+            callbacks.rssis[i],
+            callbacks.fastPairs[i],
+            callbacks.hfps[i],
+            callbacks.types[i]
+        );
+    }
 
+    pBLEScan->stop();
+    pBLEScan->clearResults();
+    if (!bleWasActiveBefore) { stopBLEStack(); }
+
+    size_t deviceCount = scannerData.size();
+
+    if (deviceCount == 0) {
         tft.fillScreen(TFT_YELLOW);
         tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
         tft.setTextColor(TFT_BLACK, TFT_YELLOW);
@@ -4108,39 +4198,7 @@ String selectTargetFromScan(const char *title) {
         return "";
     }
 
-    for (int i = 0; i < results.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = results.getDevice(i);
-
-        String address = String(device->getAddress().toString().c_str());
-        String name = String(device->getName().c_str());
-        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") name = "Unknown";
-
-        int rssi = device->getRSSI();
-        if (rssi == 0) rssi = -100;
-
-        bool fastPair = false, hasHFP = false;
-        uint8_t deviceType = 0;
-
-        if (device->haveServiceUUID()) {
-            NimBLEUUID uuid = device->getServiceUUID();
-            std::string uuidStr = uuid.toString();
-            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
-            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
-                hasHFP = true;
-            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
-                deviceType |= 0x01;
-            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
-        }
-
-        scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
-    }
-
-    pBLEScan->stop();
-    pBLEScan->clearResults();
-    if (!bleWasActiveBefore) { stopBLEStack(); }
-
-    size_t deviceCount = scannerData.size();
-
+    // Sort devices by FastPair first, then RSSI
     if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
         for (size_t i = 0; scannerData.deviceAddresses.size() > 1 && i < scannerData.deviceAddresses.size() - 1; i++) {
             for (size_t j = i + 1; j < scannerData.deviceAddresses.size(); j++) {
@@ -4169,6 +4227,7 @@ String selectTargetFromScan(const char *title) {
         xSemaphoreGive(scannerData.mutex);
     }
 
+    // Display device selection menu
     int maxVisibleDevices = 3, deviceItemHeight = 30, menuStartY = 60;
     int selectedIdx = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
