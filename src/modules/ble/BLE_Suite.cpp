@@ -4038,7 +4038,7 @@ void BLE_Sniffer() {
 }
 
 //=============================================================================
-// Target Selection Functions - FIXED with Active + Passive callback-based scan
+// Target Selection Functions - FIXED with Active + Passive scan using getResults()
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
@@ -4051,7 +4051,7 @@ String selectTargetFromScan(const char *title) {
         bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
 #endif
 
-    // Use the callback-based scan approach (same as ble_scan())
+    // Use the scan setup from ble_common
     if (!ble_scan_setup() || pBLEScan == nullptr) return "";
 
     tft.fillScreen(bruceConfig.bgColor);
@@ -4075,69 +4075,8 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    // Simple callback class with fixed buffers - using enum for compile-time constant
-    class TargetSelectionCallbacks : public NimBLEScanCallbacks {
-    public:
-        enum { MAX_DEVICES = 100 };
-        String names[MAX_DEVICES];
-        String addresses[MAX_DEVICES];
-        int rssis[MAX_DEVICES];
-        bool fastPairs[MAX_DEVICES];
-        bool hfps[MAX_DEVICES];
-        uint8_t types[MAX_DEVICES];
-        int count;
-
-        TargetSelectionCallbacks() : count(0) {}
-
-        void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
-            if (count >= MAX_DEVICES) return;
-
-            String name = String(advertisedDevice->getName().c_str());
-            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
-                name = "Unknown";
-            }
-
-            String address = String(advertisedDevice->getAddress().toString().c_str());
-            int rssi = advertisedDevice->getRSSI();
-            if (rssi == 0) rssi = -100;
-
-            bool fastPair = false, hasHFP = false;
-            uint8_t deviceType = 0;
-
-            if (advertisedDevice->haveServiceUUID()) {
-                NimBLEUUID uuid = advertisedDevice->getServiceUUID();
-                std::string uuidStr = uuid.toString();
-                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
-                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
-                    hasHFP = true;
-                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
-                    deviceType |= 0x01;
-                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
-            }
-
-            // Check for duplicates
-            for (int i = 0; i < count; i++) {
-                if (addresses[i] == address) {
-                    if (rssi > rssis[i]) rssis[i] = rssi;
-                    return;
-                }
-            }
-
-            names[count] = name;
-            addresses[count] = address;
-            rssis[count] = rssi;
-            fastPairs[count] = fastPair;
-            hfps[count] = hasHFP;
-            types[count] = deviceType;
-            count++;
-        }
-    };
-
-    TargetSelectionCallbacks callbacks;
-    pBLEScan->setScanCallbacks(&callbacks);
-
-    const int ACTIVE_SCAN_TIME = 10;
-    const int PASSIVE_SCAN_TIME = 10;
+    const int ACTIVE_SCAN_TIME = 15;
+    const int PASSIVE_SCAN_TIME = 15;
 
     // === ACTIVE SCAN ===
     pBLEScan->setActiveScan(true);
@@ -4145,9 +4084,13 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 80);
-    tft.print("Active scan (10s)...");
+    tft.print("Active scan (15s)...");
 
-    pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
+#ifdef NIMBLE_V2_PLUS
+    BLEScanResults activeResults = pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
+#else
+    BLEScanResults activeResults = pBLEScan->start(ACTIVE_SCAN_TIME, false);
+#endif
 
     // === PASSIVE SCAN ===
     pBLEScan->setActiveScan(false);
@@ -4155,24 +4098,83 @@ String selectTargetFromScan(const char *title) {
     pBLEScan->setWindow(SCAN_WINDOW);
 
     tft.setCursor(20, 100);
-    tft.print("Passive scan (10s)...");
+    tft.print("Passive scan (15s)...");
 
-    pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
+#ifdef NIMBLE_V2_PLUS
+    BLEScanResults passiveResults = pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
+#else
+    BLEScanResults passiveResults = pBLEScan->start(PASSIVE_SCAN_TIME, false);
+#endif
 
-    // Transfer collected data to scannerData
-    for (int i = 0; i < callbacks.count; i++) {
+    // Merge results from both scans
+    std::vector<String> mergedAddresses;
+    std::vector<String> mergedNames;
+    std::vector<int> mergedRssis;
+    std::vector<bool> mergedFastPairs;
+    std::vector<bool> mergedHfps;
+    std::vector<uint8_t> mergedTypes;
+
+    auto processDevice = [&](const NimBLEAdvertisedDevice *device) {
+        String address = String(device->getAddress().toString().c_str());
+        String name = String(device->getName().c_str());
+        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+            name = "Unknown";
+        }
+        int rssi = device->getRSSI();
+        if (rssi == 0) rssi = -100;
+
+        bool fastPair = false, hasHFP = false;
+        uint8_t deviceType = 0;
+
+        if (device->haveServiceUUID()) {
+            NimBLEUUID uuid = device->getServiceUUID();
+            std::string uuidStr = uuid.toString();
+            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                hasHFP = true;
+            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                deviceType |= 0x01;
+            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+        }
+
+        // Check for duplicates
+        for (size_t i = 0; i < mergedAddresses.size(); i++) {
+            if (mergedAddresses[i] == address) {
+                if (rssi > mergedRssis[i]) mergedRssis[i] = rssi;
+                return;
+            }
+        }
+
+        mergedAddresses.push_back(address);
+        mergedNames.push_back(name);
+        mergedRssis.push_back(rssi);
+        mergedFastPairs.push_back(fastPair);
+        mergedHfps.push_back(hasHFP);
+        mergedTypes.push_back(deviceType);
+    };
+
+    // Process active results
+    for (int i = 0; i < activeResults.getCount(); i++) {
+        processDevice(activeResults.getDevice(i));
+    }
+
+    // Process passive results
+    for (int i = 0; i < passiveResults.getCount(); i++) {
+        processDevice(passiveResults.getDevice(i));
+    }
+
+    // Transfer to scannerData
+    for (size_t i = 0; i < mergedAddresses.size(); i++) {
         scannerData.addDevice(
-            callbacks.names[i],
-            callbacks.addresses[i],
-            callbacks.rssis[i],
-            callbacks.fastPairs[i],
-            callbacks.hfps[i],
-            callbacks.types[i]
+            mergedNames[i],
+            mergedAddresses[i],
+            mergedRssis[i],
+            mergedFastPairs[i],
+            mergedHfps[i],
+            mergedTypes[i]
         );
     }
 
-    // Clear callbacks to prevent dangling pointer
-    pBLEScan->setScanCallbacks(nullptr);
     pBLEScan->stop();
     pBLEScan->clearResults();
 
@@ -4771,8 +4773,8 @@ void showWelcomeScreen() {
 
     tft.setTextColor(TFT_BLUE, bruceConfig.bgColor);
     tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE v3.1")) / 2, 80);
-    tft.print("BLE SUITE v3.1");
+    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 80);
+    tft.print("BLE SUITE");
 
     tft.setTextColor(TFT_LIGHTGREY, bruceConfig.bgColor);
     tft.setTextSize(1.5);
@@ -4813,8 +4815,8 @@ void BleSuiteMenu() {
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
             tft.setTextSize(2);
-            tft.setCursor((tftWidth - tft.textWidth("BLE SUITE v3.1")) / 2, 15);
-            tft.print("BLE SUITE v3.1");
+            tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
+            tft.print("BLE SUITE");
             tft.setTextSize(1);
 
             for (int i = 0; i < maxVisible && (scrollOffset + i) < MENU_ITEMS; i++) {
@@ -5837,8 +5839,8 @@ void showAttackProgress(const char *message, uint16_t color) {
 
     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
     tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE v3.1")) / 2, 15);
-    tft.print("BLE SUITE v3.1");
+    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
+    tft.print("BLE SUITE");
     tft.setTextSize(1);
 
     tft.setTextColor(color, bruceConfig.bgColor);
