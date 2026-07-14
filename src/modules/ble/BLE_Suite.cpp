@@ -2971,8 +2971,10 @@ String selectFileFromSD() {
             }
 
             tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selected;
             lastScrollOffset = scrollOffset;
@@ -3095,8 +3097,10 @@ String getScriptFromUser() {
             }
 
             tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selected;
             lastScrollOffset = scrollOffset;
@@ -4038,108 +4042,266 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    if (scannerData.size() == 0) {
-        showErrorMessage("No devices found. Run scan first.");
+    scannerData.clear();
+
+    // Use the BLE scan setup from ble_common which has proper RAM checks
+    bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
+#if !defined(LITE_VERSION)
+    bleWasActiveBefore =
+        bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
+#endif
+
+    if (!ble_scan_setup() || pBLEScan == nullptr) return "";
+
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+
+    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextSize(2);
+    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
+    tft.print(title);
+    tft.setTextSize(1);
+
+    tft.setCursor(20, 60);
+    tft.print("Scanning for devices...");
+
+    const int ACTIVE_SCAN_TIME = 15, PASSIVE_SCAN_TIME = 15;
+
+    tft.setCursor(20, 80);
+    tft.print("Active scan (15s)...");
+
+#ifdef NIMBLE_V2_PLUS
+    NimBLEScanResults results = pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
+#else
+    NimBLEScanResults results = pBLEScan->start(ACTIVE_SCAN_TIME, false);
+#endif
+
+    tft.setCursor(20, 100);
+    tft.print("Passive scan (15s)...");
+    pBLEScan->setActiveScan(false);
+
+#ifdef NIMBLE_V2_PLUS
+    results = pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
+#else
+    results = pBLEScan->start(PASSIVE_SCAN_TIME, false);
+#endif
+
+    if (results.getCount() == 0) {
+        pBLEScan->stop();
+        pBLEScan->clearResults();
+        if (!bleWasActiveBefore) { stopBLEStack(); }
+
+        tft.fillScreen(TFT_YELLOW);
+        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
+        tft.setTextColor(TFT_BLACK, TFT_YELLOW);
+        tft.setTextSize(2);
+        tft.setCursor((tftWidth - tft.textWidth("NO DEVICES")) / 2, 15);
+        tft.print("NO DEVICES");
+        tft.setTextSize(1);
+        tft.setCursor(20, 60);
+        tft.print("No BLE devices found!");
+        tft.setCursor(20, 80);
+        tft.print("Make sure BLE devices are");
+        tft.setCursor(20, 100);
+        tft.print("turned on and in range.");
+        delay(2000);
         return "";
     }
 
-    int selected = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
-    bool exitMenu = false;
-    int menuStartY = 60, menuItemHeight = 25;
-    size_t deviceCount = scannerData.size();
-    int maxVisibleItems = (tftHeight - menuStartY - 50) / menuItemHeight;
-    if (maxVisibleItems > (int)deviceCount) maxVisibleItems = deviceCount;
+    for (int i = 0; i < results.getCount(); i++) {
+        const NimBLEAdvertisedDevice *device = results.getDevice(i);
 
-    while (!exitMenu) {
-        if (selected != lastSelected || scrollOffset != lastScrollOffset) {
+        String address = String(device->getAddress().toString().c_str());
+        String name = String(device->getName().c_str());
+        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") name = "Unknown";
+
+        int rssi = device->getRSSI();
+        if (rssi == 0) rssi = -100;
+
+        bool fastPair = false, hasHFP = false;
+        uint8_t deviceType = 0;
+
+        if (device->haveServiceUUID()) {
+            NimBLEUUID uuid = device->getServiceUUID();
+            std::string uuidStr = uuid.toString();
+            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                hasHFP = true;
+            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                deviceType |= 0x01;
+            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+        }
+
+        scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+    }
+
+    pBLEScan->stop();
+    pBLEScan->clearResults();
+    if (!bleWasActiveBefore) { stopBLEStack(); }
+
+    size_t deviceCount = scannerData.size();
+
+    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
+        for (size_t i = 0; scannerData.deviceAddresses.size() > 1 && i < scannerData.deviceAddresses.size() - 1; i++) {
+            for (size_t j = i + 1; j < scannerData.deviceAddresses.size(); j++) {
+                bool swapNeeded = false;
+                if (scannerData.deviceFastPair[j] && !scannerData.deviceFastPair[i]) swapNeeded = true;
+                else if (scannerData.deviceFastPair[j] == scannerData.deviceFastPair[i] &&
+                         scannerData.deviceRssi[j] > scannerData.deviceRssi[i])
+                    swapNeeded = true;
+
+                if (swapNeeded) {
+                    std::swap(scannerData.deviceNames[i], scannerData.deviceNames[j]);
+                    std::swap(scannerData.deviceAddresses[i], scannerData.deviceAddresses[j]);
+                    std::swap(scannerData.deviceRssi[i], scannerData.deviceRssi[j]);
+
+                    bool tempFastPair = scannerData.deviceFastPair[i];
+                    scannerData.deviceFastPair[i] = scannerData.deviceFastPair[j];
+                    scannerData.deviceFastPair[j] = tempFastPair;
+
+                    bool tempHFP = scannerData.deviceHasHFP[i];
+                    scannerData.deviceHasHFP[i] = scannerData.deviceHasHFP[j];
+                    scannerData.deviceHasHFP[j] = tempHFP;
+                    std::swap(scannerData.deviceTypes[i], scannerData.deviceTypes[j]);
+                }
+            }
+        }
+        xSemaphoreGive(scannerData.mutex);
+    }
+
+    int maxVisibleDevices = 3, deviceItemHeight = 30, menuStartY = 60;
+    int selectedIdx = 0, scrollOffset = 0;
+    int lastSelected = -1, lastScrollOffset = -1;
+    bool exitLoop = false;
+
+    while (!exitLoop) {
+        if (selectedIdx != lastSelected || scrollOffset != lastScrollOffset) {
             tft.fillScreen(bruceConfig.bgColor);
             tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
             tft.setTextSize(2);
-            tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-            tft.print(title);
+            tft.setCursor((tftWidth - tft.textWidth("SELECT DEVICE")) / 2, 15);
+            tft.print("SELECT DEVICE");
             tft.setTextSize(1);
 
             tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
             tft.setCursor(20, 40);
-            tft.print("Devices: ");
+            tft.print("Found: ");
             tft.print(deviceCount);
+            tft.print(" devices");
 
-            for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < (int)deviceCount; i++) {
-                int idx = scrollOffset + i;
-                int yPos = menuStartY + (i * menuItemHeight);
-                if (yPos + menuItemHeight > tftHeight - 45) break;
+            for (int i = 0; i < maxVisibleDevices && (scrollOffset + i) < (int)deviceCount; i++) {
+                String displayName, address;
+                int rssi = 0;
+                bool fastPair = false, hasHFP = false;
+                uint8_t deviceType = 0;
 
-                if (idx == selected) {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("  ");
+                if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
+                    int deviceIndex = scrollOffset + i;
+                    if (deviceIndex < (int)scannerData.deviceNames.size()) {
+                        displayName = scannerData.deviceNames[deviceIndex];
+                        address = scannerData.deviceAddresses[deviceIndex];
+                        rssi = scannerData.deviceRssi[deviceIndex];
+                        fastPair = scannerData.deviceFastPair[deviceIndex];
+                        hasHFP = scannerData.deviceHasHFP[deviceIndex];
+                        deviceType = scannerData.deviceTypes[deviceIndex];
+                    }
+                    xSemaphoreGive(scannerData.mutex);
                 }
 
-                String display = String(idx + 1) + ". " + scannerData.deviceNames[idx] + " | " +
-                                 scannerData.deviceAddresses[idx] + " | " +
-                                 String(scannerData.deviceRssi[idx]) + "dB";
-                if (display.length() > 28) display = display.substring(0, 25) + "...";
-                tft.print(display);
+                if (displayName.isEmpty()) continue;
+
+                String displayText = displayName;
+                if (displayText.length() > 18) displayText = displayText.substring(0, 15) + "...";
+                displayText += " (" + String(rssi) + "dB)";
+                if (fastPair) displayText += " [FP]";
+                if (hasHFP) displayText += " [HFP]";
+                if (deviceType & 0x01) displayText += " [AUDIO]";
+                if (deviceType & 0x02) displayText += " [HID]";
+
+                int yPos = menuStartY + (i * deviceItemHeight);
+                if (yPos + deviceItemHeight > tftHeight - 45) break;
+
+                if (i == selectedIdx - scrollOffset) {
+                    tft.fillRect(15, yPos, tftWidth - 30, deviceItemHeight - 5, TFT_WHITE);
+                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
+                    tft.setCursor(20, yPos + 10);
+                    tft.print("> ");
+                } else {
+                    tft.fillRect(15, yPos, tftWidth - 30, deviceItemHeight - 5, bruceConfig.bgColor);
+                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+                    tft.setCursor(20, yPos + 10);
+                    tft.print("  ");
+                }
+                tft.print(displayText);
             }
 
-            if (deviceCount > (size_t)maxVisibleItems) {
+            if (deviceCount > (size_t)maxVisibleDevices) {
                 tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, menuStartY + 5);
+                tft.setCursor(tftWidth - 25, menuStartY + 10);
                 if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
-                if (scrollOffset + maxVisibleItems < (int)deviceCount) tft.print("v");
+                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleDevices * deviceItemHeight) - 15);
+                if (scrollOffset + maxVisibleDevices < (int)deviceCount) tft.print("v");
             }
 
             tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
-            lastSelected = selected;
+            lastSelected = selectedIdx;
             lastScrollOffset = scrollOffset;
         }
 
         if (check(EscPress)) {
-            delay(200);
-            exitMenu = true;
-            return "";
+            exitLoop = true;
         } else if (check(PrevPress)) {
             delay(150);
-            if (selected > 0) {
-                selected--;
-                if (selected < scrollOffset) scrollOffset = selected;
+            if (selectedIdx > 0) {
+                selectedIdx--;
+                if (selectedIdx < scrollOffset) scrollOffset = selectedIdx;
             } else {
-                selected = deviceCount - 1;
-                scrollOffset = std::max(0, (int)deviceCount - maxVisibleItems);
+                selectedIdx = deviceCount - 1;
+                scrollOffset = std::max(0, (int)deviceCount - maxVisibleDevices);
             }
         } else if (check(NextPress)) {
             delay(150);
-            if (selected < (int)deviceCount - 1) {
-                selected++;
-                if (selected >= scrollOffset + maxVisibleItems) scrollOffset = selected - maxVisibleItems + 1;
+            if (selectedIdx < (int)deviceCount - 1) {
+                selectedIdx++;
+                if (selectedIdx >= scrollOffset + maxVisibleDevices)
+                    scrollOffset = selectedIdx - maxVisibleDevices + 1;
             } else {
-                selected = 0;
+                selectedIdx = 0;
                 scrollOffset = 0;
             }
         } else if (check(SelPress)) {
-            delay(200);
-            return scannerData.deviceAddresses[selected];
+            String selectedMAC = "", selectedName = "";
+
+            if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
+                if (selectedIdx < (int)scannerData.deviceAddresses.size()) {
+                    selectedMAC = scannerData.deviceAddresses[selectedIdx];
+                    selectedName = scannerData.deviceNames[selectedIdx];
+                }
+                xSemaphoreGive(scannerData.mutex);
+            }
+
+            if (!selectedMAC.isEmpty()) {
+                scannerData.clear();
+                return selectedMAC + ":0";
+            }
         }
         delay(50);
     }
+    scannerData.clear();
     return "";
 }
 
 String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddress> &targets) {
     targets.clear();
+
+    // Full multi-select implementation
     if (scannerData.size() == 0) {
         showErrorMessage("No devices found. Run scan first.");
         return "";
@@ -4201,8 +4363,10 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
         }
 
         tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-        tft.setCursor(20, tftHeight - 35);
-        tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select  ESC: Back");
+        tft.setCursor(20, tftHeight - 30);
+        tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select");
+        tft.setCursor(20, tftHeight - 20);
+        tft.print("ESC: Back");
 
         if (check(EscPress)) {
             delay(200);
@@ -4246,12 +4410,10 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
         }
         delay(50);
     }
-    return "";
-}
 
-//=============================================================================
-// Parse Address
-//=============================================================================
+    if (targets.empty()) return "";
+    return String(targets.size()) + " targets selected";
+}
 
 NimBLEAddress parseAddress(const String &addressInfo) {
     String cleanAddr = addressInfo;
@@ -4540,22 +4702,22 @@ static bool welcomeShown = false;
 void showWelcomeScreen() {
     if (welcomeShown) return;
 
-    tft.fillScreen(TFT_GRAY);
-    tft.setTextSize(3);
-    tft.setTextColor(TFT_PURPLE, TFT_GRAY);
-    tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 40);
+    tft.fillScreen(bruceConfig.bgColor);
+    tft.setTextSize(4);
+    tft.setTextColor(TFT_PURPLE, bruceConfig.bgColor);
+    tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 35);
     tft.print("BRUCE");
 
-    tft.setTextColor(TFT_BLUE, TFT_GRAY);
+    tft.setTextColor(TFT_BLUE, bruceConfig.bgColor);
     tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE v3.1")) / 2, 90);
+    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE v3.1")) / 2, 80);
     tft.print("BLE SUITE v3.1");
 
-    tft.setTextColor(TFT_GREEN, TFT_GRAY);
-    tft.setTextSize(1);
-    tft.setCursor((tftWidth - tft.textWidth("v3.1")) / 2, 130);
+    tft.setTextColor(TFT_LIGHTGREY, bruceConfig.bgColor);
+    tft.setTextSize(1.5);
+    tft.setCursor((tftWidth - tft.textWidth("v3.1")) / 2, 100);
     tft.print("v3.1");
-    delay(1500);
+    delay(2000);
 
     welcomeShown = true;
 }
@@ -4621,8 +4783,10 @@ void BleSuiteMenu() {
             }
 
             tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selected;
             lastScrollOffset = scrollOffset;
@@ -4713,6 +4877,7 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
 
     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
     tft.setTextSize(2);
+    tft.setTextWrap(true, true);
     tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
     tft.print(title);
     tft.setTextSize(1);
@@ -4723,14 +4888,26 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
 
     while (true) {
         if (selected != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillRect(20, 60, tftWidth - 40, tftHeight - 100, bruceConfig.bgColor);
+            tft.fillRect(20, 60, tftWidth - 40, tftHeight - 115, bruceConfig.bgColor);
 
             for (int i = 0; i < maxVisible && (scrollOffset + i) < optionCount; i++) {
                 int idx = scrollOffset + i;
                 int yPos = 60 + (i * 25);
 
+                int availWidth =
+                    (tftWidth - 40) - 20;
+
                 String displayText = options[idx];
-                if (displayText.length() > 28) { displayText = displayText.substring(0, 25) + "..."; }
+
+                if (tft.textWidth(displayText) > availWidth) {
+                    String ellipsis = "...";
+                    int ellipsisWidth = tft.textWidth(ellipsis);
+                    while (displayText.length() > 0 &&
+                           tft.textWidth(displayText) + ellipsisWidth > availWidth) {
+                        displayText.remove(displayText.length() - 1);
+                    }
+                    displayText += ellipsis;
+                }
 
                 if (idx == selected) {
                     tft.fillRect(20, yPos, tftWidth - 40, 20, TFT_WHITE);
@@ -4755,8 +4932,10 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
             }
 
             tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selected;
             lastScrollOffset = scrollOffset;
@@ -5464,9 +5643,11 @@ void runAudioControlTest(NimBLEAddress target) {
                 tft.print(displayName);
             }
 
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Test  PREV/NEXT: Navigate  ESC: Back");
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selectedTest;
         }
@@ -5729,8 +5910,8 @@ bool confirmAttack(const char *targetName) {
     tft.setCursor(20, 90);
     tft.println("FastPair buffer overflow exploit");
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 35);
+    tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+    tft.setCursor(20, tftHeight - 30);
     tft.print("SEL: Yes  NEXT: No  ESC: Cancel");
 
     while (true) {
@@ -5846,7 +6027,7 @@ int8_t showAdaptiveMessage(
         if (yPos > 140) break;
     }
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextColor(TFT_BLACK, bruceConfig.bgColor);
     tft.setCursor(20, tftHeight - 35);
 
     if (buttonCount == 0) {
@@ -6106,7 +6287,7 @@ void showDeviceInfoScreen(
         yPos = lineY;
     }
 
-    tft.setTextColor(TFT_WHITE, bgColor);
+    tft.setTextColor(TFT_BLACK, bgColor);
     tft.setCursor(20, tftHeight - 35);
     tft.print("Press any key to continue...");
 
