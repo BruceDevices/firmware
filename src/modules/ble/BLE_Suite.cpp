@@ -52,14 +52,12 @@ static SelectedDevice g_selectedDevice;
 //=============================================================================
 
 void cleanupBLESuiteState() {
-    // Stop any ongoing scan
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
         g_bleScanActive = false;
     }
     
-    // Clear the selected device cache
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
     g_selectedDevice.rssi = 0;
@@ -67,10 +65,7 @@ void cleanupBLESuiteState() {
     g_selectedDevice.hasHFP = false;
     g_selectedDevice.deviceType = 0;
     
-    // Clear scanner data
     scannerData.clear();
-    
-    // Don't deinit BLE - just clean up state
     delay(50);
 }
 
@@ -3296,11 +3291,9 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setWindow(67);
 
 #ifdef NIMBLE_V2_PLUS
-    // NimBLE 2.x: start() returns bool, getResults() gets the data
     pScan->start(duration * 1000, false);
     NimBLEScanResults results = pScan->getResults(duration * 1000, false);
 #else
-    // NimBLE 1.x: start() returns results directly
     NimBLEScanResults results = pScan->start(duration, false);
 #endif
 
@@ -3939,11 +3932,9 @@ void BLE_Sniffer() {
                 padprintln("Press [SEL] to stop");
 
 #ifdef NIMBLE_V2_PLUS
-                // NimBLE 2.x: start() returns bool, getResults() gets the data
                 pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
 #else
-                // NimBLE 1.x: getResults handles everything
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
 #endif
 
@@ -4152,8 +4143,7 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    // Clean up previous state
-    scannerData.clear();
+    // Don't clear scannerData at start - keep existing data
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
     
@@ -4180,6 +4170,9 @@ String selectTargetFromScan(const char *title) {
         g_pBLEScan->setWindow(SCAN_WINDOW);
         g_pBLEScan->setDuplicateFilter(false);
     }
+
+    // Clear previous results before scanning
+    g_pBLEScan->clearResults();
 
     tft.fillScreen(bruceConfig.bgColor);
     tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
@@ -4208,10 +4201,8 @@ String selectTargetFromScan(const char *title) {
     g_pBLEScan->setActiveScan(true);
     tft.setCursor(20, 80);
     tft.print("Active scan (8s)...");
-    g_pBLEScan->clearResults();
 
 #ifdef NIMBLE_V2_PLUS
-    // NimBLE 2.x: start() returns bool, getResults() gets the data
     bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
     if (!scanStarted) {
         displayError("Failed to start BLE scan");
@@ -4219,9 +4210,7 @@ String selectTargetFromScan(const char *title) {
     }
     BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
 #else
-    // NimBLE 1.x: start() returns results directly
-    g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
-    BLEScanResults activeResults = g_pBLEScan->getResults();
+    BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
 #endif
 
     for (int i = 0; i < activeResults.getCount(); i++) {
@@ -4259,7 +4248,6 @@ String selectTargetFromScan(const char *title) {
     tft.print("Passive scan (8s)...");
 
 #ifdef NIMBLE_V2_PLUS
-    // NimBLE 2.x: start() returns bool, getResults() gets the data
     bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
     if (!passiveScanStarted) {
         displayError("Failed to start passive BLE scan");
@@ -4267,9 +4255,7 @@ String selectTargetFromScan(const char *title) {
     }
     BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
 #else
-    // NimBLE 1.x: start() returns results directly
-    g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
-    BLEScanResults passiveResults = g_pBLEScan->getResults();
+    BLEScanResults passiveResults = g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
 #endif
 
     for (int i = 0; i < passiveResults.getCount(); i++) {
@@ -4301,11 +4287,13 @@ String selectTargetFromScan(const char *title) {
         scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
     }
 
+    // Stop the scan but don't clear results yet
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_bleScanActive = false;
     }
 
+    // Get snapshot of discovered devices
     DeviceSnapshot* snapshot = scannerData.getSnapshot();
     if (!snapshot || snapshot->count == 0) {
         if (snapshot) delete snapshot;
@@ -4323,7 +4311,6 @@ String selectTargetFromScan(const char *title) {
         tft.setCursor(20, 100);
         tft.print("turned on and in range.");
         delay(2000);
-        scannerData.clear();
         return "";
     }
 
@@ -4451,38 +4438,9 @@ String selectTargetFromScan(const char *title) {
             String selectedMAC = snapshot->addresses[selectedIdx];
             String selectedName = snapshot->names[selectedIdx];
             
-            // Clean the MAC address - remove any extra characters
+            // Clean the MAC address
             selectedMAC.trim();
             selectedMAC.toUpperCase();
-            
-            // Remove any trailing garbage
-            int colonCount = 0;
-            for (int i = 0; i < selectedMAC.length(); i++) {
-                if (selectedMAC.charAt(i) == ':') colonCount++;
-            }
-            
-            // If we have more than 5 colons, something is wrong
-            if (colonCount > 5) {
-                // Try to extract just the MAC
-                for (int i = 0; i < selectedMAC.length() - 17; i++) {
-                    String substr = selectedMAC.substring(i, i + 17);
-                    bool valid = true;
-                    for (int j = 0; j < 17; j++) {
-                        char c = substr.charAt(j);
-                        if (j % 3 == 2) {
-                            if (c != ':') { valid = false; break; }
-                        } else {
-                            if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) {
-                                valid = false; break;
-                            }
-                        }
-                    }
-                    if (valid) {
-                        selectedMAC = substr;
-                        break;
-                    }
-                }
-            }
             
             g_selectedDevice.address = selectedMAC;
             g_selectedDevice.name = selectedName;
@@ -4491,7 +4449,6 @@ String selectTargetFromScan(const char *title) {
             g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
             g_selectedDevice.deviceType = snapshot->types[selectedIdx];
             
-            // Return just the MAC with no extra characters
             String returnMac = selectedMAC;
             returnMac.trim();
             
