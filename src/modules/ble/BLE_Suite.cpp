@@ -3294,9 +3294,16 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setActiveScan(true);
     pScan->setInterval(97);
     pScan->setWindow(67);
-    pScan->start(duration, false);
 
-    NimBLEScanResults results = pScan->getResults();
+#ifdef NIMBLE_V2_PLUS
+    // NimBLE 2.x: start() returns bool, getResults() gets the data
+    pScan->start(duration * 1000, false);
+    NimBLEScanResults results = pScan->getResults(duration * 1000, false);
+#else
+    // NimBLE 1.x: start() returns results directly
+    NimBLEScanResults results = pScan->start(duration, false);
+#endif
+
     for (int i = 0; i < results.getCount(); i++) {
         const NimBLEAdvertisedDevice *device = results.getDevice(i);
 
@@ -3931,7 +3938,14 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
+#ifdef NIMBLE_V2_PLUS
+                // NimBLE 2.x: start() returns bool, getResults() gets the data
+                pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
+#else
+                // NimBLE 1.x: getResults handles everything
+                NimBLEScanResults results = pScan->getResults(10 * 1000, true);
+#endif
 
                 for (int i = 0; i < results.getCount(); i++) {
                     const NimBLEAdvertisedDevice *device = results.getDevice(i);
@@ -4197,8 +4211,15 @@ String selectTargetFromScan(const char *title) {
     g_pBLEScan->clearResults();
 
 #ifdef NIMBLE_V2_PLUS
+    // NimBLE 2.x: start() returns bool, getResults() gets the data
+    bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
+    if (!scanStarted) {
+        displayError("Failed to start BLE scan");
+        return "";
+    }
     BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
 #else
+    // NimBLE 1.x: start() returns results directly
     g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
     BLEScanResults activeResults = g_pBLEScan->getResults();
 #endif
@@ -4238,8 +4259,15 @@ String selectTargetFromScan(const char *title) {
     tft.print("Passive scan (8s)...");
 
 #ifdef NIMBLE_V2_PLUS
+    // NimBLE 2.x: start() returns bool, getResults() gets the data
+    bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
+    if (!passiveScanStarted) {
+        displayError("Failed to start passive BLE scan");
+        return "";
+    }
     BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
 #else
+    // NimBLE 1.x: start() returns results directly
     g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
     BLEScanResults passiveResults = g_pBLEScan->getResults();
 #endif
