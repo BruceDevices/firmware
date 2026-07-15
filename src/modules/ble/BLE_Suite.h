@@ -14,9 +14,10 @@
 #include <functional>
 #include <vector>
 
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
+// NimBLE 2.3.7 doesn't have NimBLEExtAdvertising.h
+// #if __has_include(<NimBLEExtAdvertising.h>)
+// #define NIMBLE_V2_PLUS 1
+// #endif
 
 extern volatile int tftWidth;
 extern volatile int tftHeight;
@@ -51,7 +52,7 @@ enum FastPairExploitType {
 };
 
 //=============================================================================
-// NEW: DeviceInfo and DeviceSnapshot structures
+// DeviceInfo and DeviceSnapshot structures
 //=============================================================================
 
 struct DeviceInfo {
@@ -78,7 +79,7 @@ struct DeviceSnapshot {
 };
 
 //=============================================================================
-// NEW: SelectedDevice for passing device info to attacks
+// SelectedDevice for passing device info to attacks
 //=============================================================================
 
 struct SelectedDevice {
@@ -91,7 +92,7 @@ struct SelectedDevice {
 };
 
 //=============================================================================
-// UPDATED: ScannerData with new methods and members
+// ScannerData with snapshot methods
 //=============================================================================
 
 struct ScannerData {
@@ -104,7 +105,6 @@ struct ScannerData {
     SemaphoreHandle_t mutex;
     int foundCount;
     
-    // NEW: Version tracking and snapshot cache
     uint32_t dataVersion;
     DeviceSnapshot* snapshotCache;
     uint32_t cacheTimestamp;
@@ -114,8 +114,6 @@ struct ScannerData {
     void addDevice(const String& name, const String& address, int rssi, bool fastPair, bool hasHFP, uint8_t type);
     void clear();
     size_t size();
-    
-    // NEW: Snapshot methods
     DeviceSnapshot* getSnapshot();
     bool getDeviceInfo(int index, DeviceInfo &info);
 };
@@ -250,12 +248,10 @@ public:
     void spamFastPairPopups(FastPairPopupType popupType, int count);
     bool testVulnerability(NimBLEAddress target);
 
-    // v3.1: Smart FastPair attack with Samsung detection
     bool smartExploit(NimBLEAddress target);
     bool exploitSamsungFastPair(NimBLEAddress target);
     bool exploitGoogleFastPair(NimBLEAddress target);
 
-    // Public exploit methods
     bool executeMemoryCorruption(NimBLERemoteCharacteristic* pChar);
     bool executeStateConfusion(NimBLERemoteCharacteristic* pChar);
     bool executeCryptoOverflow(NimBLERemoteCharacteristic* pChar);
@@ -485,7 +481,7 @@ void runConnectionFlood(NimBLEAddress target);
 void runAdvertisingSpam(NimBLEAddress target);
 
 //=============================================================================
-// UPDATED: Attack functions with SelectedDevice parameter
+// Attack functions with SelectedDevice parameter
 //=============================================================================
 
 void runQuickTest(NimBLEAddress target, SelectedDevice deviceInfo);
@@ -493,7 +489,7 @@ void runDeviceProfiling(NimBLEAddress target, SelectedDevice deviceInfo);
 void runUniversalAttack(NimBLEAddress target, SelectedDevice deviceInfo);
 
 //=============================================================================
-// UPDATED: Submenu functions with SelectedDevice parameter
+// Submenu functions with SelectedDevice parameter
 //=============================================================================
 
 void showFastPairSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
@@ -506,7 +502,7 @@ void showPayloadSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
 void showTestingSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
 
 //=============================================================================
-// Original function declarations (keep these)
+// Original function declarations
 //=============================================================================
 
 void runWriteAccessTest(NimBLEAddress target);
