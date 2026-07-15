@@ -40,12 +40,6 @@ bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries) {
     return false;
 }
 
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
-
-#define ENDIAN_CHANGE_U16(x) ((((x) & 0xFF00) >> 8) + (((x) & 0xFF) << 8))
-
 BLEServer *pServer = NULL;
 BLEService *pService = NULL;
 BLECharacteristic *pTxCharacteristic;
@@ -87,38 +81,6 @@ void ble_info(const String &name, const String &address, const String &signal) {
     }
 }
 
-#ifdef NIMBLE_V2_PLUS
-class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
-    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) {
-        if (options.size() >= MAX_DISPLAY_DEVICES) {
-            if (pBLEScan) {
-                pBLEScan->stop();
-                Serial.println("Reached max devices, stopping scan");
-            }
-            return;
-        }
-        
-        String bt_title;
-        String bt_name;
-        String bt_address;
-        String bt_signal;
-
-        bt_name = advertisedDevice->getName().c_str();
-        bt_address = advertisedDevice->getAddress().toString().c_str();
-        bt_signal = String(advertisedDevice->getRSSI());
-        
-        if (bt_name.isEmpty()) bt_name = "<no name>";
-        bt_title = bt_name;
-        if (bt_title.isEmpty()) bt_title = bt_address;
-        
-        if (options.size() < MAX_DISPLAY_DEVICES) {
-            options.emplace_back(bt_title.c_str(), [=]() { 
-                ble_info(bt_name, bt_address, bt_signal); 
-            });
-        }
-    }
-};
-#else
 class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
     void onResult(NimBLEAdvertisedDevice *advertisedDevice) {
         if (options.size() >= MAX_DISPLAY_DEVICES) {
@@ -149,7 +111,6 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
         }
     }
 };
-#endif
 
 static bool is_ble_inited = false;
 
@@ -214,12 +175,7 @@ bool ble_scan_setup() {
         return false;
     }
     
-#ifdef NIMBLE_V2_PLUS
-    pBLEScan->setScanCallbacks(new AdvertisedDeviceCallbacks());
-#else
     pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
-#endif
-
     pBLEScan->setActiveScan(true);
     pBLEScan->setInterval(SCAN_INT);
     pBLEScan->setWindow(SCAN_WINDOW);
@@ -257,24 +213,14 @@ void ble_scan() {
     // Clear previous results before scanning
     pBLEScan->clearResults();
 
-#ifdef NIMBLE_V2_PLUS
-    // NimBLE 2.x: start() returns bool, getResults() gets the data
-    bool scanStarted = pBLEScan->start(scanTime * 1000, false);
-    if (!scanStarted) {
-        displayError("Failed to start BLE scan");
-        pBLEScan->clearResults();
-        return;
-    }
-    BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
-#else
+    // NimBLE 2.3.7: start() returns BLEScanResults directly
     BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
-#endif
 
     int deviceCount = foundDevices.getCount();
     int processedCount = 0;
     
     for (int i = 0; i < deviceCount && processedCount < MAX_DISPLAY_DEVICES; i++) {
-        const NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
+        NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
         if (!advertisedDevice) continue;
         
         String bt_title;
@@ -362,6 +308,9 @@ bool initBLEServer() {
     }
     pRxCharacteristic->setCallbacks(new MyCallbacks());
 
+    // pService->start() - works in NimBLE 2.3.7
+    pService->start();
+
     return true;
 }
 
@@ -442,8 +391,6 @@ void disPlayBLESend() {
     tft.setTextColor(TFT_WHITE);
     pServer->getAdvertising()->stop();
     BLEConnected = false;
-    
-    // Don't stop BLE stack here - let caller handle it
 }
 
 void ble_test() {
