@@ -48,7 +48,7 @@ static bool g_bleScanActive = false;
 static SelectedDevice g_selectedDevice;
 
 //=============================================================================
-// Cleanup Function - Safe version that doesn't deinit BLE
+// Cleanup Function - Only stops scan, doesn't clear data
 //=============================================================================
 
 void cleanupBLESuiteState() {
@@ -57,15 +57,8 @@ void cleanupBLESuiteState() {
         g_pBLEScan->clearResults();
         g_bleScanActive = false;
     }
-    
-    g_selectedDevice.address = "";
-    g_selectedDevice.name = "";
-    g_selectedDevice.rssi = 0;
-    g_selectedDevice.hasFastPair = false;
-    g_selectedDevice.hasHFP = false;
-    g_selectedDevice.deviceType = 0;
-    
-    scannerData.clear();
+    // DO NOT clear scannerData or g_selectedDevice here
+    // They persist between operations
     delay(50);
 }
 
@@ -547,7 +540,7 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 }
 
 //=============================================================================
-// HID Exploit Engine - Complete Implementation
+// HID Exploit Engine
 //=============================================================================
 
 HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const String &name, int rssi) {
@@ -1468,7 +1461,7 @@ bool WhisperPairExploit::executeAdvanced(NimBLEAddress target, int attackType) {
 }
 
 //=============================================================================
-// Audio Attack Service - Complete Implementation
+// Audio Attack Service
 //=============================================================================
 
 bool AudioAttackService::findAndAttackAudioServices(NimBLEClient *pClient) {
@@ -1682,7 +1675,7 @@ bool AudioAttackService::crashAudioStack(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Ducky Script Engine - Complete Implementation
+// Ducky Script Engine
 //=============================================================================
 
 DuckyScriptEngine::DuckyScriptEngine() : scriptLoaded(false) {}
@@ -1859,7 +1852,7 @@ void DuckyScriptEngine::clear() {
 size_t DuckyScriptEngine::getCommandCount() { return commands.size(); }
 
 //=============================================================================
-// HID Ducky Service - Complete Implementation
+// HID Ducky Service
 //=============================================================================
 
 HIDDuckyService::HIDDuckyService() : defaultDelay(100) {}
@@ -2219,7 +2212,7 @@ void HIDDuckyService::setDefaultDelay(int delay_ms) { defaultDelay = delay_ms; }
 size_t HIDDuckyService::getScriptSize() { return duckyEngine.getCommandCount(); }
 
 //=============================================================================
-// Auth Bypass Engine - Complete Implementation
+// Auth Bypass Engine
 //=============================================================================
 
 AuthBypassEngine::AuthBypassEngine() {
@@ -2373,7 +2366,7 @@ bool AuthBypassEngine::exploitAuthBypass(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Multi Connection Attack - Complete Implementation
+// Multi Connection Attack
 //=============================================================================
 
 MultiConnectionAttack::MultiConnectionAttack() {}
@@ -2573,7 +2566,7 @@ void MultiConnectionAttack::cleanup() {
 }
 
 //=============================================================================
-// Vulnerability Scanner - Complete Implementation
+// Vulnerability Scanner
 //=============================================================================
 
 VulnerabilityScanner::VulnerabilityScanner() { vulnerabilityChecks.clear(); }
@@ -2645,7 +2638,7 @@ std::vector<String> VulnerabilityScanner::getVulnerabilities() {
 }
 
 //=============================================================================
-// HID Attack Service - Complete Implementation
+// HID Attack Service
 //=============================================================================
 
 bool HIDAttackServiceClass::injectKeystrokes(NimBLEAddress target) {
@@ -2813,7 +2806,7 @@ bool HIDAttackServiceClass::forceHIDKeystrokes(NimBLEAddress target, const Strin
 }
 
 //=============================================================================
-// Pairing Attack Service - Complete Implementation
+// Pairing Attack Service
 //=============================================================================
 
 bool PairingAttackServiceClass::bruteForcePIN(NimBLEAddress target) {
@@ -2885,7 +2878,7 @@ bool PairingAttackServiceClass::bruteForcePIN(NimBLEAddress target) {
 }
 
 //=============================================================================
-// DoS Attack Service - Complete Implementation
+// DoS Attack Service
 //=============================================================================
 
 bool DoSAttackServiceClass::connectionFlood(NimBLEAddress target) {
@@ -2972,7 +2965,7 @@ bool DoSAttackServiceClass::advertisingSpam(NimBLEAddress target) {
 }
 
 //=============================================================================
-// File Operations - Complete Implementation
+// File Operations
 //=============================================================================
 
 String selectFileFromSD() {
@@ -3290,11 +3283,23 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setInterval(97);
     pScan->setWindow(67);
 
-    // NimBLE 2.3.7: start() returns results directly
+#ifdef NIMBLE_V2_PLUS
+    bool scanStarted = pScan->start(duration * 1000, false);
+    if (!scanStarted) {
+        showAttackProgress("Failed to start FastPair scan", TFT_RED);
+        return discoveredDevices;
+    }
+    NimBLEScanResults results = pScan->getResults(duration * 1000, false);
+#else
     NimBLEScanResults results = pScan->start(duration, false);
+#endif
 
     for (int i = 0; i < results.getCount(); i++) {
+#ifdef NIMBLE_V2_PLUS
+        const NimBLEAdvertisedDevice *device = results.getDevice(i);
+#else
         NimBLEAdvertisedDevice *device = results.getDevice(i);
+#endif
 
         String address = String(device->getAddress().toString().c_str());
         String name = device->getName().c_str();
@@ -3453,7 +3458,7 @@ bool FastPairExploitEngine::testVulnerability(NimBLEAddress target) {
 }
 
 //=============================================================================
-// FastPair Helpers - Complete Implementation
+// FastPair Helpers
 //=============================================================================
 
 NimBLERemoteCharacteristic *FastPairExploitEngine::findKBPCharacteristic(NimBLERemoteService *service) {
@@ -3927,11 +3932,19 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
-                // NimBLE 2.3.7: getResults works directly
+#ifdef NIMBLE_V2_PLUS
+                pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
+#else
+                NimBLEScanResults results = pScan->getResults(10 * 1000, true);
+#endif
 
                 for (int i = 0; i < results.getCount(); i++) {
+#ifdef NIMBLE_V2_PLUS
+                    const NimBLEAdvertisedDevice *device = results.getDevice(i);
+#else
                     NimBLEAdvertisedDevice *device = results.getDevice(i);
+#endif
 
                     SnifferPacket packet;
                     packet.address = String(device->getAddress().toString().c_str());
@@ -4135,7 +4148,7 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    // Don't clear scannerData at start - keep existing data
+    // DO NOT clear scannerData here - it persists between operations
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
     
@@ -4194,11 +4207,23 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 80);
     tft.print("Active scan (8s)...");
 
-    // NimBLE 2.3.7: start() returns BLEScanResults directly
+#ifdef NIMBLE_V2_PLUS
+    bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
+    if (!scanStarted) {
+        displayError("Failed to start BLE scan");
+        return "";
+    }
+    BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
+#else
     BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
+#endif
 
     for (int i = 0; i < activeResults.getCount(); i++) {
+#ifdef NIMBLE_V2_PLUS
+        const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+#else
         NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+#endif
         if (!device) continue;
         
         String address = String(device->getAddress().toString().c_str());
@@ -4231,10 +4256,23 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 100);
     tft.print("Passive scan (8s)...");
 
+#ifdef NIMBLE_V2_PLUS
+    bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
+    if (!passiveScanStarted) {
+        displayError("Failed to start passive BLE scan");
+        return "";
+    }
+    BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
+#else
     BLEScanResults passiveResults = g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
+#endif
 
     for (int i = 0; i < passiveResults.getCount(); i++) {
+#ifdef NIMBLE_V2_PLUS
+        const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+#else
         NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+#endif
         if (!device) continue;
         
         String address = String(device->getAddress().toString().c_str());
@@ -4286,6 +4324,7 @@ String selectTargetFromScan(const char *title) {
         tft.setCursor(20, 100);
         tft.print("turned on and in range.");
         delay(2000);
+        // DO NOT clear scannerData - it was already empty
         return "";
     }
 
@@ -4409,11 +4448,9 @@ String selectTargetFromScan(const char *title) {
                 scrollOffset = 0;
             }
         } else if (check(SelPress)) {
-            // Get the MAC address directly from the snapshot
             String selectedMAC = snapshot->addresses[selectedIdx];
             String selectedName = snapshot->names[selectedIdx];
             
-            // Clean the MAC address
             selectedMAC.trim();
             selectedMAC.toUpperCase();
             
@@ -4428,13 +4465,14 @@ String selectTargetFromScan(const char *title) {
             returnMac.trim();
             
             delete snapshot;
+            // DO NOT clear scannerData here - keep it for potential reuse
             return returnMac;
         }
         delay(50);
     }
     
     delete snapshot;
-    scannerData.clear();
+    // DO NOT clear scannerData here - keep it for potential reuse
     return "";
 }
 
@@ -4864,7 +4902,7 @@ void runAdvertisingSpam(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Menu System
+// Menu System - Clear data ONLY at entry and exit
 //=============================================================================
 
 static bool welcomeShown = false;
@@ -4893,6 +4931,11 @@ void showWelcomeScreen() {
 }
 
 void BleSuiteMenu() {
+    // Clear data when entering the menu
+    scannerData.clear();
+    g_selectedDevice.address = "";
+    g_selectedDevice.name = "";
+    
     showWelcomeScreen();
 
     const int MENU_ITEMS = 12;
@@ -4963,12 +5006,15 @@ void BleSuiteMenu() {
         }
 
         if (check(EscPress)) {
+            // Clear data when exiting the menu
             if (g_pBLEScan) {
                 g_pBLEScan->stop();
                 g_pBLEScan->clearResults();
                 g_bleScanActive = false;
             }
             scannerData.clear();
+            g_selectedDevice.address = "";
+            g_selectedDevice.name = "";
             return;
         }
         if (check(PrevPress)) {
@@ -4986,12 +5032,7 @@ void BleSuiteMenu() {
         if (check(SelPress)) {
             if (selected == MENU_ITEMS - 1) {
                 BLE_Sniffer();
-                if (g_pBLEScan) {
-                    g_pBLEScan->stop();
-                    g_pBLEScan->clearResults();
-                    g_bleScanActive = false;
-                }
-                scannerData.clear();
+                // Don't clear data - keep it for the menu
             } else {
                 executeAttackWithTargetScan(selected);
             }
@@ -5048,14 +5089,13 @@ void executeAttackWithTargetScan(int attackIndex) {
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
     
+    // Clean up scan state but DON'T clear scannerData
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
         g_bleScanActive = false;
     }
-    scannerData.clear();
-    g_selectedDevice.address = "";
-    g_selectedDevice.name = "";
+    // Keep scannerData and g_selectedDevice for potential reuse
     delay(100);
 }
 
