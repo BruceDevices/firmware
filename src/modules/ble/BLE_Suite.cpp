@@ -45,14 +45,6 @@ static NimBLEScan* g_pBLEScan = nullptr;
 static bool g_bleScanActive = false;
 
 // Device selection cache
-struct SelectedDevice {
-    String address;
-    String name;
-    int rssi;
-    bool hasFastPair;
-    bool hasHFP;
-    uint8_t deviceType;
-};
 static SelectedDevice g_selectedDevice;
 
 //=============================================================================
@@ -84,20 +76,6 @@ FastPairVersion detectFastPairVersion(NimBLEAddress target) { return FP_VERSION_
 //=============================================================================
 // ScannerData Implementation with Snapshot Support
 //=============================================================================
-
-struct DeviceSnapshot {
-    uint32_t version;
-    uint32_t count;
-    uint32_t timestamp;
-    std::vector<String> names;
-    std::vector<String> addresses;
-    std::vector<int> rssi;
-    std::vector<bool> fastPair;
-    std::vector<bool> hfp;
-    std::vector<uint8_t> types;
-    
-    DeviceSnapshot() : version(0), count(0), timestamp(0) {}
-};
 
 ScannerData::ScannerData() {
     mutex = xSemaphoreCreateMutex();
@@ -516,14 +494,11 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 
     bool hasHFP = false;
     DeviceInfo info;
-    if (scannerData.getDeviceInfo(0, info)) {
-        // Check if target matches any device in scanner data
-        for (size_t i = 0; i < scannerData.size(); i++) {
-            if (scannerData.getDeviceInfo(i, info)) {
-                if (info.address == target.toString().c_str()) {
-                    hasHFP = info.hasHFP;
-                    break;
-                }
+    for (size_t i = 0; i < scannerData.size(); i++) {
+        if (scannerData.getDeviceInfo(i, info)) {
+            if (info.address == target.toString().c_str()) {
+                hasHFP = info.hasHFP;
+                break;
             }
         }
     }
@@ -4187,11 +4162,18 @@ String selectTargetFromScan(const char *title) {
     const int ACTIVE_SCAN_TIME = 8;
     const int PASSIVE_SCAN_TIME = 8;
 
+    // === ACTIVE SCAN ===
     g_pBLEScan->setActiveScan(true);
     tft.setCursor(20, 80);
     tft.print("Active scan (8s)...");
     g_pBLEScan->clearResults();
-    BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
+
+#ifdef NIMBLE_V2_PLUS
+    BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
+#else
+    g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
+    BLEScanResults activeResults = g_pBLEScan->getResults();
+#endif
 
     for (int i = 0; i < activeResults.getCount(); i++) {
         const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
@@ -4222,10 +4204,17 @@ String selectTargetFromScan(const char *title) {
         scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
     }
 
+    // === PASSIVE SCAN ===
     g_pBLEScan->setActiveScan(false);
     tft.setCursor(20, 100);
     tft.print("Passive scan (8s)...");
-    BLEScanResults passiveResults = g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
+
+#ifdef NIMBLE_V2_PLUS
+    BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
+#else
+    g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
+    BLEScanResults passiveResults = g_pBLEScan->getResults();
+#endif
 
     for (int i = 0; i < passiveResults.getCount(); i++) {
         const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
@@ -4283,6 +4272,8 @@ String selectTargetFromScan(const char *title) {
     }
 
     size_t deviceCount = snapshot->count;
+    
+    // Sort with manual swap for vector<bool>
     for (size_t i = 0; i < deviceCount - 1; i++) {
         for (size_t j = i + 1; j < deviceCount; j++) {
             bool swapNeeded = false;
@@ -4295,13 +4286,22 @@ String selectTargetFromScan(const char *title) {
                 std::swap(snapshot->names[i], snapshot->names[j]);
                 std::swap(snapshot->addresses[i], snapshot->addresses[j]);
                 std::swap(snapshot->rssi[i], snapshot->rssi[j]);
-                std::swap(snapshot->fastPair[i], snapshot->fastPair[j]);
-                std::swap(snapshot->hfp[i], snapshot->hfp[j]);
+                
+                // Manual swap for vector<bool> proxy references
+                bool tempFast = snapshot->fastPair[i];
+                snapshot->fastPair[i] = snapshot->fastPair[j];
+                snapshot->fastPair[j] = tempFast;
+                
+                bool tempHfp = snapshot->hfp[i];
+                snapshot->hfp[i] = snapshot->hfp[j];
+                snapshot->hfp[j] = tempHfp;
+                
                 std::swap(snapshot->types[i], snapshot->types[j]);
             }
         }
     }
 
+    // UI selection loop...
     int maxVisibleDevices = 4, deviceItemHeight = 30, menuStartY = 60;
     int selectedIdx = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
