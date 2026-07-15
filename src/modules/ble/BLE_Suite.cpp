@@ -48,7 +48,7 @@ static bool g_bleScanActive = false;
 static SelectedDevice g_selectedDevice;
 
 //=============================================================================
-// Cleanup Function
+// Cleanup Function - Safe version that doesn't deinit BLE
 //=============================================================================
 
 void cleanupBLESuiteState() {
@@ -56,9 +56,8 @@ void cleanupBLESuiteState() {
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
-        g_pBLEScan = nullptr;
+        g_bleScanActive = false;
     }
-    g_bleScanActive = false;
     
     // Clear the selected device cache
     g_selectedDevice.address = "";
@@ -71,15 +70,8 @@ void cleanupBLESuiteState() {
     // Clear scanner data
     scannerData.clear();
     
-    // Deinit BLE if it's active
-    if (BLEStateManager::isBLEActive()) {
-        BLEStateManager::deinitBLE(true);
-        delay(100);
-    }
-    
-    // Reinit BLE in a clean state
-    BLEStateManager::initBLE("Bruce", ESP_PWR_LVL_P9);
-    delay(100);
+    // Don't deinit BLE - just clean up state
+    delay(50);
 }
 
 //=============================================================================
@@ -4146,9 +4138,7 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    // Clean up previous state first
-    cleanupBLESuiteState();
-    
+    // Clean up previous state
     scannerData.clear();
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
@@ -5019,7 +5009,13 @@ void BleSuiteMenu() {
         }
 
         if (check(EscPress)) {
-            cleanupBLESuiteState();
+            // Clean up scan state without deinit
+            if (g_pBLEScan) {
+                g_pBLEScan->stop();
+                g_pBLEScan->clearResults();
+                g_bleScanActive = false;
+            }
+            scannerData.clear();
             return;
         }
         if (check(PrevPress)) {
@@ -5037,7 +5033,13 @@ void BleSuiteMenu() {
         if (check(SelPress)) {
             if (selected == MENU_ITEMS - 1) {
                 BLE_Sniffer();
-                cleanupBLESuiteState();
+                // Clean up after sniffer
+                if (g_pBLEScan) {
+                    g_pBLEScan->stop();
+                    g_pBLEScan->clearResults();
+                    g_bleScanActive = false;
+                }
+                scannerData.clear();
             } else {
                 executeAttackWithTargetScan(selected);
             }
@@ -5094,9 +5096,16 @@ void executeAttackWithTargetScan(int attackIndex) {
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
     
-    // Clean up after attack to prevent crashes
-    cleanupBLESuiteState();
-    delay(200);
+    // Clean up scan state without deinit
+    if (g_pBLEScan) {
+        g_pBLEScan->stop();
+        g_pBLEScan->clearResults();
+        g_bleScanActive = false;
+    }
+    scannerData.clear();
+    g_selectedDevice.address = "";
+    g_selectedDevice.name = "";
+    delay(100);
 }
 
 //=============================================================================
