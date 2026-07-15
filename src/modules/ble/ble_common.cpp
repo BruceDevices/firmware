@@ -9,12 +9,16 @@
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #endif
+
 #define SERVICE_UUID "1bc68b2a-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_TX_UUID "1bc68efe-f3e3-11e9-81b4-2a2ae2dbcce4"
 
 BLEScan *pBLEScan = nullptr;
 int scanTime = SCANTIME; // In seconds
+
+// Limit the number of devices we show to prevent memory issues
+#define MAX_DISPLAY_DEVICES 100
 
 bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries) {
     if (chr == nullptr) return false;
@@ -82,30 +86,43 @@ void ble_info(const String &name, const String &address, const String &signal) {
         break;
     }
 }
+
+// Fixed callback with bounds checking
 #ifdef NIMBLE_V2_PLUS
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 #else
 class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 #endif
     void onResult(NimBLEAdvertisedDevice *advertisedDevice) {
+        // Check if we've reached the maximum
+        if (options.size() >= MAX_DISPLAY_DEVICES) {
+            // Stop the scan to prevent further callbacks
+            if (pBLEScan) {
+                pBLEScan->stop();
+                Serial.println("Reached max devices, stopping scan");
+            }
+            return;
+        }
+        
         String bt_title;
         String bt_name;
         String bt_address;
         String bt_signal;
 
+        // Safely get device info
         bt_name = advertisedDevice->getName().c_str();
-        bt_title = advertisedDevice->getName().c_str();
         bt_address = advertisedDevice->getAddress().toString().c_str();
         bt_signal = String(advertisedDevice->getRSSI());
-        // Serial.println("\n\nAddress - " + bt_address + "Name-"+ bt_name +"\n\n");
-        if (bt_title.isEmpty()) bt_title = bt_address;
+        
         if (bt_name.isEmpty()) bt_name = "<no name>";
-        // If BT name is empty, set NONAME
-        if (options.size() < 250)
-            options.emplace_back(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
-        else {
-            Serial.println("Memory low, stopping BLE scan...");
-            pBLEScan->stop();
+        bt_title = bt_name;
+        if (bt_title.isEmpty()) bt_title = bt_address;
+        
+        // Add to options with bounds check
+        if (options.size() < MAX_DISPLAY_DEVICES) {
+            options.emplace_back(bt_title.c_str(), [=]() { 
+                ble_info(bt_name, bt_address, bt_signal); 
+            });
         }
     }
 };
@@ -113,16 +130,23 @@ class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 static bool is_ble_inited = false;
 
 void stopBLEStack() {
-    if (pBLEScan) pBLEScan->stop();
+    if (pBLEScan) {
+        pBLEScan->stop();
+        // Don't clear results if we might need them
+        // pBLEScan->clearResults();
+    }
 
+    // Only deinit if we actually initialized it
+    if (is_ble_inited) {
 #if !defined(LITE_VERSION)
-    if (BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0) {
-        BLEStateManager::deinitBLE(true);
-    } else
+        if (BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0) {
+            BLEStateManager::deinitBLE(true);
+        } else
 #endif
-        if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
-            BLEDevice::getServer() != nullptr || BLEConnected || is_ble_inited) {
-        BLEDevice::deinit();
+            if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
+                BLEDevice::getServer() != nullptr || BLEConnected) {
+            BLEDevice::deinit();
+        }
     }
 
     pBLEScan = nullptr;
@@ -160,11 +184,22 @@ bool ble_scan_setup() {
         returnToMenu = true;
         return false;
     }
-    BLEDevice::init("");
+    
+    // Only init if not already inited
+    if (!is_ble_inited) {
+        BLEDevice::init("");
+        is_ble_inited = true;
+    }
+    
     RAM_LOG("ble-scan post-init");
     pBLEScan = BLEDevice::getScan();
+    if (!pBLEScan) {
+        displayError("Failed to get scan object", true);
+        return false;
+    }
+    
 #ifdef NIMBLE_V2_PLUS
-    pBLEScan->setScanCallbacks(new NimBLEScanCallbacks());
+    pBLEScan->setScanCallbacks(new AdvertisedDeviceCallbacks());
 #else
     pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
 #endif
@@ -174,13 +209,11 @@ bool ble_scan_setup() {
     pBLEScan->setInterval(SCAN_INT);
     // Less or equal setInterval value
     pBLEScan->setWindow(SCAN_WINDOW);
+    // Don't filter duplicates - we want to see all devices
+    pBLEScan->setDuplicateFilter(false);
 
     // Bluetooth MAC Address
-#ifdef NIMBLE_V2_PLUS
     esp_read_mac(sta_mac, ESP_MAC_BT);
-#else
-    esp_read_mac(sta_mac, ESP_MAC_BT);
-#endif
 
     sprintf(
         strID,
@@ -199,81 +232,174 @@ bool ble_scan_setup() {
 void ble_scan() {
     displayTextLine("Scanning..");
 
+    // Clear options and limit size
     options = {};
+    options.reserve(MAX_DISPLAY_DEVICES);
+    
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
-    bleWasActiveBefore =
-        bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
+    bleWasActiveBefore = bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
 #endif
 
-    if (!ble_scan_setup() || pBLEScan == nullptr) return;
+    if (!ble_scan_setup() || pBLEScan == nullptr) {
+        displayError("Failed to init BLE scan");
+        return;
+    }
+
+    // Clear previous results before scanning
+    pBLEScan->clearResults();
+
 #ifdef NIMBLE_V2_PLUS
+    // For NimBLE v2+, use getResults with timeout
     BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
-    for (int i = 0; i < foundDevices.getCount(); i++) {
+    
+    // Safely process results with bounds checking
+    int deviceCount = foundDevices.getCount();
+    int processedCount = 0;
+    
+    for (int i = 0; i < deviceCount && processedCount < MAX_DISPLAY_DEVICES; i++) {
         const NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
+        if (!advertisedDevice) continue;
+        
         String bt_title;
         String bt_name;
         String bt_address;
         String bt_signal;
 
         bt_name = advertisedDevice->getName().c_str();
-        bt_title = advertisedDevice->getName().c_str();
         bt_address = advertisedDevice->getAddress().toString().c_str();
         bt_signal = String(advertisedDevice->getRSSI());
-        // Serial.println("\n\nAddress - " + bt_address + "Name-"+ bt_name +"\n\n");
-        if (bt_title.isEmpty()) bt_title = bt_address;
+        
         if (bt_name.isEmpty()) bt_name = "<no name>";
-        // If BT name is empty, set NONAME
-        if (options.size() < 250)
-            options.emplace_back(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
-        else {
-            Serial.println("Memory low, stopping BLE scan...");
-            pBLEScan->stop();
+        bt_title = bt_name;
+        if (bt_title.isEmpty()) bt_title = bt_address;
+        
+        if (options.size() < MAX_DISPLAY_DEVICES) {
+            options.emplace_back(bt_title.c_str(), [=]() { 
+                ble_info(bt_name, bt_address, bt_signal); 
+            });
+            processedCount++;
         }
     }
 #else
-    BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
+    // For older NimBLE, use start() which blocks
+    pBLEScan->start(scanTime, false);
+    BLEScanResults foundDevices = pBLEScan->getResults();
+    
+    // Process results with bounds checking
+    int deviceCount = foundDevices.getCount();
+    int processedCount = 0;
+    
+    for (int i = 0; i < deviceCount && processedCount < MAX_DISPLAY_DEVICES; i++) {
+        NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
+        if (!advertisedDevice) continue;
+        
+        String bt_title;
+        String bt_name;
+        String bt_address;
+        String bt_signal;
+
+        bt_name = advertisedDevice->getName().c_str();
+        bt_address = advertisedDevice->getAddress().toString().c_str();
+        bt_signal = String(advertisedDevice->getRSSI());
+        
+        if (bt_name.isEmpty()) bt_name = "<no name>";
+        bt_title = bt_name;
+        if (bt_title.isEmpty()) bt_title = bt_address;
+        
+        if (options.size() < MAX_DISPLAY_DEVICES) {
+            options.emplace_back(bt_title.c_str(), [=]() { 
+                ble_info(bt_name, bt_address, bt_signal); 
+            });
+            processedCount++;
+        }
+    }
 #endif
 
-    addOptionToMainMenu();
-
-    loopOptions(options);
-    options.clear();
-
-    // Delete results fromBLEScan buffer to release memory
-    pBLEScan->clearResults();
-    pBLEScan->stop();
-    if (!bleWasActiveBefore) { stopBLEStack(); }
+    // Add option to show count if we hit the limit
+    if (options.size() >= MAX_DISPLAY_DEVICES) {
+        options.emplace_back("... and more devices", nullptr);
+    }
+    
+    // Clear results from buffer to release memory
+    if (pBLEScan) {
+        pBLEScan->clearResults();
+        pBLEScan->stop();
+    }
+    
+    // Only stop BLE if it wasn't active before and we don't need it
+    if (!bleWasActiveBefore && !BLEStateManager::isBLEActive()) {
+        stopBLEStack();
+    }
+    
+    // Show the menu if we have options
+    if (!options.empty()) {
+        addOptionToMainMenu();
+        loopOptions(options);
+        options.clear();
+    } else {
+        displayError("No devices found");
+        delay(1000);
+    }
 }
 
 bool initBLEServer() {
     uint64_t chipid = ESP.getEfuseMac();
     String blename = "Bruce-" + String((uint8_t)(chipid >> 32), HEX);
 
-    BLEDevice::init(blename.c_str());
-    // BLEDevice::setPower(ESP_PWR_LVL_N12);
+    if (!is_ble_inited) {
+        BLEDevice::init(blename.c_str());
+        is_ble_inited = true;
+    }
+    
     pServer = BLEDevice::createServer();
+    if (!pServer) {
+        displayError("Failed to create BLE server");
+        return false;
+    }
 
     pServer->setCallbacks(new MyServerCallbacks());
     pService = pServer->createService(SERVICE_UUID);
+    if (!pService) {
+        displayError("Failed to create BLE service");
+        return false;
+    }
+    
     pTxCharacteristic = pService->createCharacteristic(CHARACTERISTIC_RX_UUID, NIMBLE_PROPERTY::NOTIFY);
+    if (!pTxCharacteristic) {
+        displayError("Failed to create TX characteristic");
+        return false;
+    }
 
     pTxCharacteristic->addDescriptor(new NimBLE2904());
-    BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
+    pRxCharacteristic = pService->createCharacteristic(
         CHARACTERISTIC_TX_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
     );
+    if (!pRxCharacteristic) {
+        displayError("Failed to create RX characteristic");
+        return false;
+    }
     pRxCharacteristic->setCallbacks(new MyCallbacks());
 
+    // Start the service
+    pService->start();
+    
     return true;
 }
 
 void disPlayBLESend() {
     uint8_t senddata[2] = {0};
     tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorder(); // Moved up to avoid drawing screen issues
+    drawMainBorder();
     tft.setTextSize(1);
 
-    // pService->start() is deprecated in NimBLE v2 - services start automatically with the server
+    if (!pServer) {
+        if (!initBLEServer()) {
+            displayError("Failed to init BLE server");
+            return;
+        }
+    }
+
     pServer->getAdvertising()->start();
 
     uint64_t chipid = ESP.getEfuseMac();
@@ -291,7 +417,6 @@ void disPlayBLESend() {
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 tft.setTextSize(FM);
                 tft.setCursor(12, 50);
-                // tft.printf("BLE connect!\n");
                 tft.printf("BLE Send\n");
                 tft.setTextSize(FM);
             }
@@ -337,28 +462,31 @@ void disPlayBLESend() {
     }
 
     tft.setTextColor(TFT_WHITE);
-    pService->~NimBLEService();
     pServer->getAdvertising()->stop();
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
-    BLEDevice::deinit();
-#endif
     BLEConnected = false;
+    
+    // Don't deinit here - let the caller handle cleanup
 }
 
 void ble_test() {
     printf("ble test\n");
 
-    // if (!is_ble_inited)
-    // {
-    printf("Init ble server\n");
-    initBLEServer();
-    delay(100);
-    is_ble_inited = true;
-    // }
+    if (!is_ble_inited) {
+        printf("Init ble server\n");
+        if (!initBLEServer()) {
+            displayError("Failed to init BLE server");
+            return;
+        }
+        delay(100);
+    }
 
     disPlayBLESend();
+
+    // Clean up properly
+    if (pServer) {
+        pServer->getAdvertising()->stop();
+    }
+    stopBLEStack();
 
     printf("Quit ble test\n");
 }
