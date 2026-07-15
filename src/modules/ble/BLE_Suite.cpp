@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 15/07/2026
+ * Last Updated: 16/07/2026
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
@@ -547,7 +547,7 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 }
 
 //=============================================================================
-// HID Exploit Engine
+// HID Exploit Engine - Complete Implementation
 //=============================================================================
 
 HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const String &name, int rssi) {
@@ -1468,7 +1468,7 @@ bool WhisperPairExploit::executeAdvanced(NimBLEAddress target, int attackType) {
 }
 
 //=============================================================================
-// Audio Attack Service
+// Audio Attack Service - Complete Implementation
 //=============================================================================
 
 bool AudioAttackService::findAndAttackAudioServices(NimBLEClient *pClient) {
@@ -1682,7 +1682,7 @@ bool AudioAttackService::crashAudioStack(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Ducky Script Engine
+// Ducky Script Engine - Complete Implementation
 //=============================================================================
 
 DuckyScriptEngine::DuckyScriptEngine() : scriptLoaded(false) {}
@@ -1859,7 +1859,7 @@ void DuckyScriptEngine::clear() {
 size_t DuckyScriptEngine::getCommandCount() { return commands.size(); }
 
 //=============================================================================
-// HID Ducky Service
+// HID Ducky Service - Complete Implementation
 //=============================================================================
 
 HIDDuckyService::HIDDuckyService() : defaultDelay(100) {}
@@ -2219,7 +2219,7 @@ void HIDDuckyService::setDefaultDelay(int delay_ms) { defaultDelay = delay_ms; }
 size_t HIDDuckyService::getScriptSize() { return duckyEngine.getCommandCount(); }
 
 //=============================================================================
-// Auth Bypass Engine
+// Auth Bypass Engine - Complete Implementation
 //=============================================================================
 
 AuthBypassEngine::AuthBypassEngine() {
@@ -2373,7 +2373,7 @@ bool AuthBypassEngine::exploitAuthBypass(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Multi Connection Attack
+// Multi Connection Attack - Complete Implementation
 //=============================================================================
 
 MultiConnectionAttack::MultiConnectionAttack() {}
@@ -2573,7 +2573,7 @@ void MultiConnectionAttack::cleanup() {
 }
 
 //=============================================================================
-// Vulnerability Scanner
+// Vulnerability Scanner - Complete Implementation
 //=============================================================================
 
 VulnerabilityScanner::VulnerabilityScanner() { vulnerabilityChecks.clear(); }
@@ -2645,7 +2645,7 @@ std::vector<String> VulnerabilityScanner::getVulnerabilities() {
 }
 
 //=============================================================================
-// HID Attack Service
+// HID Attack Service - Complete Implementation
 //=============================================================================
 
 bool HIDAttackServiceClass::injectKeystrokes(NimBLEAddress target) {
@@ -2813,7 +2813,7 @@ bool HIDAttackServiceClass::forceHIDKeystrokes(NimBLEAddress target, const Strin
 }
 
 //=============================================================================
-// Pairing Attack Service
+// Pairing Attack Service - Complete Implementation
 //=============================================================================
 
 bool PairingAttackServiceClass::bruteForcePIN(NimBLEAddress target) {
@@ -2885,7 +2885,7 @@ bool PairingAttackServiceClass::bruteForcePIN(NimBLEAddress target) {
 }
 
 //=============================================================================
-// DoS Attack Service
+// DoS Attack Service - Complete Implementation
 //=============================================================================
 
 bool DoSAttackServiceClass::connectionFlood(NimBLEAddress target) {
@@ -2972,7 +2972,7 @@ bool DoSAttackServiceClass::advertisingSpam(NimBLEAddress target) {
 }
 
 //=============================================================================
-// File Operations
+// File Operations - Complete Implementation
 //=============================================================================
 
 String selectFileFromSD() {
@@ -3290,15 +3290,11 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setInterval(97);
     pScan->setWindow(67);
 
-#ifdef NIMBLE_V2_PLUS
-    pScan->start(duration * 1000, false);
-    NimBLEScanResults results = pScan->getResults(duration * 1000, false);
-#else
+    // NimBLE 2.3.7: start() returns results directly
     NimBLEScanResults results = pScan->start(duration, false);
-#endif
 
     for (int i = 0; i < results.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = results.getDevice(i);
+        NimBLEAdvertisedDevice *device = results.getDevice(i);
 
         String address = String(device->getAddress().toString().c_str());
         String name = device->getName().c_str();
@@ -3457,7 +3453,7 @@ bool FastPairExploitEngine::testVulnerability(NimBLEAddress target) {
 }
 
 //=============================================================================
-// FastPair Helpers
+// FastPair Helpers - Complete Implementation
 //=============================================================================
 
 NimBLERemoteCharacteristic *FastPairExploitEngine::findKBPCharacteristic(NimBLERemoteService *service) {
@@ -3931,15 +3927,11 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
-#ifdef NIMBLE_V2_PLUS
-                pScan->start(10 * 1000, true);
+                // NimBLE 2.3.7: getResults works directly
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
-#else
-                NimBLEScanResults results = pScan->getResults(10 * 1000, true);
-#endif
 
                 for (int i = 0; i < results.getCount(); i++) {
-                    const NimBLEAdvertisedDevice *device = results.getDevice(i);
+                    NimBLEAdvertisedDevice *device = results.getDevice(i);
 
                     SnifferPacket packet;
                     packet.address = String(device->getAddress().toString().c_str());
@@ -4202,19 +4194,11 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 80);
     tft.print("Active scan (8s)...");
 
-#ifdef NIMBLE_V2_PLUS
-    bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
-    if (!scanStarted) {
-        displayError("Failed to start BLE scan");
-        return "";
-    }
-    BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
-#else
+    // NimBLE 2.3.7: start() returns BLEScanResults directly
     BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
-#endif
 
     for (int i = 0; i < activeResults.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+        NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
         if (!device) continue;
         
         String address = String(device->getAddress().toString().c_str());
@@ -4247,19 +4231,10 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 100);
     tft.print("Passive scan (8s)...");
 
-#ifdef NIMBLE_V2_PLUS
-    bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
-    if (!passiveScanStarted) {
-        displayError("Failed to start passive BLE scan");
-        return "";
-    }
-    BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
-#else
     BLEScanResults passiveResults = g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
-#endif
 
     for (int i = 0; i < passiveResults.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+        NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
         if (!device) continue;
         
         String address = String(device->getAddress().toString().c_str());
@@ -4287,7 +4262,7 @@ String selectTargetFromScan(const char *title) {
         scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
     }
 
-    // Stop the scan but don't clear results yet
+    // Stop the scan but DON'T clear results yet - we need them for display
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_bleScanActive = false;
@@ -4584,7 +4559,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
 }
 
 //=============================================================================
-// Parse Address Function - Fixed MAC extraction
+// parseAddress - Fixed MAC extraction
 //=============================================================================
 
 NimBLEAddress parseAddress(const String &addressInfo) {
