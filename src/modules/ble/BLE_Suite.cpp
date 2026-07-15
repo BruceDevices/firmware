@@ -4592,22 +4592,18 @@ NimBLEAddress parseAddress(const String &addressInfo) {
     cleanAddr.trim();
     cleanAddr.toUpperCase();
     
-    // If it has the ":0" suffix from our return format, remove it
     if (cleanAddr.endsWith(":0")) {
         cleanAddr = cleanAddr.substring(0, cleanAddr.length() - 2);
     }
     
-    // Look for MAC pattern (XX:XX:XX:XX:XX:XX)
     int start = -1;
     int colonCount = 0;
     for (int i = 0; i < cleanAddr.length(); i++) {
         char c = cleanAddr.charAt(i);
         if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
             if (start == -1) start = i;
-            // Check if we have a valid MAC
             if (i - start + 1 >= 17) {
                 String possibleMac = cleanAddr.substring(start, start + 17);
-                // Validate MAC format
                 bool valid = true;
                 for (int j = 0; j < 17; j++) {
                     if (j % 3 == 2) {
@@ -4630,7 +4626,6 @@ NimBLEAddress parseAddress(const String &addressInfo) {
         } else if (c == ':') {
             colonCount++;
         } else {
-            // Reset if we hit a non-valid character
             if (start != -1 && colonCount < 5) {
                 start = -1;
                 colonCount = 0;
@@ -4638,7 +4633,6 @@ NimBLEAddress parseAddress(const String &addressInfo) {
         }
     }
     
-    // Try the simpler approach - just look for the first valid MAC
     for (int i = 0; i < addressInfo.length() - 17; i++) {
         String substr = addressInfo.substring(i, i + 17);
         bool valid = true;
@@ -4994,7 +4988,6 @@ void BleSuiteMenu() {
         }
 
         if (check(EscPress)) {
-            // Clean up scan state without deinit
             if (g_pBLEScan) {
                 g_pBLEScan->stop();
                 g_pBLEScan->clearResults();
@@ -5018,7 +5011,6 @@ void BleSuiteMenu() {
         if (check(SelPress)) {
             if (selected == MENU_ITEMS - 1) {
                 BLE_Sniffer();
-                // Clean up after sniffer
                 if (g_pBLEScan) {
                     g_pBLEScan->stop();
                     g_pBLEScan->clearResults();
@@ -5081,7 +5073,6 @@ void executeAttackWithTargetScan(int attackIndex) {
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
     
-    // Clean up scan state without deinit
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
