@@ -18,8 +18,6 @@
 #define NIMBLE_V2_PLUS 1
 #endif
 
-// TFT color definitions are now included from display.h - do not redefine here
-
 extern volatile int tftWidth;
 extern volatile int tftHeight;
 class tft_logger;
@@ -50,6 +48,76 @@ enum FastPairExploitType {
     FP_EXPLOIT_HANDSHAKE_FAULT,
     FP_EXPLOIT_RAPID_CONNECTION,
     FP_EXPLOIT_ALL
+};
+
+//=============================================================================
+// NEW: DeviceInfo and DeviceSnapshot structures
+//=============================================================================
+
+struct DeviceInfo {
+    String address;
+    String name;
+    int rssi;
+    bool hasFastPair;
+    bool hasHFP;
+    uint8_t deviceType;
+};
+
+struct DeviceSnapshot {
+    uint32_t version;
+    uint32_t count;
+    uint32_t timestamp;
+    std::vector<String> names;
+    std::vector<String> addresses;
+    std::vector<int> rssi;
+    std::vector<bool> fastPair;
+    std::vector<bool> hfp;
+    std::vector<uint8_t> types;
+    
+    DeviceSnapshot() : version(0), count(0), timestamp(0) {}
+};
+
+//=============================================================================
+// NEW: SelectedDevice for passing device info to attacks
+//=============================================================================
+
+struct SelectedDevice {
+    String address;
+    String name;
+    int rssi;
+    bool hasFastPair;
+    bool hasHFP;
+    uint8_t deviceType;
+};
+
+//=============================================================================
+// UPDATED: ScannerData with new methods and members
+//=============================================================================
+
+struct ScannerData {
+    std::vector<String> deviceNames;
+    std::vector<String> deviceAddresses;
+    std::vector<int> deviceRssi;
+    std::vector<bool> deviceFastPair;
+    std::vector<bool> deviceHasHFP;
+    std::vector<uint8_t> deviceTypes;
+    SemaphoreHandle_t mutex;
+    int foundCount;
+    
+    // NEW: Version tracking and snapshot cache
+    uint32_t dataVersion;
+    DeviceSnapshot* snapshotCache;
+    uint32_t cacheTimestamp;
+
+    ScannerData();
+    ~ScannerData();
+    void addDevice(const String& name, const String& address, int rssi, bool fastPair, bool hasHFP, uint8_t type);
+    void clear();
+    size_t size();
+    
+    // NEW: Snapshot methods
+    DeviceSnapshot* getSnapshot();
+    bool getDeviceInfo(int index, DeviceInfo &info);
 };
 
 struct CharacteristicInfo {
@@ -103,23 +171,6 @@ struct DuckyCommand {
     String command;
     String parameter;
     int delay_ms;
-};
-
-struct ScannerData {
-    std::vector<String> deviceNames;
-    std::vector<String> deviceAddresses;
-    std::vector<int> deviceRssi;
-    std::vector<bool> deviceFastPair;
-    std::vector<bool> deviceHasHFP;
-    std::vector<uint8_t> deviceTypes;
-    SemaphoreHandle_t mutex;
-    int foundCount;
-
-    ScannerData();
-    ~ScannerData();
-    void addDevice(const String& name, const String& address, int rssi, bool fastPair, bool hasHFP, uint8_t type);
-    void clear();
-    size_t size();
 };
 
 class AutoCleanup {
@@ -432,8 +483,32 @@ void runDuckyScriptAttack(NimBLEAddress target);
 void runPINBruteForce(NimBLEAddress target);
 void runConnectionFlood(NimBLEAddress target);
 void runAdvertisingSpam(NimBLEAddress target);
-void runQuickTest(NimBLEAddress target);
-void runDeviceProfiling(NimBLEAddress target);
+
+//=============================================================================
+// UPDATED: Attack functions with SelectedDevice parameter
+//=============================================================================
+
+void runQuickTest(NimBLEAddress target, SelectedDevice deviceInfo);
+void runDeviceProfiling(NimBLEAddress target, SelectedDevice deviceInfo);
+void runUniversalAttack(NimBLEAddress target, SelectedDevice deviceInfo);
+
+//=============================================================================
+// UPDATED: Submenu functions with SelectedDevice parameter
+//=============================================================================
+
+void showFastPairSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showHFPSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showAudioSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showHIDSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showMemorySubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showDoSSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showPayloadSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+void showTestingSubMenu(NimBLEAddress target, SelectedDevice deviceInfo);
+
+//=============================================================================
+// Original function declarations (keep these)
+//=============================================================================
+
 void runWriteAccessTest(NimBLEAddress target);
 void runProtocolFuzzer(NimBLEAddress target);
 void runJamConnectAttack(NimBLEAddress target);
@@ -472,14 +547,13 @@ void runFastPairCryptoOverflow(NimBLEAddress target);
 void runFastPairPopupSpam(NimBLEAddress target, FastPairPopupType type);
 void runFastPairAllExploits(NimBLEAddress target);
 void runFastPairHIDChain(NimBLEAddress target);
-void runUniversalAttack(NimBLEAddress target);
 String selectFileFromSD();
 bool loadScriptFromSD(const String &filename);
 
 // BLE Sniffer
 void BLE_Sniffer();
 
-// Forward declarations for submenu functions
+// Forward declarations for old submenu functions (for compatibility)
 void showFastPairSubMenu(NimBLEAddress target);
 void showHFPSubMenu(NimBLEAddress target);
 void showAudioSubMenu(NimBLEAddress target);
