@@ -43,6 +43,7 @@ bool ble_scan_setup();
 
 // Perform BLE scan and display results
 // Automatically handles device limits to prevent memory issues
+// Compatible with NimBLE 1.x and 2.x
 void ble_scan();
 
 // Safely stop BLE stack and clean up resources
