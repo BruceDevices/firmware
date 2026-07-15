@@ -48,6 +48,41 @@ static bool g_bleScanActive = false;
 static SelectedDevice g_selectedDevice;
 
 //=============================================================================
+// Cleanup Function
+//=============================================================================
+
+void cleanupBLESuiteState() {
+    // Stop any ongoing scan
+    if (g_pBLEScan) {
+        g_pBLEScan->stop();
+        g_pBLEScan->clearResults();
+        g_pBLEScan = nullptr;
+    }
+    g_bleScanActive = false;
+    
+    // Clear the selected device cache
+    g_selectedDevice.address = "";
+    g_selectedDevice.name = "";
+    g_selectedDevice.rssi = 0;
+    g_selectedDevice.hasFastPair = false;
+    g_selectedDevice.hasHFP = false;
+    g_selectedDevice.deviceType = 0;
+    
+    // Clear scanner data
+    scannerData.clear();
+    
+    // Deinit BLE if it's active
+    if (BLEStateManager::isBLEActive()) {
+        BLEStateManager::deinitBLE(true);
+        delay(100);
+    }
+    
+    // Reinit BLE in a clean state
+    BLEStateManager::initBLE("Bruce", ESP_PWR_LVL_P9);
+    delay(100);
+}
+
+//=============================================================================
 // v3.1: Samsung MAC OUI Detection
 //=============================================================================
 
@@ -4111,6 +4146,9 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
+    // Clean up previous state first
+    cleanupBLESuiteState();
+    
     scannerData.clear();
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
@@ -4301,7 +4339,7 @@ String selectTargetFromScan(const char *title) {
         }
     }
 
-    // UI selection loop...
+    // UI selection loop
     int maxVisibleDevices = 4, deviceItemHeight = 30, menuStartY = 60;
     int selectedIdx = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
@@ -4391,15 +4429,56 @@ String selectTargetFromScan(const char *title) {
                 scrollOffset = 0;
             }
         } else if (check(SelPress)) {
-            g_selectedDevice.address = snapshot->addresses[selectedIdx];
-            g_selectedDevice.name = snapshot->names[selectedIdx];
+            // Get the MAC address directly from the snapshot
+            String selectedMAC = snapshot->addresses[selectedIdx];
+            String selectedName = snapshot->names[selectedIdx];
+            
+            // Clean the MAC address - remove any extra characters
+            selectedMAC.trim();
+            selectedMAC.toUpperCase();
+            
+            // Remove any trailing garbage
+            int colonCount = 0;
+            for (int i = 0; i < selectedMAC.length(); i++) {
+                if (selectedMAC.charAt(i) == ':') colonCount++;
+            }
+            
+            // If we have more than 5 colons, something is wrong
+            if (colonCount > 5) {
+                // Try to extract just the MAC
+                for (int i = 0; i < selectedMAC.length() - 17; i++) {
+                    String substr = selectedMAC.substring(i, i + 17);
+                    bool valid = true;
+                    for (int j = 0; j < 17; j++) {
+                        char c = substr.charAt(j);
+                        if (j % 3 == 2) {
+                            if (c != ':') { valid = false; break; }
+                        } else {
+                            if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) {
+                                valid = false; break;
+                            }
+                        }
+                    }
+                    if (valid) {
+                        selectedMAC = substr;
+                        break;
+                    }
+                }
+            }
+            
+            g_selectedDevice.address = selectedMAC;
+            g_selectedDevice.name = selectedName;
             g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
             g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
             g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
             g_selectedDevice.deviceType = snapshot->types[selectedIdx];
             
+            // Return just the MAC with no extra characters
+            String returnMac = selectedMAC;
+            returnMac.trim();
+            
             delete snapshot;
-            return g_selectedDevice.address + ":0";
+            return returnMac;
         }
         delay(50);
     }
@@ -4529,54 +4608,87 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
     return String(targets.size()) + " targets selected";
 }
 
+//=============================================================================
+// Parse Address Function - Fixed MAC extraction
+//=============================================================================
+
 NimBLEAddress parseAddress(const String &addressInfo) {
     String cleanAddr = addressInfo;
     cleanAddr.trim();
     cleanAddr.toUpperCase();
-
-    int start = 0;
+    
+    // If it has the ":0" suffix from our return format, remove it
+    if (cleanAddr.endsWith(":0")) {
+        cleanAddr = cleanAddr.substring(0, cleanAddr.length() - 2);
+    }
+    
+    // Look for MAC pattern (XX:XX:XX:XX:XX:XX)
+    int start = -1;
+    int colonCount = 0;
     for (int i = 0; i < cleanAddr.length(); i++) {
         char c = cleanAddr.charAt(i);
-        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || c == ':') {
-        } else if (c == '|' || c == '(' || c == ' ') {
-            cleanAddr = cleanAddr.substring(0, i);
-            break;
-        }
-    }
-
-    cleanAddr.trim();
-    if (cleanAddr.length() < 17) {
-        for (int i = 0; i < addressInfo.length() - 17; i++) {
-            String substr = addressInfo.substring(i, i + 17);
-            bool valid = true;
-            for (int j = 0; j < 17; j++) {
-                char c = substr.charAt(j);
-                if (j % 3 == 2) {
-                    if (c != ':') {
-                        valid = false;
-                        break;
-                    }
-                } else {
-                    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
-                        valid = false;
-                        break;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
+            if (start == -1) start = i;
+            // Check if we have a valid MAC
+            if (i - start + 1 >= 17) {
+                String possibleMac = cleanAddr.substring(start, start + 17);
+                // Validate MAC format
+                bool valid = true;
+                for (int j = 0; j < 17; j++) {
+                    if (j % 3 == 2) {
+                        if (possibleMac.charAt(j) != ':') {
+                            valid = false;
+                            break;
+                        }
+                    } else {
+                        char h = possibleMac.charAt(j);
+                        if (!((h >= '0' && h <= '9') || (h >= 'A' && h <= 'F'))) {
+                            valid = false;
+                            break;
+                        }
                     }
                 }
+                if (valid) {
+                    return NimBLEAddress(std::string(possibleMac.c_str()), BLE_ADDR_PUBLIC);
+                }
             }
-            if (valid) {
-                cleanAddr = substr;
-                cleanAddr.toUpperCase();
-                break;
+        } else if (c == ':') {
+            colonCount++;
+        } else {
+            // Reset if we hit a non-valid character
+            if (start != -1 && colonCount < 5) {
+                start = -1;
+                colonCount = 0;
             }
         }
     }
-
-    if (cleanAddr.length() < 17) {
-        Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
-        return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
+    
+    // Try the simpler approach - just look for the first valid MAC
+    for (int i = 0; i < addressInfo.length() - 17; i++) {
+        String substr = addressInfo.substring(i, i + 17);
+        bool valid = true;
+        for (int j = 0; j < 17; j++) {
+            char c = substr.charAt(j);
+            if (j % 3 == 2) {
+                if (c != ':') {
+                    valid = false;
+                    break;
+                }
+            } else {
+                if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        if (valid) {
+            substr.toUpperCase();
+            return NimBLEAddress(std::string(substr.c_str()), BLE_ADDR_PUBLIC);
+        }
     }
-
-    return NimBLEAddress(std::string(cleanAddr.c_str()), BLE_ADDR_PUBLIC);
+    
+    Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
+    return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
 }
 
 //=============================================================================
@@ -4906,7 +5018,10 @@ void BleSuiteMenu() {
             lastScrollOffset = scrollOffset;
         }
 
-        if (check(EscPress)) return;
+        if (check(EscPress)) {
+            cleanupBLESuiteState();
+            return;
+        }
         if (check(PrevPress)) {
             selected = (selected > 0) ? selected - 1 : MENU_ITEMS - 1;
             if (selected < scrollOffset) scrollOffset = selected;
@@ -4922,6 +5037,7 @@ void BleSuiteMenu() {
         if (check(SelPress)) {
             if (selected == MENU_ITEMS - 1) {
                 BLE_Sniffer();
+                cleanupBLESuiteState();
             } else {
                 executeAttackWithTargetScan(selected);
             }
@@ -4977,6 +5093,10 @@ void executeAttackWithTargetScan(int attackIndex) {
 
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
+    
+    // Clean up after attack to prevent crashes
+    cleanupBLESuiteState();
+    delay(200);
 }
 
 //=============================================================================
