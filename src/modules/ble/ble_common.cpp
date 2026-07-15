@@ -14,6 +14,9 @@
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_TX_UUID "1bc68efe-f3e3-11e9-81b4-2a2ae2dbcce4"
 
+// Limit the number of devices to prevent memory issues
+#define MAX_DISPLAY_DEVICES 100
+
 BLEScan *pBLEScan = nullptr;
 int scanTime = SCANTIME; // In seconds
 
@@ -153,16 +156,12 @@ static bool is_ble_inited = false;
 void stopBLEStack() {
     if (pBLEScan) {
         pBLEScan->stop();
+        pBLEScan->clearResults();
     }
 
     if (is_ble_inited) {
-#if !defined(LITE_VERSION)
-        if (BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0) {
-            BLEStateManager::deinitBLE(true);
-        } else
-#endif
-            if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
-                BLEDevice::getServer() != nullptr || BLEConnected) {
+        if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
+            BLEDevice::getServer() != nullptr || BLEConnected) {
             BLEDevice::deinit();
         }
     }
@@ -249,9 +248,6 @@ void ble_scan() {
     options.reserve(MAX_DISPLAY_DEVICES);
     
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
-#if !defined(LITE_VERSION)
-    bleWasActiveBefore = bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
-#endif
 
     if (!ble_scan_setup() || pBLEScan == nullptr) {
         displayError("Failed to init BLE scan");
@@ -266,11 +262,11 @@ void ble_scan() {
     bool scanStarted = pBLEScan->start(scanTime * 1000, false);
     if (!scanStarted) {
         displayError("Failed to start BLE scan");
+        pBLEScan->clearResults();
         return;
     }
     BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
 #else
-    // NimBLE 1.x: start() returns results directly
     BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
 #endif
 
@@ -313,15 +309,9 @@ void ble_scan() {
         pBLEScan->clearResults();
     }
     
-    // Only stop BLE if it wasn't active before
+    // Only stop BLE if it wasn't active before and we're done with it
     if (!bleWasActiveBefore) {
-#if !defined(LITE_VERSION)
-        if (!BLEStateManager::isBLEActive()) {
-            stopBLEStack();
-        }
-#else
         stopBLEStack();
-#endif
     }
     
     if (!options.empty()) {
@@ -372,7 +362,6 @@ bool initBLEServer() {
     }
     pRxCharacteristic->setCallbacks(new MyCallbacks());
 
-    // Services start automatically when server starts
     return true;
 }
 
@@ -453,6 +442,8 @@ void disPlayBLESend() {
     tft.setTextColor(TFT_WHITE);
     pServer->getAdvertising()->stop();
     BLEConnected = false;
+    
+    // Don't stop BLE stack here - let caller handle it
 }
 
 void ble_test() {
