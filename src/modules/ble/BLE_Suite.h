@@ -56,12 +56,9 @@ bool check(int key);
 #define SCAN_INT 100
 #define SCAN_WINDOW 99
 
-enum {
-    BLE_ESC_PRESS = 0,
-    BLE_SEL_PRESS = 1,
-    BLE_PREV_PRESS = 2,
-    BLE_NEXT_PRESS = 3
-};
+//=============================================================================
+// Forward Declarations
+//=============================================================================
 
 // Forward declaration of AdvertisedDeviceCallbacks for ble_common.cpp
 #if NIMBLE_V2_PLUS
@@ -79,6 +76,17 @@ public:
 
 // External reference to g_scanCallbacks for ble_common.cpp
 extern AdvertisedDeviceCallbacks* g_scanCallbacks;
+
+//=============================================================================
+// Enums
+//=============================================================================
+
+enum {
+    BLE_ESC_PRESS = 0,
+    BLE_SEL_PRESS = 1,
+    BLE_PREV_PRESS = 2,
+    BLE_NEXT_PRESS = 3
+};
 
 enum FastPairPopupType {
     FP_POPUP_REGULAR = 0,
@@ -216,6 +224,10 @@ struct DuckyCommand {
     int delay_ms;
 };
 
+//=============================================================================
+// AutoCleanup Class
+//=============================================================================
+
 class AutoCleanup {
 private:
     std::function<void()> cleanupFunc;
@@ -227,6 +239,10 @@ public:
     void disable();
     void enable();
 };
+
+//=============================================================================
+// BLEStateManager Class
+//=============================================================================
 
 class BLEStateManager {
 private:
@@ -245,6 +261,10 @@ public:
     static size_t getActiveClientCount();
 };
 
+//=============================================================================
+// BLEAttackManager Class
+//=============================================================================
+
 class BLEAttackManager {
 public:
     void prepareForConnection();
@@ -253,7 +273,10 @@ public:
     DeviceProfile profileDevice(NimBLEAddress target);
 };
 
-// FastPair structs
+//=============================================================================
+// FastPair Structures and Functions
+//=============================================================================
+
 struct FastPairDeviceInfo {
     NimBLEAddress address;
     String name;
@@ -285,6 +308,10 @@ enum FastPairVersion {
 };
 
 FastPairVersion detectFastPairVersion(NimBLEAddress target);
+
+//=============================================================================
+// FastPairExploitEngine Class
+//=============================================================================
 
 class FastPairExploitEngine {
 public:
@@ -322,6 +349,10 @@ private:
     void generateRandomMac(uint8_t* mac);
 };
 
+//=============================================================================
+// HIDExploitEngine Class
+//=============================================================================
+
 class HIDExploitEngine {
 public:
     HIDDeviceProfile analyzeHIDDevice(NimBLEAddress target, const String& name, int rssi);
@@ -340,6 +371,10 @@ public:
     bool testHIDVulnerability(NimBLEAddress target);
 };
 
+//=============================================================================
+// WhisperPairExploit Class
+//=============================================================================
+
 class WhisperPairExploit {
 public:
     WhisperPairExploit();
@@ -357,6 +392,10 @@ public:
     bool executeAdvanced(NimBLEAddress target, int attackType);
 };
 
+//=============================================================================
+// AudioAttackService Class
+//=============================================================================
+
 class AudioAttackService {
 public:
     bool findAndAttackAudioServices(NimBLEClient* pClient);
@@ -367,6 +406,10 @@ public:
     bool injectMediaCommands(NimBLEAddress target);
     bool crashAudioStack(NimBLEAddress target);
 };
+
+//=============================================================================
+// DuckyScriptEngine Class
+//=============================================================================
 
 class DuckyScriptEngine {
 public:
@@ -390,6 +433,10 @@ private:
     bool scriptLoaded;
 };
 
+//=============================================================================
+// HIDDuckyService Class
+//=============================================================================
+
 class HIDDuckyService {
 public:
     HIDDuckyService();
@@ -411,6 +458,10 @@ private:
     bool sendGUIKey(NimBLERemoteCharacteristic* pChar, char key);
 };
 
+//=============================================================================
+// AuthBypassEngine Class
+//=============================================================================
+
 class AuthBypassEngine {
 private:
     struct PairedDevice {
@@ -430,6 +481,10 @@ public:
     bool exploitAuthBypass(NimBLEAddress target);
 };
 
+//=============================================================================
+// MultiConnectionAttack Class
+//=============================================================================
+
 class MultiConnectionAttack {
 public:
     MultiConnectionAttack();
@@ -448,6 +503,10 @@ private:
     std::vector<NimBLEClient*> activeConnections;
 };
 
+//=============================================================================
+// VulnerabilityScanner Class
+//=============================================================================
+
 class VulnerabilityScanner {
 private:
     struct VulnCheck {
@@ -465,6 +524,10 @@ public:
     std::vector<String> getVulnerabilities();
 };
 
+//=============================================================================
+// Attack Service Classes
+//=============================================================================
+
 class HIDAttackServiceClass {
 public:
     bool injectKeystrokes(NimBLEAddress target);
@@ -481,6 +544,10 @@ public:
     bool connectionFlood(NimBLEAddress target);
     bool advertisingSpam(NimBLEAddress target);
 };
+
+//=============================================================================
+// Debug Memory Macros
+//=============================================================================
 
 #ifdef DEBUG_MEMORY
 class HeapMonitor {
@@ -508,6 +575,10 @@ public:
 #define MEM_REPORT()
 #define MEM_CHECK()
 #endif
+
+//=============================================================================
+// Function Declarations
+//=============================================================================
 
 void cleanupBLEStack();
 
