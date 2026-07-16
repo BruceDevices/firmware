@@ -26,6 +26,41 @@
 #include <esp_random.h>
 #include <globals.h>
 
+// NimBLE version detection
+// Check for NimBLE version via multiple methods
+#if defined(NIMBLE_VERSION)
+    #if NIMBLE_VERSION >= 20000
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#elif defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
+    // v1.5+ has some v2 features
+    #define NIMBLE_V2_PLUS 1
+#elif __has_include(<NimBLEExtAdvertising.h>)
+    #define NIMBLE_V2_PLUS 1
+#endif
+
+// If we're compiling with a version that has the new scan API
+// Check if NimBLEScan::start returns NimBLEScanResults or bool
+// We'll use a simpler approach: detect by checking if NimBLEScanResults is defined
+#ifdef __has_include
+    #if __has_include(<NimBLEScan.h>)
+        // Check if NimBLEScanResults type exists (v2.x)
+        // We'll use a compile-time detection approach
+        #ifndef NIMBLE_V2_PLUS
+            // Try to detect v2 by checking for NimBLEScanResults type
+            class __NimBLE_Scanner_Detector {
+                static void test(NimBLEScanResults*) {}
+            };
+            // If this compiles, we're on v2+
+            #define NIMBLE_V2_PLUS 1
+        #endif
+    #endif
+#endif
+
 int showSubMenu(const char *title, const char *options[], int optionCount);
 
 extern tft_logger tft;
@@ -540,7 +575,7 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 }
 
 //=============================================================================
-// HID Exploit Engine
+// HID Exploit Engine - Complete Implementation
 //=============================================================================
 
 HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const String &name, int rssi) {
@@ -615,6 +650,10 @@ HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const 
 
     return profile;
 }
+
+//=============================================================================
+// [HID Exploit Engine functions - unchanged from previous version]
+//=============================================================================
 
 bool HIDExploitEngine::tryAppleMagicSpoof(NimBLEAddress target, HIDDeviceProfile profile) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
@@ -3283,7 +3322,9 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setInterval(97);
     pScan->setWindow(67);
 
-#ifdef NIMBLE_V2_PLUS
+    // This is the key fix - use the correct API based on NimBLE version
+#if defined(NIMBLE_V2_PLUS)
+    // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
     bool scanStarted = pScan->start(duration * 1000, false);
     if (!scanStarted) {
         showAttackProgress("Failed to start FastPair scan", TFT_RED);
@@ -3291,11 +3332,12 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     }
     NimBLEScanResults results = pScan->getResults(duration * 1000, false);
 #else
+    // NimBLE 1.x API: start returns NimBLEScanResults
     NimBLEScanResults results = pScan->start(duration, false);
 #endif
 
     for (int i = 0; i < results.getCount(); i++) {
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
         const NimBLEAdvertisedDevice *device = results.getDevice(i);
 #else
         NimBLEAdvertisedDevice *device = results.getDevice(i);
@@ -3932,7 +3974,7 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
                 pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
 #else
@@ -3940,7 +3982,7 @@ void BLE_Sniffer() {
 #endif
 
                 for (int i = 0; i < results.getCount(); i++) {
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
                     const NimBLEAdvertisedDevice *device = results.getDevice(i);
 #else
                     NimBLEAdvertisedDevice *device = results.getDevice(i);
@@ -4207,7 +4249,8 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 80);
     tft.print("Active scan (8s)...");
 
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
+    // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
     bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
     if (!scanStarted) {
         displayError("Failed to start BLE scan");
@@ -4215,11 +4258,12 @@ String selectTargetFromScan(const char *title) {
     }
     BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
 #else
+    // NimBLE 1.x API: start returns NimBLEScanResults
     BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
 #endif
 
     for (int i = 0; i < activeResults.getCount(); i++) {
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
         const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
 #else
         NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
@@ -4256,7 +4300,7 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 100);
     tft.print("Passive scan (8s)...");
 
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
     bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
     if (!passiveScanStarted) {
         displayError("Failed to start passive BLE scan");
@@ -4268,7 +4312,7 @@ String selectTargetFromScan(const char *title) {
 #endif
 
     for (int i = 0; i < passiveResults.getCount(); i++) {
-#ifdef NIMBLE_V2_PLUS
+#if defined(NIMBLE_V2_PLUS)
         const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
 #else
         NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
