@@ -26,8 +26,11 @@
 #include <esp_random.h>
 #include <globals.h>
 
-// NimBLE version detection
-// Check for NimBLE version via multiple methods
+//=============================================================================
+// NimBLE Version Detection - Must match ble_common.h
+//=============================================================================
+
+// Detect NimBLE 2.x by checking for features only available in v2+
 #if defined(NIMBLE_VERSION)
     #if NIMBLE_VERSION >= 20000
         #define NIMBLE_V2_PLUS 1
@@ -37,28 +40,25 @@
 #elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
     #define NIMBLE_V2_PLUS 1
 #elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
-    // v1.5+ has some v2 features
     #define NIMBLE_V2_PLUS 1
 #elif __has_include(<NimBLEExtAdvertising.h>)
     #define NIMBLE_V2_PLUS 1
 #endif
 
-// If we're compiling with a version that has the new scan API
-// Check if NimBLEScan::start returns NimBLEScanResults or bool
-// We'll use a simpler approach: detect by checking if NimBLEScanResults is defined
-#ifdef __has_include
-    #if __has_include(<NimBLEScan.h>)
-        // Check if NimBLEScanResults type exists (v2.x)
-        // We'll use a compile-time detection approach
-        #ifndef NIMBLE_V2_PLUS
-            // Try to detect v2 by checking for NimBLEScanResults type
-            class __NimBLE_Scanner_Detector {
-                static void test(NimBLEScanResults*) {}
-            };
-            // If this compiles, we're on v2+
-            #define NIMBLE_V2_PLUS 1
+// If none of the above matched, check if NimBLEScanResults is a type
+#ifndef NIMBLE_V2_PLUS
+    #ifdef __has_include
+        #if __has_include(<NimBLEScan.h>)
+            #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+                #define NIMBLE_V2_PLUS 1
+            #endif
         #endif
     #endif
+#endif
+
+// If we still don't know, default to v1 behavior (safe fallback)
+#ifndef NIMBLE_V2_PLUS
+    #define NIMBLE_V2_PLUS 0
 #endif
 
 int showSubMenu(const char *title, const char *options[], int optionCount);
@@ -575,7 +575,7 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 }
 
 //=============================================================================
-// HID Exploit Engine - Complete Implementation
+// HID Exploit Engine
 //=============================================================================
 
 HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const String &name, int rssi) {
@@ -650,10 +650,6 @@ HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const 
 
     return profile;
 }
-
-//=============================================================================
-// [HID Exploit Engine functions - unchanged from previous version]
-//=============================================================================
 
 bool HIDExploitEngine::tryAppleMagicSpoof(NimBLEAddress target, HIDDeviceProfile profile) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
@@ -3322,9 +3318,9 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setInterval(97);
     pScan->setWindow(67);
 
-    // This is the key fix - use the correct API based on NimBLE version
-#if defined(NIMBLE_V2_PLUS)
-    // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
+    // Use the same version detection as ble_common.h
+#if NIMBLE_V2_PLUS
+    // NimBLE 2.x: start returns bool, getResults returns NimBLEScanResults
     bool scanStarted = pScan->start(duration * 1000, false);
     if (!scanStarted) {
         showAttackProgress("Failed to start FastPair scan", TFT_RED);
@@ -3332,12 +3328,12 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     }
     NimBLEScanResults results = pScan->getResults(duration * 1000, false);
 #else
-    // NimBLE 1.x API: start returns NimBLEScanResults
+    // NimBLE 1.x: start returns NimBLEScanResults directly
     NimBLEScanResults results = pScan->start(duration, false);
 #endif
 
     for (int i = 0; i < results.getCount(); i++) {
-#if defined(NIMBLE_V2_PLUS)
+#if NIMBLE_V2_PLUS
         const NimBLEAdvertisedDevice *device = results.getDevice(i);
 #else
         NimBLEAdvertisedDevice *device = results.getDevice(i);
@@ -3974,7 +3970,7 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
-#if defined(NIMBLE_V2_PLUS)
+#if NIMBLE_V2_PLUS
                 pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
 #else
@@ -3982,7 +3978,7 @@ void BLE_Sniffer() {
 #endif
 
                 for (int i = 0; i < results.getCount(); i++) {
-#if defined(NIMBLE_V2_PLUS)
+#if NIMBLE_V2_PLUS
                     const NimBLEAdvertisedDevice *device = results.getDevice(i);
 #else
                     NimBLEAdvertisedDevice *device = results.getDevice(i);
@@ -4190,6 +4186,12 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
+    // RAM check - if memory is tight, reduce scan time
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return "";
+    }
+    
     // DO NOT clear scannerData here - it persists between operations
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
@@ -4241,107 +4243,122 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    const int ACTIVE_SCAN_TIME = 8;
-    const int PASSIVE_SCAN_TIME = 8;
+    // Determine scan time based on available memory
+    int activeScanTime = ACTIVE_SCAN_TIME;
+    int passiveScanTime = PASSIVE_SCAN_TIME;
+
+    // If memory is tight, use reduced scan times
+    if (!radioHasMemForBle()) {
+        activeScanTime = 3;  // 3 seconds instead of 8
+        passiveScanTime = 3;  // 3 seconds instead of 8
+    }
 
     // === ACTIVE SCAN ===
     g_pBLEScan->setActiveScan(true);
     tft.setCursor(20, 80);
-    tft.print("Active scan (8s)...");
+    tft.print("Active scan (" + String(activeScanTime) + "s)...");
 
-#if defined(NIMBLE_V2_PLUS)
-    // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
-    bool scanStarted = g_pBLEScan->start(ACTIVE_SCAN_TIME * 1000, false);
-    if (!scanStarted) {
-        displayError("Failed to start BLE scan");
+    try {
+#if NIMBLE_V2_PLUS
+        // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
+        bool scanStarted = g_pBLEScan->start(activeScanTime * 1000, false);
+        if (!scanStarted) {
+            displayError("Failed to start BLE scan");
+            return "";
+        }
+        BLEScanResults activeResults = g_pBLEScan->getResults(activeScanTime * 1000, false);
+#else
+        // NimBLE 1.x API: start returns NimBLEScanResults
+        BLEScanResults activeResults = g_pBLEScan->start(activeScanTime, false);
+#endif
+
+        for (int i = 0; i < activeResults.getCount(); i++) {
+#if NIMBLE_V2_PLUS
+            const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+#else
+            NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+#endif
+            if (!device) continue;
+            
+            String address = String(device->getAddress().toString().c_str());
+            String name = String(device->getName().c_str());
+            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+                name = "Unknown";
+            }
+            int rssi = device->getRSSI();
+            if (rssi == 0) rssi = -100;
+
+            bool fastPair = false, hasHFP = false;
+            uint8_t deviceType = 0;
+
+            if (device->haveServiceUUID()) {
+                NimBLEUUID uuid = device->getServiceUUID();
+                std::string uuidStr = uuid.toString();
+                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                    hasHFP = true;
+                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                    deviceType |= 0x01;
+                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+            }
+
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+        }
+
+        // === PASSIVE SCAN ===
+        g_pBLEScan->setActiveScan(false);
+        tft.setCursor(20, 100);
+        tft.print("Passive scan (" + String(passiveScanTime) + "s)...");
+
+#if NIMBLE_V2_PLUS
+        bool passiveScanStarted = g_pBLEScan->start(passiveScanTime * 1000, false);
+        if (!passiveScanStarted) {
+            displayError("Failed to start passive BLE scan");
+            return "";
+        }
+        BLEScanResults passiveResults = g_pBLEScan->getResults(passiveScanTime * 1000, false);
+#else
+        BLEScanResults passiveResults = g_pBLEScan->start(passiveScanTime, false);
+#endif
+
+        for (int i = 0; i < passiveResults.getCount(); i++) {
+#if NIMBLE_V2_PLUS
+            const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+#else
+            NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+#endif
+            if (!device) continue;
+            
+            String address = String(device->getAddress().toString().c_str());
+            String name = String(device->getName().c_str());
+            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+                name = "Unknown";
+            }
+            int rssi = device->getRSSI();
+            if (rssi == 0) rssi = -100;
+
+            bool fastPair = false, hasHFP = false;
+            uint8_t deviceType = 0;
+
+            if (device->haveServiceUUID()) {
+                NimBLEUUID uuid = device->getServiceUUID();
+                std::string uuidStr = uuid.toString();
+                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                    hasHFP = true;
+                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                    deviceType |= 0x01;
+                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+            }
+
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+        }
+    } catch (...) {
+        displayError("BLE scan error");
+        if (g_pBLEScan) {
+            g_pBLEScan->clearResults();
+        }
         return "";
-    }
-    BLEScanResults activeResults = g_pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
-#else
-    // NimBLE 1.x API: start returns NimBLEScanResults
-    BLEScanResults activeResults = g_pBLEScan->start(ACTIVE_SCAN_TIME, false);
-#endif
-
-    for (int i = 0; i < activeResults.getCount(); i++) {
-#if defined(NIMBLE_V2_PLUS)
-        const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
-#else
-        NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
-#endif
-        if (!device) continue;
-        
-        String address = String(device->getAddress().toString().c_str());
-        String name = String(device->getName().c_str());
-        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
-            name = "Unknown";
-        }
-        int rssi = device->getRSSI();
-        if (rssi == 0) rssi = -100;
-
-        bool fastPair = false, hasHFP = false;
-        uint8_t deviceType = 0;
-
-        if (device->haveServiceUUID()) {
-            NimBLEUUID uuid = device->getServiceUUID();
-            std::string uuidStr = uuid.toString();
-            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
-            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
-                hasHFP = true;
-            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
-                deviceType |= 0x01;
-            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
-        }
-
-        scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
-    }
-
-    // === PASSIVE SCAN ===
-    g_pBLEScan->setActiveScan(false);
-    tft.setCursor(20, 100);
-    tft.print("Passive scan (8s)...");
-
-#if defined(NIMBLE_V2_PLUS)
-    bool passiveScanStarted = g_pBLEScan->start(PASSIVE_SCAN_TIME * 1000, false);
-    if (!passiveScanStarted) {
-        displayError("Failed to start passive BLE scan");
-        return "";
-    }
-    BLEScanResults passiveResults = g_pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
-#else
-    BLEScanResults passiveResults = g_pBLEScan->start(PASSIVE_SCAN_TIME, false);
-#endif
-
-    for (int i = 0; i < passiveResults.getCount(); i++) {
-#if defined(NIMBLE_V2_PLUS)
-        const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
-#else
-        NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
-#endif
-        if (!device) continue;
-        
-        String address = String(device->getAddress().toString().c_str());
-        String name = String(device->getName().c_str());
-        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
-            name = "Unknown";
-        }
-        int rssi = device->getRSSI();
-        if (rssi == 0) rssi = -100;
-
-        bool fastPair = false, hasHFP = false;
-        uint8_t deviceType = 0;
-
-        if (device->haveServiceUUID()) {
-            NimBLEUUID uuid = device->getServiceUUID();
-            std::string uuidStr = uuid.toString();
-            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
-            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
-                hasHFP = true;
-            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
-                deviceType |= 0x01;
-            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
-        }
-
-        scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
     }
 
     // Stop the scan but DON'T clear results yet - we need them for display
