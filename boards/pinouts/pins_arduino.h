@@ -54,4 +54,6 @@
 #include "../ESP32-C5/pins_arduino.h"
 #elif NM_CYD_ESP32C5
 #include "../nm-cyd-c5/pins_arduino.h"
+#elif FREENOVE_FNK0103
+#include "../freenove-fnk0103/pins_arduino.h"
 #endif
