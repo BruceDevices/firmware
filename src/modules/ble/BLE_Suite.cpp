@@ -4324,7 +4324,6 @@ String selectTargetFromScan(const char *title) {
         tft.setCursor(20, 100);
         tft.print("turned on and in range.");
         delay(2000);
-        // DO NOT clear scannerData - it was already empty
         return "";
     }
 
