@@ -45,18 +45,7 @@
     #define NIMBLE_V2_PLUS 1
 #endif
 
-// If none of the above matched, check if NimBLEScanResults is a type
-#ifndef NIMBLE_V2_PLUS
-    #ifdef __has_include
-        #if __has_include(<NimBLEScan.h>)
-            #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-                #define NIMBLE_V2_PLUS 1
-            #endif
-        #endif
-    #endif
-#endif
-
-// If we still don't know, default to v1 behavior (safe fallback)
+// If none of the above matched, default to v1 behavior (safe fallback)
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 0
 #endif
@@ -4186,10 +4175,10 @@ void BLE_Sniffer() {
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    // RAM check - if memory is tight, reduce scan time
-    if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
-        return "";
+    // Simple memory check - if heap is low, warn but continue
+    if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 10000) {
+        displayError("Low memory, scan may be unstable", true);
+        // Don't return - let the user decide
     }
     
     // DO NOT clear scannerData here - it persists between operations
@@ -4243,14 +4232,14 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    // Determine scan time based on available memory
+    // Use fixed scan times
     int activeScanTime = ACTIVE_SCAN_TIME;
     int passiveScanTime = PASSIVE_SCAN_TIME;
 
-    // If memory is tight, use reduced scan times
-    if (!radioHasMemForBle()) {
-        activeScanTime = 3;  // 3 seconds instead of 8
-        passiveScanTime = 3;  // 3 seconds instead of 8
+    // If memory is very low, use reduced scan times
+    if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 15000) {
+        activeScanTime = 3;
+        passiveScanTime = 3;
     }
 
     // === ACTIVE SCAN ===
