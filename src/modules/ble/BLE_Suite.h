@@ -14,11 +14,6 @@
 #include <functional>
 #include <vector>
 
-// NimBLE 2.3.7 doesn't have NimBLEExtAdvertising.h
-// #if __has_include(<NimBLEExtAdvertising.h>)
-// #define NIMBLE_V2_PLUS 1
-// #endif
-
 extern volatile int tftWidth;
 extern volatile int tftHeight;
 class tft_logger;
@@ -28,12 +23,62 @@ extern BruceConfig bruceConfig;
 
 bool check(int key);
 
+//=============================================================================
+// NimBLE Version Detection - Must match ble_common.h
+//=============================================================================
+
+// Detect NimBLE 2.x by checking for features only available in v2+
+#if defined(NIMBLE_VERSION)
+    #if NIMBLE_VERSION >= 20000
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#elif defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
+    #define NIMBLE_V2_PLUS 1
+#elif __has_include(<NimBLEExtAdvertising.h>)
+    #define NIMBLE_V2_PLUS 1
+#endif
+
+// If none of the above matched, default to v1 behavior (safe fallback)
+#ifndef NIMBLE_V2_PLUS
+    #define NIMBLE_V2_PLUS 0
+#endif
+
+//=============================================================================
+// BLE Scan Constants
+//=============================================================================
+
+#define ACTIVE_SCAN_TIME 8
+#define PASSIVE_SCAN_TIME 8
+#define SCAN_INT 100
+#define SCAN_WINDOW 99
+
 enum {
     BLE_ESC_PRESS = 0,
     BLE_SEL_PRESS = 1,
     BLE_PREV_PRESS = 2,
     BLE_NEXT_PRESS = 3
 };
+
+// Forward declaration of AdvertisedDeviceCallbacks for ble_common.cpp
+#if NIMBLE_V2_PLUS
+class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
+public:
+    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
+    void onScanEnd(NimBLEScanResults results, int reason) override;
+};
+#else
+class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
+public:
+    void onResult(NimBLEAdvertisedDevice *advertisedDevice) override;
+};
+#endif
+
+// External reference to g_scanCallbacks for ble_common.cpp
+extern AdvertisedDeviceCallbacks* g_scanCallbacks;
 
 enum FastPairPopupType {
     FP_POPUP_REGULAR = 0,
