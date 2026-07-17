@@ -1,5 +1,6 @@
 #include "ble_common.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
 #include "core/ram_profile.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
@@ -222,6 +223,11 @@ bool ble_scan_setup() {
     }
 
     RAM_LOG("ble-scan pre-init");
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        returnToMenu = true;
+        return false;
+    }
     
     if (!is_ble_inited) {
         // Use a minimal name to save RAM
