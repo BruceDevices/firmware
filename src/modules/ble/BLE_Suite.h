@@ -42,7 +42,7 @@ bool check(int key);
 #define SCAN_WINDOW 99
 
 //=============================================================================
-// Note: AdvertisedDeviceCallbacks is now defined in ble_common.h
+// Note: AdvertisedDeviceCallbacks is defined in ble_common.h
 //=============================================================================
 
 //=============================================================================
