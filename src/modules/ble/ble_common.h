@@ -61,6 +61,27 @@
 // Memory protection: Reduce scan time in low-memory situations
 #define SCAN_TIME_REDUCED 3
 
+//=============================================================================
+// Forward Declarations
+//=============================================================================
+
+// Forward declaration of AdvertisedDeviceCallbacks for ble_common.cpp
+#if NIMBLE_V2_PLUS
+class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
+public:
+    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
+    void onScanEnd(NimBLEScanResults results, int reason) override;
+};
+#else
+class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
+public:
+    void onResult(NimBLEAdvertisedDevice *advertisedDevice) override;
+};
+#endif
+
+// External reference to g_scanCallbacks for ble_common.cpp
+extern AdvertisedDeviceCallbacks* g_scanCallbacks;
+
 extern BLEScan *pBLEScan;
 extern int scanTime;
 
