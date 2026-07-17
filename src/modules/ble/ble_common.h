@@ -12,72 +12,63 @@
 #include <globals.h>
 
 //=============================================================================
-// NimBLE Version Detection - Simplified for reliability
+// NimBLE Version Detection - SUPER SIMPLE
 //=============================================================================
 
-// Define NIMBLE_V2_PLUS based on available features
-// We check for NimBLEScanCallbacks which is v2-specific
-#ifndef NIMBLE_V2_PLUS
-    // Check if NimBLEScanCallbacks is defined (v2 feature)
-    #ifdef __has_include
-        #if __has_include(<NimBLEScan.h>)
-            // Try to detect v2 by checking for a v2-only type
-            // We'll use a simple approach: check if NimBLEScanCallbacks exists
-            namespace __nimble_detect {
-                template<typename...> struct void_type { typedef void type; };
-                template<typename T, typename = void> struct has_scan_callbacks : std::false_type {};
-                template<typename T> struct has_scan_callbacks<T, 
-                    typename void_type<typename T::ScanCallbacks>::type> : std::true_type {};
-            }
-            // If the compiler can see NimBLEScanCallbacks, we're on v2+
-            #if __nimble_detect::has_scan_callbacks<NimBLEDevice>::value
-                #define NIMBLE_V2_PLUS 1
-            #endif
-        #endif
-    #endif
-#endif
+// Try to detect NimBLE 2.x using simple macro checks
+// NIMBLE_V2_PLUS is defined as 1 for v2, 0 for v1 (default)
 
-// Check specific NimBLE version macros
-#ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_VERSION)
-        #if NIMBLE_VERSION >= 20000
+// First check: NIMBLE_VERSION macro
+#ifdef NIMBLE_VERSION
+    #if NIMBLE_VERSION >= 20000
+        #ifndef NIMBLE_V2_PLUS
             #define NIMBLE_V2_PLUS 1
         #endif
     #endif
 #endif
 
-#ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
-        #define NIMBLE_V2_PLUS 1
+// Second check: NIMBLE_CPP_VERSION
+#ifdef NIMBLE_CPP_VERSION
+    #if NIMBLE_CPP_VERSION >= 2
+        #ifndef NIMBLE_V2_PLUS
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
-#ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
-        #define NIMBLE_V2_PLUS 1
+// Third check: NIMBLE_VERSION_MAJOR
+#ifdef NIMBLE_VERSION_MAJOR
+    #if NIMBLE_VERSION_MAJOR >= 2
+        #ifndef NIMBLE_V2_PLUS
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
-// If we're on ESP-IDF 5.0+, likely using NimBLE 2.x
-#ifndef NIMBLE_V2_PLUS
-    #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-        #define NIMBLE_V2_PLUS 1
+// Fourth check: ESP-IDF version
+#ifdef ESP_IDF_VERSION
+    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        #ifndef NIMBLE_V2_PLUS
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
-// Check for NimBLEExtAdvertising.h which is v2-specific
-#ifndef NIMBLE_V2_PLUS
+// Fifth check: Check for v2-specific header
+#ifdef __has_include
     #if __has_include(<NimBLEExtAdvertising.h>)
-        #define NIMBLE_V2_PLUS 1
+        #ifndef NIMBLE_V2_PLUS
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
-// If we still don't know, default to v1 behavior (safe fallback)
+// If no detection succeeded, default to v1 (safe fallback)
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 0
 #endif
 
-// Debug output to help with troubleshooting
+// Print the detected version for debugging
 #pragma message("NIMBLE_V2_PLUS = " __STRINGIFY(NIMBLE_V2_PLUS))
 
 //=============================================================================
@@ -102,15 +93,18 @@
 // Forward declaration of AdvertisedDeviceCallbacks
 // Only declare onScanEnd for NimBLE 2.x
 #if NIMBLE_V2_PLUS
+// NimBLE 2.x version
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 public:
     void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
     void onScanEnd(NimBLEScanResults results, int reason) override;
 };
 #else
+// NimBLE 1.x version - NO onScanEnd!
 class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
 public:
     void onResult(NimBLEAdvertisedDevice *advertisedDevice) override;
+    // No onScanEnd - this doesn't exist in NimBLE 1.x
 };
 #endif
 
