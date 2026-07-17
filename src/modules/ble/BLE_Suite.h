@@ -25,12 +25,12 @@ extern BruceConfig bruceConfig;
 bool check(int key);
 
 //=============================================================================
-// NimBLE Version Detection - Matches ble_common.h
+// NimBLE Version Detection - SUPER SIMPLE
 //=============================================================================
 
-// Define NIMBLE_V2_PLUS based on available features
+// Try to detect NimBLE 2.x using simple macro checks
 #ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_VERSION)
+    #ifdef NIMBLE_VERSION
         #if NIMBLE_VERSION >= 20000
             #define NIMBLE_V2_PLUS 1
         #endif
@@ -38,27 +38,36 @@ bool check(int key);
 #endif
 
 #ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
-        #define NIMBLE_V2_PLUS 1
+    #ifdef NIMBLE_CPP_VERSION
+        #if NIMBLE_CPP_VERSION >= 2
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
 #ifndef NIMBLE_V2_PLUS
-    #if defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
-        #define NIMBLE_V2_PLUS 1
+    #ifdef NIMBLE_VERSION_MAJOR
+        #if NIMBLE_VERSION_MAJOR >= 2
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
 #ifndef NIMBLE_V2_PLUS
-    #if __has_include(<NimBLEExtAdvertising.h>)
-        #define NIMBLE_V2_PLUS 1
+    #ifdef __has_include
+        #if __has_include(<NimBLEExtAdvertising.h>)
+            #define NIMBLE_V2_PLUS 1
+        #endif
     #endif
 #endif
 
-// If we still don't know, default to v1 behavior (safe fallback)
+// If no detection succeeded, default to v1 (safe fallback)
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 0
 #endif
+
+// Print the detected version for debugging
+#pragma message("BLE_Suite: NIMBLE_V2_PLUS = " __STRINGIFY(NIMBLE_V2_PLUS))
 
 //=============================================================================
 // BLE Scan Constants
