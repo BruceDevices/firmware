@@ -25,49 +25,13 @@ extern BruceConfig bruceConfig;
 bool check(int key);
 
 //=============================================================================
-// NimBLE Version Detection - SUPER SIMPLE
+// NimBLE Version - MANUAL FORCE FOR NIMBLE 2.x
 //=============================================================================
 
-// Try to detect NimBLE 2.x using simple macro checks
+// Since you're using NimBLE 2.3.7+, set this to 1
 #ifndef NIMBLE_V2_PLUS
-    #ifdef NIMBLE_VERSION
-        #if NIMBLE_VERSION >= 20000
-            #define NIMBLE_V2_PLUS 1
-        #endif
-    #endif
+    #define NIMBLE_V2_PLUS 1
 #endif
-
-#ifndef NIMBLE_V2_PLUS
-    #ifdef NIMBLE_CPP_VERSION
-        #if NIMBLE_CPP_VERSION >= 2
-            #define NIMBLE_V2_PLUS 1
-        #endif
-    #endif
-#endif
-
-#ifndef NIMBLE_V2_PLUS
-    #ifdef NIMBLE_VERSION_MAJOR
-        #if NIMBLE_VERSION_MAJOR >= 2
-            #define NIMBLE_V2_PLUS 1
-        #endif
-    #endif
-#endif
-
-#ifndef NIMBLE_V2_PLUS
-    #ifdef __has_include
-        #if __has_include(<NimBLEExtAdvertising.h>)
-            #define NIMBLE_V2_PLUS 1
-        #endif
-    #endif
-#endif
-
-// If no detection succeeded, default to v1 (safe fallback)
-#ifndef NIMBLE_V2_PLUS
-    #define NIMBLE_V2_PLUS 0
-#endif
-
-// Print the detected version for debugging
-#pragma message("BLE_Suite: NIMBLE_V2_PLUS = " __STRINGIFY(NIMBLE_V2_PLUS))
 
 //=============================================================================
 // BLE Scan Constants
