@@ -508,13 +508,15 @@ bool mic_record_wav_to_path(
 void mic_record_app() {
 
     // ===== LAYOUT CONSTANTS =====
+    const bool isTinyScreen = (tftHeight <= 150); // e.g. Cardputer: 135px tall
     const int MARGIN = (tftWidth > 200) ? 10 : 5;
-    const int HEADER_HEIGHT = (tftHeight > 200) ? 35 : 25;
-    const int ITEM_HEIGHT = (tftHeight > 200) ? 30 : 22;
-    const int BUTTON_HEIGHT = (tftHeight > 200) ? 40 : 30;
+    const int HEADER_HEIGHT = (tftHeight > 200) ? 35 : (isTinyScreen ? 22 : 25);
+    const int ITEM_HEIGHT = (tftHeight > 200) ? 30 : (isTinyScreen ? 18 : 22);
+    const int ITEM_GAP = isTinyScreen ? 4 : 8;
+    const int BUTTON_HEIGHT = (tftHeight > 200) ? 40 : (isTinyScreen ? 22 : 30);
     const int TEXT_SIZE_LARGE = (tftWidth > 200) ? 2 : 1;
     const int TEXT_SIZE_SMALL = 1;
-    const int START_Y = HEADER_HEIGHT + ((tftHeight > 200) ? 15 : 8);
+    const int START_Y = HEADER_HEIGHT + (tftHeight > 200 ? 15 : (isTinyScreen ? 5 : 8));
 
     // UI Parameters
     int selected_item = 0;
@@ -542,9 +544,9 @@ void mic_record_app() {
 
         // Calculate Y based on the item
         if (itemIndex < ITEM_START) {
-            yPos = START_Y + itemIndex * (ITEM_HEIGHT + 8);
+            yPos = START_Y + itemIndex * (ITEM_HEIGHT + ITEM_GAP);
         } else {
-            yPos = START_Y + 2 * (ITEM_HEIGHT + 8) + ITEM_HEIGHT + 15;
+            yPos = START_Y + 2 * (ITEM_HEIGHT + ITEM_GAP) + ITEM_HEIGHT + (isTinyScreen ? 5 : 15);
         }
 
         // 1. CLEAN: Delete only the area of ​​this specific item
