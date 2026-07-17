@@ -33,14 +33,14 @@
 #define MAX_DISPLAY_DEVICES 100
 
 //=============================================================================
-// AdvertisedDeviceCallbacks - For NimBLE 2.x
+// AdvertisedDeviceCallbacks - NO onScanEnd (doesn't exist in NimBLE)
 //=============================================================================
 
-// For NimBLE 2.x - uses NimBLEScanCallbacks with onScanEnd
+// For NimBLE 2.x - uses NimBLEScanCallbacks with ONLY onResult
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 public:
     void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
-    void onScanEnd(NimBLEScanResults results, int reason) override;
+    // onScanEnd does NOT exist in NimBLEScanCallbacks - DO NOT DECLARE IT!
 };
 
 // External reference to g_scanCallbacks
