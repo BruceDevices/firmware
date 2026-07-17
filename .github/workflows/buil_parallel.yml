@@ -46,6 +46,7 @@ jobs:
           - { env: "m5stack-cores3",                  family: "ESP32-S3",}
           - { env: "m5stack-dinmeter",                family: "ESP32-S3",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
+          - { env: "esp32-s3-devkitc-1-psram",        family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
           - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
           - { env: "nm-cyd-c5",                       family: "ESP32-C5",}
