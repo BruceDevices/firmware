@@ -92,6 +92,18 @@ const size_t SNIFFER_QUEUE_DEPTH = 48;
 std::set<uint64_t> handshakeReadyBssids;
 portMUX_TYPE handshakeReadyMux = portMUX_INITIALIZER_UNLOCKED;
 std::set<uint64_t> handshakeBeaconLogged;
+std::map<uint64_t, HandshakeTracker> perApHandshakeTracker;
+
+// --- Strict M1+M2 validation buffers ---
+// Buffer M1 frames in memory; only flush to file when M2 arrives.
+constexpr size_t EAPOL_BUF_SIZE = 256;
+struct EapolBuffer {
+    uint8_t data[EAPOL_BUF_SIZE] = {0};
+    uint16_t len = 0;
+    uint32_t timestamp_sec = 0;
+    uint32_t timestamp_usec = 0;
+};
+std::map<uint64_t, EapolBuffer> m1Buffer;
 
 // --- New globals for beacon last-seen tracking & cleanup ---
 std::map<uint64_t, uint32_t> beaconLastSeen; // key = macToKey(mac) -> last seen millis()
@@ -212,8 +224,8 @@ bool isItEAPOL(const wifi_promiscuous_pkt_t *packet) {
 
 HandshakeTracker hsTracker;
 
-bool handshakeUsable(const HandshakeTracker &hs) { // EAPOL Messages needed: 1+2 or 3+4
-    return (hs.msg1 && hs.msg2) || (hs.msg3 && hs.msg4);
+bool handshakeUsable(const HandshakeTracker &hs) {
+    return hs.msg1 && hs.msg2;
 }
 
 // Analyze the EAPOL Message Number
@@ -263,10 +275,9 @@ typedef struct pcaprec_hdr_s {
 } pcaprec_hdr_t;
 
 void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, const char *ssidLabel) {
-    // Construire le nom du fichier en utilisant les adresses MAC de l'AP et du client
-    const uint8_t *addr1 = packet->payload + 4;  // Adresse du destinataire (Adresse 1)
-    const uint8_t *addr2 = packet->payload + 10; // Adresse de l'expéditeur (Adresse 2)
-    const uint8_t *bssid = packet->payload + 16; // Adresse BSSID (Adresse 3)
+    const uint8_t *addr1 = packet->payload + 4;
+    const uint8_t *addr2 = packet->payload + 10;
+    const uint8_t *bssid = packet->payload + 16;
     const uint8_t *apAddr;
 
     if (memcmp(addr1, bssid, 6) == 0) {
@@ -275,49 +286,107 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         apAddr = addr2;
     }
 
+    uint64_t apKey = macToKey(apAddr);
     String sanitizedSsid = sanitizeSsid(ssidLabel);
     String filePath = buildHandshakePath(apAddr, sanitizedSsid.c_str());
-
-    // Vérifier si le fichier existe déjà
     bool fichierExiste = handshakeFileExists(filePath);
 
-    // Si probe est true et que le fichier n'existe pas, ignorer l'enregistrement
-    if (beacon && !fichierExiste) { return; }
+    // Beacon: only save if handshake file already exists (handshake was captured)
+    if (beacon) {
+        if (!fichierExiste) { return; }
+        uint64_t beaconKey = apKey;
+        if (handshakeBeaconRecorded(beaconKey)) { return; }
+        registerHandshakeBeacon(beaconKey);
 
-    // Ouvrir le fichier en mode ajout si existant sinon en mode écriture
-    File fichierPcap = Fs.open(
-        filePath, fichierExiste ? FILE_APPEND : FILE_WRITE
-    ); // if the file already exists in the new session, will overwrite it
-    if (!fichierPcap) {
-        Serial.println("Fail creating the EAPOL/Handshake PCAP file");
+        File f = Fs.open(filePath, FILE_APPEND);
+        if (!f) { return; }
+        pcaprec_hdr_t hdr;
+        hdr.ts_sec = packet->rx_ctrl.timestamp / 1000000;
+        hdr.ts_usec = packet->rx_ctrl.timestamp % 1000000;
+        hdr.incl_len = packet->rx_ctrl.sig_len;
+        hdr.orig_len = packet->rx_ctrl.sig_len;
+        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
+        f.write(packet->payload, packet->rx_ctrl.sig_len);
+        f.close();
         return;
     }
 
-    if (!beacon && !fichierExiste) {
-        // Serial.println("New EAPOL/Handshake PCAP file, writing header");
-        registerHandshakeRecord(filePath);
-        num_HS++;
-        writeHeader(fichierPcap);
-        markHandshakeReady(macToKey(apAddr));
-    }
-    if (beacon && fichierExiste) {
-        uint64_t beaconKey = macToKey(apAddr);
-        if (handshakeBeaconRecorded(beaconKey)) {
-            fichierPcap.close();
-            return;
-        }
-        registerHandshakeBeacon(beaconKey);
+    // --- EAPOL frame handling (strict M1+M2 validation) ---
+    int eapolMsg = classifyEapolMessage(packet);
+    if (eapolMsg < 1 || eapolMsg > 4) { return; }
+
+    auto &tracker = perApHandshakeTracker[apKey];
+
+    // M1: buffer in memory only — don't write to file yet
+    if (eapolMsg == 1) {
+        if (tracker.msg1) { return; } // already buffered
+        tracker.msg1 = true;
+
+        uint16_t dataLen = std::min<uint16_t>(packet->rx_ctrl.sig_len, EAPOL_BUF_SIZE);
+        auto &buf = m1Buffer[apKey];
+        memcpy(buf.data, packet->payload, dataLen);
+        buf.len = dataLen;
+        buf.timestamp_sec = packet->rx_ctrl.timestamp / 1000000;
+        buf.timestamp_usec = packet->rx_ctrl.timestamp % 1000000;
+        return;
     }
 
-    // Écrire l'en-tête du paquet et le paquet lui-même dans le fichier
-    pcaprec_hdr_t pcap_packet_header;
-    pcap_packet_header.ts_sec = packet->rx_ctrl.timestamp / 1000000;
-    pcap_packet_header.ts_usec = packet->rx_ctrl.timestamp % 1000000;
-    pcap_packet_header.incl_len = packet->rx_ctrl.sig_len;
-    pcap_packet_header.orig_len = packet->rx_ctrl.sig_len;
-    fichierPcap.write((const byte *)&pcap_packet_header, sizeof(pcaprec_hdr_t));
-    fichierPcap.write(packet->payload, packet->rx_ctrl.sig_len);
-    fichierPcap.close();
+    // M2: flush M1 + M2 to file, mark handshake valid
+    if (eapolMsg == 2) {
+        tracker.msg2 = true;
+
+        auto m1it = m1Buffer.find(apKey);
+        if (m1it == m1Buffer.end()) {
+            // M2 arrived without M1 — discard, not a valid handshake
+            return;
+        }
+
+        // Ensure the target directory exists
+        if (!Fs.exists("/BrucePCAP")) { Fs.mkdir("/BrucePCAP"); }
+        if (!Fs.exists("/BrucePCAP/handshakes")) { Fs.mkdir("/BrucePCAP/handshakes"); }
+
+        registerHandshakeRecord(filePath);
+
+        File f = Fs.open(filePath, FILE_APPEND);
+        if (!f) { return; }
+
+        // If file was just created (empty), write pcap global header first
+        if (f.size() == 0) {
+            writeHeader(f);
+        }
+
+        // Write buffered M1
+        pcaprec_hdr_t hdr;
+        hdr.ts_sec = m1it->second.timestamp_sec;
+        hdr.ts_usec = m1it->second.timestamp_usec;
+        hdr.incl_len = m1it->second.len;
+        hdr.orig_len = m1it->second.len;
+        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
+        f.write(m1it->second.data, m1it->second.len);
+
+        // Write M2 from current packet
+        uint16_t m2Len = std::min<uint16_t>(packet->rx_ctrl.sig_len, EAPOL_BUF_SIZE);
+        hdr.ts_sec = packet->rx_ctrl.timestamp / 1000000;
+        hdr.ts_usec = packet->rx_ctrl.timestamp % 1000000;
+        hdr.incl_len = m2Len;
+        hdr.orig_len = m2Len;
+        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
+        f.write(packet->payload, m2Len);
+
+        f.close();
+
+        // Free the M1 buffer
+        m1Buffer.erase(apKey);
+
+        // Mark handshake valid
+        if (handshakeReadyBssids.find(apKey) == handshakeReadyBssids.end()) {
+            num_HS++;
+        }
+        markHandshakeReady(apKey);
+        return;
+    }
+
+    // M3/M4: silently ignore — only M1+M2 are required for a valid handshake
 }
 
 static String sanitizeSsid(const char *ssid) {
@@ -347,10 +416,11 @@ static String macToHex(const uint8_t *mac) {
 static bool handshakeFileExists(const String &path) { return handshakeRecordExists(path); }
 
 static String buildHandshakePath(const uint8_t *mac, const char *ssid) {
-    String path = "/BrucePCAP/handshakes/HS_" + macToHex(mac);
+    String path = "/BrucePCAP/handshakes/HS_";
     if (ssid && ssid[0] != '\0') {
-        path += "_";
         path += ssid;
+    } else {
+        path += macToHex(mac);
     }
     path += ".pcap";
     return path;
@@ -362,6 +432,14 @@ static bool shouldSaveBeaconForHandshake(const uint8_t *mac) {
     bool ready = false;
     portENTER_CRITICAL(&handshakeReadyMux);
     ready = handshakeReadyBssids.find(key) != handshakeReadyBssids.end();
+    portEXIT_CRITICAL(&handshakeReadyMux);
+    return ready;
+}
+
+static bool hasCompleteHandshake(uint64_t apKey) {
+    bool ready = false;
+    portENTER_CRITICAL(&handshakeReadyMux);
+    ready = handshakeReadyBssids.find(apKey) != handshakeReadyBssids.end();
     portEXIT_CRITICAL(&handshakeReadyMux);
     return ready;
 }
@@ -734,6 +812,8 @@ void sniffer_reset_handshake_cache() {
     }
     resetHandshakeTracking();
     resetHandshakeBeaconCache();
+    perApHandshakeTracker.clear();
+    m1Buffer.clear();
 }
 
 void printAddress(const uint8_t *addr) {
@@ -808,9 +888,14 @@ void sniffer(void *buf, wifi_promiscuous_pkt_type_t type) {
     if (frameInfo.isEapol) { num_EAPOL++; }
 
     bool saveRaw = rawCaptureEnabled();
-    bool saveHandshake =
-        handshakeCaptureEnabled() &&
-        (frameInfo.isEapol || (frameInfo.isBeacon && shouldSaveBeaconForHandshake(frameInfo.apAddr)));
+    bool saveHandshake = false;
+    if (handshakeCaptureEnabled()) {
+        if (frameInfo.isEapol && !hasCompleteHandshake(frameInfo.apKey)) {
+            saveHandshake = true;
+        } else if (frameInfo.isBeacon && shouldSaveBeaconForHandshake(frameInfo.apAddr)) {
+            saveHandshake = true;
+        }
+    }
     bool saveDeauth = deauthCaptureEnabled() && frameInfo.isDeauth;
 
     if (!saveRaw && !saveHandshake && !saveDeauth) { return; }

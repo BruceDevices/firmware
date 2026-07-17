@@ -46,12 +46,13 @@ public:
     bool poll(std::vector<int> &durations);
     // Disable + delete the channel and free the queue/buffer.
     void end();
-    bool active() const { return _ch != nullptr; }
+    bool active() const { return _ch != nullptr || _m5Isr; }
     ~RfRxSession() { end(); }
 
 private:
     rmt_channel_handle_t _ch = nullptr;
     QueueHandle_t _queue = nullptr;
+    bool _m5Isr = false;
     // Heap-allocated capture buffer: keeping ~1KB off the (8KB) serialcmds task
     // stack, where rfReceiveSignal runs, avoids stack overflow / corruption.
     rmt_symbol_word_t *_buf = nullptr;

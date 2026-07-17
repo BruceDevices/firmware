@@ -1,4 +1,5 @@
 #include "nrf_common.h"
+#include "../../core/bus_HAL.h"
 #include "../../core/mykeyboard.h"
 
 RF24 NRFradio(bruceConfigPins.NRF24_bus.io0, bruceConfigPins.NRF24_bus.cs);
@@ -23,15 +24,8 @@ void nrf_info() {
         "things go wrong."
     );
     delay(1000);
-    while (!check(AnyKeyPress));
+    while (!check(AnyKeyPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
 }
-
-// Track whether the SPI bus has been initialized for the NRF24.
-// Re-calling NRFSPI->begin() on an already-running bus can glitch
-// CLK/MOSI lines and corrupt the first SPI transaction that
-// NRFradio.begin() makes (CONFIG register read), returning garbage
-// and causing a false "NRF24 not found" on every second entry.
-static bool nrfSpiInitialized = false;
 
 bool nrf_start(NRF24_MODE mode) {
     bool result = false;
@@ -58,40 +52,11 @@ bool nrf_start(NRF24_MODE mode) {
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
     delay(5); // Let pins settle before SPI traffic
 
-    if (bruceConfigPins.NRF24_bus.mosi == (gpio_num_t)TFT_MOSI &&
-        bruceConfigPins.NRF24_bus.mosi != GPIO_NUM_NC) { // (T_EMBED), CORE2 and others
-#if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
-        NRFSPI = &tft.getSPIinstance();
-#else
+    NRFSPI =
+        acquireSPIBus(bruceConfigPins.NRF24_bus.sck, bruceConfigPins.NRF24_bus.miso, bruceConfigPins.NRF24_bus.mosi);
+    if (!NRFSPI) {
+        Serial.println("No hardware SPI bus available for NRF24, falling back to default SPI");
         NRFSPI = &SPI;
-#endif
-
-    } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.SDCARD_bus.mosi) {
-        // CC1101 shares SPI with SDCard (Cardputer and CYDs)
-        NRFSPI = &sdcardSPI;
-    } else if (
-        bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&
-        bruceConfigPins.NRF24_bus.mosi != bruceConfigPins.SDCARD_bus.mosi
-    ) {
-        // Smoochie board shares CC1101 and NRF24 SPI bus with different CS pins at
-        // the same time, different from StickCs that uses the same Bus, but one at a
-        // time (same CS Pin)
-        NRFSPI = &CC_NRF_SPI;
-    } else {
-        NRFSPI = &SPI;
-    }
-
-    // Only call NRFSPI->begin() once per bus instance. Calling it again
-    // on an already-initialized bus resets the SPI peripheral mid-session
-    // which can leave CLK/MOSI in a bad state and corrupt the first
-    // NRFradio.begin() CONFIG register read → false "NRF24 not found".
-    if (!nrfSpiInitialized) {
-        NRFSPI->begin(
-            (int8_t)bruceConfigPins.NRF24_bus.sck,
-            (int8_t)bruceConfigPins.NRF24_bus.miso,
-            (int8_t)bruceConfigPins.NRF24_bus.mosi
-        );
-        nrfSpiInitialized = true;
     }
     delay(10);
 

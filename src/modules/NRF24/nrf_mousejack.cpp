@@ -703,6 +703,7 @@ static bool mj_scan() {
                 lastDrawnCount = mj_targetCount;
                 lastRefresh = millis();
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
     }
 

@@ -80,7 +80,7 @@ public:
     void releaseAll(void) override;
     bool isConnected(void);
     void setBatteryLevel(uint8_t level);
-    void setName(String deviceName);
+    void setName(const String &deviceName);
     void setDelay(uint32_t ms);
     void setAppearence(uint16_t v) { appearance = v; }
     void setRandomUUID(void) { _randUUID = !_randUUID; };

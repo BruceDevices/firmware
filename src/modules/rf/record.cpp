@@ -1,4 +1,6 @@
 #include "record.h"
+#include "protocols/rf_config.h"
+#include "protocols/rf_decoder.h"
 #include "rf_utils.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 static bool
@@ -80,6 +82,77 @@ void rf_raw_record_draw(RawRecordingStatus status) {
     }
 }
 
+static size_t rf_durations_to_rmt_symbols(const std::vector<int> &durations, rmt_symbol_word_t **out) {
+    *out = nullptr;
+    if (durations.empty()) return 0;
+
+    size_t symbolCount = (durations.size() + 1) / 2;
+    rmt_symbol_word_t *code = (rmt_symbol_word_t *)malloc(symbolCount * sizeof(rmt_symbol_word_t));
+    if (code == nullptr) return 0;
+
+    for (size_t i = 0; i < symbolCount; i++) {
+        rmt_symbol_word_t symbol = {};
+
+        int d0 = durations[i * 2];
+        symbol.level0 = d0 > 0 ? 1 : 0;
+        symbol.duration0 = abs(d0);
+
+        size_t j = i * 2 + 1;
+        if (j < durations.size()) {
+            int d1 = durations[j];
+            symbol.level1 = d1 > 0 ? 1 : 0;
+            symbol.duration1 = abs(d1);
+        } else {
+            symbol.level1 = symbol.level0 ? 0 : 1;
+            symbol.duration1 = 0;
+        }
+
+        code[i] = symbol;
+    }
+
+    *out = code;
+    return symbolCount;
+}
+
+static void rf_raw_record_accept_capture(
+    RawRecording &recorded, RawRecordingStatus &status, bool &fakeRssiPresent, rmt_symbol_word_t *code,
+    size_t codeLength, unsigned long long signalDuration
+) {
+    fakeRssiPresent = true;
+
+    unsigned long receivedTime = millis();
+    recorded.codes.push_back(code);
+    recorded.codeLengths.push_back(codeLength);
+
+    if (status.lastSignalTime != 0) {
+        unsigned long signalDurationMs = signalDuration / RMT_1MS_TICKS;
+        uint16_t gap = (uint16_t)(receivedTime - status.lastSignalTime - signalDurationMs - 5);
+        recorded.gaps.push_back(gap);
+    } else {
+        status.firstSignalTime = receivedTime;
+        status.recordingStarted = true;
+        tft.drawPixel(0, 0, 0);
+        tft.fillRect(10, 30, tftWidth - 20, tftHeight - 40, bruceConfig.bgColor);
+    }
+    status.lastSignalTime = receivedTime;
+}
+
+static void rf_raw_record_update_status(
+    RawRecordingStatus &status, bool &fakeRssiPresent, bool rssiFeature
+) {
+    if (status.recordingStarted &&
+        (status.lastRssiUpdate == 0 || millis() - status.lastRssiUpdate >= 100)) {
+        if (fakeRssiPresent) status.latestRssi = -45;
+        else status.latestRssi = -90;
+        fakeRssiPresent = false;
+
+        if (rssiFeature) status.latestRssi = ELECHOUSE_cc1101.getRssi();
+
+        status.rssiCount++;
+        status.lastRssiUpdate = millis();
+    }
+}
+
 // TODO: replace frequency scans throughout rf.cpp with this unified function
 #define FREQUENCY_SCAN_MAX_TRIES 5
 float rf_freq_scan() {
@@ -117,7 +190,7 @@ float rf_freq_scan() {
                         if (best_frequencies[i].rssi > best_frequencies[max_index].rssi) { max_index = i; }
                     }
 
-                    bruceConfigPins.setRfFreq(best_frequencies[max_index].freq, 0);
+                    bruceConfigPins.setRfFreq(best_frequencies[max_index].freq, 1);
                     frequency = best_frequencies[max_index].freq;
                     Serial.println("Frequency Found: " + String(frequency));
                     deinitRfModule();
@@ -128,7 +201,7 @@ float rf_freq_scan() {
         } else {
 
             frequency = 433.92;
-            bruceConfigPins.setRfFreq(433.92, 2);
+            bruceConfigPins.setRfFreq(433.92, 1);
         }
     }
     return frequency;
@@ -174,6 +247,56 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
 
     // Start recording
     delay(200);
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) {
+        RfRxSession rx;
+        if (!rx.begin()) {
+            deinitRfModule();
+            return;
+        }
+        Serial.println("M5 GPIO RAW recorder initialized");
+
+        while (!status.recordingFinished) {
+            previousMillis = millis();
+
+            std::vector<int> durations;
+            if (rx.poll(durations)) {
+                if (durations.size() >= 5) {
+                    rmt_symbol_word_t *code = nullptr;
+                    size_t codeLength = rf_durations_to_rmt_symbols(durations, &code);
+                    if (codeLength > 0) {
+                        unsigned long long signalDuration = 0;
+                        for (int d : durations) signalDuration += abs(d);
+                        rf_raw_record_accept_capture(
+                            recorded, status, fakeRssiPresent, code, codeLength, signalDuration
+                        );
+                        RF_DBG(
+                            "m5 raw record: durations=%u symbols=%u",
+                            (unsigned)durations.size(),
+                            (unsigned)codeLength
+                        );
+                    }
+                }
+            }
+
+            rf_raw_record_update_status(status, fakeRssiPresent, rssiFeature);
+
+            if (status.firstSignalTime > 0 && millis() - status.firstSignalTime >= 20000)
+                status.recordingFinished = true;
+            if (check(SelPress) && status.recordingStarted) status.recordingFinished = true;
+            if (check(EscPress)) {
+                status.recordingFinished = true;
+                returnToMenu = true;
+            }
+            rf_raw_record_draw(status);
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        Serial.println("Recording stopped.");
+        rx.end();
+        deinitRfModule();
+        return;
+    }
+
     rmt_channel_handle_t rx_ch = NULL;
     rx_ch = setup_rf_rx();
     if (rx_ch == NULL) return;
@@ -206,48 +329,23 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
             bool valid_signal = false;
             if (rx_size >= 5) valid_signal = true;
             if (valid_signal) {         // ignore codes shorter than 5 items
-                fakeRssiPresent = true; // For rssi display on single-pinned RF Modules
                 rmt_symbol_word_t *code = (rmt_symbol_word_t *)malloc(rx_size * sizeof(rmt_symbol_word_t));
 
                 // Gap calculation
-                unsigned long receivedTime = millis();
                 unsigned long long signalDuration = 0;
                 for (size_t i = 0; i < rx_size; i++) {
                     code[i] = rx_items[i];
                     signalDuration += rx_items[i].duration0 + rx_items[i].duration1;
                 }
-                recorded.codes.push_back(code);
-                recorded.codeLengths.push_back(rx_size);
-
-                if (status.lastSignalTime != 0) {
-                    unsigned long signalDurationMs = signalDuration / RMT_1MS_TICKS;
-                    uint16_t gap = (uint16_t)(receivedTime - status.lastSignalTime - signalDurationMs - 5);
-                    recorded.gaps.push_back(gap);
-                } else {
-                    status.firstSignalTime = receivedTime;
-                    status.recordingStarted = true;
-                    // Erase sinewave animation
-                    tft.drawPixel(0, 0, 0);
-                    tft.fillRect(10, 30, tftWidth - 20, tftHeight - 40, bruceConfig.bgColor);
-                }
-                status.lastSignalTime = receivedTime;
+                rf_raw_record_accept_capture(recorded, status, fakeRssiPresent, code, rx_size, signalDuration);
             }
             ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
             rx_size = 0;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
 
         // Periodically update RSSI
-        if (status.recordingStarted &&
-            (status.lastRssiUpdate == 0 || millis() - status.lastRssiUpdate >= 100)) {
-            if (fakeRssiPresent) status.latestRssi = -45;
-            else status.latestRssi = -90;
-            fakeRssiPresent = false;
-
-            if (rssiFeature) status.latestRssi = ELECHOUSE_cc1101.getRssi();
-
-            status.rssiCount++;
-            status.lastRssiUpdate = millis();
-        }
+        rf_raw_record_update_status(status, fakeRssiPresent, rssiFeature);
 
         // Stop recording after 20 seconds
         if (status.firstSignalTime > 0 && millis() - status.firstSignalTime >= 20000)
@@ -308,6 +406,7 @@ void rf_raw_record() {
 
         if (returnToMenu || check(EscPress)) return;
         option = rf_raw_record_options(saved);
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     for (auto &code : recorded.codes) free(code);
     recorded.codes.clear();

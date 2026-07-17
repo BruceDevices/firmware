@@ -38,6 +38,10 @@ private:
     RfCodes received;
     String title = "RF Scan Copy";
     bool restartScan = false;
+    bool exitRequested = false;
+    uint64_t lastM5CaptureKey = 0;
+    String lastM5CaptureProtocol = "";
+    unsigned long lastM5CaptureMs = 0;
     bool ReadRAW = true;
     bool codesOnly = false;
     bool autoSave = false;
@@ -61,8 +65,9 @@ private:
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
-    void decode_signal(const std::vector<int> &durations);
-    void read_raw(const std::vector<int> &durations);
+    bool decode_signal(const std::vector<int> &durations);
+    bool read_raw(const std::vector<int> &durations);
+    bool is_m5_duplicate_capture(const RfCodes &data);
     void replay_signal(bool asRaw = false);
     void save_signal(bool asRaw = false);
     void reset_signals();
@@ -79,7 +84,7 @@ private:
 
 void display_info(
     RfCodes received, int signals, bool ReadRAW = false, bool codesOnly = false, bool autoSave = false,
-    String title = "", bool headless = false
+    const String &title = "", bool headless = false
 );
 void display_signal_data(RfCodes received, bool headless = false);
 

@@ -116,6 +116,8 @@ static const uint8_t ADC = 10;
 // Default I2C port
 #define GROVE_SDA 2
 #define GROVE_SCL 1
+#define SYS_I2C_SDA 12
+#define SYS_I2C_SCL 11
 
 // FM Radio
 #define FM_SI4713

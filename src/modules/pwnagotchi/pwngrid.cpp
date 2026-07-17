@@ -60,6 +60,11 @@ void add_new_peer(JsonDocument &json, signed int rssi) {
 }
 
 // Delete pwngrid peers
+void clearPwngridPeers() {
+    pwngrid_peers.clear();
+    pwngrid_friends_tot = 0;
+    pwngrid_last_friend_name = "";
+}
 void delete_peer_gone() { // Delete peers wigh pwngrid_peers.gone = true
     std::vector<int>
         peer_gone; // Create a vector of integers to save the index value of the element to be deleted
@@ -99,7 +104,7 @@ const int raw_beacon_len = sizeof(pwngrid_beacon_raw);
 
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
-esp_err_t pwngridAdvertise(uint8_t channel, String face) {
+esp_err_t pwngridAdvertise(uint8_t channel, const String &face) {
     static uint8_t _chan = 1;
     JsonDocument pal_json;
     String pal_json_str = "";
@@ -166,7 +171,7 @@ esp_err_t pwngridAdvertise(uint8_t channel, String face) {
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_wifi.html#_CPPv417esp_wifi_80211_tx16wifi_interface_tPKvib
     esp_err_t result;
     for (int i = 0; i < 3; i++) {
-        result = esp_wifi_80211_tx(WIFI_IF_AP, pwngrid_beacon_frame, frame_len, false);
+        result = wifiRawTx(WIFI_IF_AP, pwngrid_beacon_frame, frame_len);
         if (result != ESP_OK) {
             ESP_LOGE("pwngrid", "Failed sending advertising: %s", esp_err_to_name(result));
         }

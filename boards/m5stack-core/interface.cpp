@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <M5Unified.h>
 #include <interface.h>
@@ -9,6 +10,7 @@
 ***************************************************************************************/
 void _setup_gpio() {
     M5.begin(); // Need to test if SDCard inits with the new setup
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
 }
 
 /***************************************************************************************

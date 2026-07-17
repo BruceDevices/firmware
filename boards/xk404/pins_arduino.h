@@ -26,6 +26,8 @@ static const uint8_t RX = 44;
 
 #define GROVE_SDA 47
 #define GROVE_SCL 48
+#define SYS_I2C_SDA 47
+#define SYS_I2C_SCL 48
 static const uint8_t SDA = 47;
 static const uint8_t SCL = 48;
 

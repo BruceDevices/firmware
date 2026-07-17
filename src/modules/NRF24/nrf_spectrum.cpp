@@ -76,7 +76,10 @@ void nrf_spectrum() {
         for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
         NRFradio.setDataRate(RF24_1MBPS);
 
-        while (!check(EscPress)) { scanChannels(); }
+        while (!check(EscPress)) {
+            scanChannels();
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
         NRFradio.stopListening();
         NRFradio.powerDown();
         delay(250);

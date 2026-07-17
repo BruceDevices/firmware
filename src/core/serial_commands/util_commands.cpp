@@ -4,8 +4,8 @@
 #include "core/utils.h" // to return optionsJSON
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
+#include "core/bus_HAL.h"
 #include "modules/badusb_ble/ducky_typer.h"
-#include <Wire.h>
 #include <globals.h>
 
 uint32_t uptimeCallback(cmd *c) {
@@ -56,7 +56,7 @@ uint32_t dateCallback(cmd *c) {
 uint32_t i2cCallback(cmd *c) {
     // scan for connected i2c modules
     // derived from https://learn.adafruit.com/scanning-i2c-addresses/arduino
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    TwoWire *Wire = acquireI2CBus();
     byte error, address;
     int nDevices;
     serialDevice->println("Scanning...");
@@ -65,8 +65,8 @@ uint32_t i2cCallback(cmd *c) {
         // The i2c_scanner uses the return value of
         // the Write.endTransmisstion to see if
         // a device did acknowledge to the address.
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
+        Wire->beginTransmission(address);
+        error = Wire->endTransmission();
         if (error == 0) {
             serialDevice->print("I2C device found at address 0x");
             if (address < 16) serialDevice->print("0");
@@ -78,6 +78,7 @@ uint32_t i2cCallback(cmd *c) {
             serialDevice->println(address, HEX);
         }
     }
+    releaseI2CBus();
 
     if (nDevices == 0) {
         serialDevice->println("No I2C devices found");

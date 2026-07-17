@@ -8,6 +8,7 @@
 
 #include "PN532.h"
 #include "apdu.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/sd_functions.h"
@@ -43,35 +44,54 @@ bool sendCommandCheckAckPreferIrq(Adafruit_PN532 &nfc, uint8_t *cmd, uint8_t cmd
     return true;
 }
 
-bool tgInitAsTargetIrq(Adafruit_PN532 &nfc) {
+// Identity broadcast by TgInitAsTarget. The PN532 always advertises
+// ISO14443A and FeliCa params in a single call; the reader picks whichever
+// it polls for. NFCID1t is only 3 bytes - the chip always prefixes the
+// emulated single-size NFCID1 with a fixed 0x08 byte, so a byte-perfect
+// 4-byte custom UID isn't achievable, only the low 3 bytes are customizable.
+struct TargetIdentity {
+    // MODE bitfield: 0x00 broadcasts ISO14443A and FeliCa together. 0x05
+    // ("PICC only, Passive only") reliably suppresses the FeliCa auto-answer
+    // for ISO14443A emulation; readers otherwise tend to lock onto the
+    // FeliCa identity even when it's just a leftover default.
+    uint8_t mode = 0x00;
+    uint8_t sensRes[2] = {0x08, 0x00};                                     // ATQA
+    uint8_t nfcid1t[3] = {0xDC, 0x44, 0x20};                               // low 3 bytes of NFCID1
+    uint8_t selRes = 0x60;                                                 // SAK
+    uint8_t nfcid2t[8] = {0x01, 0xFE, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7}; // FeliCa IDm
+    uint8_t pad[8] = {0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7};     // FeliCa PMm
+    uint8_t sysCode[2] = {0xFF, 0xFF};                                     // FeliCa system code
+};
+
+bool tgInitAsTargetIrq(Adafruit_PN532 &nfc, const TargetIdentity &id) {
     // Matches the older "AsTarget" payload
     uint8_t target[] = {
         PN532_COMMAND_TGINITASTARGET,
-        0x00, // MODE bitfield
-        0x08,
-        0x00, // SENS_RES
-        0xDC,
-        0x44,
-        0x20, // NFCID1T
-        0x60, // SEL_RES
-        0x01,
-        0xFE, // NFCID2t prefix
-        0xA2,
-        0xA3,
-        0xA4,
-        0xA5,
-        0xA6,
-        0xA7,
-        0xC0,
-        0xC1,
-        0xC2,
-        0xC3,
-        0xC4,
-        0xC5,
-        0xC6,
-        0xC7,
-        0xFF,
-        0xFF, // system code
+        id.mode, // MODE bitfield
+        id.sensRes[0],
+        id.sensRes[1],
+        id.nfcid1t[0],
+        id.nfcid1t[1],
+        id.nfcid1t[2],
+        id.selRes,
+        id.nfcid2t[0],
+        id.nfcid2t[1],
+        id.nfcid2t[2],
+        id.nfcid2t[3],
+        id.nfcid2t[4],
+        id.nfcid2t[5],
+        id.nfcid2t[6],
+        id.nfcid2t[7],
+        id.pad[0],
+        id.pad[1],
+        id.pad[2],
+        id.pad[3],
+        id.pad[4],
+        id.pad[5],
+        id.pad[6],
+        id.pad[7],
+        id.sysCode[0],
+        id.sysCode[1],
         0xAA,
         0x99,
         0x88,
@@ -172,6 +192,83 @@ bool parseHexBytesAfterColon(const String &line, std::vector<uint8_t> &bytes) {
     return !bytes.empty() && hi < 0;
 }
 
+bool parseHexByteString(const String &s, uint8_t *out, uint8_t len) {
+    int hi = -1;
+    uint8_t count = 0;
+    for (int i = 0; i < s.length() && count < len; i++) {
+        int v = hexNibble(s.charAt(i));
+        if (v < 0) continue;
+        if (hi < 0) {
+            hi = v;
+        } else {
+            out[count++] = static_cast<uint8_t>((hi << 4) | v);
+            hi = -1;
+        }
+    }
+    return count == len;
+}
+
+// Derives the identity to broadcast via TgInitAsTarget from whatever is
+// currently loaded (uid/printableUID). Falls back to the legacy hardcoded
+// demo identity when nothing usable is loaded, to avoid regressing the
+// no-file-loaded "quick test" emulation flow.
+// serveNdefOverT4T: when true, the caller intends to serve the loaded content
+// as an NFC Forum Type 4 Tag (NDEF over ISO-DEP APDUs). The PN532 in target
+// mode only delivers ISO14443-4 (RATS/ISO-DEP) and NFC-DEP commands to the
+// host, so a loaded card's real Type 2 SAK (e.g. NTAG21x) is overridden with
+// the ISO14443-4 bit to make the reader do RATS and read NDEF over Type 4.
+TargetIdentity buildTargetIdentity(
+    const RFIDInterface::Uid &uid, const RFIDInterface::PrintableUID &printableUID, bool serveNdefOverT4T
+) {
+    TargetIdentity id;
+
+    if (printableUID.picc_type == "FeliCa") {
+        // format_data_felica()/parse_data() store IDm in uid.uidByte (8 bytes),
+        // PMm as a hex string in printableUID.sak, and the system code as a
+        // plain hex string in printableUID.atqa.
+        id.mode = 0x00; // Broadcast FeliCa (no confirmed "FeliCa only" bit; keep both).
+        memcpy(id.nfcid2t, uid.uidByte, 8);
+        uint8_t pmm[8];
+        if (parseHexByteString(printableUID.sak, pmm, 8)) memcpy(id.pad, pmm, 8);
+        if (printableUID.atqa.length() > 0) {
+            uint16_t sysCode = strtoul(printableUID.atqa.c_str(), NULL, 16);
+            id.sysCode[0] = static_cast<uint8_t>((sysCode >> 8) & 0xFF);
+            id.sysCode[1] = static_cast<uint8_t>(sysCode & 0xFF);
+        }
+    } else {
+        // Not emulating a FeliCa dump: suppress the FeliCa auto-answer so
+        // readers that poll both technologies don't lock onto a leftover
+        // default FeliCa identity instead of the ISO14443A content below.
+        id.mode = 0x05; // "PICC only, Passive only", per TgInitAsTarget()'s own reference call.
+        if (uid.size >= 3) {
+            id.sensRes[0] = uid.atqaByte[0];
+            id.sensRes[1] = uid.atqaByte[1];
+            // ATQA's UID-size bits (b7-b6 of the low byte) must say "single
+            // size" (4 bytes): TgInitAsTarget's NFCID1t field only holds 3
+            // bytes (+1 fixed by the chip), so a real card's "double size"
+            // ATQA (e.g. NTAG21x's 0x0044, 7-byte UID) would be a lie we
+            // can't back up - readers abort activation when the anticollision
+            // cascade doesn't match what ATQA promised.
+            id.sensRes[1] &= ~0x40;
+            // Only the low 3 bytes of a 4-byte NFCID1 are settable (see
+            // TargetIdentity comment above), so best-effort match the tail.
+            id.nfcid1t[0] = uid.uidByte[uid.size - 3];
+            id.nfcid1t[1] = uid.uidByte[uid.size - 2];
+            id.nfcid1t[2] = uid.uidByte[uid.size - 1];
+            id.selRes = uid.sak;
+            if (serveNdefOverT4T) {
+                // The loaded card's real SAK may be Type 2 (0x00, e.g. NTAG21x),
+                // which would make the reader try raw Type 2 commands the PN532
+                // can't answer in target mode. Force the ISO14443-4 bit so the
+                // reader does RATS and reads our NDEF over Type 4 instead.
+                id.selRes |= 0x20;
+            }
+        }
+    }
+
+    return id;
+}
+
 bool extractNdefMessageFromPageDump(const String &dump, std::vector<uint8_t> &ndefOut) {
     ndefOut.clear();
     if (dump.length() == 0) return false;
@@ -269,20 +366,29 @@ PN532::PN532(CONNECTION_TYPE connection_type) {
 }
 
 bool PN532::begin() {
+    TwoWire *Wire = nullptr;
 #ifdef M5STICK
     if (_connection_type == CONNECTION_TYPE::I2C_SPI) {
-        Wire.begin(GPIO_NUM_26, GPIO_NUM_25);
+        Wire = acquireI2CBus(GPIO_NUM_26, GPIO_NUM_25);
     } else if (_connection_type == CONNECTION_TYPE::I2C) {
-        Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+        Wire = acquireI2CBus();
     }
 #else
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    Wire = acquireI2CBus();
 #endif
 
+    if (_use_i2c && Wire != &::Wire) {
+        // The vendored Adafruit_PN532/Adafruit_I2CDevice libs always talk to the default global
+        // `Wire` object and have no way to be pointed at another TwoWire instance. If bus_HAL had
+        // to remap i2c_bus to Wire1 to avoid colliding with sys_i2c, PN532 can't work here.
+        displayError("I2C bus conflicts with system I2C bus", true);
+        return false;
+    }
+
     bool i2c_check = true;
-    if (_use_i2c) {
-        Wire.beginTransmission(PN532_I2C_ADDRESS);
-        int error = Wire.endTransmission();
+    if (_use_i2c && Wire != nullptr) {
+        Wire->beginTransmission(PN532_I2C_ADDRESS);
+        int error = Wire->endTransmission();
         i2c_check = (error == 0);
     }
 
@@ -405,23 +511,32 @@ int PN532::emulate() {
     static const std::vector<uint8_t> kSwNotSupported = {0x6A, 0x81};
     static const std::vector<uint8_t> kSwEof = {0x62, 0x82};
 
+    // NDEF over ISO-DEP (NFC Forum Type 4 Tag) is the only content the PN532
+    // can actually deliver in target mode - it never passes raw Type 2
+    // (MIFARE Ultralight/NTAG) or FeliCa block-read commands up to the host,
+    // regardless of what's loaded. For a Type 2 dump, extract its embedded
+    // NDEF; otherwise use an explicitly built NDEF, falling back to a test
+    // URL so a bare "quick test" emulation still has something to serve.
     std::vector<uint8_t> emulatedNdefMessage;
     bool canParseUltralightDump = (uid.sak == PICC_TYPE_MIFARE_UL);
     if ((!canParseUltralightDump || !extractNdefMessageFromPageDump(strAllPages, emulatedNdefMessage))) {
         if (!buildNdefMessageFromStruct(this->ndefMessage, emulatedNdefMessage)) {
-            // Fallback test payload if no loaded/read NDEF is available.
             std::vector<uint8_t> uriPayload = Ndef::urlNdefAbbrv("https://bruce.computer");
             emulatedNdefMessage = Ndef::newMessage(uriPayload);
         }
     }
-    if (emulatedNdefMessage.empty()) return FAILURE;
-    if (emulatedNdefMessage.size() > (kNdefMaxLen - 2)) return FAILURE;
+    bool hasNdefFile = !emulatedNdefMessage.empty() && emulatedNdefMessage.size() <= (kNdefMaxLen - 2);
+    if (!hasNdefFile) return FAILURE;
 
-    std::vector<uint8_t> ndefFile(kNdefMaxLen, 0x00);
-    ndefFile[0] = static_cast<uint8_t>((emulatedNdefMessage.size() >> 8) & 0xFF);
-    ndefFile[1] = static_cast<uint8_t>(emulatedNdefMessage.size() & 0xFF);
-    memcpy(ndefFile.data() + 2, emulatedNdefMessage.data(), emulatedNdefMessage.size());
+    std::vector<uint8_t> ndefFile;
+    if (hasNdefFile) {
+        ndefFile.assign(kNdefMaxLen, 0x00);
+        ndefFile[0] = static_cast<uint8_t>((emulatedNdefMessage.size() >> 8) & 0xFF);
+        ndefFile[1] = static_cast<uint8_t>(emulatedNdefMessage.size() & 0xFF);
+        memcpy(ndefFile.data() + 2, emulatedNdefMessage.data(), emulatedNdefMessage.size());
+    }
 
+    TargetIdentity targetIdentity = buildTargetIdentity(uid, printableUID, hasNdefFile);
     TagFile currentFile = TagFile::NONE;
     bool hadInteraction = false;
     bool targetArmed = false;
@@ -431,8 +546,9 @@ int PN532::emulate() {
 
     if (_use_i2c) {
         // PN532 target mode is sensitive to ESP32 I2C timing/clock stretching.
-        Wire.setClock(100000);
-        Wire.setTimeOut(50);
+        TwoWire *Wire = acquireI2CBus();
+        Wire->setClock(100000);
+        Wire->setTimeOut(50);
     }
     // `begin()` already wakes and SAMConfig's the PN532. Avoid reusing Adafruit's I2C RDY polling path here.
 
@@ -443,7 +559,7 @@ int PN532::emulate() {
         }
         yield();
         if (!targetReady && millis() >= nextArmTry) {
-            targetReady = tgInitAsTargetIrq(nfc);
+            targetReady = tgInitAsTargetIrq(nfc, targetIdentity);
             nextArmTry = millis() + 300;
             currentFile = TagFile::NONE;
             if (targetReady) targetArmed = true;
@@ -462,13 +578,23 @@ int PN532::emulate() {
             delay(20);
             continue;
         }
-        if (tgStatus == 0x29 || tgStatus == 0x25) {
+        if (tgStatus == 0x29) {
+            // Target genuinely released/deselected by the initiator.
             nfc.inRelease();
             targetReady = false;
             delay(20);
             continue;
         }
-        if (tgStatus != 0x00 || request_len < 5) {
+        if (tgStatus != 0x00 || request_len < 1) {
+            // 0x25 (and other non-zero statuses) show up continuously while
+            // idle/not-yet-selected - NOT a release condition. Releasing here
+            // was tearing the link down mid-anticollision/mid-activation.
+            delay(10);
+            continue;
+        }
+
+        // --- ISO-DEP / NFC Forum Type 4 Tag (NDEF over APDU) ---
+        if (request_len < 5) {
             delay(10);
             continue;
         }
@@ -553,6 +679,21 @@ int PN532::emulate() {
     return targetArmed ? TAG_NOT_PRESENT : FAILURE;
 }
 
+String PN532::emulationCaveat() const {
+    // The PN532 in target mode only delivers ISO14443-4/NFC-DEP commands to
+    // the host, so raw Type 2 and FeliCa block reads never reach here. Warn
+    // the user before they assume a byte-perfect clone.
+    if (printableUID.picc_type == "FeliCa") {
+        return "PN532 limitation: only IDm/PMm identity is emulated, "
+               "block reads (Read Without Encryption) are not supported.";
+    }
+    if (uid.sak == PICC_TYPE_MIFARE_UL && totalPages > 0 && strAllPages.length() > 0) {
+        return "PN532 limitation: only the NDEF content is emulated (as a "
+               "Type 4 Tag), not a byte-perfect raw memory clone.";
+    }
+    return "";
+}
+
 int PN532::load() {
     String filepath;
     File file;
@@ -577,9 +718,21 @@ int PN532::load() {
         if (line.startsWith("UID:")) printableUID.uid = strData;
         if (line.startsWith("SAK:")) printableUID.sak = strData;
         if (line.startsWith("ATQA:")) printableUID.atqa = strData;
-        if (line.startsWith("Pages total:")) dataPages = strData.toInt();
-        if (line.startsWith("Pages read:")) pageReadSuccess = false;
-        if (line.startsWith("Page ")) strAllPages += line + "\n";
+        // FeliCa dumps (PN532::save()) reuse the SAK/ATQA/"pages" fields for
+        // PMm/system code/block count under FeliCa-specific line names - see
+        // the equivalent fix in RFIDInterface::loadFromFile().
+        if (line.startsWith("Manufacture id:")) printableUID.sak = strData;
+        if (line.startsWith("Blocks total:") || line.startsWith("Pages total:")) {
+            // totalPages (not just dataPages) must be set here: emulate()'s
+            // Type 2/FeliCa raw dispatch (isType2Dump/isFelicaDump) requires
+            // totalPages > 0, and this loop previously never set it - a
+            // dump loaded via the GUI "Load file" flow would silently fall
+            // through to the generic NDEF/T4T-only path instead.
+            dataPages = strData.toInt();
+            totalPages = dataPages;
+        }
+        if (line.startsWith("Pages read:") || line.startsWith("Blocks read:")) pageReadSuccess = false;
+        if (line.startsWith("Page ") || line.startsWith("Block ")) strAllPages += line + "\n";
     }
 
     file.close();
@@ -589,7 +742,7 @@ int PN532::load() {
     return SUCCESS;
 }
 
-int PN532::save(String filename) {
+int PN532::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 
@@ -793,6 +946,7 @@ int PN532::read_mifare_classic_data_sector(byte sector) {
 }
 
 int PN532::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     uint8_t successA = 0;
     uint8_t successB = 0;
 

@@ -119,5 +119,6 @@ void rf_bruteforce() {
             case 5: return;
             default: return; // EscPress
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }

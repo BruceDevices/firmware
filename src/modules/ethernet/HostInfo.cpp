@@ -119,6 +119,7 @@ void HostInfo::setup(const Host &host) {
         }
 
         client_connect(host.ip, port, TIMEOUT_MS);
+        vTaskDelay(pdMS_TO_TICKS(1));
         unsigned long startTime = millis();
 
         bool connected = false;
@@ -131,6 +132,7 @@ void HostInfo::setup(const Host &host) {
                 connected = true;
                 break;
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         if (returnToMenu) {

@@ -266,7 +266,7 @@ void ConfigMenu::devMenu() {
             {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
 #if !defined(LITE_VERSION)
             {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-            {"ST25R3916 Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); }  },
+            {"ST25R3916 Pins",  [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
             {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
 #endif
             {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
@@ -318,7 +318,7 @@ void ConfigMenu::switchToUARTSerial() {
         bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
 
     // Configure UART pins and switch serial output

@@ -2,7 +2,7 @@
  * BLE Sniffer - Standalone module for LITE_VERSION
  * Author: Ninja-jr
  * Date: 2026-01-24
- * 
+ *
  * Captures BLE advertisements, displays hex dumps,
  * parses manufacturer data, and saves to SD/LittleFS.
  */
@@ -13,9 +13,9 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
-#include <SD.h>
 #include <LittleFS.h>
 #include <NimBLEDevice.h>
+#include <SD.h>
 #include <globals.h>
 
 struct SnifferPacket {
@@ -45,10 +45,10 @@ static String payloadToHex(const std::vector<uint8_t> &payload) {
 
 static String parseManufacturerData(const std::vector<uint8_t> &payload) {
     if (payload.size() < 2) return "Unknown";
-    
+
     uint16_t companyId = (payload[1] << 8) | payload[0];
     String info = "Company: 0x" + String(companyId, HEX) + " ";
-    
+
     switch (companyId) {
         case 0x004C:
             info += "(Apple)";
@@ -75,11 +75,8 @@ static String parseManufacturerData(const std::vector<uint8_t> &payload) {
                 info += " Model: 0x" + String(modelId, HEX);
             }
             break;
-        case 0x0600:
-            info += "(Microsoft)";
-            break;
-        default:
-            info += "(Unknown)";
+        case 0x0600: info += "(Microsoft)"; break;
+        default: info += "(Unknown)";
     }
     return info;
 }
@@ -91,11 +88,11 @@ void BLE_Sniffer() {
     padprintln("Press [ESC] to exit");
     padprintln("");
     padprintln("Status: READY");
-    
+
     bool isCapturing = false;
     bool firstRun = true;
     bool bleInitialized = false;
-    
+
     while (true) {
         if (check(EscPress)) {
             if (isCapturing && pSnifferScan) {
@@ -112,7 +109,7 @@ void BLE_Sniffer() {
             }
             break;
         }
-        
+
         if (check(SelPress)) {
             isCapturing = !isCapturing;
             if (isCapturing) {
@@ -137,28 +134,28 @@ void BLE_Sniffer() {
                 padprintln("");
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
-                
+
                 NimBLEScanResults results = pSnifferScan->getResults(10 * 1000, true);
-                
+
                 for (int i = 0; i < results.getCount(); i++) {
                     const NimBLEAdvertisedDevice *device = results.getDevice(i);
-                    
+
                     SnifferPacket packet;
                     packet.address = String(device->getAddress().toString().c_str());
                     packet.name = String(device->getName().c_str());
                     if (packet.name.isEmpty()) packet.name = "Unknown";
                     packet.rssi = device->getRSSI();
                     packet.timestamp = String(millis() / 1000);
-                    
+
                     std::string manufData = device->getManufacturerData();
                     packet.payload.assign(manufData.begin(), manufData.end());
                     packet.payloadHex = payloadToHex(packet.payload);
                     packet.channel = 37 + (i % 3);
-                    
+
                     snifferPackets.push_back(packet);
                     snifferPacketCount++;
                 }
-                
+
                 pSnifferScan->stop();
                 isCapturing = false;
                 padprintln("");
@@ -170,59 +167,63 @@ void BLE_Sniffer() {
                 padprintln("Press [ESC] to exit");
             }
         }
-        
+
         if (check(SelPress) && !isCapturing && snifferPacketCount > 0) {
             int selected = 0;
             int scrollOffset = 0;
             bool viewing = true;
-            
+
             while (viewing) {
                 if (check(EscPress)) {
                     viewing = false;
                     break;
                 }
-                
+
                 tft.fillScreen(bruceConfig.bgColor);
                 drawMainBorderWithTitle("CAPTURED PACKETS");
-                
+
                 int y = BORDER_PAD_Y + FM * LH + 4;
                 int lineH = max(14, tftHeight / 12);
                 int visibleItems = (tftHeight - y - 50) / lineH;
-                
+
                 tft.setTextSize(FP);
                 tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                 tft.setCursor(10, y);
                 tft.println("Packets: " + String(snifferPacketCount));
                 y += lineH;
-                
+
                 for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5; i++) {
                     int idx = scrollOffset + i;
                     SnifferPacket &pkt = snifferPackets[idx];
                     bool selectedItem = (idx == selected);
                     uint16_t fg = selectedItem ? bruceConfig.bgColor : TFT_WHITE;
                     uint16_t bg = selectedItem ? bruceConfig.priColor : bruceConfig.bgColor;
-                    
+
                     tft.fillRect(10, y, tftWidth - 20, lineH - 2, bg);
                     tft.setTextColor(fg, bg);
-                    String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " + String(pkt.rssi) + "dB";
+                    String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " +
+                                     String(pkt.rssi) + "dB";
                     if (display.length() > 35) display = display.substring(0, 32) + "...";
                     tft.drawString(display, 15, y + 2, 1);
                     y += lineH;
                 }
-                
+
                 if (snifferPacketCount > visibleItems) {
                     tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                     tft.setCursor(tftWidth - 30, BORDER_PAD_Y + FM * LH + 4 + lineH);
-                    if (scrollOffset > 0) tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
+                    if (scrollOffset > 0)
+                        tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
                     if (scrollOffset + visibleItems < snifferPacketCount) {
-                        tft.drawString("v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1);
+                        tft.drawString(
+                            "v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1
+                        );
                     }
                 }
-                
+
                 tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
                 tft.setCursor(10, tftHeight - 20);
                 tft.drawString("PREV/NEXT: Navigate  SEL: View Details  ESC: Back", 10, tftHeight - 20, 1);
-                
+
                 if (check(NextPress)) {
                     if (selected < snifferPacketCount - 1) {
                         selected++;
@@ -234,20 +235,18 @@ void BLE_Sniffer() {
                 if (check(PrevPress)) {
                     if (selected > 0) {
                         selected--;
-                        if (selected < scrollOffset) {
-                            scrollOffset = selected;
-                        }
+                        if (selected < scrollOffset) { scrollOffset = selected; }
                     }
                 }
                 if (check(SelPress)) {
                     SnifferPacket &pkt = snifferPackets[selected];
-                    
+
                     drawMainBorderWithTitle("PACKET DETAILS");
                     int dy = BORDER_PAD_Y + FM * LH + 4;
                     int dlh = max(12, tftHeight / 14);
                     tft.setTextSize(FP);
                     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    
+
                     tft.setCursor(10, dy);
                     tft.println("Device: " + pkt.name);
                     dy += dlh;
@@ -261,21 +260,21 @@ void BLE_Sniffer() {
                     dy += dlh;
                     tft.println("Payload (" + String(pkt.payload.size()) + " bytes):");
                     dy += dlh;
-                    
+
                     String parsed = parseManufacturerData(pkt.payload);
                     tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                     tft.println(parsed);
                     dy += dlh;
-                    
+
                     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
                     String hexDump = pkt.payloadHex;
                     if (hexDump.length() > 400) hexDump = hexDump.substring(0, 400) + "...\n(truncated)";
                     tft.println(hexDump);
-                    
+
                     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
                     tft.setCursor(10, tftHeight - 20);
                     tft.drawString("Press any key to continue", 10, tftHeight - 20, 1);
-                    
+
                     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) {
                         delay(50);
                     }
@@ -283,22 +282,21 @@ void BLE_Sniffer() {
                 delay(100);
             }
         }
-        
+
         if (check(NextPress) && !isCapturing && snifferPacketCount > 0) {
             FS *fs = nullptr;
             String storageType = "";
-            
+
             if (getFsStorage(fs) && fs == &SD) {
                 storageType = "SD";
-            }
-            else if (LittleFS.begin()) {
+            } else if (setupLittleFS()) {
                 fs = &LittleFS;
                 storageType = "LittleFS";
             }
-            
+
             if (fs && !storageType.isEmpty()) {
                 if (!fs->exists("/BruceSniffer")) fs->mkdir("/BruceSniffer");
-                
+
                 String filename = "/BruceSniffer/sniffer_" + String(millis()) + ".txt";
                 File file = fs->open(filename, FILE_WRITE);
                 if (file) {
@@ -306,11 +304,17 @@ void BLE_Sniffer() {
                     file.println("Timestamp: " + String(millis()));
                     file.println("Total packets: " + String(snifferPacketCount));
                     file.println("");
-                    
+
                     for (size_t i = 0; i < snifferPackets.size(); i++) {
                         SnifferPacket &pkt = snifferPackets[i];
-                        file.printf("[%d] %s | %s | %d dBm | Ch:%d\n", 
-                                   i + 1, pkt.name.c_str(), pkt.address.c_str(), pkt.rssi, pkt.channel);
+                        file.printf(
+                            "[%d] %s | %s | %d dBm | Ch:%d\n",
+                            i + 1,
+                            pkt.name.c_str(),
+                            pkt.address.c_str(),
+                            pkt.rssi,
+                            pkt.channel
+                        );
                         file.print("  Payload: ");
                         for (size_t j = 0; j < pkt.payload.size(); j++) {
                             file.printf("%02X ", pkt.payload[j]);
@@ -328,7 +332,7 @@ void BLE_Sniffer() {
             }
             delay(1000);
         }
-        
+
         delay(100);
     }
 }

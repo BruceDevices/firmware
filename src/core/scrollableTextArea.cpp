@@ -76,19 +76,38 @@ void ScrollableTextArea::show(bool force) {
 
     while (check(SelPress)) {
         update(force);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         update(force);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
 uint32_t ScrollableTextArea::getMaxVisibleTextLength() { return _maxVisibleLines * _maxCharactersPerLine; }
 
 void ScrollableTextArea::update(bool force) {
-    if (check(PrevPress) || check(UpPress)) scrollUp();
-    else if (check(NextPress) || check(DownPress)) scrollDown();
+#ifdef HAS_ENCODER
+    int32_t rotarySteps = drainRotarySteps();
+    if (rotarySteps != 0) {
+        check(PrevPress);
+        check(NextPress);
+        check(UpPress);
+        check(DownPress);
+        while (rotarySteps > 0) {
+            scrollUp();
+            rotarySteps--;
+        }
+        while (rotarySteps < 0) {
+            scrollDown();
+            rotarySteps++;
+        }
+    } else
+#endif
+    {
+        if (check(PrevPress) || check(UpPress)) scrollUp();
+        else if (check(NextPress) || check(DownPress)) scrollDown();
+    }
 
     draw(force);
 }

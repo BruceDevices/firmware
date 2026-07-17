@@ -27,8 +27,8 @@ public:
     int emulate() override;
     int load() override;
     int loadFromFile(const String &filepath) override;
-    int save(String filename) override;
-    int saveFlipper(String filename) override;
+    int save(const String &filename) override;
+    int saveFlipper(const String &filename) override;
 
     void stopDiscovery();
 
@@ -111,6 +111,9 @@ private:
     String _getNtagVariant();
     bool _readNtagSignature();
     bool _readNtagCounters();
+    // Explicit ::ReturnCode (RFAL's typedef, st_errno.h) - unqualified ReturnCode
+    // here would resolve to the inherited RFIDInterface::ReturnCode enum instead.
+    ::ReturnCode _t2tReadPage(uint8_t page, uint8_t *rxBuf, uint16_t rxBufLen, uint16_t *rcvLen);
 
     // ISO15693 (NFC-V), NFC-B e NFC-F (FeliCa)
     int _readNfcV(rfalNfcDevice *dev);

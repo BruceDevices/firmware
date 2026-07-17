@@ -101,6 +101,7 @@ void ARPSpoofer::loop() {
             count++;
             tft.drawRightString("Spoofed " + String(count) + " times", tftWidth - 12, tftHeight - 16, 1);
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     if (mitm) {

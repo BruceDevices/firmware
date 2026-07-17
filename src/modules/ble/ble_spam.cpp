@@ -207,7 +207,7 @@ void generateRandomMac(uint8_t *mac) {
 
 BLEAdvertising *pAdvertising;
 
-BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, String customName = "") {
+BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const String &customName = "") {
     BLEAdvertisementData AdvData = BLEAdvertisementData();
     uint8_t *AdvData_Raw = nullptr;
     uint8_t i = 0;
@@ -534,15 +534,15 @@ static const uint32_t BLE_SPAM_BLINK_MS = 250;
 
 static const BleSpamAttackOption BLE_SPAM_ATTACK_OPTIONS[] = {
 #if !defined(LITE_VERSION)
-    {BLE_SPAM_ATTACK_APPLE_PAIRING,      "Apple Pairing Prompt" },
-    {BLE_SPAM_ATTACK_APPLE_ACTION,       "Apple Action Modal"   },
+    {BLE_SPAM_ATTACK_APPLE_PAIRING,         "Apple Pairing Prompt" },
+    {BLE_SPAM_ATTACK_APPLE_ACTION,          "Apple Action Modal"   },
     {BLE_SPAM_ATTACK_APPLE_NOT_YOUR_DEVICE, "Apple Not Your Device"},
 #endif
-    {BLE_SPAM_ATTACK_ANDROID_ALERT,      "Android Device Alert" },
-    {BLE_SPAM_ATTACK_WINDOWS_SWIFT_PAIR, "Windows Swift Pair"   },
-    {BLE_SPAM_ATTACK_SAMSUNG,            "Samsung BLE Spam"     },
-    {BLE_SPAM_ATTACK_BLE_BEACON,         "BLE Beacon Spam"      },
-    {BLE_SPAM_ATTACK_RANDOM_ALL,         "Random / All"         }
+    {BLE_SPAM_ATTACK_ANDROID_ALERT,         "Android Device Alert" },
+    {BLE_SPAM_ATTACK_WINDOWS_SWIFT_PAIR,    "Windows Swift Pair"   },
+    {BLE_SPAM_ATTACK_SAMSUNG,               "Samsung BLE Spam"     },
+    {BLE_SPAM_ATTACK_BLE_BEACON,            "BLE Beacon Spam"      },
+    {BLE_SPAM_ATTACK_RANDOM_ALL,            "Random / All"         }
 };
 
 #if !defined(LITE_VERSION)
@@ -859,6 +859,7 @@ static int bleSpamListLoop(
         } else if (check(SelPress)) {
             return state.cursor;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -875,12 +876,10 @@ static const char *bleSpamGetAttackLabel(int index) { return BLE_SPAM_ATTACK_OPT
 static int bleSpamGetDeviceCount(BleSpamAttackType type) {
     switch (type) {
 #if !defined(LITE_VERSION)
-        case BLE_SPAM_ATTACK_APPLE_PAIRING:
-            return APPLE_PROXIMITY_DEVICE_COUNT + 1; // +1 Random/All
+        case BLE_SPAM_ATTACK_APPLE_PAIRING: return APPLE_PROXIMITY_DEVICE_COUNT + 1; // +1 Random/All
         case BLE_SPAM_ATTACK_APPLE_ACTION:
-            return sizeof(BLE_SPAM_APPLE_ACTION_DEVICES) / sizeof(BleSpamAppleDevice) + 1; // +1 Random/All
-        case BLE_SPAM_ATTACK_APPLE_NOT_YOUR_DEVICE:
-            return APPLE_PROXIMITY_DEVICE_COUNT + 1; // +1 Random/All
+            return sizeof(BLE_SPAM_APPLE_ACTION_DEVICES) / sizeof(BleSpamAppleDevice) + 1;   // +1 Random/All
+        case BLE_SPAM_ATTACK_APPLE_NOT_YOUR_DEVICE: return APPLE_PROXIMITY_DEVICE_COUNT + 1; // +1 Random/All
 #endif
         case BLE_SPAM_ATTACK_ANDROID_ALERT:
             return sizeof(BLE_SPAM_ANDROID_DEVICES) / sizeof(BLE_SPAM_ANDROID_DEVICES[0]);
@@ -908,7 +907,8 @@ static const char *bleSpamGetDeviceName(BleSpamAttackType type, int index) {
     switch (type) {
 #if !defined(LITE_VERSION)
         case BLE_SPAM_ATTACK_APPLE_PAIRING: {
-            if (index >= 0 && index < APPLE_PROXIMITY_DEVICE_COUNT) return APPLE_PROXIMITY_DEVICES[index].name;
+            if (index >= 0 && index < APPLE_PROXIMITY_DEVICE_COUNT)
+                return APPLE_PROXIMITY_DEVICES[index].name;
             if (index == APPLE_PROXIMITY_DEVICE_COUNT) return "Random / All";
             return "Apple";
         }
@@ -919,7 +919,8 @@ static const char *bleSpamGetDeviceName(BleSpamAttackType type, int index) {
             return "Apple";
         }
         case BLE_SPAM_ATTACK_APPLE_NOT_YOUR_DEVICE: {
-            if (index >= 0 && index < APPLE_PROXIMITY_DEVICE_COUNT) return APPLE_PROXIMITY_DEVICES[index].name;
+            if (index >= 0 && index < APPLE_PROXIMITY_DEVICE_COUNT)
+                return APPLE_PROXIMITY_DEVICES[index].name;
             if (index == APPLE_PROXIMITY_DEVICE_COUNT) return "Random / All";
             return "Apple";
         }
@@ -979,9 +980,8 @@ static const char *bleSpamGetDeviceName(BleSpamAttackType type, int index) {
 // Flipper Zero ble_spam app. Status byte, battery, and the 16-byte "encrypted
 // payload" tail are regenerated fresh on every packet. prefix=0x07 triggers the
 // normal device-popup; prefix=0x01 triggers the "Not Your Device" variant.
-static bool buildAppleProximityPair(
-    uint8_t prefix, uint16_t deviceId, BLEAdvertisementData &advertisementData
-) {
+static bool
+buildAppleProximityPair(uint8_t prefix, uint16_t deviceId, BLEAdvertisementData &advertisementData) {
     uint8_t buf[31];
     uint8_t i = 0;
     buf[i++] = 0x1E; // AD length
@@ -993,11 +993,11 @@ static bool buildAppleProximityPair(
     buf[i++] = prefix;
     buf[i++] = (uint8_t)(deviceId >> 8);
     buf[i++] = (uint8_t)(deviceId & 0xFF);
-    buf[i++] = 0x55; // Status
+    buf[i++] = 0x55;             // Status
     esp_fill_random(&buf[i], 3); // Battery
     i += 3;
-    buf[i++] = 0x00; // Color
-    buf[i++] = 0x00; // Reserved
+    buf[i++] = 0x00;              // Color
+    buf[i++] = 0x00;              // Reserved
     esp_fill_random(&buf[i], 16); // "Encrypted payload"
     i += 16;
 
@@ -1620,7 +1620,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
         if (redrawRows) {
             int rowH = max(12, FP * LH + 4);
             int rowStart = BORDER_PAD_Y + FM * LH + 10;
-            int startRowY = rowStart + rowH * 4 + rowH;
+            int startRowY = rowStart + rowH * 4 + ((tftHeight > 135) ? rowH : 0);
 
             bleSpamRenderConfigRows(config, cursor, editState, rowStart, rowH);
 
@@ -1678,7 +1678,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
                     config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1);
                     configChanged = true;
                 } else if (editState.edit_row == 2) {
-                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
+                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
                     configChanged = true;
                 } else if (editState.edit_row == 3) {
                     config.mac_rand_mode = static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 1) % 8);
@@ -1693,7 +1693,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
                     config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1);
                     configChanged = true;
                 } else if (editState.edit_row == 2) {
-                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
+                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
                     configChanged = true;
                 } else if (editState.edit_row == 3) {
                     config.mac_rand_mode = static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 7) % 8);
@@ -1710,6 +1710,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
                 redrawRows = true;
             }
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1823,6 +1824,7 @@ static bool bleSpamStoppedPrompt(const BleSpamSelection &selection, uint32_t sen
         } else if (check(SelPress)) {
             return (cursor == 0);
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1913,7 +1915,7 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
                     } else if (editState.edit_row == 1) {
                         config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1);
                     } else if (editState.edit_row == 2) {
-                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
+                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
                     } else if (editState.edit_row == 3) {
                         config.mac_rand_mode =
                             static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 1) % 8);
@@ -1926,7 +1928,7 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
                     } else if (editState.edit_row == 1) {
                         config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1);
                     } else if (editState.edit_row == 2) {
-                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
+                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
                     } else if (editState.edit_row == 3) {
                         config.mac_rand_mode =
                             static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 7) % 8);
@@ -1962,7 +1964,7 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
             statsDirty = false;
             configDirty = false;
             blinkDirty = false;
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         bleSpamDeinitAdvertiser();
@@ -2004,6 +2006,7 @@ static int bleSpamTwoOptionPrompt(const String &title, const char *opt0, const c
             cursor = (cursor + 1) % 2;
             redraw = true;
         } else if (check(SelPress)) return cursor;
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

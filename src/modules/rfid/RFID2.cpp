@@ -147,18 +147,19 @@ int RFID2::load() {
     return SUCCESS;
 }
 
-int RFID2::save(String filename) {
+int RFID2::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 
+    String fname = filename;
     if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
-    if ((*fs).exists("/BruceRFID/" + filename + ".rfid")) {
+    if ((*fs).exists("/BruceRFID/" + fname + ".rfid")) {
         int i = 1;
-        filename += "_";
-        while ((*fs).exists("/BruceRFID/" + filename + String(i) + ".rfid")) i++;
-        filename += String(i);
+        fname += "_";
+        while ((*fs).exists("/BruceRFID/" + fname + String(i) + ".rfid")) i++;
+        fname += String(i);
     }
-    File file = (*fs).open("/BruceRFID/" + filename + ".rfid", FILE_WRITE);
+    File file = (*fs).open("/BruceRFID/" + fname + ".rfid", FILE_WRITE);
 
     if (!file) { return FAILURE; }
 
@@ -354,6 +355,7 @@ int RFID2::read_mifare_classic_data_sector(byte sector) {
 }
 
 int RFID2::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     byte statusA = 0;
     byte statusB = 0;
 

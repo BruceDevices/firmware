@@ -11,10 +11,12 @@
 #include "../rf_utils.h" // setup_rf_rx, find_pulse_index, crc64_ecma, RMT defines
 #include "rf_config.h"   // RF_DBG
 #include "rf_registry.h"
+#include <globals.h>
 
 // --- Decode tuning (mirrors the classic OOK receiver) ----------------------
 #define RF_SEPARATION_LIMIT 4300 // µs: a longer low is treated as an inter-frame gap
 #define RF_RECEIVE_TOLERANCE 60  // % tolerance on pulse-length matching
+#define RF_NOMINAL_TE_TOLERANCE 20
 #define RF_MAX_CHANGES 131       // max transitions kept per frame
 
 // --- RX noise rejection ----------------------------------------------------
@@ -23,10 +25,53 @@
 // Scan/Copy. The classic OOK receiver rejects this via its own ISR noise
 // pre-filter; we reproduce it here.
 #define RF_RX_MIN_TRANSITIONS 16 // discard captures with fewer edges (noise bursts)
+#define RF_M5_RX_GLITCH_US 220   // M5 RF433R AGC noise is mostly shorter than real OOK pulses
+#define RF_M5_RX_MIN_TRANSITIONS 110
 // NOTE: signal_range_min_ns is kept at the framework-proven 3µs; larger values
 // (e.g. 100µs) were observed to stop the RMT receive from completing at all.
 
 static inline unsigned int rf_udiff(int a, int b) { return (unsigned int)abs(a - b); }
+static inline unsigned int rf_udiff_u(unsigned int a, unsigned int b) {
+    return (a > b) ? (a - b) : (b - a);
+}
+
+static int rf_push_duration_merge(std::vector<int> &out, int d) {
+    if (!out.empty() && ((out.back() > 0) == (d > 0))) {
+        out.back() += d;
+        return 1;
+    }
+    out.push_back(d);
+    return 0;
+}
+
+static void rf_filter_m5_rx_glitches(std::vector<int> &durations) {
+    if (bruceConfigPins.rfModule != M5_RF_MODULE || durations.empty()) return;
+
+    std::vector<int> filtered;
+    filtered.reserve(durations.size());
+
+    int removed = 0;
+    int merged = 0;
+    for (int d : durations) {
+        if (abs(d) < RF_M5_RX_GLITCH_US) {
+            removed++;
+            continue;
+        }
+        merged += rf_push_duration_merge(filtered, d);
+    }
+
+    if (removed > 0) {
+        RF_DBG(
+            "m5 glitch filter: %u -> %u durations, removed=%d merged=%d min=%dus",
+            (unsigned)durations.size(),
+            (unsigned)filtered.size(),
+            removed,
+            merged,
+            RF_M5_RX_GLITCH_US
+        );
+        durations.swap(filtered);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // RMT capture session
@@ -38,6 +83,37 @@ static bool rf_rx_done_cb(
     QueueHandle_t queue = (QueueHandle_t)user_data;
     xQueueSendFromISR(queue, edata, &high_task_wakeup);
     return high_task_wakeup == pdTRUE;
+}
+
+static portMUX_TYPE rf_m5_mux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool rf_m5_active = false;
+static volatile bool rf_m5_last_level = false;
+static volatile uint32_t rf_m5_last_edge_us = 0;
+static volatile int rf_m5_count = 0;
+static volatile int rf_m5_ready_count = 0;
+static int rf_m5_pin = -1;
+static int rf_m5_buf[RF_MAX_CHANGES * 4];
+
+static void IRAM_ATTR rf_m5_edge_isr() {
+    if (!rf_m5_active || rf_m5_ready_count > 0) return;
+
+    uint32_t now = micros();
+    bool level = digitalRead(rf_m5_pin);
+    uint32_t dur = now - rf_m5_last_edge_us;
+    if (dur < RF_M5_RX_GLITCH_US) return;
+
+    portENTER_CRITICAL_ISR(&rf_m5_mux);
+    if (rf_m5_count < (int)(sizeof(rf_m5_buf) / sizeof(rf_m5_buf[0]))) {
+        int idx = rf_m5_count;
+        rf_m5_buf[idx] = rf_m5_last_level ? (int)dur : -(int)dur;
+        rf_m5_count = idx + 1;
+    } else {
+        rf_m5_ready_count = rf_m5_count;
+        rf_m5_count = 0;
+    }
+    rf_m5_last_level = level;
+    rf_m5_last_edge_us = now;
+    portEXIT_CRITICAL_ISR(&rf_m5_mux);
 }
 
 void RfRxSession::arm() {
@@ -54,6 +130,24 @@ void RfRxSession::arm() {
 }
 
 bool RfRxSession::begin() {
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) {
+        if (!initRfModule("rx", bruceConfigPins.rfFreq)) return false;
+
+        portENTER_CRITICAL(&rf_m5_mux);
+        rf_m5_pin = bruceConfigPins.rfRx;
+        rf_m5_active = true;
+        rf_m5_last_level = digitalRead(rf_m5_pin);
+        rf_m5_last_edge_us = micros();
+        rf_m5_count = 0;
+        rf_m5_ready_count = 0;
+        portEXIT_CRITICAL(&rf_m5_mux);
+
+        attachInterrupt(digitalPinToInterrupt(rf_m5_pin), rf_m5_edge_isr, CHANGE);
+        _m5Isr = true;
+        RF_DBG("M5 GPIO RX started on gpio=%d filter=%dus", bruceConfigPins.rfRx, RF_M5_RX_GLITCH_US);
+        return true;
+    }
+
     if (_buf == nullptr) {
         _buf = (rmt_symbol_word_t *)malloc(_bufSymbols * sizeof(rmt_symbol_word_t));
         if (_buf == nullptr) return false;
@@ -78,10 +172,48 @@ bool RfRxSession::begin() {
 }
 
 bool RfRxSession::poll(std::vector<int> &durations) {
+    if (_m5Isr) {
+        int ready = 0;
+        uint32_t now = micros();
+
+        portENTER_CRITICAL(&rf_m5_mux);
+        if (rf_m5_ready_count == 0 && rf_m5_count > 0 && (uint32_t)(now - rf_m5_last_edge_us) > 30000) {
+            if (rf_m5_count >= RF_M5_RX_MIN_TRANSITIONS) {
+                rf_m5_ready_count = rf_m5_count;
+            } else {
+                rf_m5_count = 0;
+                rf_m5_last_edge_us = now;
+                rf_m5_last_level = digitalRead(rf_m5_pin);
+            }
+        }
+        ready = rf_m5_ready_count;
+        if (ready > 0) {
+            durations.clear();
+            durations.reserve(ready);
+            for (int i = 0; i < ready; i++) durations.push_back(rf_m5_buf[i]);
+            rf_m5_ready_count = 0;
+            rf_m5_count = 0;
+            rf_m5_last_edge_us = now;
+            rf_m5_last_level = digitalRead(rf_m5_pin);
+        }
+        portEXIT_CRITICAL(&rf_m5_mux);
+
+        if (ready == 0) return false;
+        rf_filter_m5_rx_glitches(durations);
+#if RF_DEBUG
+        RF_DBG("M5 GPIO capture: %u durations", (unsigned)durations.size());
+        String head;
+        for (size_t i = 0; i < durations.size() && i < 24; i++) head += String(durations[i]) + " ";
+        RF_DBG("durations[0..23]: %s", head.c_str());
+#endif
+        return !durations.empty();
+    }
+
     if (_ch == nullptr) return false;
     rmt_rx_done_event_data_t rx;
     if (xQueueReceive(_queue, &rx, 0) == pdPASS) {
         rf_symbols_to_durations(rx.received_symbols, rx.num_symbols, durations);
+        rf_filter_m5_rx_glitches(durations);
         arm(); // re-arm for the next signal
 
         // Reject noise bursts: too few edges to be a real frame.
@@ -102,6 +234,16 @@ bool RfRxSession::poll(std::vector<int> &durations) {
 }
 
 void RfRxSession::end() {
+    if (_m5Isr) {
+        detachInterrupt(digitalPinToInterrupt(rf_m5_pin));
+        portENTER_CRITICAL(&rf_m5_mux);
+        rf_m5_active = false;
+        rf_m5_count = 0;
+        rf_m5_ready_count = 0;
+        rf_m5_pin = -1;
+        portEXIT_CRITICAL(&rf_m5_mux);
+        _m5Isr = false;
+    }
     if (_ch != nullptr) {
         rmt_disable(_ch);
         rmt_del_channel(_ch);
@@ -143,6 +285,10 @@ static bool rf_match_protocol(
     if (syncLen == 0) return false;
     unsigned int delay = timings[0] / syncLen;
     if (delay == 0) return false;
+    unsigned int teTol = pro->te * RF_NOMINAL_TE_TOLERANCE / 100;
+    if (teTol < 80) teTol = 80;
+    if (rf_udiff_u(delay, pro->te) > teTol) return false;
+
     unsigned int tol = delay * RF_RECEIVE_TOLERANCE / 100;
     // Protocols that start high have their first data timing filtered out.
     unsigned int first = pro->inverted ? 2 : 1;
@@ -175,7 +321,49 @@ static bool rf_match_protocol(
     return false;
 }
 
+static bool rf_decode_chamberlain_9bit(const std::vector<int> &durations, RfCodes &out) {
+    const unsigned int te = 430;
+    const unsigned int dataTol = 260;
+    const unsigned int stopTol = 700;
+
+    for (size_t stop = 18; stop + 1 < durations.size(); stop++) {
+        unsigned int stop0 = (unsigned int)abs(durations[stop]);
+        unsigned int stop1 = (unsigned int)abs(durations[stop + 1]);
+        if (rf_udiff_u(stop0, 3000) > stopTol || rf_udiff_u(stop1, 1000) > stopTol) continue;
+
+        uint64_t code = 0;
+        bool ok = true;
+        size_t start = stop - 18;
+        for (size_t i = start; i < stop; i += 2) {
+            unsigned int a = (unsigned int)abs(durations[i]);
+            unsigned int b = (unsigned int)abs(durations[i + 1]);
+            code <<= 1;
+
+            if (rf_udiff_u(a, te * 2) <= dataTol && rf_udiff_u(b, te) <= dataTol) {
+                // zero bit: long then short
+            } else if (rf_udiff_u(a, te) <= dataTol && rf_udiff_u(b, te * 2) <= dataTol) {
+                code |= 1;
+            } else {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) continue;
+
+        out.key = code;
+        out.Bit = 9;
+        out.te = te;
+        out.protocol = "Chamberlain_9bit";
+        out.preset = "Ook270Async";
+        RF_DBG("decode MATCH proto=Chamberlain_9bit key=%llX bits=9 te=%u", (unsigned long long)code, te);
+        return true;
+    }
+    return false;
+}
+
 bool rf_decode_ook(const std::vector<int> &durations, RfCodes &out) {
+    if (rf_decode_chamberlain_9bit(durations, out)) return true;
+
     unsigned int timings[RF_MAX_CHANGES];
     unsigned int changeCount = 0;
     unsigned int repeatCount = 0;

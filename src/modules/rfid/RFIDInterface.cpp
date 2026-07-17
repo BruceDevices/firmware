@@ -38,8 +38,11 @@ int RFIDInterface::loadFromFile(const String &filepath) {
         else if (line.startsWith("UID:")) printableUID.uid = strData;
         else if (line.startsWith("SAK:")) printableUID.sak = strData;
         else if (line.startsWith("ATQA:")) printableUID.atqa = strData;
-        else if (line.startsWith("Pages total:")) totalPages = strData.toInt();
-        else if (line.startsWith("Pages read:")) pageReadSuccess = false;
+        // FeliCa dumps (PN532::save()) reuse the SAK/ATQA/"pages" fields for
+        // PMm/system code/block count under FeliCa-specific line names.
+        else if (line.startsWith("Manufacture id:")) printableUID.sak = strData;
+        else if (line.startsWith("Pages total:") || line.startsWith("Blocks total:")) totalPages = strData.toInt();
+        else if (line.startsWith("Pages read:") || line.startsWith("Blocks read:")) pageReadSuccess = false;
         else if (line.startsWith("Page ")) {
             strAllPages += line + "\n";
             dataPages++;

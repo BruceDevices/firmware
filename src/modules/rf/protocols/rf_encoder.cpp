@@ -258,6 +258,7 @@ static const int g_linear[]     = {1500,-500, 500,-1500, 1500,-500, 500,-1500, 1
 static const int g_clemsa[]     = {2695,-385, 385,-2695, 2695,-385, 385,-2695, 2695,-19250};
 static const int g_mastercode[] = {2145,-1072, 1072,-2145, 2145,-1072, 1072,-2145, 2145,-15008};
 static const int g_came[]       = {-320,640, -640,320, -320,640, -640,320, -11520,320};
+static const int g_nice12[]     = {-1400,700, -700,1400, -1400,700, -700,1400, -25200,700};
 static const int g_ansonic[]    = {-1111,555, -555,1111, -1111,555, -555,1111, -19425,555};
 static const int g_gatetx[]     = {-700,350, -350,700, -700,350, -350,700, -17150,700};
 static const int g_holtek[]     = {-870,430, -430,870, -870,430, -430,870, -15480,430};
@@ -276,9 +277,11 @@ bool rf_encoder_selftest() {
         {"Clemsa", 0xA, 4, g_clemsa, sizeof(g_clemsa) / sizeof(int)},
         {"Mastercode", 0xA, 4, g_mastercode, sizeof(g_mastercode) / sizeof(int)},
         {"CAME", 0xA, 4, g_came, sizeof(g_came) / sizeof(int)},
+        {"Nice_12bit", 0xA, 4, g_nice12, sizeof(g_nice12) / sizeof(int)},
         {"Ansonic", 0xA, 4, g_ansonic, sizeof(g_ansonic) / sizeof(int)},
         {"GateTX", 0xA, 4, g_gatetx, sizeof(g_gatetx) / sizeof(int)},
         {"Holtek", 0xA, 4, g_holtek, sizeof(g_holtek) / sizeof(int)},
+        {"Holtek_12bit", 0xA, 4, g_holtek, sizeof(g_holtek) / sizeof(int)},
         {"PhoenixV2", 0xA, 4, g_phoenixv2, sizeof(g_phoenixv2) / sizeof(int)},
     };
 

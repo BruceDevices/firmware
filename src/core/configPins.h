@@ -208,7 +208,7 @@ public:
     SPIPins LoRa_bus;
 #endif
 #endif
-    // I2CPins sys_i2c = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
+    I2CPins sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
     I2CPins i2c_bus = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
     UARTPins uart_bus = {(gpio_num_t)SERIAL_RX, (gpio_num_t)SERIAL_TX};
     UARTPins gps_bus = {(gpio_num_t)GPS_SERIAL_RX, (gpio_num_t)GPS_SERIAL_TX};
@@ -290,7 +290,7 @@ public:
     void setRfRxPin(int value);
     void setRfModule(RFModules value);
     void validateRfModuleValue();
-    void setRfFreq(float value, int fxdFreq = 2);
+    void setRfFreq(float value, int fxdFreq = 1);
     void setRfFxdFreq(float value);
     void setRfScanRange(int value, int fxdFreq = 0);
     void validateRfScanRangeValue();

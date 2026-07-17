@@ -162,13 +162,18 @@ bool run_bjs_script_headless(char *code) {
     return true;
 }
 
-bool run_bjs_script_headless(FS &fs, String filename) {
+bool run_bjs_script_headless(FS &fs, const String &filename) {
     script = readBigFile(&fs, filename);
     if (script == NULL) { return false; }
 
     int slash = filename.lastIndexOf('/');
-    scriptName = strdup(filename.c_str() + slash + 1);
-    scriptDirpath = strndup(filename.c_str(), slash);
+    if (slash < 0) {
+        scriptDirpath = strdup("/");
+        scriptName = strdup(filename.c_str());
+    } else {
+        scriptName = strdup(filename.c_str() + slash + 1);
+        scriptDirpath = strndup(filename.c_str(), slash == 0 ? 1 : slash);
+    }
     returnToMenu = true;
     interpreter_state = 1;
     startInterpreterTask();
@@ -193,7 +198,8 @@ String getScriptsFolder(FS *&fs) {
     return "";
 }
 
-std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupScript, int rememberedIndex) {
+std::vector<Option>
+getScriptsOptionsList(const String &currentPath, bool saveStartupScript, int rememberedIndex) {
     std::vector<Option> opt = {};
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     FS *fs;

@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <AXP192.h>
 #include <interface.h>
@@ -10,6 +11,10 @@ AXP192 axp192;
 void _setup_gpio() {
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
+    setSysI2CBus(&Wire1); // AXP192 (BM8563 RTC included) lives on Wire1
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     axp192.begin(); // Start the energy management of AXP192
 }
 

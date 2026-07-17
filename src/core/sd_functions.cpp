@@ -1,4 +1,5 @@
 #include "sd_functions.h"
+#include "bus_HAL.h"
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
@@ -26,10 +27,29 @@ String fileToCopy;
 std::vector<FileList> fileList;
 
 /***************************************************************************************
+** Function name: setupLittleFS
+** Description:   Start LittleFS
+***************************************************************************************/
+bool setupLittleFS(uint8_t maxFiles) {
+    if (maxFiles < 1) { maxFiles = 1; }
+    return LittleFS.begin(false, "/littlefs", maxFiles);
+}
+
+/***************************************************************************************
+** Function name: closeLittleFS
+** Description:   Turn Off LittleFS, set littlefsMounted state to false
+***************************************************************************************/
+void closeLittleFS() {
+    LittleFS.end();
+    Serial.println("LittleFS Unmounted...");
+}
+
+/***************************************************************************************
 ** Function name: setupSdCard
 ** Description:   Start SD Card
 ***************************************************************************************/
-bool setupSdCard() {
+bool setupSdCard(uint8_t maxFiles) {
+    if (maxFiles < 1) { maxFiles = 1; }
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0) {
         sdcardMounted = false;
@@ -44,56 +64,64 @@ bool setupSdCard() {
     task = true;
 #endif
 #ifdef USE_SD_MMC
-    if (!SD.begin("/sdcard", true)) {
+    if (!SD.begin("/sdcard", true, false, BOARD_MAX_SDMMC_FREQ, maxFiles)) {
         sdcardMounted = false;
         result = false;
     }
 #else
     // Not using InputHandler (SdCard on default &SPI bus)
     if (task) {
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) result = false;
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, SPI, 4000000UL, "/sd", maxFiles)) result = false;
         // Serial.println("Task not activated");
-    }
-    // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
-    else if (
-        bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
-        bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC
-    ) {
-        Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
-#if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
-        if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
-            result = false;
-            Serial.println("SDCard in the same Bus as TFT, but failed to mount");
-        }
-#else
-        goto NEXT; // destination for Headless and 8bit displays (no SPI bus)
-#endif
-
-    }
-    // If not using TFT Bus, use a specific bus
-    else {
-    NEXT:
-        sdcardSPI.begin(
-            (int8_t)bruceConfigPins.SDCARD_bus.sck,
-            (int8_t)bruceConfigPins.SDCARD_bus.miso,
-            (int8_t)bruceConfigPins.SDCARD_bus.mosi,
-            (int8_t)bruceConfigPins.SDCARD_bus.cs
-        ); // start SPI communications
-        delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
-            result = false;
+    } else {
+        // acquireSPIBus() never begin()s the display's bus (it's already running), so a non-null,
+        // non-sdcardSPI result means these pins are physically the display's own bus. Reusing the
+        // pointer it returns (instead of calling tft.getSPIinstance() here) also keeps this file
+        // buildable on boards with a non-SPI (e.g. parallel) display, where that accessor doesn't
+        // exist at all.
+        SPIClass *bus = acquireSPIBus(
+            bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso, bruceConfigPins.SDCARD_bus.mosi
+        );
+        if (bus != nullptr && bus != &sdcardSPI) {
+            Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
+            if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, *bus, 4000000UL, "/sd", maxFiles)) {
+                result = false;
+                Serial.println("SDCard in the same Bus as TFT, but failed to mount");
+            }
+        } else {
+            // SDCard on a dedicated bus: it's the anchor/owner of sdcardSPI, so start it here.
+            if (!sdcardSPI.begin(
+                    (int8_t)bruceConfigPins.SDCARD_bus.sck,
+                    (int8_t)bruceConfigPins.SDCARD_bus.miso,
+                    (int8_t)bruceConfigPins.SDCARD_bus.mosi,
+                    (int8_t)bruceConfigPins.SDCARD_bus.cs
+                )) {
+                Serial.println("Failed starting SPI Bus");
+            } // start SPI communications
+            delay(20);
+            if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI, 4000000UL, "/sd", maxFiles)) {
+                result = false;
+                Serial.println("SDCard in a different Bus, sdcardSPI failed to mount");
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-            // If using Shared SPI, do not stop the bus if SDCard is not present
-            // If using Legacy, release the pins from this SPI Bus
-            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
+                // If using Shared SPI, do not stop the bus if SDCard is not present
+                // If using Legacy, release the pins from this SPI Bus
+                if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
 #endif
+            }
+            Serial.println("SDCard in a different Bus, using sdcardSPI instance");
         }
-        Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
 #endif
 
     if (result == false) {
         Serial.println("SDCARD NOT mounted, check wiring and format");
+        Serial.printf(
+            "Pins: SCK=%d, MISO=%d, MOSI=%d, CS=%d\n",
+            bruceConfigPins.SDCARD_bus.sck,
+            bruceConfigPins.SDCARD_bus.miso,
+            bruceConfigPins.SDCARD_bus.mosi,
+            bruceConfigPins.SDCARD_bus.cs
+        );
         sdcardMounted = false;
         return false;
     } else {
@@ -189,8 +217,11 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
             return false;
         }
     }
-
-    if (!LittleFS.begin()) {
+    /*
+    begin(bool formatOnFail = false, const char *basePath = "/littlefs", uint8_t maxOpenFiles = (uint8_t)10U,
+    const char *partitionLabel = "spiffs")
+    */
+    if (!setupLittleFS()) {
         Serial.println("LittleFS not mounted");
         return false;
     }
@@ -216,7 +247,9 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
         return false;
     }
     const int bufSize = 1024;
-    static uint8_t buff[bufSize] = {0}; // static to keep this buffer off the task stack
+    // heap-allocated (not stack) to keep this buffer off the task stack; freed before
+    // every return below
+    uint8_t *buff = (uint8_t *)malloc(bufSize);
     // tft.drawRect(5,tftHeight-12, (tftWidth-10), 9, bruceConfig.priColor);
     while ((bytesRead = source.read(buff, bufSize)) > 0) {
         if (dest.write(buff, bytesRead) != bytesRead) {
@@ -224,6 +257,7 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
             source.close();
             dest.close();
             Serial.println("Error 5");
+            free(buff);
             return false;
         } else {
             prog += bytesRead;
@@ -245,9 +279,11 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
     if (prog == tot) result = true;
     else {
         displayError("Fail Copying File", true);
+        free(buff);
         return false;
     }
 
+    free(buff);
     return result;
 }
 
@@ -377,7 +413,7 @@ bool folderExists(FS fs, String path) {
 ** Description:   read a small (<3KB) file and return its contents as a single string
 **                on any error returns an empty string
 ***************************************************************************************/
-String readSmallFile(FS &fs, String filepath) {
+String readSmallFile(FS &fs, const String &filepath) {
     String fileContent = "";
     File file;
 
@@ -402,7 +438,7 @@ String readSmallFile(FS &fs, String filepath) {
 ** Description:   read file and return its contents as a char*
 **                caller needs to call free()
 ***************************************************************************************/
-char *readBigFile(FS *fs, String filepath, bool binary, size_t *fileSize) {
+char *readBigFile(FS *fs, const String &filepath, bool binary, size_t *fileSize) {
     File file = fs->open(filepath);
     if (!file) {
         Serial.printf("Could not open file: %s\n", filepath.c_str());
@@ -443,7 +479,7 @@ size_t getFileSize(FS &fs, String filepath) {
     return fileSize;
 }
 
-String md5File(FS &fs, String filepath) {
+String md5File(FS &fs, const String &filepath) {
     if (!fs.exists(filepath)) return "";
     String txt = readSmallFile(fs, filepath);
     MD5Builder md5;
@@ -453,7 +489,7 @@ String md5File(FS &fs, String filepath) {
     return (md5.toString());
 }
 
-String crc32File(FS &fs, String filepath) {
+String crc32File(FS &fs, const String &filepath) {
     if (!fs.exists(filepath)) return "";
     String txt = readSmallFile(fs, filepath);
     // derived from
@@ -512,7 +548,7 @@ bool checkExt(String ext, String pattern) {
 ** Function name: readFs
 ** Description:   read files/folders from a folder
 ***************************************************************************************/
-void readFs(FS fs, String folder, String allowed_ext) {
+void readFs(FS &fs, const String &folder, const String &allowed_ext) {
     int allFilesCount = 0;
     fileList.clear();
     FileList object;
@@ -562,7 +598,7 @@ void readFs(FS fs, String folder, String allowed_ext) {
 **  Function: loopSD
 **  Where you choose what to do with your SD Files
 **********************************************************************/
-String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
+String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPath) {
     delay(10);
     if (!fs.exists(rootPath)) {
         Serial.println("loopSD-> 1st exist test failed");
@@ -601,7 +637,11 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
     LongPress = false;
     unsigned long LongPressTmp = millis();
     while (1) {
+#ifdef HAS_ENCODER
+        delay(4);
+#else
         delay(10);
+#endif
         // if(returnToMenu) break; // stop this loop and retur to the previous loop
         if (exit) break; // stop this loop and retur to the previous loop
 
@@ -659,16 +699,41 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
         }
 #endif
 
-        if (check(PrevPress) || check(UpPress)) {
-            if (index == 0) index = maxFiles;
-            else if (index > 0) index--;
-            redraw = true;
-        }
-        /* DW Btn to next item */
-        if (check(NextPress) || check(DownPress)) {
-            if (index == maxFiles) index = 0;
-            else index++;
-            redraw = true;
+        {
+#ifdef HAS_ENCODER
+            int32_t rotarySteps = drainRotarySteps();
+            if (rotarySteps != 0) {
+                check(PrevPress);
+                check(NextPress);
+                check(UpPress);
+                check(DownPress);
+                while (rotarySteps > 0) {
+                    if (index == 0) index = maxFiles;
+                    else if (index > 0) index--;
+                    rotarySteps--;
+                    redraw = true;
+                }
+                while (rotarySteps < 0) {
+                    if (index == maxFiles) index = 0;
+                    else index++;
+                    rotarySteps++;
+                    redraw = true;
+                }
+            } else
+#endif
+            {
+                if (check(PrevPress) || check(UpPress)) {
+                    if (index == 0) index = maxFiles;
+                    else if (index > 0) index--;
+                    redraw = true;
+                }
+                /* DW Btn to next item */
+                if (check(NextPress) || check(DownPress)) {
+                    if (index == maxFiles) index = 0;
+                    else index++;
+                    redraw = true;
+                }
+            }
         }
         if (check(NextPagePress)) {
             index += PAGE_JUMP_SIZE;
@@ -703,7 +768,9 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                         {"Close Menu", [&]() { yield(); }                                                  },
                         {"Main Menu",  [&]() { exit = true; }                                              },
                     };
-                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
+                    while (check(SelPress)) {
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                    } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -717,7 +784,9 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
                     options.push_back({"Close Menu", [&]() { yield(); }});
                     options.push_back({"Main Menu", [&]() { exit = true; }});
-                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
+                    while (check(SelPress)) {
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                    } // wait for SEL release to avoid repeated activations
                     loopOptions(options);
                     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                     reload = true;
@@ -730,7 +799,9 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                              fileList[index].filename; // Folder=="/"? "":"/" +
                     // Debug viewer
                     Serial.println(Folder);
-                    while (check(SelPress)) { yield(); } // wait for SEL release to avoid repeated activations
+                    while (check(SelPress)) {
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                    } // wait for SEL release to avoid repeated activations
                     redraw = true;
                 } else if (fileList[index].folder == false && fileList[index].operation == false) {
                     // Save the file/folder info to Clear memory to allow other functions to work better
@@ -741,14 +812,14 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     fileList.clear(); // Clear memory to allow other functions to work better
 
                     options = {
-                        {"View File",  [=]() { viewFile(fs, filepath); }            },
-                        {"File Info",  [=]() { fileInfo(fs, filepath); }            },
-                        {"Rename",     [=]() { renameFile(fs, filepath, filename); }},
-                        {"Copy",       [=]() { copyFile(fs, filepath); }            },
-                        {"Delete",     [=]() { deleteFromSd(fs, filepath); }        },
-                        {"New Folder", [=]() { createFolder(fs, Folder); }          },
+                        {"View File",  [=, &fs]() { viewFile(fs, filepath); }            },
+                        {"File Info",  [=, &fs]() { fileInfo(fs, filepath); }            },
+                        {"Rename",     [=, &fs]() { renameFile(fs, filepath, filename); }},
+                        {"Copy",       [=, &fs]() { copyFile(fs, filepath); }            },
+                        {"Delete",     [=, &fs]() { deleteFromSd(fs, filepath); }        },
+                        {"New Folder", [=, &fs]() { createFolder(fs, Folder); }          },
                     };
-                    if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
+                    if (fileToCopy != "") options.push_back({"Paste", [=, &fs]() { pasteFile(fs, Folder); }});
                     if (&fs == &SD)
                         options.push_back({"Copy->LittleFS", [=]() { copyToFs(SD, LittleFS, filepath); }});
                     if (&fs == &LittleFS && sdcardMounted)
@@ -887,7 +958,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                     options.push_back({"Main Menu", [&]() { exit = true; }});
                     if (!filePicker) {
                         while (check(SelPress)) {
-                            yield();
+                            vTaskDelay(pdMS_TO_TICKS(1));
                         } // wait for SEL release to avoid repeated activations
                         loopOptions(options);
                     } else {
@@ -920,7 +991,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
 **  Function: viewFile
 **  Display file content
 **********************************************************************/
-void viewFile(FS fs, String filepath) {
+void viewFile(FS &fs, const String &filepath) {
     File file = fs.open(filepath, FILE_READ);
     if (!file) return;
 
@@ -967,7 +1038,7 @@ bool getFsStorage(FS *&fs) {
 **  Function: fileInfo
 **  Display file info
 **********************************************************************/
-void fileInfo(FS fs, String filepath) {
+void fileInfo(FS &fs, const String &filepath) {
     File file = fs.open(filepath, FILE_READ);
     if (!file) return;
 

@@ -3,7 +3,7 @@
  * Author: Ninja-jr
  * Version: 3.1
  * Last Updated: 2026-01-24
- * 
+ *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
  *           BLE Sniffer, Samsung detection, expanded model database,
@@ -21,10 +21,10 @@
 #include "fastpair_crypto.h"
 #include "modules/NRF24/nrf_jammer_api.h"
 #include <SD.h>
-#include <esp_heap_caps.h>
-#include <globals.h>
-#include <esp_random.h>
 #include <algorithm>
+#include <esp_heap_caps.h>
+#include <esp_random.h>
+#include <globals.h>
 
 int showSubMenu(const char *title, const char *options[], int optionCount);
 
@@ -44,16 +44,13 @@ String BLEStateManager::currentDeviceName = "";
 // v3.1: Samsung MAC OUI Detection
 //=============================================================================
 
-const char* SAMSUNG_MAC_OUIS[] = {
-    "00:1E:DF", "00:23:E7", "00:24:FE", "00:26:5C", "00:27:14",
-    "00:2A:10", "00:2D:0A", "00:30:FA", "00:35:FE", "00:3C:E4",
-    "00:40:96", "00:44:01", "00:4A:77", "00:4D:4A", "00:50:F7",
-    "00:54:08", "00:57:7A", "00:5A:38", "00:5E:88", "00:62:6E",
-    "00:64:22", "00:66:44", "00:68:EB", "00:6A:94", "00:6C:F0",
-    "00:6E:2A", "00:70:89", "00:72:44", "00:74:04", "00:76:5E",
-    "00:78:2C", "00:7A:04", "00:7C:2E", "00:7E:58", "00:80:82"
-};
-const int SAMSUNG_MAC_OUIS_COUNT = sizeof(SAMSUNG_MAC_OUIS)/sizeof(SAMSUNG_MAC_OUIS[0]);
+const char *SAMSUNG_MAC_OUIS[] = {"00:1E:DF", "00:23:E7", "00:24:FE", "00:26:5C", "00:27:14", "00:2A:10",
+                                  "00:2D:0A", "00:30:FA", "00:35:FE", "00:3C:E4", "00:40:96", "00:44:01",
+                                  "00:4A:77", "00:4D:4A", "00:50:F7", "00:54:08", "00:57:7A", "00:5A:38",
+                                  "00:5E:88", "00:62:6E", "00:64:22", "00:66:44", "00:68:EB", "00:6A:94",
+                                  "00:6C:F0", "00:6E:2A", "00:70:89", "00:72:44", "00:74:04", "00:76:5E",
+                                  "00:78:2C", "00:7A:04", "00:7C:2E", "00:7E:58", "00:80:82"};
+const int SAMSUNG_MAC_OUIS_COUNT = sizeof(SAMSUNG_MAC_OUIS) / sizeof(SAMSUNG_MAC_OUIS[0]);
 
 bool isSamsungDevice(const NimBLEAddress &address) {
     String mac = String(address.toString().c_str());
@@ -67,9 +64,7 @@ bool isSamsungDevice(const String &mac) {
     return false;
 }
 
-FastPairVersion detectFastPairVersion(NimBLEAddress target) {
-    return FP_VERSION_2;
-}
+FastPairVersion detectFastPairVersion(NimBLEAddress target) { return FP_VERSION_2; }
 
 //=============================================================================
 // ScannerData Implementation
@@ -158,51 +153,51 @@ bool isBLEInitialized() {
 //=============================================================================
 
 const FastPairModelInfo fastpair_models[] = {
-    {0x000047, "Pixel Buds Pro",      "Headphones"},
-    {0x000048, "Pixel Buds A-Series", "Headphones"},
-    {0x0000E5, "Google Pixel Buds",   "Headphones"},
-    {0x0000C5, "Pixel Watch 2",       "Watch"},
-    {0x0000C6, "Pixel Watch 3",       "Watch"},
-    {0x00000A, "Galaxy Buds Live",    "Headphones"},
-    {0x0000F0, "Galaxy Buds2",        "Headphones"},
-    {0x0000B0, "Galaxy Buds2 Pro",    "Headphones"},
-    {0x0000A0, "Galaxy Buds FE",      "Headphones"},
-    {0x0000E1, "Galaxy Buds Live",    "Headphones"},
-    {0x0000E2, "Galaxy Buds Pro",     "Headphones"},
-    {0x0000C0, "Galaxy Buds3",        "Headphones"},
-    {0x0000C1, "Galaxy Watch 4",      "Watch"},
-    {0x0000E3, "Galaxy Watch 4 Classic", "Watch"},
-    {0x0000C2, "Galaxy Watch 5",      "Watch"},
-    {0x0000E4, "Galaxy Watch 5 Pro",  "Watch"},
-    {0x0000C3, "Galaxy Watch 6",      "Watch"},
-    {0x0000C4, "Galaxy Watch Ultra",  "Watch"},
-    {0x0000D1, "Galaxy Home",         "Speaker"},
-    {0x0000D0, "Sony WF-1000XM5",     "Headphones"},
-    {0x0000E0, "Sony WH-1000XM5",     "Headphones"},
-    {0x0000E6, "Sony LinkBuds S",     "Headphones"},
-    {0x0000D2, "Sony SRS-XB100",      "Speaker"},
-    {0x0000F5, "Bose QC Ultra",       "Headphones"},
-    {0x0000F6, "Bose QC Earbuds II",  "Headphones"},
-    {0x0000D4, "Bose SoundLink Flex", "Speaker"},
-    {0x0000EA, "Bose SoundLink Micro","Speaker"},
-    {0x0000F7, "JBL Tune 230NC",      "Headphones"},
-    {0x0000D3, "JBL Flip 6",          "Speaker"},
-    {0x0000E9, "JBL Go 3",            "Speaker"},
-    {0x0000F8, "Nothing Ear (2)",     "Headphones"},
-    {0x0000E7, "Nothing Ear (1)",     "Headphones"},
-    {0x0000E8, "Nothing Ear (stick)", "Headphones"},
-    {0x0000D5, "Marshall Emberton",   "Speaker"},
-    {0x0000D6, "Google Nest Audio",   "Speaker"},
-    {0x000006, "AirPods Pro",         "Headphones"},
-    {0xF00100, "Fun Device 1",        "Fun"},
-    {0xF00101, "Fun Device 2",        "Fun"},
-    {0xF00103, "Fun Device 3",        "Fun"},
-    {0xF00104, "Fun Device 4",        "Fun"},
-    {0xF00105, "Fun Device 5",        "Fun"},
-    {0xF01011, "Prank Device 1",      "Prank"},
-    {0xF38C02, "Prank Device 2",      "Prank"},
-    {0xF00106, "Prank Device 3",      "Prank"},
-    {0,        nullptr,               nullptr}
+    {0x000047, "Pixel Buds Pro",         "Headphones"},
+    {0x000048, "Pixel Buds A-Series",    "Headphones"},
+    {0x0000E5, "Google Pixel Buds",      "Headphones"},
+    {0x0000C5, "Pixel Watch 2",          "Watch"     },
+    {0x0000C6, "Pixel Watch 3",          "Watch"     },
+    {0x00000A, "Galaxy Buds Live",       "Headphones"},
+    {0x0000F0, "Galaxy Buds2",           "Headphones"},
+    {0x0000B0, "Galaxy Buds2 Pro",       "Headphones"},
+    {0x0000A0, "Galaxy Buds FE",         "Headphones"},
+    {0x0000E1, "Galaxy Buds Live",       "Headphones"},
+    {0x0000E2, "Galaxy Buds Pro",        "Headphones"},
+    {0x0000C0, "Galaxy Buds3",           "Headphones"},
+    {0x0000C1, "Galaxy Watch 4",         "Watch"     },
+    {0x0000E3, "Galaxy Watch 4 Classic", "Watch"     },
+    {0x0000C2, "Galaxy Watch 5",         "Watch"     },
+    {0x0000E4, "Galaxy Watch 5 Pro",     "Watch"     },
+    {0x0000C3, "Galaxy Watch 6",         "Watch"     },
+    {0x0000C4, "Galaxy Watch Ultra",     "Watch"     },
+    {0x0000D1, "Galaxy Home",            "Speaker"   },
+    {0x0000D0, "Sony WF-1000XM5",        "Headphones"},
+    {0x0000E0, "Sony WH-1000XM5",        "Headphones"},
+    {0x0000E6, "Sony LinkBuds S",        "Headphones"},
+    {0x0000D2, "Sony SRS-XB100",         "Speaker"   },
+    {0x0000F5, "Bose QC Ultra",          "Headphones"},
+    {0x0000F6, "Bose QC Earbuds II",     "Headphones"},
+    {0x0000D4, "Bose SoundLink Flex",    "Speaker"   },
+    {0x0000EA, "Bose SoundLink Micro",   "Speaker"   },
+    {0x0000F7, "JBL Tune 230NC",         "Headphones"},
+    {0x0000D3, "JBL Flip 6",             "Speaker"   },
+    {0x0000E9, "JBL Go 3",               "Speaker"   },
+    {0x0000F8, "Nothing Ear (2)",        "Headphones"},
+    {0x0000E7, "Nothing Ear (1)",        "Headphones"},
+    {0x0000E8, "Nothing Ear (stick)",    "Headphones"},
+    {0x0000D5, "Marshall Emberton",      "Speaker"   },
+    {0x0000D6, "Google Nest Audio",      "Speaker"   },
+    {0x000006, "AirPods Pro",            "Headphones"},
+    {0xF00100, "Fun Device 1",           "Fun"       },
+    {0xF00101, "Fun Device 2",           "Fun"       },
+    {0xF00103, "Fun Device 3",           "Fun"       },
+    {0xF00104, "Fun Device 4",           "Fun"       },
+    {0xF00105, "Fun Device 5",           "Fun"       },
+    {0xF01011, "Prank Device 1",         "Prank"     },
+    {0xF38C02, "Prank Device 2",         "Prank"     },
+    {0xF00106, "Prank Device 3",         "Prank"     },
+    {0,        nullptr,                  nullptr     }
 };
 
 //=============================================================================
@@ -1730,9 +1725,9 @@ bool DuckyScriptEngine::parseLine(String line) {
     return true;
 }
 
-bool DuckyScriptEngine::loadFromSD(String filename) {
+bool DuckyScriptEngine::loadFromSD(const String &filename) {
     commands.clear();
-    if (!SD.begin()) return false;
+    if (!setupSdCard()) return false;
     File file = SD.open(filename);
     if (!file) return false;
 
@@ -1748,7 +1743,7 @@ bool DuckyScriptEngine::loadFromSD(String filename) {
     return true;
 }
 
-bool DuckyScriptEngine::loadFromString(String script) {
+bool DuckyScriptEngine::loadFromString(const String &script) {
     commands.clear();
     int start = 0, end = script.indexOf('\n');
     while (end != -1) {
@@ -1880,7 +1875,7 @@ bool HIDDuckyService::sendGUIKey(NimBLERemoteCharacteristic *pChar, char key) {
     return sendHIDReport(pChar, modifier, kc.keycode);
 }
 
-bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, String script) {
+bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, const String &script) {
     if (!duckyEngine.loadFromString(script)) return false;
 
     bool hasHFP = false;
@@ -1913,7 +1908,7 @@ bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, String script) {
     return executeDuckyScript(target);
 }
 
-bool HIDDuckyService::injectDuckyScriptFromSD(NimBLEAddress target, String filename) {
+bool HIDDuckyService::injectDuckyScriptFromSD(NimBLEAddress target, const String &filename) {
     if (!duckyEngine.loadFromSD(filename)) return false;
     return executeDuckyScript(target);
 }
@@ -2017,7 +2012,7 @@ bool HIDDuckyService::executeDuckyScript(NimBLEAddress target) {
 }
 
 bool HIDDuckyService::forceInjectDuckyScript(
-    NimBLEAddress target, String script, const String &deviceName, int rssi
+    NimBLEAddress target, const String &script, const String &deviceName, int rssi
 ) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
 
@@ -2538,7 +2533,9 @@ void VulnerabilityScanner::scanDevice(NimBLEAddress target) {
     showDeviceInfoScreen("SCAN RESULTS", lines, TFT_BLUE, TFT_WHITE);
 }
 
-void VulnerabilityScanner::addCustomCheck(String name, bool (*checkFunc)(NimBLEAddress), String desc) {
+void VulnerabilityScanner::addCustomCheck(
+    const String &name, bool (*checkFunc)(NimBLEAddress), const String &desc
+) {
     VulnCheck check;
     check.name = name;
     check.checkFunction = checkFunc;
@@ -2888,7 +2885,7 @@ bool DoSAttackServiceClass::advertisingSpam(NimBLEAddress target) {
 //=============================================================================
 
 String selectFileFromSD() {
-    if (!SD.begin()) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card not found");
         return "";
     }
@@ -3012,8 +3009,8 @@ String selectFileFromSD() {
     return "";
 }
 
-bool loadScriptFromSD(String filename) {
-    if (!SD.begin()) {
+bool loadScriptFromSD(const String &filename) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card failed");
         return false;
     }
@@ -3234,9 +3231,7 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
             info.modelId = modelId;
             info.deviceType = getDeviceTypeFromModelId(modelId);
 
-            if (isSamsungDevice(info.address)) {
-                info.deviceType += " (Samsung)";
-            }
+            if (isSamsungDevice(info.address)) { info.deviceType += " (Samsung)"; }
 
             discoveredDevices.push_back(info);
             showAttackProgress(
@@ -3741,10 +3736,10 @@ static String payloadToHex(const std::vector<uint8_t> &payload) {
 
 static String parseManufacturerData(const std::vector<uint8_t> &payload) {
     if (payload.size() < 2) return "Unknown";
-    
+
     uint16_t companyId = (payload[1] << 8) | payload[0];
     String info = "Company: 0x" + String(companyId, HEX) + " ";
-    
+
     switch (companyId) {
         case 0x004C: info += "(Apple)"; break;
         case 0x0075: info += "(Samsung)"; break;
@@ -3763,7 +3758,7 @@ static String parseManufacturerData(const std::vector<uint8_t> &payload) {
         case 0x0022: info += "(Dialog)"; break;
         default: info += "(Unknown)";
     }
-    
+
     if (payload.size() >= 4) {
         if (companyId == 0x004C) {
             uint8_t type = payload[2];
@@ -3772,12 +3767,10 @@ static String parseManufacturerData(const std::vector<uint8_t> &payload) {
             else if (type == 0x04 && subtype == 0x04) info += " Continuity Action";
             else if (type == 0x0F && subtype == 0x05) info += " Nearby Action";
             else if (type == 0x10 && subtype == 0x14) info += " iBeacon";
-        }
-        else if (companyId == 0x0075) {
+        } else if (companyId == 0x0075) {
             if (payload[2] == 0x42 && payload[3] == 0x09) info += " Galaxy Buds";
             else if (payload[2] == 0x01 && payload[3] == 0x00) info += " Galaxy Watch";
-        }
-        else if (companyId == 0xFE2C && payload.size() >= 7) {
+        } else if (companyId == 0xFE2C && payload.size() >= 7) {
             uint32_t modelId = (payload[4] << 16) | (payload[5] << 8) | payload[6];
             info += " Model: 0x" + String(modelId, HEX);
             for (int i = 0; fastpair_models[i].name != nullptr; i++) {
@@ -3798,11 +3791,11 @@ void BLE_Sniffer() {
     padprintln("Press [ESC] to exit");
     padprintln("");
     padprintln("Status: READY");
-    
+
     NimBLEScan *pScan = nullptr;
     bool isCapturing = false;
     bool firstRun = true;
-    
+
     while (true) {
         if (check(EscPress)) {
             if (isCapturing) {
@@ -3815,7 +3808,7 @@ void BLE_Sniffer() {
             }
             break;
         }
-        
+
         if (check(SelPress)) {
             isCapturing = !isCapturing;
             if (isCapturing) {
@@ -3837,28 +3830,28 @@ void BLE_Sniffer() {
                 padprintln("");
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
-                
+
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
-                
+
                 for (int i = 0; i < results.getCount(); i++) {
                     const NimBLEAdvertisedDevice *device = results.getDevice(i);
-                    
+
                     SnifferPacket packet;
                     packet.address = String(device->getAddress().toString().c_str());
                     packet.name = String(device->getName().c_str());
                     if (packet.name.isEmpty()) packet.name = "Unknown";
                     packet.rssi = device->getRSSI();
                     packet.timestamp = String(millis() / 1000);
-                    
+
                     std::string manufData = device->getManufacturerData();
                     packet.payload.assign(manufData.begin(), manufData.end());
                     packet.payloadHex = payloadToHex(packet.payload);
                     packet.channel = 37 + (i % 3);
-                    
+
                     snifferPackets.push_back(packet);
                     snifferPacketCount++;
                 }
-                
+
                 pScan->stop();
                 isCapturing = false;
                 padprintln("");
@@ -3870,59 +3863,63 @@ void BLE_Sniffer() {
                 padprintln("Press [ESC] to exit");
             }
         }
-        
+
         if (check(SelPress) && !isCapturing && snifferPacketCount > 0) {
             int selected = 0;
             int scrollOffset = 0;
             bool viewing = true;
-            
+
             while (viewing) {
                 if (check(EscPress)) {
                     viewing = false;
                     break;
                 }
-                
+
                 tft.fillScreen(bruceConfig.bgColor);
                 drawMainBorderWithTitle("CAPTURED PACKETS");
-                
+
                 int y = BORDER_PAD_Y + FM * LH + 4;
                 int lineH = max(14, tftHeight / 12);
                 int visibleItems = (tftHeight - y - 50) / lineH;
-                
+
                 tft.setTextSize(FP);
                 tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                 tft.setCursor(10, y);
                 tft.println("Packets: " + String(snifferPacketCount));
                 y += lineH;
-                
+
                 for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5; i++) {
                     int idx = scrollOffset + i;
                     SnifferPacket &pkt = snifferPackets[idx];
                     bool selectedItem = (idx == selected);
                     uint16_t fg = selectedItem ? bruceConfig.bgColor : TFT_WHITE;
                     uint16_t bg = selectedItem ? bruceConfig.priColor : bruceConfig.bgColor;
-                    
+
                     tft.fillRect(10, y, tftWidth - 20, lineH - 2, bg);
                     tft.setTextColor(fg, bg);
-                    String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " + String(pkt.rssi) + "dB";
+                    String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " +
+                                     String(pkt.rssi) + "dB";
                     if (display.length() > 35) display = display.substring(0, 32) + "...";
                     tft.drawString(display, 15, y + 2, 1);
                     y += lineH;
                 }
-                
+
                 if (snifferPacketCount > visibleItems) {
                     tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                     tft.setCursor(tftWidth - 30, BORDER_PAD_Y + FM * LH + 4 + lineH);
-                    if (scrollOffset > 0) tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
+                    if (scrollOffset > 0)
+                        tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
                     if (scrollOffset + visibleItems < snifferPacketCount) {
-                        tft.drawString("v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1);
+                        tft.drawString(
+                            "v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1
+                        );
                     }
                 }
-                
+
                 tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
                 tft.setCursor(10, tftHeight - 20);
                 tft.drawString("PREV/NEXT: Navigate  SEL: View Details  ESC: Back", 10, tftHeight - 20, 1);
-                
+
                 if (check(NextPress)) {
                     if (selected < snifferPacketCount - 1) {
                         selected++;
@@ -3934,20 +3931,18 @@ void BLE_Sniffer() {
                 if (check(PrevPress)) {
                     if (selected > 0) {
                         selected--;
-                        if (selected < scrollOffset) {
-                            scrollOffset = selected;
-                        }
+                        if (selected < scrollOffset) { scrollOffset = selected; }
                     }
                 }
                 if (check(SelPress)) {
                     SnifferPacket &pkt = snifferPackets[selected];
-                    
+
                     drawMainBorderWithTitle("PACKET DETAILS");
                     int dy = BORDER_PAD_Y + FM * LH + 4;
                     int dlh = max(12, tftHeight / 14);
                     tft.setTextSize(FP);
                     tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    
+
                     tft.setCursor(10, dy);
                     tft.println("Device: " + pkt.name);
                     dy += dlh;
@@ -3961,21 +3956,21 @@ void BLE_Sniffer() {
                     dy += dlh;
                     tft.println("Payload (" + String(pkt.payload.size()) + " bytes):");
                     dy += dlh;
-                    
+
                     String parsed = parseManufacturerData(pkt.payload);
                     tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
                     tft.println(parsed);
                     dy += dlh;
-                    
+
                     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
                     String hexDump = pkt.payloadHex;
                     if (hexDump.length() > 400) hexDump = hexDump.substring(0, 400) + "...\n(truncated)";
                     tft.println(hexDump);
-                    
+
                     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
                     tft.setCursor(10, tftHeight - 20);
                     tft.drawString("Press any key to continue", 10, tftHeight - 20, 1);
-                    
+
                     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) {
                         delay(50);
                     }
@@ -3983,22 +3978,21 @@ void BLE_Sniffer() {
                 delay(100);
             }
         }
-        
+
         if (check(NextPress) && !isCapturing && snifferPacketCount > 0) {
             FS *fs = nullptr;
             String storageType = "";
-            
+
             if (getFsStorage(fs) && fs == &SD) {
                 storageType = "SD";
-            }
-            else if (LittleFS.begin()) {
+            } else if (setupLittleFS()) {
                 fs = &LittleFS;
                 storageType = "LittleFS";
             }
-            
+
             if (fs && !storageType.isEmpty()) {
                 if (!fs->exists("/BruceSniffer")) fs->mkdir("/BruceSniffer");
-                
+
                 String filename = "/BruceSniffer/sniffer_" + String(millis()) + ".txt";
                 File file = fs->open(filename, FILE_WRITE);
                 if (file) {
@@ -4006,11 +4000,17 @@ void BLE_Sniffer() {
                     file.println("Timestamp: " + String(millis()));
                     file.println("Total packets: " + String(snifferPacketCount));
                     file.println("");
-                    
+
                     for (size_t i = 0; i < snifferPackets.size(); i++) {
                         SnifferPacket &pkt = snifferPackets[i];
-                        file.printf("[%d] %s | %s | %d dBm | Ch:%d\n", 
-                                   i + 1, pkt.name.c_str(), pkt.address.c_str(), pkt.rssi, pkt.channel);
+                        file.printf(
+                            "[%d] %s | %s | %d dBm | Ch:%d\n",
+                            i + 1,
+                            pkt.name.c_str(),
+                            pkt.address.c_str(),
+                            pkt.rssi,
+                            pkt.channel
+                        );
                         file.print("  Payload: ");
                         for (size_t j = 0; j < pkt.payload.size(); j++) {
                             file.printf("%02X ", pkt.payload[j]);
@@ -4028,7 +4028,7 @@ void BLE_Sniffer() {
             }
             delay(1000);
         }
-        
+
         delay(100);
     }
 }
@@ -4037,7 +4037,7 @@ void BLE_Sniffer() {
 // Target Selection Functions
 //=============================================================================
 
-String selectTargetFromScan(const char* title) {
+String selectTargetFromScan(const char *title) {
     if (scannerData.size() == 0) {
         showErrorMessage("No devices found. Run scan first.");
         return "";
@@ -4084,9 +4084,9 @@ String selectTargetFromScan(const char* title) {
                     tft.print("  ");
                 }
 
-                String display = String(idx + 1) + ". " + scannerData.deviceNames[idx] + " | " + 
-                                scannerData.deviceAddresses[idx] + " | " + 
-                                String(scannerData.deviceRssi[idx]) + "dB";
+                String display = String(idx + 1) + ". " + scannerData.deviceNames[idx] + " | " +
+                                 scannerData.deviceAddresses[idx] + " | " +
+                                 String(scannerData.deviceRssi[idx]) + "dB";
                 if (display.length() > 28) display = display.substring(0, 25) + "...";
                 tft.print(display);
             }
@@ -4138,7 +4138,7 @@ String selectTargetFromScan(const char* title) {
     return "";
 }
 
-String selectMultipleTargetsFromScan(const char* title, std::vector<NimBLEAddress>& targets) {
+String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddress> &targets) {
     targets.clear();
     if (scannerData.size() == 0) {
         showErrorMessage("No devices found. Run scan first.");
@@ -4222,7 +4222,8 @@ String selectMultipleTargetsFromScan(const char* title, std::vector<NimBLEAddres
             delay(150);
             if (currentIndex < (int)deviceCount - 1) {
                 currentIndex++;
-                if (currentIndex >= scrollOffset + maxVisibleItems) scrollOffset = currentIndex - maxVisibleItems + 1;
+                if (currentIndex >= scrollOffset + maxVisibleItems)
+                    scrollOffset = currentIndex - maxVisibleItems + 1;
             } else {
                 currentIndex = 0;
                 scrollOffset = 0;
@@ -4231,7 +4232,9 @@ String selectMultipleTargetsFromScan(const char* title, std::vector<NimBLEAddres
             delay(200);
             selected[currentIndex] = !selected[currentIndex];
             if (selected[currentIndex]) {
-                targets.push_back(NimBLEAddress(std::string(scannerData.deviceAddresses[currentIndex].c_str()), BLE_ADDR_PUBLIC));
+                targets.push_back(NimBLEAddress(
+                    std::string(scannerData.deviceAddresses[currentIndex].c_str()), BLE_ADDR_PUBLIC
+                ));
             } else {
                 for (auto it = targets.begin(); it != targets.end(); ++it) {
                     if (it->toString() == scannerData.deviceAddresses[currentIndex].c_str()) {
@@ -4250,11 +4253,11 @@ String selectMultipleTargetsFromScan(const char* title, std::vector<NimBLEAddres
 // Parse Address
 //=============================================================================
 
-NimBLEAddress parseAddress(const String& addressInfo) {
+NimBLEAddress parseAddress(const String &addressInfo) {
     String cleanAddr = addressInfo;
     cleanAddr.trim();
     cleanAddr.toUpperCase();
-    
+
     int start = 0;
     for (int i = 0; i < cleanAddr.length(); i++) {
         char c = cleanAddr.charAt(i);
@@ -4264,7 +4267,7 @@ NimBLEAddress parseAddress(const String& addressInfo) {
             break;
         }
     }
-    
+
     cleanAddr.trim();
     if (cleanAddr.length() < 17) {
         for (int i = 0; i < addressInfo.length() - 17; i++) {
@@ -4273,10 +4276,14 @@ NimBLEAddress parseAddress(const String& addressInfo) {
             for (int j = 0; j < 17; j++) {
                 char c = substr.charAt(j);
                 if (j % 3 == 2) {
-                    if (c != ':') { valid = false; break; }
+                    if (c != ':') {
+                        valid = false;
+                        break;
+                    }
                 } else {
                     if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
-                        valid = false; break;
+                        valid = false;
+                        break;
                     }
                 }
             }
@@ -4287,12 +4294,12 @@ NimBLEAddress parseAddress(const String& addressInfo) {
             }
         }
     }
-    
+
     if (cleanAddr.length() < 17) {
         Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
         return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
     }
-    
+
     return NimBLEAddress(std::string(cleanAddr.c_str()), BLE_ADDR_PUBLIC);
 }
 
@@ -4302,10 +4309,10 @@ NimBLEAddress parseAddress(const String& addressInfo) {
 
 void runHFPVulnerabilityTest(NimBLEAddress target) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-    
+
     HFPExploitEngine hfp;
     bool result = hfp.testCVE202536911(target);
-    
+
     std::vector<String> lines;
     lines.push_back("HFP VULNERABILITY TEST");
     lines.push_back("Target: " + String(target.toString().c_str()));
@@ -4318,19 +4325,19 @@ void runHFPVulnerabilityTest(NimBLEAddress target) {
     } else {
         lines.push_back("Device appears to be patched");
     }
-    
+
     cleanup.disable();
     showDeviceInfoScreen("HFP TEST", lines, result ? TFT_ORANGE : TFT_GREEN, TFT_WHITE);
 }
 
 void runHFPAttackChain(NimBLEAddress target) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-    
+
     if (!confirmAttack("Execute HFP attack chain?")) return;
-    
+
     HFPExploitEngine hfp;
     bool result = hfp.executeHFPAttackChain(target);
-    
+
     if (result) {
         showAttackResult(true, "HFP attack chain successful!");
     } else {
@@ -4339,31 +4346,29 @@ void runHFPAttackChain(NimBLEAddress target) {
     cleanup.disable();
 }
 
-void runSmartHFPPivot(NimBLEAddress target, String deviceName, int rssi) {
+void runSmartHFPPivot(NimBLEAddress target, const String &deviceName, int rssi) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-    
+
     runHFPHIDPivotAttack(target);
     cleanup.disable();
 }
 
 void runFastPairScan(NimBLEAddress target) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-    
+
     FastPairExploitEngine fpEngine;
     auto devices = fpEngine.scanForFastPairDevices(10);
-    
+
     std::vector<String> lines;
     lines.push_back("FASTPAIR DEVICES FOUND");
     lines.push_back("Total: " + String(devices.size()));
     lines.push_back("");
-    
+
     for (int i = 0; i < std::min(5, (int)devices.size()); i++) {
-        lines.push_back(String(i+1) + ". " + devices[i].name + " | " + devices[i].deviceType);
+        lines.push_back(String(i + 1) + ". " + devices[i].name + " | " + devices[i].deviceType);
     }
-    if (devices.size() > 5) {
-        lines.push_back("... and " + String(devices.size() - 5) + " more");
-    }
-    
+    if (devices.size() > 5) { lines.push_back("... and " + String(devices.size() - 5) + " more"); }
+
     cleanup.disable();
     showDeviceInfoScreen("FASTPAIR SCAN", lines, TFT_BLUE, TFT_WHITE);
 }
@@ -4400,12 +4405,12 @@ void runFastPairAllExploits(NimBLEAddress target) {
 
 void runFastPairHIDChain(NimBLEAddress target) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-    
+
     showAttackProgress("FastPair → HID chain attack...", TFT_CYAN);
-    
+
     FastPairExploitEngine fpEngine;
     bool fpSuccess = fpEngine.testVulnerability(target);
-    
+
     if (fpSuccess) {
         showAttackProgress("FastPair vulnerable! Proceeding to HID...", TFT_GREEN);
         HIDDuckyService ducky;
@@ -4433,13 +4438,13 @@ void runAdvancedDuckyInjection(NimBLEAddress target) {
 void runHIDVulnerabilityTest(NimBLEAddress target) {
     HIDExploitEngine hid;
     bool result = hid.testHIDVulnerability(target);
-    
+
     std::vector<String> lines;
     lines.push_back("HID VULNERABILITY TEST");
     lines.push_back("Target: " + String(target.toString().c_str()));
     lines.push_back("");
     lines.push_back("HID Vulnerable: " + String(result ? "YES" : "NO"));
-    
+
     showDeviceInfoScreen("HID TEST", lines, result ? TFT_ORANGE : TFT_GREEN, TFT_WHITE);
 }
 
@@ -4451,9 +4456,7 @@ void runVulnerabilityScan(NimBLEAddress target) {
 void runForceHIDInjection(NimBLEAddress target) {
     HIDDuckyService ducky;
     String script = getScriptFromUser();
-    if (!script.isEmpty()) {
-        ducky.forceInjectDuckyScript(target, script, "", 0);
-    }
+    if (!script.isEmpty()) { ducky.forceInjectDuckyScript(target, script, "", 0); }
 }
 
 void runJamConnectAttack(NimBLEAddress target) {
@@ -4465,20 +4468,18 @@ void runMultiTargetAttack() {
     std::vector<NimBLEAddress> targets;
     String result = selectMultipleTargetsFromScan("SELECT TARGETS", targets);
     if (result.isEmpty() && targets.empty()) return;
-    
+
     if (targets.size() > 0) {
-        const char* options[] = {"Connection Flood", "Advertising Spam"};
+        const char *options[] = {"Connection Flood", "Advertising Spam"};
         int choice = showSubMenu("Multi-Target Attack", options, 2);
-        
+
         MultiConnectionAttack multi;
         if (choice == 0) multi.connectionFlood(targets);
         else if (choice == 1) multi.advertisingSpam(targets);
     }
 }
 
-void showAttackMenuWithTarget(NimBLEAddress target) {
-    executeAttackWithTargetScan(0);
-}
+void showAttackMenuWithTarget(NimBLEAddress target) { executeAttackWithTargetScan(0); }
 
 void executeSelectedAttack(int attackIndex, NimBLEAddress target) {
     executeAttackWithTargetScan(attackIndex);
@@ -4512,9 +4513,7 @@ void runHIDInjection(NimBLEAddress target) {
 void runDuckyScriptAttack(NimBLEAddress target) {
     HIDDuckyService ducky;
     String script = getScriptFromUser();
-    if (!script.isEmpty()) {
-        ducky.injectDuckyScript(target, script);
-    }
+    if (!script.isEmpty()) { ducky.injectDuckyScript(target, script); }
 }
 
 void runPINBruteForce(NimBLEAddress target) {

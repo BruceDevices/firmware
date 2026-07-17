@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
@@ -6,10 +7,10 @@
 #include <interface.h>
 
 // Rotary encoder
-#include <RotaryEncoder.h>
-extern RotaryEncoder *encoder;
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() { encoder->tick(); }
+#include <rotary_decoder.h>
+extern RotaryDecoder *encoder;
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 // Charger chip
 #define XPOWERS_CHIP_BQ25896
@@ -170,11 +171,15 @@ void _setup_gpio() {
 
     pinMode(LORA_RST, OUTPUT);
     digitalWrite(LORA_RST, HIGH);
-    Wire.begin(GROVE_SDA, GROVE_SCL);
+    setSysI2CBus(&Wire); // PMU/keyboard/RTC/codec all live on the default Wire object
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     // Power management
     bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
         // https://github.com/Xinyuan-LilyGO/LilyGoLib/blob/a64fc6ca94757baa5401ad71b39fb7f92cd1a7e9/src/LilyGo_LoRa_Pager.cpp#L442-L452
         PPM.resetDefault();
@@ -207,9 +212,10 @@ void _setup_gpio() {
 
     // Encoder
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::FOUR3);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 4);
 
     // Haptic driver
     if (!drv.begin(Wire, SDA, SCL)) {
@@ -303,6 +309,11 @@ void InputHandler(void) {
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
         lastPos = newPos;
         lastEncoderMoveMs = millis();
     } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {

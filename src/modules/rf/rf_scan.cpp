@@ -8,7 +8,32 @@
 #include <globals.h>
 #include <sstream>
 
-RFScan::RFScan() { setup(); }
+#define RF_M5_SCAN_COOLDOWN_MS 500
+#define RF_M5_SCAN_DUPLICATE_MS 1500
+#define RF_M5_SCAN_RESYNC_MS 20
+#define RF_M5_RAW_MIN_BITS 24
+#define RF_M5_RAW_MIN_TE_US 300
+
+static void rf_clear_nav_state() {
+    NextPress = false;
+    PrevPress = false;
+    UpPress = false;
+    DownPress = false;
+    SelPress = false;
+    EscPress = false;
+    AnyKeyPress = false;
+    SerialCmdPress = false;
+    forceMenuOption = -1;
+}
+
+static bool rf_m5_raw_is_plausible(bool hasCrc, int rawBits, int rawTe) {
+    return hasCrc && rawBits >= RF_M5_RAW_MIN_BITS && rawTe >= RF_M5_RAW_MIN_TE_US;
+}
+
+RFScan::RFScan() {
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) ReadRAW = false;
+    setup();
+}
 
 RFScan::~RFScan() {
     _rx.end();
@@ -16,6 +41,10 @@ RFScan::~RFScan() {
 }
 
 void RFScan::setup() {
+    rf_clear_nav_state();
+    returnToMenu = false;
+    exitRequested = false;
+
     if (!initRfModule("rx", bruceConfigPins.rfFreq)) { return; }
 
     enable_receive();
@@ -29,7 +58,6 @@ void RFScan::setup() {
 
     if (bruceConfigPins.rfFxdFreq) frequency = bruceConfigPins.rfFreq;
 
-    returnToMenu = false;
     restartScan = false;
 
     return loop();
@@ -37,22 +65,41 @@ void RFScan::setup() {
 
 void RFScan::loop() {
     while (1) {
-        if (check(EscPress) || returnToMenu) return;
+        if (EscPress || exitRequested) {
+            RF_DBG("RFScan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested);
+            check(EscPress);
+            return;
+        }
         if (check(NextPress)) {
             select_menu_option();
-            if (returnToMenu) return;
+            if (exitRequested) {
+                RF_DBG("RFScan exit after options");
+                return;
+            }
             return setup();
         }
-        if (restartScan) return setup();
+        if (restartScan) {
+            RF_DBG("RFScan restart");
+            return setup();
+        }
 
         if (bruceConfigPins.rfFxdFreq) frequency = bruceConfigPins.rfFreq;
         if (frequency <= 0) init_freqs();
 
         while (frequency <= 0) { // FastScan
-            if (check(EscPress) || returnToMenu) return;
+            if (EscPress || exitRequested) {
+                RF_DBG(
+                    "RFScan fast-scan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested
+                );
+                check(EscPress);
+                return;
+            }
             if (check(NextPress)) {
                 select_menu_option();
-                if (returnToMenu) return;
+                if (exitRequested) {
+                    RF_DBG("RFScan fast-scan exit after options");
+                    return;
+                }
                 return setup();
             }
 
@@ -61,14 +108,30 @@ void RFScan::loop() {
 
         std::vector<int> durations;
         if (_rx.poll(durations)) {
+            bool captured = false;
             if (!ReadRAW) {
-                decode_signal(durations);
-                if (autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
+                captured = decode_signal(durations);
+                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
             } else {
-                read_raw(durations);
-                if (autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
+                captured = read_raw(durations);
+                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
+            }
+            if (captured && bruceConfigPins.rfModule == M5_RF_MODULE) {
+                _rx.end();
+                rf_clear_nav_state();
+                returnToMenu = false;
+                vTaskDelay(RF_M5_SCAN_COOLDOWN_MS / portTICK_PERIOD_MS);
+                enable_receive();
+                continue;
+            }
+            if (!captured && bruceConfigPins.rfModule == M5_RF_MODULE) {
+                _rx.end();
+                vTaskDelay(RF_M5_SCAN_RESYNC_MS / portTICK_PERIOD_MS);
+                enable_receive();
+                continue;
             }
         }
+        vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 }
 
@@ -107,7 +170,7 @@ bool RFScan::fast_scan() {
                 if (_freqs[i].rssi > _freqs[max_index].rssi) { max_index = i; }
             }
 
-            bruceConfigPins.setRfFreq(_freqs[max_index].freq, 2); // change to fixed frequency
+            bruceConfigPins.setRfFreq(_freqs[max_index].freq, 1); // change to fixed frequency
             frequency = _freqs[max_index].freq;
             setMHZ(frequency);
             Serial.println("Frequency Found: " + String(frequency));
@@ -176,7 +239,7 @@ bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received) {
     return true;
 }
 
-void RFScan::decode_signal(const std::vector<int> &durations) {
+bool RFScan::decode_signal(const std::vector<int> &durations) {
     received.fix = 0;
     received.hop = 0;
     received.btn = 0;
@@ -187,6 +250,8 @@ void RFScan::decode_signal(const std::vector<int> &durations) {
     // Decode-only mode: show the signal only if a registry protocol (or KeeLoq)
     // matched.
     if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
+        if (is_m5_duplicate_capture(received)) return false;
+
         Serial.println("Decoded signal captured: " + received.protocol);
         blinkLed();
         ++signals;
@@ -197,10 +262,23 @@ void RFScan::decode_signal(const std::vector<int> &durations) {
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
+        return true;
     }
+
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) {
+        String _data;
+        bool hasCrc = false;
+        uint64_t crc = 0;
+        std::vector<int> indexed_durations;
+        int rawBits = 0;
+        int rawTe = 0;
+        rf_build_raw(durations, _data, hasCrc, crc, indexed_durations, rawBits, rawTe);
+        RF_DBG("m5 scan discard: crc=%d bits=%d te=%d", (int)hasCrc, rawBits, rawTe);
+    }
+    return false;
 }
 
-void RFScan::read_raw(const std::vector<int> &durations) {
+bool RFScan::read_raw(const std::vector<int> &durations) {
     found_freq = frequency;
 
     received.fix = 0;
@@ -226,6 +304,8 @@ void RFScan::read_raw(const std::vector<int> &durations) {
 
     // if a registry protocol (or KeeLoq) decoded the signal, show it
     if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
+        if (is_m5_duplicate_capture(received)) return false;
+
         Serial.println("Decoded signal captured: " + received.protocol);
         blinkLed();
         ++signals;
@@ -233,22 +313,42 @@ void RFScan::read_raw(const std::vector<int> &durations) {
 
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
+        return true;
     }
     // no decode, but a repeated pattern gave us a CRC
     else if (hasCrc) {
-        Serial.println("Raw signal captured");
-        blinkLed();
-        ++signals;
+        if (bruceConfigPins.rfModule == M5_RF_MODULE &&
+            !rf_m5_raw_is_plausible(hasCrc, rawBits, rawTe)) {
+            RF_DBG(
+                "m5 raw discard: crc=%d bits=%d te=%d minBits=%d minTe=%d",
+                (int)hasCrc,
+                rawBits,
+                rawTe,
+                RF_M5_RAW_MIN_BITS,
+                RF_M5_RAW_MIN_TE_US
+            );
+            return false;
+        }
         received.preset = "Ook270Async";
         received.protocol = "RAW";
         received.key = crc;
+        if (is_m5_duplicate_capture(received)) return false;
+
+        Serial.println("Raw signal captured");
+        blinkLed();
+        ++signals;
         received.indexed_durations = indexed_durations;
         received.Bit = rawBits;
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
+        return true;
     }
     // no decode and no CRC: only show the raw data when not filtering for codes
     else if (!codesOnly) {
+        if (bruceConfigPins.rfModule == M5_RF_MODULE) {
+            RF_DBG("m5 raw discard: crc=0 bits=%d te=%d", rawBits, rawTe);
+            return false;
+        }
         Serial.println("Raw data captured");
         blinkLed();
         ++signals;
@@ -259,7 +359,31 @@ void RFScan::read_raw(const std::vector<int> &durations) {
         received.Bit = 0;
         frequency = 0;
         display_info(received, signals, ReadRAW, codesOnly, autoSave, title);
+        return true;
     }
+    return false;
+}
+
+bool RFScan::is_m5_duplicate_capture(const RfCodes &data) {
+    if (bruceConfigPins.rfModule != M5_RF_MODULE) return false;
+
+    unsigned long now = millis();
+    bool duplicate = data.key == lastM5CaptureKey && data.protocol == lastM5CaptureProtocol &&
+                     now - lastM5CaptureMs < RF_M5_SCAN_DUPLICATE_MS;
+    if (duplicate) {
+        RF_DBG(
+            "m5 duplicate ignored: proto=%s key=%llX age=%lums",
+            data.protocol.c_str(),
+            (unsigned long long)data.key,
+            now - lastM5CaptureMs
+        );
+        return true;
+    }
+
+    lastM5CaptureKey = data.key;
+    lastM5CaptureProtocol = data.protocol;
+    lastM5CaptureMs = now;
+    return false;
 }
 
 void RFScan::select_menu_option() {
@@ -335,7 +459,10 @@ void RFScan::set_option(RFMenuOption option) {
 
         case CLOSE_MENU: break;
 
-        case MAIN_MENU: returnToMenu = true; return;
+        case MAIN_MENU:
+            exitRequested = true;
+            returnToMenu = true;
+            return;
     }
 
     restartScan = true;
@@ -378,15 +505,16 @@ void RFScan::reset_signals() {
 }
 
 void RFScan::set_threshold() {
+    int idx = constrain((-rssiThreshold - 55) / 5, 0, 5);
     options = {
         {"(-55) More Accurate", [&]() { rssiThreshold = -55; }},
         {"(-60)",               [&]() { rssiThreshold = -60; }},
-        {"(-65) Default ",      [&]() { rssiThreshold = -65; }},
+        {"(-65) Default",       [&]() { rssiThreshold = -65; }},
         {"(-70)",               [&]() { rssiThreshold = -70; }},
         {"(-75)",               [&]() { rssiThreshold = -75; }},
         {"(-80) Less Accurate", [&]() { rssiThreshold = -80; }},
     };
-    loopOptions(options);
+    loopOptions(options, idx);
 }
 /*
 // Using similar function from rf_utils.h
@@ -432,7 +560,8 @@ static void rf_info_line(bool headless, const String &s) {
 }
 
 void display_info(
-    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, String title, bool headless
+    RfCodes received, int signals, bool ReadRAW, bool codesOnly, bool autoSave, const String &title,
+    bool headless
 ) {
     if (!headless) {
         if (title != "") drawMainBorderWithTitle(title);
@@ -474,8 +603,7 @@ void display_signal_data(RfCodes received, bool headless) {
     if (received.preset != "") {
         if (received.fix != 0) {
             rf_info_line(headless, "Protocol: KeeLoq");
-        } else
-            rf_info_line(headless, "Protocol: " + String(received.protocol) + "(" + received.preset + ")");
+        } else rf_info_line(headless, "Protocol: " + String(received.protocol) + "(" + received.preset + ")");
     } else rf_info_line(headless, "Protocol: " + String(received.protocol));
 
     if (received.key > 0) {
@@ -724,8 +852,8 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 // Interactive: draw on screen. Headless (CLI): emit the same
                 // formatted info on Serial instead of the display.
                 display_info(received, 1, raw, false, false, "", headless);
-            } else if (transitions > 20) {
-                // decoding failed (or raw requested): keep it as RAW
+            } else if (raw && transitions > 20) {
+                // Raw mode requested: keep undecoded captures as RAW.
                 received.frequency = long(frequency * 1000000);
                 received.protocol = "RAW";
                 received.preset = "Ook270Async";
@@ -735,6 +863,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 display_info(received, 1, raw, false, false, "", headless);
             } else {
                 received.data = ""; // too few transitions - discard
+                received.key = 0;
             }
         }
 

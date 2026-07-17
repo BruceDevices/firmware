@@ -1,4 +1,5 @@
 #include "TouchDrvGT911.hpp"
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
@@ -47,8 +48,8 @@ void ISR_rst() {
 }
 
 #define LILYGO_KB_SLAVE_ADDRESS 0x55
-#define KB_I2C_SDA 18
-#define KB_I2C_SCL 8
+#define KB_I2C_SDA 18 // SYS_I2C_SDA
+#define KB_I2C_SCL 8  // SYS_I2C_SCL
 #define SEL_BTN 0
 #define UP_BTN 3
 #define DW_BTN 15
@@ -62,8 +63,9 @@ void ISR_rst() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    delay(500); // time to ESP32C3 start and enable the keyboard
-    if (!Wire.begin(KB_I2C_SDA, KB_I2C_SCL)) Serial.println("Fail starting ESP32-C3 keyboard");
+    delay(500);           // time to ESP32C3 start and enable the keyboard
+    setSysI2CBus(&Wire1); // Keyboard + GT911 touch both live on the default Wire object
+    if (!Wire1.begin(SYS_I2C_SDA, SYS_I2C_SCL)) Serial.println("Fail starting ESP32-C3 keyboard");
 
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
@@ -71,7 +73,7 @@ void _setup_gpio() {
 
     pinMode(BOARD_TOUCH_INT, INPUT);
     touch.setPins(-1, BOARD_TOUCH_INT);
-    if (!touch.begin(Wire, GT911_SLAVE_ADDRESS_L)) {
+    if (!touch.begin(Wire1, GT911_SLAVE_ADDRESS_L)) {
         Serial.println("Failed to find GT911 - check your wiring!");
     }
     // Set touch max xy

@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Arduino.h>
@@ -28,8 +29,9 @@ void _setup_gpio() {
     bruceConfig.colorInverted = 0;
 
 #if defined(HAS_CAPACITIVE_TOUCH) && defined(TOUCH_GT911_I2C)
-    // Bring up the I2C bus the GT911 lives on
-    Wire.begin(GT911_I2C_CONFIG_SDA_IO_NUM, GT911_I2C_CONFIG_SCL_IO_NUM);
+    // Bring up the I2C bus the GT911 lives on.
+    setSysI2CBus(&Wire1);
+    Wire1.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     // GT911 power-on reset sequence. No RST line on this board, so hold INT low
     // briefly to keep address 0x5D, then release it as an input.
@@ -41,9 +43,7 @@ void _setup_gpio() {
 
     // No reset line available -> pass -1 for RST.
     touch.setPins(-1, BOARD_TOUCH_INT);
-    if (!touch.begin(
-            Wire, GT911_SLAVE_ADDRESS_L, GT911_I2C_CONFIG_SDA_IO_NUM, GT911_I2C_CONFIG_SCL_IO_NUM
-        )) {
+    if (!touch.begin(Wire1, GT911_SLAVE_ADDRESS_L, SYS_I2C_SDA, SYS_I2C_SCL)) {
         Serial.println("Failed to find GT911 touch - check wiring!");
     } else {
         Serial.println("GT911 touch started");

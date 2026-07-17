@@ -284,6 +284,7 @@ void mic_test_one_task() {
         tft.pushImage(displayX, displayY, displayWidth, displayHeight, frameBuffer);
         wakeUpScreen();
         if (check(SelPress) || check(EscPress)) break;
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     i2s_channel_disable(i2s_chan);
 

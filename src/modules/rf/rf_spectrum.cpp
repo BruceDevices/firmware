@@ -1,4 +1,5 @@
 #include "rf_spectrum.h"
+#include "protocols/rf_config.h"
 #include "protocols/rf_decoder.h"
 #include "rf_utils.h"
 #include "structs.h"
@@ -28,6 +29,44 @@ void draw_tf_spectrum_grid() {
 void rf_spectrum() {
     tft.fillScreen(bruceConfig.bgColor);
     draw_tf_spectrum_grid();
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) {
+        RfRxSession rx;
+        if (!rx.begin()) {
+            deinitRfModule();
+            return;
+        }
+
+        std::vector<int> durations;
+        while (1) {
+            if (rx.poll(durations)) {
+                draw_tf_spectrum_grid();
+                for (size_t i = 0; i < durations.size(); i++) {
+                    int pulse = abs(durations[i]);
+                    int lineHeight = map(pulse, 0, SIGNAL_STRENGTH_THRESHOLD, 0, tftHeight / 2);
+                    int lineX =
+                        map(i, 0, durations.size() > 1 ? durations.size() - 1 : 1, 0, tftWidth - 1);
+                    int startY = constrain(20 + tftHeight / 2 - lineHeight / 2, 20, 20 + tftHeight);
+                    int endY = constrain(20 + tftHeight / 2 + lineHeight / 2, 20, 20 + tftHeight);
+                    tft.drawLine(lineX, startY, lineX, endY, bruceConfig.priColor);
+                }
+                RF_DBG("m5 spectrum: durations=%u", (unsigned)durations.size());
+            }
+
+            if (check(EscPress)) { break; }
+            if (setMHZMenu()) {
+                rx.end();
+                rx.begin();
+                draw_tf_spectrum_grid();
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        rx.end();
+        returnToMenu = true;
+        deinitRfModule();
+        return;
+    }
+
     rmt_channel_handle_t rx_ch = NULL;
     rx_ch = setup_rf_rx();
     if (rx_ch == NULL) return;

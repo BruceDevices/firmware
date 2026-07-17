@@ -171,6 +171,7 @@ void setSleepMode() {
             returnToMenu = true;
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -693,7 +694,7 @@ void setRFModuleMenu() {
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
             deinitRfModule();
-            if (pins_setup == 1) CC_NRF_SPI.end();
+            if (pins_setup == 1) AUX_SPI.end();
             return;
         }
         // else display an error
@@ -1576,6 +1577,10 @@ RELOAD:
 **  Main Menu to manually set SPI Pins
 **********************************************************************/
 void setI2CPinsMenu(BruceConfigPins::I2CPins &value) {
+#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0
+    displayError("I2C Pins cannot be changed on this board", true);
+    return;
+#else
     uint8_t opt = 0;
     bool changed = false;
     BruceConfigPins::I2CPins points = value;
@@ -1612,6 +1617,7 @@ RELOAD:
         changed = true;
         goto RELOAD;
     }
+#endif
 }
 
 /*********************************************************************

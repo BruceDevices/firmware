@@ -16,28 +16,41 @@
 void RFIDMenu::optionsMenu() {
     options = {
 #if !defined(REMOVE_RFID_HW_INTERFACE)  // Remove Hardware interface menu due to lack of external GPIO
-        {"Read tag",    [=]() { TagOMatic(); }                          },
+        {"Read tag",    [=]() { TagOMatic(); }                     },
 #ifndef LITE_VERSION
-        {"Read EMV",    [=]() { EMVReader(); }                          },
-        {"Read 125kHz", [=]() { RFID125(); }                            },
+        {"Read EMV",    [=]() { EMVReader(); }                     },
+        {"Read 125kHz", [=]() { RFID125(); }                       },
 #endif
-        {"Scan tags",   [=]() { TagOMatic(TagOMatic::SCAN_MODE); }      },
-        {"Load file",   [=]() { TagOMatic(TagOMatic::LOAD_MODE); }      },
-        {"Erase data",  [=]() { TagOMatic(TagOMatic::ERASE_MODE); }     },
-        {"Write NDEF",  [=]() { TagOMatic(TagOMatic::WRITE_NDEF_MODE); }},
+        {"Scan tags",   [=]() { TagOMatic(TagOMatic::SCAN_MODE); } },
+        {"Load file",   [=]() { TagOMatic(TagOMatic::LOAD_MODE); } },
+        {"Erase data",  [=]() { TagOMatic(TagOMatic::ERASE_MODE); }},
 #endif
-#ifndef LITE_VERSION
-        {"Amiibolink",  [=]() { Amiibo(); }                             },
-#endif
-        {"Chameleon",   [=]() { Chameleon(); }                          },
-#ifndef LITE_VERSION
-        {"PN532 BLE",   [=]() { Pn532ble(); }                           },
-#if !defined(REMOVE_RFID_HW_INTERFACE)  // Remove Hardware interface menu due to lack of external GPIO
-        {"PN532 UART",  [=]() { PN532KillerTools(); }                   },
-#endif
-#endif
-        {"Config",      [this]() { configMenu(); }                      },
     };
+
+#if !defined(REMOVE_RFID_HW_INTERFACE)
+    // Emulate NDEF (arm the radio directly with a built NDEF message) only
+    // makes sense on modules that can act as a target/card emulator.
+    bool ndefEmulationSupported = bruceConfigPins.rfidModule == PN532_I2C_MODULE ||
+                                  bruceConfigPins.rfidModule == PN532_SPI_MODULE ||
+                                  bruceConfigPins.rfidModule == PN532_I2C_SPI_MODULE ||
+                                  bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE ||
+                                  bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE || false;
+    if (ndefEmulationSupported) {
+        options.push_back({"Emulate NDEF", [=]() { TagOMatic(TagOMatic::EMULATE_NDEF_MODE); }});
+    }
+    options.push_back({"Write NDEF", [=]() { TagOMatic(TagOMatic::WRITE_NDEF_MODE); }});
+#endif
+#ifndef LITE_VERSION
+    options.push_back({"Amiibolink", [=]() { Amiibo(); }});
+#endif
+    options.push_back({"Chameleon", [=]() { Chameleon(); }});
+#ifndef LITE_VERSION
+    options.push_back({"PN532 BLE", [=]() { Pn532ble(); }});
+#if !defined(REMOVE_RFID_HW_INTERFACE) // Remove Hardware interface menu due to lack of external GPIO
+    options.push_back({"PN532 UART", [=]() { PN532KillerTools(); }});
+#endif
+#endif
+    options.push_back({"Config", [this]() { configMenu(); }});
 
 #if !defined(REMOVE_RFID_HW_INTERFACE)
 #ifndef LITE_VERSION

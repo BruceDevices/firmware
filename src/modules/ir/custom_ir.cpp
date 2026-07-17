@@ -64,13 +64,14 @@ void selectRecentIrMenu() {
             selected_code = NULL;
         }
         if (check(EscPress) || exit) break;
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     options.clear();
 
     return;
 }
 
-bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
+bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI) {
     // SPAM all codes of the file
 
     int total_codes = 0;
@@ -193,7 +194,7 @@ bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
         // if user is pushing (holding down) TRIGGER button, stop transmission early
         if (check(SelPress)) // Pause TV-B-Gone
         {
-            while (check(SelPress)) yield();
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
             if (!hideDefaultUI) { displayTextLine("Paused"); }
 
             while (!check(SelPress)) { // If Presses Select again, continues
@@ -201,8 +202,9 @@ bool txIrFile(FS *fs, String filepath, bool hideDefaultUI) {
                     endingEarly = true;
                     break;
                 }
+                vTaskDelay(pdMS_TO_TICKS(1));
             }
-            while (check(SelPress)) { yield(); }
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
             if (endingEarly) break; // Cancels  custom IR Spam
             if (!hideDefaultUI) { displayTextLine("Running, Wait"); }
         }
@@ -306,8 +308,10 @@ void sendIRCommand(IRCode *code, bool hideDefaultUI) {
     else if (code->protocol.equalsIgnoreCase("Kaseikyo"))
         sendKaseikyoCommand(code->address, code->command, hideDefaultUI);
     // Others protocols of IRRemoteESP8266, not related to Flipper Zero IR File Format
-    else if (code->protocol != "" && code->data != "" &&
-             strToDecodeType(code->protocol.c_str()) != decode_type_t::UNKNOWN)
+    else if (
+        code->protocol != "" && code->data != "" &&
+        strToDecodeType(code->protocol.c_str()) != decode_type_t::UNKNOWN
+    )
         sendDecodedCommand(code->protocol, code->data, code->bits, hideDefaultUI);
 }
 
@@ -648,7 +652,7 @@ void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
     digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }
 
-bool chooseCmdIrFile(FS *fs, String filepath) {
+bool chooseCmdIrFile(FS *fs, const String &filepath) {
     checkIrTxPin();
     resetCodesArray();
     int total_codes = 0;
@@ -711,13 +715,17 @@ bool chooseCmdIrFile(FS *fs, String filepath) {
     for (auto code : codes) {
         if (code->name != "") {
             options.push_back({code->name.c_str(), [code, &actionTaken]() {
-                               actionTaken = true;
-                               sendIRCommand(code);
-                               addToRecentCodes(code);
-                           }});
+                                   actionTaken = true;
+                                   sendIRCommand(code);
+                                   addToRecentCodes(code);
+                               }});
         }
     }
-    options.push_back({"Main Menu", [&]() { actionTaken = true; exit = true; goToMainMenu = true; }});
+    options.push_back({"Main Menu", [&]() {
+                           actionTaken = true;
+                           exit = true;
+                           goToMainMenu = true;
+                       }});
     databaseFile.close();
 
 #ifdef USE_BOOST /// DISABLE 5V OUTPUT
@@ -738,14 +746,14 @@ bool chooseCmdIrFile(FS *fs, String filepath) {
             // Distinguish short vs long press by checking if button is still held
             unsigned long pressStart = millis();
             bool longPress = false;
-            while (check(EscPress)) {           // button still physically held
+            while (check(EscPress)) { // button still physically held
                 if (millis() - pressStart >= 2000) {
                     longPress = true;
                     break;
                 }
                 delay(10);
             }
-            while (check(EscPress)) delay(10);  // wait for release
+            while (check(EscPress)) delay(10); // wait for release
 
             if (longPress) goToMainMenu = true;
             // Short (or already released): goToMainMenu stays false → back to file browser

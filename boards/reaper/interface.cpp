@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <bq27220.h>
 #include <globals.h>
@@ -24,8 +25,9 @@ BQ27220 bq;
 bool gaugeOn = false;
 
 void _setup_gpio() {
-    Wire.setPins(GROVE_SDA, GROVE_SCL);
-    Wire.begin(GROVE_SDA, GROVE_SCL);
+    setSysI2CBus(&Wire); // PMU/battery gauge live on the default Wire object
+    Wire.setPins(SYS_I2C_SDA, SYS_I2C_SCL);
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
     pinMode(SEL_BTN, INPUT);
@@ -54,7 +56,7 @@ void _setup_gpio() {
     bruceConfigPins.rfidModule = ST25R3916_SPI_MODULE;
 
     bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
 
         PPM.setSysPowerDownVoltage(3300);

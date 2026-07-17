@@ -202,6 +202,8 @@ void showDeviceInfo() {
     area.addLine("[GPIO]");
     area.addLine("GROVE_SDA: " + String(bruceConfigPins.i2c_bus.sda));
     area.addLine("GROVE_SCL: " + String(bruceConfigPins.i2c_bus.scl));
+    area.addLine("SYS_I2C_SDA: " + String(bruceConfigPins.sys_i2c.sda));
+    area.addLine("SYS_I2C_SCL: " + String(bruceConfigPins.sys_i2c.scl));
     area.addLine("SERIAL TX: " + String(bruceConfigPins.uart_bus.tx));
     area.addLine("SERIAL RX: " + String(bruceConfigPins.uart_bus.rx));
     area.addLine("SPI_SCK_PIN: " + String(SPI_SCK_PIN));

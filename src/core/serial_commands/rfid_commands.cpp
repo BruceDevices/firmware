@@ -163,7 +163,15 @@ uint32_t rfidEmulateCallback(cmd *c) {
         }
     }
 
+    if (_rfid->printableUID.uid.length() > 0) {
+        serialDevice->println("Emulating UID: " + _rfid->printableUID.uid + " (" + _rfid->printableUID.picc_type + ")");
+    }
+    String caveat = _rfid->emulationCaveat();
+    if (caveat.length() > 0) serialDevice->println("[!] " + caveat);
     serialDevice->println("Starting RFID emulation" + (mode.length() ? (" (" + mode + ")") : String("")) + "...");
+    // backToMenu() (run after every serial command) leaves this flag set, which
+    // would make emulate()'s loop bail out on its very first iteration.
+    returnToMenu = false;
     int result = _rfid->emulate();
     serialDevice->println("Emulate: " + _rfid->statusMessage(result));
     return result == RFIDInterface::SUCCESS;
@@ -331,6 +339,16 @@ uint32_t rfidAutotestCallback(cmd *c) {
     }
 
     if (mode == "emulate") {
+        if (_rfid->printableUID.uid.length() > 0) {
+            serialDevice->println(
+                "Emulating UID: " + _rfid->printableUID.uid + " (" + _rfid->printableUID.picc_type + ")"
+            );
+        }
+        String caveat = _rfid->emulationCaveat();
+        if (caveat.length() > 0) serialDevice->println("[!] " + caveat);
+        // backToMenu() (run after every serial command) leaves this flag set, which
+        // would make emulate()'s loop bail out on its very first iteration.
+        returnToMenu = false;
         int result = _rfid->emulate();
         serialDevice->println("Emulate: " + _rfid->statusMessage(result));
         return result == RFIDInterface::SUCCESS;

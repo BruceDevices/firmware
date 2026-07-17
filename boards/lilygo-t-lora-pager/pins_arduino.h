@@ -80,6 +80,8 @@ static const uint8_t MISO = SPI_MISO_PIN;
 // Set Main I2C Bus
 #define GROVE_SDA 3
 #define GROVE_SCL 2
+#define SYS_I2C_SDA 3
+#define SYS_I2C_SCL 2
 static const uint8_t SDA = GROVE_SDA;
 static const uint8_t SCL = GROVE_SCL;
 

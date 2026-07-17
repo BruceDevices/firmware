@@ -50,7 +50,8 @@ public:
     int write_ndef();
     int emulate() override;
     int load();
-    int save(String filename);
+    int save(const String &filename);
+    String emulationCaveat() const override;
 
 private:
     bool _use_i2c;
