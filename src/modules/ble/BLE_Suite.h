@@ -7,6 +7,7 @@
 
 #include "HFP_Exploit.h"
 #include "fastpair_crypto.h"
+#include "ble_common.h"  // ← This now provides AdvertisedDeviceCallbacks
 #include <NimBLEDevice.h>
 #include <WString.h>
 #include <freertos/FreeRTOS.h>
@@ -57,25 +58,8 @@ bool check(int key);
 #define SCAN_WINDOW 99
 
 //=============================================================================
-// Forward Declarations
+// Note: AdvertisedDeviceCallbacks is now defined in ble_common.h
 //=============================================================================
-
-// Forward declaration of AdvertisedDeviceCallbacks for ble_common.cpp
-#if NIMBLE_V2_PLUS
-class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
-public:
-    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
-    void onScanEnd(NimBLEScanResults results, int reason) override;
-};
-#else
-class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
-public:
-    void onResult(NimBLEAdvertisedDevice *advertisedDevice) override;
-};
-#endif
-
-// External reference to g_scanCallbacks for ble_common.cpp
-extern AdvertisedDeviceCallbacks* g_scanCallbacks;
 
 //=============================================================================
 // Enums
