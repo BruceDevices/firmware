@@ -15,7 +15,6 @@
 // NimBLE Version - MANUAL FORCE FOR NIMBLE 2.x
 //=============================================================================
 
-// Since you're using NimBLE 2.3.7+, set this to 1
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 1
 #endif
@@ -29,18 +28,16 @@
 #define SCAN_INT 100
 #define SCAN_WINDOW 99
 
-// Maximum number of BLE devices to display to prevent memory issues
 #define MAX_DISPLAY_DEVICES 100
 
 //=============================================================================
-// AdvertisedDeviceCallbacks - NO onScanEnd (doesn't exist in NimBLE)
+// AdvertisedDeviceCallbacks - DECLARATION ONLY
 //=============================================================================
 
-// For NimBLE 2.x - uses NimBLEScanCallbacks with ONLY onResult
+// Forward declaration - the class is defined in ble_common.cpp
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 public:
     void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override;
-    // onScanEnd does NOT exist in NimBLEScanCallbacks - DO NOT DECLARE IT!
 };
 
 // External reference to g_scanCallbacks
