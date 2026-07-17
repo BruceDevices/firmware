@@ -34,7 +34,17 @@
 #ifndef NIMBLE_V2_PLUS
     #ifdef __has_include
         #if __has_include(<NimBLEScan.h>)
-            #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            // Try to detect v2 by checking for a v2-only feature
+            // We'll use a compile-time check
+            namespace __nimble_detect {
+                template<typename T> class has_getResults {
+                    template<typename U> static auto test(int) -> decltype(std::declval<U>().getResults(0), std::true_type());
+                    template<typename> static auto test(...) -> std::false_type;
+                public:
+                    static const bool value = decltype(test<NimBLEScan>(0))::value;
+                };
+            }
+            #if __nimble_detect::has_getResults<NimBLEScan>::value
                 #define NIMBLE_V2_PLUS 1
             #endif
         #endif
@@ -62,10 +72,11 @@
 #define SCAN_TIME_REDUCED 3
 
 //=============================================================================
-// Forward Declarations
+// Forward Declaration - SINGLE SOURCE OF TRUTH
 //=============================================================================
 
-// Forward declaration of AdvertisedDeviceCallbacks for ble_common.cpp
+// Forward declaration of AdvertisedDeviceCallbacks
+// Only declare onScanEnd for NimBLE 2.x
 #if NIMBLE_V2_PLUS
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 public:
@@ -79,7 +90,7 @@ public:
 };
 #endif
 
-// External reference to g_scanCallbacks for ble_common.cpp
+// External reference to g_scanCallbacks
 extern AdvertisedDeviceCallbacks* g_scanCallbacks;
 
 extern BLEScan *pBLEScan;
