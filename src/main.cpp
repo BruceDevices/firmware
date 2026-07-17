@@ -88,7 +88,19 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
         // and navigation gets stuck, the idea here is run the input detection
         // if AnyKeyPress is false, or rerun if it was not renewed within 75ms (arbitrary)
         // because AnyKeyPress will be true if didn´t passed through a check(bool var)
-        if (!AnyKeyPress || millis() - timer > 75) {
+        //
+        // BUT: the 75ms re-scan also WIPES a real, not-yet-consumed press. On
+        // screens whose redraw/scan loop iterates slower than 75ms (e.g. RF
+        // scan/record on large RGB panels), a tap/swipe sets a flag that gets
+        // cleared before the loop calls check() — leaving the user trapped with
+        // no working buttons. So when an actual press is pending, hold it much
+        // longer (600ms) to give a slow consumer time to read it; only fall back
+        // to the short 75ms re-scan when AnyKeyPress is stuck with nothing
+        // actionable pending (the original "navigation stuck" recovery case).
+        bool actionPending = NextPress || PrevPress || UpPress || DownPress || SelPress || EscPress ||
+                             NextPagePress || PrevPagePress || touchPoint.pressed;
+        unsigned long holdMs = actionPending ? 600 : 75;
+        if (!AnyKeyPress || millis() - timer > holdMs) {
             NextPress = false;
             PrevPress = false;
             UpPress = false;
@@ -259,9 +271,16 @@ void boot_screen() {
     tft.setTextSize(FP);
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
     tft.setTextSize(FM);
+#ifdef HAS_TOUCH
+    // tftHeight excludes a 20px touch-footer margin, and the FM tagline is
+    // taller than that margin — so tftHeight+2 clips at the physical edge.
+    // Pull it up enough to sit fully inside the visible screen.
+    tft.drawCentreString("PREDATORY FIRMWARE", tftWidth / 2, tftHeight - 6, 1);
+#else
     tft.drawCentreString(
         "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1
     ); // will draw outside the screen on non touch devices
+#endif
 }
 
 /*********************************************************************

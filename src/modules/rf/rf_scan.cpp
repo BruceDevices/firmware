@@ -65,12 +65,14 @@ void RFScan::setup() {
 
 void RFScan::loop() {
     while (1) {
-        if (EscPress || exitRequested) {
+        // BACK (PrevPress) and swipe-down (EscPress) both exit; SELECT
+        // (SelPress) and NEXT (NextPress) both open the options menu.
+        if (EscPress || check(PrevPress) || exitRequested || returnToMenu) {
             RF_DBG("RFScan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested);
             check(EscPress);
             return;
         }
-        if (check(NextPress)) {
+        if (check(NextPress) || check(SelPress)) {
             select_menu_option();
             if (exitRequested) {
                 RF_DBG("RFScan exit after options");
@@ -87,14 +89,14 @@ void RFScan::loop() {
         if (frequency <= 0) init_freqs();
 
         while (frequency <= 0) { // FastScan
-            if (EscPress || exitRequested) {
+            if (EscPress || check(PrevPress) || exitRequested || returnToMenu) {
                 RF_DBG(
                     "RFScan fast-scan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested
                 );
                 check(EscPress);
                 return;
             }
-            if (check(NextPress)) {
+            if (check(NextPress) || check(SelPress)) {
                 select_menu_option();
                 if (exitRequested) {
                     RF_DBG("RFScan fast-scan exit after options");

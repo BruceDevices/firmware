@@ -15,7 +15,7 @@ float phase = 0.0;
 float lastPhase = 2 * PI;
 unsigned long lastAnimationUpdate = 0;
 void sinewave_animation() {
-    if (millis() - lastAnimationUpdate < 10) return;
+    if (millis() - lastAnimationUpdate < 25) return;
 
     tft.drawPixel(0, 0, 0);
 
@@ -23,7 +23,12 @@ void sinewave_animation() {
     int amplitude = (tftHeight / 2) - 40;
     int sinewaveWidth = 5;
 
-    for (int x = 20; x < tftWidth - 20; x++) {
+    // Step in larger increments on wide panels: redrawing every single column
+    // (≈760 on an 800px screen) blocks the loop for longer than the input
+    // task's 75ms flag window, which would swallow an ESC/exit swipe. A coarser
+    // step keeps each pass short so check(EscPress) stays responsive.
+    int step = (tftWidth > 400) ? 4 : 1;
+    for (int x = 20; x < tftWidth - 20; x += step) {
         int lastY = centerY + amplitude * sin(lastPhase + x * 0.05);
         int y = centerY + amplitude * sin(phase + x * 0.05);
         tft.drawFastVLine(x, lastY, sinewaveWidth, bruceConfig.bgColor);
@@ -49,6 +54,9 @@ void rf_raw_record_draw(RawRecordingStatus status) {
     } else if (!status.recordingStarted) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.print("Waiting for signal...");
+        tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+        tft.println("   Press [ESC] to exit  ");
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         sinewave_animation();
     } else if (status.recordingFinished) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -319,6 +327,13 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
 
     while (!status.recordingFinished) {
         previousMillis = millis();
+        // Check for an exit swipe/press up-front, before the (slow) redraw —
+        // otherwise a pending ESC can be reset by the input task mid-draw.
+        if (check(EscPress)) {
+            status.recordingFinished = true;
+            returnToMenu = true;
+            break;
+        }
         size_t rx_size = 0;
         rmt_symbol_word_t *rx_items = NULL;
         if (xQueueReceive(receive_queue, &rx_data, 0) == pdPASS) {

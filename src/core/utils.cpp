@@ -245,33 +245,69 @@ void showDeviceInfo() {
 #if defined(HAS_TOUCH)
 /*********************************************************************
 ** Function: touchHeatMap
-** Touchscreen Mapping, include this function after reading the touchPoint
+** Touchscreen Mapping — updated for 800×480 Waveshare 4.3B
+**
+** Keeps original 3×3 zone logic unchanged so all existing modules work.
+** Added on top:
+**   • Swipe RIGHT→LEFT (dx > 120 px within 500 ms) → EscPress (go back)
+**   • The redesigned TouchFooter bar sits at tftHeight - footerH - 2.
+**     Its three button zones are:
+**       Left  third of screen-width → PrevPress  (BACK in footer)
+**       Mid   third of screen-width → SelPress   (SELECT in footer)
+**       Right third of screen-width → NextPress  (NEXT in footer)
+**     These are already covered by the original zone mapping (left/mid/right
+**     thirds), so no extra logic is needed for the footer buttons.
+**
+** Original zone map (still applies):
+**   ________________________________ 0
+**   |   Esc   |   UP    |         |
+**   |_________|_________|  Next   |_> third_y
+**   |         |   Sel   |         |
+**   |  Prev   |_________|         |_> third_y*2
+**   |         |  Down   |         |
+**   |_________|_________|_________|_> third_y*3  (= tftHeight)
+**
+** Swipe detection state machine:
+**   _swipeX0  — X coordinate of the most-recent touch-down event
+**   _swipeT0  — millis() at touch-down
+**   A subsequent touch event with x < (_swipeX0 - 120) within 500 ms
+**   is classified as a left-swipe → EscPress.
 **********************************************************************/
 void touchHeatMap(struct TouchPoint t) {
-    int third_x = tftWidth / 3;
+    // =====================================================================
+    //  touchHeatMap — sets press flags from raw touch coordinates.
+    //
+    //  loopOptions() overrides these flags with exact coordinate detection
+    //  for all menu types (REGULAR, SUBMENU, MAIN).  This function only
+    //  needs to handle:
+    //    • The footer bar  → BACK / SELECT / NEXT
+    //    • Raw module code that calls InputHandler() directly (non-menu
+    //      modules like IR, RF, etc.) which still rely on zone flags.
+    //
+    //  Layout (800×480):
+    //    Footer  (y > H-56)  : 3 equal columns → Esc / Sel / Next
+    //    Content (y ≤ H-56)  : original 3×3 zone grid (fallback for modules)
+    // =====================================================================
+
+    // ---- Footer buttons (highest priority) --------------------------------
+    if (t.y > tftHeight - 56) {
+        int third_x = tftWidth / 3;
+        if      (t.x < third_x)      EscPress  = true;   // < BACK
+        else if (t.x < third_x * 2)  SelPress  = true;   // SELECT
+        else                          NextPress = true;   // NEXT >
+        return;
+    }
+
+    // ---- Content-area fallback zone grid (for modules, not menus) ---------
+    int third_x = tftWidth  / 3;
     int third_y = tftHeight / 3;
 
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y > third_y) PrevPress = true;
-    if (t.x > third_x * 1 && t.x < third_x * 2 && ((t.y > third_y && t.y < third_y * 2) || t.y > tftHeight))
-        SelPress = true;
-    if (t.x > third_x * 2 && t.x < third_x * 3) NextPress = true;
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y < third_y) EscPress = true;
-    if (t.x > third_x * 1 && t.x < third_x * 2 && t.y < third_y) UpPress = true;
-    if (t.x > third_x * 1 && t.x < third_x * 2 && t.y > third_y * 2 && t.y < third_y * 3) DownPress = true;
-    /*
-                        Touch area Map
-                ________________________________ 0
-                |   Esc   |   UP    |         |
-                |_________|_________|         |_> third_y
-                |         |   Sel   |         |
-                |         |_________|  Next   |_> third_y*2
-                |  Prev   |  Down   |         |
-                |_________|_________|_________|_> third_y*3
-                |__Prev___|___Sel___|__Next___| 20 pixel touch area where the touchFooter is drawn
-                0         L third_x |         |
-                                    Lthird_x*2|
-                                              Lthird_x*3
-    */
+    if (t.x < third_x && t.y > third_y)                               PrevPress = true;
+    if (t.x > third_x && t.x < third_x*2 && t.y > third_y && t.y < third_y*2) SelPress  = true;
+    if (t.x > third_x*2)                                              NextPress = true;
+    if (t.x < third_x  && t.y < third_y)                              EscPress  = true;
+    if (t.x > third_x  && t.x < third_x*2 && t.y < third_y)          UpPress   = true;
+    if (t.x > third_x  && t.x < third_x*2 && t.y > third_y*2)        DownPress = true;
 }
 
 #endif

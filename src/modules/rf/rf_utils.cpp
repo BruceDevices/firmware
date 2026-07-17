@@ -238,6 +238,23 @@ bool initRfModule(String mode, float frequency) {
     // use default frequency if no one is passed
     if (!frequency) frequency = bruceConfigPins.rfFreq;
 
+    // Guard the capacitive-touch / IO-expander I2C bus. The single-pin RF
+    // defaults are rfTx=GROVE_SDA / rfRx=GROVE_SCL, which on boards that run
+    // GT911 touch + an IO expander on that same I2C bus would get torn down by
+    // gpio_reset_pin()/pinMode() below — killing touch and trapping the user
+    // with no way out. There's no RF radio on those pins anyway, so refuse.
+#if defined(HAS_CAPACITIVE_TOUCH) && defined(GROVE_SDA) && defined(GROVE_SCL)
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
+        int rtx = bruceConfigPins.rfTx, rrx = bruceConfigPins.rfRx;
+        if (rtx < 0 || rrx < 0 || rtx == GROVE_SDA || rtx == GROVE_SCL || rrx == GROVE_SDA ||
+            rrx == GROVE_SCL) {
+            Serial.println("RF disabled: rf pins conflict with the I2C touch bus");
+            displayError("RF not available", true);
+            return false;
+        }
+    }
+#endif
+
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
         SPIClass *ccSpi = acquireSPIBus(
             bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
