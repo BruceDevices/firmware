@@ -20,46 +20,10 @@ BLEScan *pBLEScan = nullptr;
 int scanTime = SCANTIME;
 
 //=============================================================================
-// AdvertisedDeviceCallbacks - DEFINITION
+// Global Instance - Definition of the pointer
 //=============================================================================
 
-// Static callback instance
 AdvertisedDeviceCallbacks* g_scanCallbacks = nullptr;
-
-// Class definition - only here, not in header!
-class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
-public:
-    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
-        if (!advertisedDevice) return;
-        
-        if (options.size() >= MAX_DISPLAY_DEVICES) {
-            if (pBLEScan) {
-                pBLEScan->stop();
-                Serial.println("Reached max devices, stopping scan");
-            }
-            return;
-        }
-        
-        String bt_title;
-        String bt_name;
-        String bt_address;
-        String bt_signal;
-
-        bt_name = advertisedDevice->getName().c_str();
-        bt_address = advertisedDevice->getAddress().toString().c_str();
-        bt_signal = String(advertisedDevice->getRSSI());
-        
-        if (bt_name.isEmpty()) bt_name = "<no name>";
-        bt_title = bt_name;
-        if (bt_title.isEmpty()) bt_title = bt_address;
-        
-        if (options.size() < MAX_DISPLAY_DEVICES) {
-            options.emplace_back(bt_title.c_str(), [=]() { 
-                ble_info(bt_name, bt_address, bt_signal); 
-            });
-        }
-    }
-};
 
 //=============================================================================
 // Ble Notify
