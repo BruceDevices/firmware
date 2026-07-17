@@ -12,42 +12,63 @@
 #include <globals.h>
 
 //=============================================================================
-// NimBLE Version Detection - Must be consistent across all files
+// NimBLE Version Detection - Simplified for reliability
 //=============================================================================
 
-// Detect NimBLE 2.x by checking for features only available in v2+
-#if defined(NIMBLE_VERSION)
-    #if NIMBLE_VERSION >= 20000
-        #define NIMBLE_V2_PLUS 1
-    #endif
-#elif defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
-    #define NIMBLE_V2_PLUS 1
-#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
-    #define NIMBLE_V2_PLUS 1
-#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
-    #define NIMBLE_V2_PLUS 1
-#elif __has_include(<NimBLEExtAdvertising.h>)
-    #define NIMBLE_V2_PLUS 1
-#endif
-
-// If none of the above matched, check if NimBLEScanResults is a type
+// Define NIMBLE_V2_PLUS based on available features
+// We check for NimBLEScanCallbacks which is v2-specific
 #ifndef NIMBLE_V2_PLUS
+    // Check if NimBLEScanCallbacks is defined (v2 feature)
     #ifdef __has_include
         #if __has_include(<NimBLEScan.h>)
-            // Try to detect v2 by checking for a v2-only feature
-            // We'll use a compile-time check
+            // Try to detect v2 by checking for a v2-only type
+            // We'll use a simple approach: check if NimBLEScanCallbacks exists
             namespace __nimble_detect {
-                template<typename T> class has_getResults {
-                    template<typename U> static auto test(int) -> decltype(std::declval<U>().getResults(0), std::true_type());
-                    template<typename> static auto test(...) -> std::false_type;
-                public:
-                    static const bool value = decltype(test<NimBLEScan>(0))::value;
-                };
+                template<typename...> struct void_type { typedef void type; };
+                template<typename T, typename = void> struct has_scan_callbacks : std::false_type {};
+                template<typename T> struct has_scan_callbacks<T, 
+                    typename void_type<typename T::ScanCallbacks>::type> : std::true_type {};
             }
-            #if __nimble_detect::has_getResults<NimBLEScan>::value
+            // If the compiler can see NimBLEScanCallbacks, we're on v2+
+            #if __nimble_detect::has_scan_callbacks<NimBLEDevice>::value
                 #define NIMBLE_V2_PLUS 1
             #endif
         #endif
+    #endif
+#endif
+
+// Check specific NimBLE version macros
+#ifndef NIMBLE_V2_PLUS
+    #if defined(NIMBLE_VERSION)
+        #if NIMBLE_VERSION >= 20000
+            #define NIMBLE_V2_PLUS 1
+        #endif
+    #endif
+#endif
+
+#ifndef NIMBLE_V2_PLUS
+    #if defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#endif
+
+#ifndef NIMBLE_V2_PLUS
+    #if defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#endif
+
+// If we're on ESP-IDF 5.0+, likely using NimBLE 2.x
+#ifndef NIMBLE_V2_PLUS
+    #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#endif
+
+// Check for NimBLEExtAdvertising.h which is v2-specific
+#ifndef NIMBLE_V2_PLUS
+    #if __has_include(<NimBLEExtAdvertising.h>)
+        #define NIMBLE_V2_PLUS 1
     #endif
 #endif
 
@@ -55,6 +76,9 @@
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 0
 #endif
+
+// Debug output to help with troubleshooting
+#pragma message("NIMBLE_V2_PLUS = " __STRINGIFY(NIMBLE_V2_PLUS))
 
 //=============================================================================
 // BLE Constants
