@@ -7,7 +7,7 @@
 
 #include "HFP_Exploit.h"
 #include "fastpair_crypto.h"
-#include "ble_common.h"  // This provides AdvertisedDeviceCallbacks
+#include "ble_common.h"
 #include <NimBLEDevice.h>
 #include <WString.h>
 #include <freertos/FreeRTOS.h>
@@ -28,7 +28,6 @@ bool check(int key);
 // NimBLE Version - MANUAL FORCE FOR NIMBLE 2.x
 //=============================================================================
 
-// Since you're using NimBLE 2.3.7+, set this to 1
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 1
 #endif
