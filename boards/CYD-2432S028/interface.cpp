@@ -39,6 +39,7 @@ CYD28_TouchR touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
 SPIClass touchSPI;
 void _setup_gpio() {
 #ifndef HAS_CAPACITIVE_TOUCH // Capacitive Touchscreen uses I2C to communicate
+    touch.setRotation(3); // if x is mirrored and y is mirrorred
     pinMode(XPT2046_CS, OUTPUT);
     digitalWrite(XPT2046_CS, HIGH);
 #endif
