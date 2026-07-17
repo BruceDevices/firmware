@@ -14,84 +14,19 @@
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_TX_UUID "1bc68efe-f3e3-11e9-81b4-2a2ae2dbcce4"
 
-// Limit the number of devices to prevent memory issues
 #define MAX_DISPLAY_DEVICES 100
 
 BLEScan *pBLEScan = nullptr;
-int scanTime = SCANTIME; // In seconds
-
-bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries) {
-    if (chr == nullptr) return false;
-    if (chr->notify(value, length)) return true;
-    for (uint8_t i = 0; i < retries; i++) {
-        vTaskDelay(1);
-        if (chr->notify(value, length)) return true;
-    }
-    return false;
-}
-
-bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries) {
-    if (chr == nullptr) return false;
-    if (chr->notify()) return true;
-    for (uint8_t i = 0; i < retries; i++) {
-        vTaskDelay(1);
-        if (chr->notify()) return true;
-    }
-    return false;
-}
-
-#define ENDIAN_CHANGE_U16(x) ((((x) & 0xFF00) >> 8) + (((x) & 0xFF) << 8))
-
-BLEServer *pServer = NULL;
-BLEService *pService = NULL;
-BLECharacteristic *pTxCharacteristic;
-BLECharacteristic *pRxCharacteristic;
-bool bleDataTransferEnabled = false;
-
-bool deviceConnected = false;
-bool oldDeviceConnected = false;
-
-class MyServerCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer *pServer) { deviceConnected = true; };
-
-    void onDisconnect(BLEServer *pServer) { deviceConnected = false; }
-};
-
-class MyCallbacks : public BLECharacteristicCallbacks {
-    NimBLEAttValue data;
-    void onWrite(NimBLECharacteristic *pCharacteristic) { data = pCharacteristic->getValue(); }
-};
-
-uint8_t sta_mac[6];
-char strID[18];
-char strAddl[200];
-
-void ble_info(const String &name, const String &address, const String &signal) {
-    drawMainBorder();
-    tft.setTextColor(bruceConfig.priColor);
-    tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);
-    tft.drawString("Name: " + name, 10, 48);
-    tft.drawString("Adresse: " + address, 10, 66);
-    tft.drawString("Signal: " + String(signal) + " dBm", 10, 84);
-    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, tftHeight - 20, 1);
-
-    delay(300);
-    while (!check(SelPress)) {
-        while (!check(SelPress)) { yield(); }
-        returnToMenu = true;
-        break;
-    }
-}
+int scanTime = SCANTIME;
 
 //=============================================================================
-// NimBLE Callbacks - Version-specific with proper lifetime management
+// AdvertisedDeviceCallbacks - DEFINITION
 //=============================================================================
 
-// Static callback instances to prevent premature deletion
+// Static callback instance
 AdvertisedDeviceCallbacks* g_scanCallbacks = nullptr;
 
-#if NIMBLE_V2_PLUS
-// NimBLE 2.x uses NimBLEScanCallbacks with const pointers
+// Class definition - only here, not in header!
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
 public:
     void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
@@ -124,52 +59,89 @@ public:
             });
         }
     }
-    
-    void onScanEnd(NimBLEScanResults results, int reason) override {
-        Serial.printf("Scan ended: %d devices found, reason: %d\n", results.getCount(), reason);
-    }
 };
-#else
-// NimBLE 1.x uses NimBLEAdvertisedDeviceCallbacks
-class AdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
-public:
-    void onResult(NimBLEAdvertisedDevice *advertisedDevice) override {
-        if (!advertisedDevice) return;
-        
-        if (options.size() >= MAX_DISPLAY_DEVICES) {
-            if (pBLEScan) {
-                pBLEScan->stop();
-                Serial.println("Reached max devices, stopping scan");
-            }
-            return;
-        }
-        
-        String bt_title;
-        String bt_name;
-        String bt_address;
-        String bt_signal;
 
-        bt_name = advertisedDevice->getName().c_str();
-        bt_address = advertisedDevice->getAddress().toString().c_str();
-        bt_signal = String(advertisedDevice->getRSSI());
-        
-        if (bt_name.isEmpty()) bt_name = "<no name>";
-        bt_title = bt_name;
-        if (bt_title.isEmpty()) bt_title = bt_address;
-        
-        if (options.size() < MAX_DISPLAY_DEVICES) {
-            options.emplace_back(bt_title.c_str(), [=]() { 
-                ble_info(bt_name, bt_address, bt_signal); 
-            });
-        }
+//=============================================================================
+// Ble Notify
+//=============================================================================
+
+bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries) {
+    if (chr == nullptr) return false;
+    if (chr->notify(value, length)) return true;
+    for (uint8_t i = 0; i < retries; i++) {
+        vTaskDelay(1);
+        if (chr->notify(value, length)) return true;
     }
+    return false;
+}
+
+bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries) {
+    if (chr == nullptr) return false;
+    if (chr->notify()) return true;
+    for (uint8_t i = 0; i < retries; i++) {
+        vTaskDelay(1);
+        if (chr->notify()) return true;
+    }
+    return false;
+}
+
+//=============================================================================
+// BLE Server
+//=============================================================================
+
+#define ENDIAN_CHANGE_U16(x) ((((x) & 0xFF00) >> 8) + (((x) & 0xFF) << 8))
+
+BLEServer *pServer = NULL;
+BLEService *pService = NULL;
+BLECharacteristic *pTxCharacteristic;
+BLECharacteristic *pRxCharacteristic;
+bool bleDataTransferEnabled = false;
+
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+
+class MyServerCallbacks : public BLEServerCallbacks {
+    void onConnect(BLEServer *pServer) { deviceConnected = true; };
+    void onDisconnect(BLEServer *pServer) { deviceConnected = false; }
 };
-#endif
+
+class MyCallbacks : public BLECharacteristicCallbacks {
+    NimBLEAttValue data;
+    void onWrite(NimBLECharacteristic *pCharacteristic) { data = pCharacteristic->getValue(); }
+};
+
+//=============================================================================
+// BLE Info Display
+//=============================================================================
+
+uint8_t sta_mac[6];
+char strID[18];
+char strAddl[200];
+
+void ble_info(const String &name, const String &address, const String &signal) {
+    drawMainBorder();
+    tft.setTextColor(bruceConfig.priColor);
+    tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);
+    tft.drawString("Name: " + name, 10, 48);
+    tft.drawString("Adresse: " + address, 10, 66);
+    tft.drawString("Signal: " + String(signal) + " dBm", 10, 84);
+    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, tftHeight - 20, 1);
+
+    delay(300);
+    while (!check(SelPress)) {
+        while (!check(SelPress)) { yield(); }
+        returnToMenu = true;
+        break;
+    }
+}
 
 static bool is_ble_inited = false;
 
+//=============================================================================
+// Stop BLE Stack
+//=============================================================================
+
 void stopBLEStack() {
-    // Clean up scan callbacks first
     if (g_scanCallbacks) {
         delete g_scanCallbacks;
         g_scanCallbacks = nullptr;
@@ -178,7 +150,6 @@ void stopBLEStack() {
     if (pBLEScan) {
         pBLEScan->stop();
         pBLEScan->clearResults();
-        // Don't delete pBLEScan - it's owned by BLEDevice
         pBLEScan = nullptr;
     }
 
@@ -211,13 +182,16 @@ void stopBLEStack() {
 #endif
 }
 
+//=============================================================================
+// BLE Scan Setup
+//=============================================================================
+
 bool ble_scan_setup() {
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
             wifiDisconnect();
             delay(200);
         }
-
         stopBLEStack();
         delay(100);
     }
@@ -230,7 +204,6 @@ bool ble_scan_setup() {
     }
     
     if (!is_ble_inited) {
-        // Use a minimal name to save RAM
         BLEDevice::init("");
         is_ble_inited = true;
     }
@@ -242,45 +215,37 @@ bool ble_scan_setup() {
         return false;
     }
     
-    // Clean up old callbacks if they exist
     if (g_scanCallbacks) {
         delete g_scanCallbacks;
         g_scanCallbacks = nullptr;
     }
     
-    // Create new callbacks
     g_scanCallbacks = new AdvertisedDeviceCallbacks();
     if (!g_scanCallbacks) {
         displayError("Failed to create callbacks", true);
         return false;
     }
     
-#if NIMBLE_V2_PLUS
     pBLEScan->setScanCallbacks(g_scanCallbacks);
-#else
-    pBLEScan->setAdvertisedDeviceCallbacks(g_scanCallbacks);
-#endif
-
     pBLEScan->setActiveScan(true);
     pBLEScan->setInterval(SCAN_INT);
     pBLEScan->setWindow(SCAN_WINDOW);
     pBLEScan->setDuplicateFilter(false);
 
     esp_read_mac(sta_mac, ESP_MAC_BT);
-
     sprintf(
         strID,
         "%02X:%02X:%02X:%02X:%02X:%02X",
-        sta_mac[0],
-        sta_mac[1],
-        sta_mac[2],
-        sta_mac[3],
-        sta_mac[4],
-        sta_mac[5]
+        sta_mac[0], sta_mac[1], sta_mac[2],
+        sta_mac[3], sta_mac[4], sta_mac[5]
     );
     vTaskDelay(100 / portTICK_PERIOD_MS);
     return true;
 }
+
+//=============================================================================
+// BLE Scan
+//=============================================================================
 
 void ble_scan() {
     displayTextLine("Scanning..");
@@ -298,39 +263,23 @@ void ble_scan() {
         return;
     }
 
-    // Clear previous results before scanning
     pBLEScan->clearResults();
 
-    // Use a try-catch block to handle potential exceptions
     try {
-#if NIMBLE_V2_PLUS
-        // NimBLE 2.x: start() returns bool, getResults() gets the data
-        // Time is in milliseconds for NimBLE 2.x
         bool scanStarted = pBLEScan->start(scanTime * 1000, false);
         if (!scanStarted) {
             displayError("Failed to start BLE scan");
             pBLEScan->clearResults();
             return;
         }
-        // Get results - timeout in milliseconds
         BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
-#else
-        // NimBLE 1.x: start() returns results directly, time in seconds
-        BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
-#endif
 
         int deviceCount = foundDevices.getCount();
         int processedCount = 0;
-        
-        // Cap the number of devices to prevent memory issues
         int maxToProcess = min(deviceCount, MAX_DISPLAY_DEVICES);
         
         for (int i = 0; i < maxToProcess && processedCount < MAX_DISPLAY_DEVICES; i++) {
-#if NIMBLE_V2_PLUS
             const NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
-#else
-            NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
-#endif
             if (!advertisedDevice) continue;
             
             String bt_title;
@@ -354,7 +303,6 @@ void ble_scan() {
             }
         }
 
-        // Show "and more" if we hit the limit
         if (options.size() >= MAX_DISPLAY_DEVICES) {
             options.emplace_back("... and more devices", nullptr);
         }
@@ -364,13 +312,10 @@ void ble_scan() {
         return;
     }
     
-    // Stop scan
     if (pBLEScan) {
         pBLEScan->stop();
-        // Don't clear results here - we need them for display
     }
     
-    // Only stop BLE if it wasn't active before and we're done with it
     if (!bleWasActiveBefore) {
 #if !defined(LITE_VERSION)
         if (!BLEStateManager::isBLEActive()) {
@@ -390,6 +335,10 @@ void ble_scan() {
         delay(1000);
     }
 }
+
+//=============================================================================
+// BLE Server Init
+//=============================================================================
 
 bool initBLEServer() {
     uint64_t chipid = ESP.getEfuseMac();
@@ -429,16 +378,12 @@ bool initBLEServer() {
     }
     pRxCharacteristic->setCallbacks(new MyCallbacks());
 
-#if NIMBLE_V2_PLUS
-    // NimBLE 2.x: Services start automatically when server starts
-    // No need to call pService->start()
-#else
-    // NimBLE 1.x: Need to call pService->start()
-    pService->start();
-#endif
-
     return true;
 }
+
+//=============================================================================
+// BLE Send Display
+//=============================================================================
 
 void disPlayBLESend() {
     uint8_t senddata[2] = {0};
@@ -518,6 +463,10 @@ void disPlayBLESend() {
     pServer->getAdvertising()->stop();
     BLEConnected = false;
 }
+
+//=============================================================================
+// BLE Test
+//=============================================================================
 
 void ble_test() {
     printf("ble test\n");
