@@ -450,6 +450,14 @@ void markHandshakeReady(uint64_t key) {
     portEXIT_CRITICAL(&handshakeReadyMux);
 }
 
+bool sniffer_is_handshake_ready(uint64_t key) {
+    bool ready = false;
+    portENTER_CRITICAL(&handshakeReadyMux);
+    ready = handshakeReadyBssids.find(key) != handshakeReadyBssids.end();
+    portEXIT_CRITICAL(&handshakeReadyMux);
+    return ready;
+}
+
 static void resetHandshakeTracking() {
     portENTER_CRITICAL(&handshakeReadyMux);
     handshakeReadyBssids.clear();

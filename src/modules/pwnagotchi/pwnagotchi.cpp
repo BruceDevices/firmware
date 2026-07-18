@@ -59,7 +59,7 @@ void advertise(uint8_t channel);
 void wakeUp();
 void toggle_all_channels();
 static uint64_t bruceMacToKey(const void *mac);
-extern std::set<uint64_t> handshakeReadyBssids;
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -198,6 +198,7 @@ void brucegotchi_start() {
 
     uint8_t reconIdx = 0;
     uint8_t interactIdx = 0;
+    bool didDeauth = false;
 
     // Sorted channel list (rebuilt after each recon)
     std::vector<uint8_t> sortedChannels;
@@ -314,7 +315,6 @@ void brucegotchi_start() {
             if (interactIdx < sortedChannels.size()) {
                 uint8_t currentChan = sortedChannels[interactIdx];
                 unsigned long elapsed = millis() - phaseStart;
-                bool didDeauth = false;
 
                 if (elapsed < 50) {
                     // Just switched — set channel
@@ -339,7 +339,7 @@ void brucegotchi_start() {
                         uint64_t key = bruceMacToKey(beacon.MAC);
 
                         // [1] Skip APs that already have a valid handshake
-                        if (handshakeReadyBssids.find(key) != handshakeReadyBssids.end()) {
+                        if (sniffer_is_handshake_ready(key)) {
                             skipped++;
                             continue;
                         }
@@ -371,6 +371,7 @@ void brucegotchi_start() {
                 uint32_t waitTarget = didDeauth ? BRUCE_HOP_RECON_MS : BRUCE_MIN_RECON_MS;
                 if (elapsed >= (uint32_t)(50 + BRUCE_RECON_DEAUTH_MS + waitTarget)) {
                     interactIdx++;
+                    didDeauth = false;
                     phaseStart = millis();
 
                     // Quick update
@@ -409,6 +410,7 @@ void brucegotchi_start() {
                 phase = BrucePhase::RECON;
                 reconIdx = 0;
                 interactIdx = 0;
+                didDeauth = false;
                 sortedChannels.clear();
                 apDeauthCount.clear();
 
