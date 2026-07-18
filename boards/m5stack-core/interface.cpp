@@ -39,7 +39,12 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, check(SelPress), AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    M5.update();
+    // RFID driver mid-transaction - skip this cycle's M5.update(), buttons below are plain GPIO
+    // so they're unaffected; just retry next tick.
+    if (trylockSysI2CBus()) {
+        M5.update();
+        unlockSysI2CBus();
+    }
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
 

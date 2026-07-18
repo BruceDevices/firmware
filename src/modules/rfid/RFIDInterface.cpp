@@ -8,6 +8,7 @@
  */
 
 #include "RFIDInterface.h"
+#include "apdu.h"
 #include "core/sd_functions.h"
 #include <FS.h>
 
@@ -41,7 +42,8 @@ int RFIDInterface::loadFromFile(const String &filepath) {
         // FeliCa dumps (PN532::save()) reuse the SAK/ATQA/"pages" fields for
         // PMm/system code/block count under FeliCa-specific line names.
         else if (line.startsWith("Manufacture id:")) printableUID.sak = strData;
-        else if (line.startsWith("Pages total:") || line.startsWith("Blocks total:")) totalPages = strData.toInt();
+        else if (line.startsWith("Pages total:") || line.startsWith("Blocks total:"))
+            totalPages = strData.toInt();
         else if (line.startsWith("Pages read:") || line.startsWith("Blocks read:")) pageReadSuccess = false;
         else if (line.startsWith("Page ")) {
             strAllPages += line + "\n";
@@ -106,4 +108,9 @@ void RFIDInterface::buildNdefMessage(const String &type, const String &value) {
         ndefMessage.payloadSize = len + 1;
     }
     ndefMessage.messageSize = ndefMessage.payloadSize + 4;
+}
+
+void RFIDInterface::buildWifiNdef(const String &ssid, const String &password) {
+    std::vector<uint8_t> wscPayload = Ndef::wifiCredentialPayload(ssid.c_str(), password.c_str());
+    rawNdefRecord = Ndef::mimeRecord("application/vnd.wfa.wsc", wscPayload, {'1'});
 }

@@ -666,22 +666,30 @@ int ST25R3916::_writeNdefBlocks(rfalNfcDevice *dev) {
     uint8_t ndefPayload[180] = {0};
     size_t idx = 0;
 
-    if (ndefMessage.messageSize == 0 || ndefMessage.payloadSize == 0) return FAILURE;
-    if ((size_t)ndefMessage.messageSize + 3 > sizeof(ndefPayload)) return FAILURE;
+    if (!rawNdefRecord.empty()) {
+        if (rawNdefRecord.size() + 3 > sizeof(ndefPayload) || rawNdefRecord.size() > 254) return FAILURE;
+        ndefPayload[idx++] = 0x03;
+        ndefPayload[idx++] = static_cast<uint8_t>(rawNdefRecord.size());
+        for (uint8_t b : rawNdefRecord) ndefPayload[idx++] = b;
+        ndefPayload[idx++] = 0xFE;
+    } else {
+        if (ndefMessage.messageSize == 0 || ndefMessage.payloadSize == 0) return FAILURE;
+        if ((size_t)ndefMessage.messageSize + 3 > sizeof(ndefPayload)) return FAILURE;
 
-    ndefPayload[idx++] = ndefMessage.begin;
-    ndefPayload[idx++] = ndefMessage.messageSize;
-    ndefPayload[idx++] = ndefMessage.header;
-    ndefPayload[idx++] = ndefMessage.tnf;
-    ndefPayload[idx++] = ndefMessage.payloadSize;
-    ndefPayload[idx++] = ndefMessage.payloadType;
+        ndefPayload[idx++] = ndefMessage.begin;
+        ndefPayload[idx++] = ndefMessage.messageSize;
+        ndefPayload[idx++] = ndefMessage.header;
+        ndefPayload[idx++] = ndefMessage.tnf;
+        ndefPayload[idx++] = ndefMessage.payloadSize;
+        ndefPayload[idx++] = ndefMessage.payloadType;
 
-    for (uint8_t i = 0; i < ndefMessage.payloadSize && idx < sizeof(ndefPayload); i++) {
-        ndefPayload[idx++] = ndefMessage.payload[i];
+        for (uint8_t i = 0; i < ndefMessage.payloadSize && idx < sizeof(ndefPayload); i++) {
+            ndefPayload[idx++] = ndefMessage.payload[i];
+        }
+
+        if (idx >= sizeof(ndefPayload)) return FAILURE;
+        ndefPayload[idx++] = ndefMessage.end;
     }
-
-    if (idx >= sizeof(ndefPayload)) return FAILURE;
-    ndefPayload[idx++] = ndefMessage.end;
 
     int maxBytes = (totalPages > 0 ? (totalPages - 5 - 4) : 36) * 4;
     if (maxBytes <= 0 || (int)idx > maxBytes) {
@@ -1459,7 +1467,12 @@ static constexpr uint32_t kT2tPostActivationTimeoutMs = 60;
 ::ReturnCode ST25R3916::_t2tReadPage(uint8_t page, uint8_t *rxBuf, uint16_t rxBufLen, uint16_t *rcvLen) {
     uint8_t cmd[2] = {0x30, page}; // NFC Forum Type 2 Tag READ command (T2T 1.0 5.2, table 11)
     return _hw->rfalTransceiveBlockingTxRx(
-        cmd, sizeof(cmd), rxBuf, rxBufLen, rcvLen, RFAL_TXRX_FLAGS_DEFAULT,
+        cmd,
+        sizeof(cmd),
+        rxBuf,
+        rxBufLen,
+        rcvLen,
+        RFAL_TXRX_FLAGS_DEFAULT,
         rfalConvMsTo1fc(kT2tPostActivationTimeoutMs)
     );
 }
@@ -1520,7 +1533,12 @@ bool ST25R3916::_readNtagSignature() {
     uint8_t rx[40] = {0};
     uint16_t rxLen = 0;
     auto err = _hw->rfalTransceiveBlockingTxRx(
-        cmd, sizeof(cmd), rx, sizeof(rx), &rxLen, RFAL_TXRX_FLAGS_DEFAULT,
+        cmd,
+        sizeof(cmd),
+        rx,
+        sizeof(rx),
+        &rxLen,
+        RFAL_TXRX_FLAGS_DEFAULT,
         rfalConvMsTo1fc(kT2tPostActivationTimeoutMs)
     );
     if (err != ST_ERR_NONE || rxLen < 32) {
@@ -1544,7 +1562,12 @@ bool ST25R3916::_readNtagCounters() {
         uint8_t rx[4] = {0};
         uint16_t rxLen = 0;
         auto err = _hw->rfalTransceiveBlockingTxRx(
-            cmd, sizeof(cmd), rx, sizeof(rx), &rxLen, RFAL_TXRX_FLAGS_DEFAULT,
+            cmd,
+            sizeof(cmd),
+            rx,
+            sizeof(rx),
+            &rxLen,
+            RFAL_TXRX_FLAGS_DEFAULT,
             rfalConvMsTo1fc(kT2tPostActivationTimeoutMs)
         );
         if (err == ST_ERR_NONE && rxLen >= 3) {
@@ -3025,8 +3048,15 @@ void ST25R3916::_buildT4TFiles() {
 
     uint8_t rec[400];
     uint16_t rl = 0;
-    if (ndefMessage.payloadSize > 0 &&
-        (ndefMessage.payloadType == NDEF_URI || ndefMessage.payloadType == NDEF_TEXT)) {
+    if (!rawNdefRecord.empty() && rawNdefRecord.size() <= sizeof(rec)) {
+        // Record shapes ndefMessage can't hold (MIME/WSC Wi-Fi records, etc.)
+        // are already a complete record - header through payload.
+        memcpy(rec, rawNdefRecord.data(), rawNdefRecord.size());
+        rl = (uint16_t)rawNdefRecord.size();
+    } else if (
+        ndefMessage.payloadSize > 0 &&
+        (ndefMessage.payloadType == NDEF_URI || ndefMessage.payloadType == NDEF_TEXT)
+    ) {
         // Single short NDEF record from the ndefMessage struct (set via 'rfid ndef').
         rec[0] = 0xD1; // MB|ME|SR, TNF=well-known
         rec[1] = 0x01; // type length

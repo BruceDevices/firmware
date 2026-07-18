@@ -112,6 +112,7 @@ private:
     void create_ndef_link();
     void build_ndef_text_payload(const String &text);
     void build_ndef_url_payload(const String &url);
+    void buildWifiNdef(const String &ssid, const String &password);
 };
 
 #endif

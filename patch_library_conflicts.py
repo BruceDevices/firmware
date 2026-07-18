@@ -152,6 +152,54 @@ conflicts = [
         '    digitalWrite(cs_pin, HIGH);\n'
         '  }'
     ),
+    # NFC-A anti-collision (SENS/SDD/SEL) response timeout is ~120us -
+    # generous enough for a real tag's silicon, but too tight for a
+    # PN532-in-target-mode emulator, which relays TgInitAsTarget/AutoColl over
+    # I2C to its host. Bench-confirmed: with this at spec (1620/fc), the
+    # ST25R3916 reader never once completed activation against a PN532 T4T
+    # target across the whole test session; bumped to 5ms, it did (still not
+    # every attempt - see the retry patch right below for the other half of
+    # this fix - but previously it was zero times ever).
+    (
+        ".pio/libdeps/*/NFC-RFAL-fork/src/rfal_nfca.h",
+        r'#define RFAL_NFCA_FDTMIN          1620U',
+        '#define RFAL_NFCA_FDTMIN          rfalConvMsTo1fc(5)'
+    ),
+    # SDD_REQ/SEL_REQ retries during anti-collision are unconditionally
+    # disabled (rt=0, meaning a single-shot attempt) whenever devLimit != 0 -
+    # i.e. exactly Bruce's own single-target read/emulate-read case
+    # (params.devLimit = 1 in ST25R3916.cpp). One missed/late response (see
+    # the FDTMIN patch above) then fails activation outright with no recourse.
+    # Retries cost only a few ms of delay and are otherwise unconditionally
+    # safe, so always allow them instead of gating on devLimit.
+    (
+        ".pio/libdeps/*/NFC-RFAL-fork/src/rfal_nfca.cpp",
+        r'\(devLimit == 0U\) \? RFAL_NFCA_N_RETRANS : 0U',
+        '/* Bruce: always retry, see patch_library_conflicts.py */ RFAL_NFCA_N_RETRANS'
+    ),
+    # The WUPA sent at the top of rfalNfcaPollerFullCollisionResolution() (the anti-collision
+    # pass POLL_COLAVOIDANCE actually runs, heavier than the lightweight TECHDETECT probe) had no
+    # retry wrapper at all - unlike the SDD_REQ/SEL_REQ calls below it, a single missed/late
+    # response against a PN532 I2C-relayed target fails the whole collision resolution outright
+    # (ST_ERR_TIMEOUT) with zero recourse. Bench-confirmed this was the dominant remaining cause
+    # of ST25R3916 failing to activate a PN532 T4T target: once this call times out, devCnt stays
+    # 0 for NFC-A and the multi-tech discovery (A|B|V|F) falls through to NFC-F, which a PN532
+    # armed for T4T still answers (FeliCaParams/POL_REQ listening can't be disabled independently
+    # of Mode - see PN532.cpp), producing a wrong-protocol device that fails Activation instead of
+    # surfacing the real NFC-A timeout. Wrapping this call the same way as SDD/SEL fixed it.
+    (
+        ".pio/libdeps/*/NFC-RFAL-fork/src/rfal_nfca.cpp",
+        r'ret = rfalRfDev->rfalISO14443ATransceiveShortFrame\(RFAL_14443A_SHORTFRAME_CMD_WUPA, \(uint8_t \*\)&nfcaDevList->sensRes, \(uint8_t\)rfalConvBytesToBits\(sizeof\(rfalNfcaSensRes\)\), &rcvLen, RFAL_NFCA_FDTMIN\);',
+        'rfalNfcaTxRetry(ret, rfalRfDev->rfalISO14443ATransceiveShortFrame(RFAL_14443A_SHORTFRAME_CMD_WUPA, (uint8_t *)&nfcaDevList->sensRes, (uint8_t)rfalConvBytesToBits(sizeof(rfalNfcaSensRes)), &rcvLen, RFAL_NFCA_FDTMIN), (/* Bruce: WUPA had no retry at all - see patch_library_conflicts.py */ RFAL_NFCA_N_RETRANS), RFAL_NFCA_T_RETRANS);'
+    ),
+    # 2 retries (EMVCo default) is occasionally still not enough margin for PN532's I2C-relayed
+    # response time under load; bumped to 4 as a balance between activation reliability and not
+    # inflating worst-case discovery latency against genuinely absent tags.
+    (
+        ".pio/libdeps/*/NFC-RFAL-fork/src/rfal_nfca.cpp",
+        r'#define RFAL_NFCA_N_RETRANS         2U',
+        '#define RFAL_NFCA_N_RETRANS         4U'
+    ),
 ]
 
 for file_pattern, search, replace in conflicts:

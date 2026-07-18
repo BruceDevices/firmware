@@ -13,6 +13,7 @@
 #include <MFRC522DriverI2C.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522Hack.h>
+#include <algorithm>
 
 #define RFID2_I2C_ADDRESS 0x28
 
@@ -580,6 +581,27 @@ int RFID2::erase_data_blocks() {
 int RFID2::write_ndef_blocks() {
     byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
     if (piccType != MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+
+    if (!rawNdefRecord.empty()) {
+        // Record shapes ndefMessage can't hold (MIME/WSC Wi-Fi records, etc.) -
+        // TLV-wrap (0x03 LEN <record> 0xFE) and page-write generically instead
+        // of reading the fixed Text/URI struct fields below.
+        if (rawNdefRecord.size() > 254) return FAILURE; // single-byte TLV length only
+        size_t ndef_size = rawNdefRecord.size() + 3;
+        size_t payload_size = ndef_size % 4 == 0 ? ndef_size : ndef_size + (4 - (ndef_size % 4));
+        std::vector<uint8_t> ndef_payload(payload_size, 0);
+        ndef_payload[0] = 0x03;
+        ndef_payload[1] = static_cast<uint8_t>(rawNdefRecord.size());
+        std::copy(rawNdefRecord.begin(), rawNdefRecord.end(), ndef_payload.begin() + 2);
+        ndef_payload[ndef_size - 1] = 0xFE;
+
+        for (size_t i = 0; i < payload_size; i += 4) {
+            int block = 4 + (i / 4);
+            byte status = mfrc522.MIFARE_Ultralight_Write((byte)block, ndef_payload.data() + i, 4);
+            if (status != MFRC522::StatusCode::STATUS_OK) return FAILURE;
+        }
+        return SUCCESS;
+    }
 
     byte ndef_size = ndefMessage.messageSize + 3;
     byte payload_size = ndef_size % 4 == 0 ? ndef_size : ndef_size + (4 - (ndef_size % 4));

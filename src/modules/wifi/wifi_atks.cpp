@@ -84,26 +84,26 @@ const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
 };
 // clang-format on
 
-static inline void prepareBeaconPacket(
+// Tags after the SSID (Rates, DS Param/channel, RSN) in the template, starting right after
+// the 32-byte SSID placeholder. Kept as a named offset so the channel byte position below
+// stays correct if the template layout changes.
+constexpr size_t BEACON_TAIL_OFFSET = 70;
+constexpr size_t BEACON_TAIL_LEN = BEACON_PKT_LEN - BEACON_TAIL_OFFSET;
+constexpr size_t BEACON_TAIL_CHANNEL_OFFSET = 82 - BEACON_TAIL_OFFSET;
+
+static inline size_t prepareBeaconPacket(
     uint8_t outPacket[BEACON_PKT_LEN], const uint8_t macAddr[6], const char *ssid, uint8_t ssidLen,
     uint8_t channel, bool setWPAflag = true
 ) {
-    // copy template into a packet
-    memcpy(outPacket, beaconPacketTemplate, BEACON_PKT_LEN);
-
-    // write MAC addresses (source and BSSID)
-    memcpy(&outPacket[10], macAddr, 6); // Source
-    memcpy(&outPacket[16], macAddr, 6); // BSSID
-
-    // ensure SSID slot is cleared (32 bytes) then copy SSID
-    memset(&outPacket[38], 0x20, 32); // keep template behavior
     if (ssidLen > 32) ssidLen = 32;
-    outPacket[37] = ssidLen; // SSID element length
+    memcpy(outPacket, beaconPacketTemplate, 38);
+    memcpy(&outPacket[10], macAddr, 6);
+    memcpy(&outPacket[16], macAddr, 6);
+    outPacket[37] = ssidLen;
     if (ssidLen > 0) { memcpy(&outPacket[38], ssid, ssidLen); }
-
-    // set channel and WPA flags
-    outPacket[82] = channel;
-    outPacket[34] = 0x31;
+    memcpy(&outPacket[38 + ssidLen], &beaconPacketTemplate[BEACON_TAIL_OFFSET], BEACON_TAIL_LEN);
+    outPacket[38 + ssidLen + BEACON_TAIL_CHANNEL_OFFSET] = channel;
+    return 38 + ssidLen + BEACON_TAIL_LEN;
 }
 
 const uint8_t channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // used Wi-Fi channels (available: 1-14)
@@ -811,6 +811,7 @@ void target_atk(const String &tssid, const String &mac, uint8_t channel) {
 }
 
 void generateRandomWiFiMac(uint8_t *mac) {
+    mac[0] = (random(0, 255) & 0xFC) | 0x02;
     for (int i = 1; i < 6; i++) { mac[i] = random(0, 255); }
 }
 
@@ -911,11 +912,9 @@ void beaconSpamList(const char list[]) {
 
         // generate MAC and prepare packet
         generateRandomWiFiMac(macAddr);
-        prepareBeaconPacket(beaconPacket, macAddr, ssidBuf, ssidLen, wifi_channel, true);
-
-        // send 2 packets instead of 3 (makes devices show more networks)
+        size_t pktLen = prepareBeaconPacket(beaconPacket, macAddr, ssidBuf, ssidLen, wifi_channel, true);
         for (int k = 0; k < 2; k++) {
-            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
+            wifiRawTx(WIFI_IF_STA, beaconPacket, pktLen);
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 
@@ -941,11 +940,10 @@ void beaconSpamSingle(String baseSSID) {
 
         // prepare packet
         generateRandomWiFiMac(macAddr);
-        prepareBeaconPacket(beaconPacket, macAddr, currentSSID.c_str(), ssidLen, wifi_channel, true);
-
-        // send 2 packets
+        size_t pktLen =
+            prepareBeaconPacket(beaconPacket, macAddr, currentSSID.c_str(), ssidLen, wifi_channel, true);
         for (int k = 0; k < 2; k++) {
-            wifiRawTx(WIFI_IF_STA, beaconPacket, BEACON_PKT_LEN); // espera o driver drenar em NO_MEM
+            wifiRawTx(WIFI_IF_STA, beaconPacket, pktLen);
             vTaskDelay(1 / portTICK_PERIOD_MS);
         }
 
@@ -967,8 +965,7 @@ void beaconAttack() {
     String singleSSID = "";
     // create empty SSID
     for (int i = 0; i < 32; i++) emptySSID[i] = ' ';
-    // for random generator
-    randomSeed(1);
+    srand(millis()); // seeds rand() (used by randomSSID()) without disabling random()'s hardware RNG
     options = {
         {"Funny SSID",
          [&]() {

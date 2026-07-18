@@ -42,7 +42,9 @@ void _setBrightness(uint8_t brightval) { M5.Display.setBrightness(brightval); }
 void InputHandler(void) {
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
     auto t = M5.Touch.getDetail();
     if (t.isPressed() || t.isHolding()) {
         tm = millis();

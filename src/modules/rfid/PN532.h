@@ -74,6 +74,7 @@ private:
     int read_mifare_classic_data_sector(byte sector);
     int authenticate_mifare_classic(byte block);
     int read_mifare_ultralight_data_blocks();
+    int read_ndef_t4t_data();
 
     int write_data_blocks();
     bool write_mifare_classic_data_block(int block, String data);

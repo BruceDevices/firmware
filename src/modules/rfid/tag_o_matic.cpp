@@ -251,6 +251,12 @@ void TagOMatic::dump_check_details() {
 void TagOMatic::dump_ndef_details() {
     if (!_ndef_created) return;
 
+    if (!_rfid->rawNdefRecord.empty()) {
+        padprintln("Payload type: Wi-Fi (WSC)");
+        padprintln("Payload size: " + String(_rfid->rawNdefRecord.size()) + " bytes");
+        return;
+    }
+
     String payload_type = "";
     switch (_rfid->ndefMessage.payloadType) {
         case RFIDInterface::NDEF_URI: payload_type = "URI"; break;
@@ -546,6 +552,11 @@ void TagOMatic::build_ndef_url_payload(const String &url) {
     _ndef_created = true;
 }
 
+void TagOMatic::buildWifiNdef(const String &ssid, const String &password) {
+    _rfid->buildWifiNdef(ssid, password);
+    _ndef_created = true;
+}
+
 void TagOMatic::create_ndef_text() {
     String ndef_data = keyboard("", NDEF_DATA_SIZE, "NDEF data:");
     if (ndef_data == "\x1B") return;
@@ -558,11 +569,11 @@ void TagOMatic::create_ndef_url() {
     options = {
         {"http://www.",  [&]() { prefix = "http://www."; } },
         {"https://www.", [&]() { prefix = "https://www."; }},
-        {"http://",      [&]() { prefix = "http://"; }      },
-        {"https://",     [&]() { prefix = "https://"; }     },
-        {"tel:",         [&]() { prefix = "tel:"; }         },
-        {"mailto:",      [&]() { prefix = "mailto:"; }      },
-        {"None",         [&]() { prefix = ""; }             },
+        {"http://",      [&]() { prefix = "http://"; }     },
+        {"https://",     [&]() { prefix = "https://"; }    },
+        {"tel:",         [&]() { prefix = "tel:"; }        },
+        {"mailto:",      [&]() { prefix = "mailto:"; }     },
+        {"None",         [&]() { prefix = ""; }            },
     };
 
     loopOptions(options);
@@ -574,14 +585,14 @@ void TagOMatic::create_ndef_url() {
 }
 
 void TagOMatic::create_ndef_wifi() {
-    // Text-record fallback (no NDEF URI record type covers Wi-Fi Simple
-    // Config on this stack): reuses the same "WIFI:T:WPA;S:...;P:...;;"
-    // convention the QR code menu's default "Bruce AP" entry already uses.
+    // A proper NFC Forum Wi-Fi Simple Config record (MIME type
+    // "application/vnd.wfa.wsc" with a binary WSC Credential payload) is what
+    // phones actually look for to show the "connect to this network" prompt.
     options = {};
     for (auto const &entry : bruceConfig.wifi) {
         String ssid = entry.first;
         options.emplace_back(ssid, [this, ssid]() {
-            build_ndef_text_payload("WIFI:T:WPA;S:" + ssid + ";P:" + bruceConfig.getWifiPassword(ssid) + ";;");
+            buildWifiNdef(ssid, bruceConfig.getWifiPassword(ssid));
         });
     }
     options.emplace_back("Manual entry", [this]() {
@@ -589,7 +600,7 @@ void TagOMatic::create_ndef_wifi() {
         if (ssid == "\x1B") return;
         String pwd = keyboard("", 63, "Password:", true);
         if (pwd == "\x1B") return;
-        build_ndef_text_payload("WIFI:T:WPA;S:" + ssid + ";P:" + pwd + ";;");
+        buildWifiNdef(ssid, pwd);
     });
 
     loopOptions(options);

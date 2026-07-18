@@ -51,7 +51,9 @@ void InputHandler(void) {
     static bool btnBWaitingSecondClick = false;
     static bool btnBLongPressFired = false;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
 
     bool emitNext = false;
     bool emitPrev = false;

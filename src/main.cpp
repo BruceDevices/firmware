@@ -1,6 +1,7 @@
 #include "core/main_menu.h"
 #include <globals.h>
 
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/ram_profile.h"
 #include "core/serial_commands/cli.h"
@@ -101,6 +102,7 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
+            checkAndRecoverSysI2CBus();
 #ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
 #endif

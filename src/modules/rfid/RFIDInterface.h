@@ -10,6 +10,7 @@
 #define __RFID_INTERFACE_H__
 
 #include <globals.h>
+#include <vector>
 
 class RFIDInterface {
 public:
@@ -71,6 +72,7 @@ public:
     Uid uid;
     PrintableUID printableUID;
     NdefMessage ndefMessage;
+    std::vector<uint8_t> rawNdefRecord;
     String strAllPages = "";
     // Optional forced emulation mode set by the CLI (e.g. "t4t", "felica").
     // Empty = auto-detect from the loaded tag. Honored by drivers that support it.
@@ -113,6 +115,11 @@ public:
     // serial `rfid ndef` and `rfid emulate t4t` paths so the encoding is
     // identical regardless of entry point.
     void buildNdefMessage(const String &type, const String &value);
+
+    // Build `rawNdefRecord` as an NFC Forum Wi-Fi Simple Config MIME record
+    // ("application/vnd.wfa.wsc") that phones recognize for the "connect to
+    // this network" prompt
+    void buildWifiNdef(const String &ssid, const String &password);
 
     String statusMessage(int status) const {
         switch (status) {
