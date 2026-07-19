@@ -368,13 +368,16 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
 //=============================================================================
 
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
-    // Don't deinit/reinit - use existing stack or initialize if needed
-    if (!is_ble_inited) {
+    NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
+    if (!pAdv) {
         BLEDevice::init(DeviceName);
-        is_ble_inited = true;
+        pAdv = NimBLEDevice::getAdvertising();
+        if (!pAdv) {
+            displayError("Failed to init BLE");
+            return;
+        }
     }
     
-    // Set MAC if we want random
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
@@ -388,19 +391,12 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     myBeacon.setSignalPower(0xc5);
     myBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
 
-    pAdvertising = BLEDevice::getAdvertising();
-    if (!pAdvertising) {
-        displayError("Failed to get advertising");
-        return;
-    }
-    
-    // Stop any existing advertising first
-    pAdvertising->stop();
+    pAdv->stop();
     
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x1A);
     advertisementData.setManufacturerData(myBeacon.getData());
-    pAdvertising->setAdvertisementData(advertisementData);
+    pAdv->setAdvertisementData(advertisementData);
 
     drawMainBorderWithTitle("iBeacon");
     padprintln("");
@@ -408,22 +404,15 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     padprintln("");
     padprintln("Press Any key to STOP.");
 
-    // Start advertising and keep it running
-    pAdvertising->start();
+    pAdv->start();
     BLEConnected = true;
 
-    // Wait for user to exit
     while (!check(AnyKeyPress)) {
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
-    // Stop advertising
-    pAdvertising->stop();
+    pAdv->stop();
     BLEConnected = false;
-    
-    // DO NOT call BLEDevice::deinit() here!
-    // The stack is shared with other modules
-    // Just stop advertising and let the stack stay alive
 }
 
 enum BleSpamAttackType {
@@ -1399,8 +1388,7 @@ static bool bleSpamBuildAdvertisementData(
 
 #ifdef NIMBLE_V2_PLUS
             advertisementData.addData(packet, i);
-#else
-            std::vector<uint8_t> dataVec(packet, packet + i);
+#else            std::vector<uint8_t> dataVec(packet, packet + i);
             advertisementData.addData(dataVec);
 #endif
             return true;
