@@ -363,13 +363,22 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
     return AdvData;
 }
 
+//=============================================================================
+// iBeacon - FIXED: No deinit, just stop advertising
+//=============================================================================
+
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
+    // Don't deinit/reinit - use existing stack or initialize if needed
+    if (!is_ble_inited) {
+        BLEDevice::init(DeviceName);
+        is_ble_inited = true;
+    }
+    
+    // Set MAC if we want random
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
-
-    BLEDevice::init(DeviceName);
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
 
     NimBLEBeacon myBeacon;
@@ -380,6 +389,14 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     myBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
 
     pAdvertising = BLEDevice::getAdvertising();
+    if (!pAdvertising) {
+        displayError("Failed to get advertising");
+        return;
+    }
+    
+    // Stop any existing advertising first
+    pAdvertising->stop();
+    
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x1A);
     advertisementData.setManufacturerData(myBeacon.getData());
@@ -391,20 +408,22 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     padprintln("");
     padprintln("Press Any key to STOP.");
 
+    // Start advertising and keep it running
+    pAdvertising->start();
+    BLEConnected = true;
+
+    // Wait for user to exit
     while (!check(AnyKeyPress)) {
-        pAdvertising->start();
-        Serial.println("Advertizing started...");
-        vTaskDelay(20 / portTICK_PERIOD_MS);
-        pAdvertising->stop();
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-        Serial.println("Advertizing stop");
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
-    BLEDevice::deinit();
-#endif
+    // Stop advertising
+    pAdvertising->stop();
+    BLEConnected = false;
+    
+    // DO NOT call BLEDevice::deinit() here!
+    // The stack is shared with other modules
+    // Just stop advertising and let the stack stay alive
 }
 
 enum BleSpamAttackType {
