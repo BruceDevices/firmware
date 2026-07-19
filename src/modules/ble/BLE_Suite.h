@@ -7,7 +7,6 @@
 
 #include "HFP_Exploit.h"
 #include "fastpair_crypto.h"
-#include "ble_common.h"
 #include <NimBLEDevice.h>
 #include <WString.h>
 #include <freertos/FreeRTOS.h>
@@ -25,11 +24,27 @@ extern BruceConfig bruceConfig;
 bool check(int key);
 
 //=============================================================================
-// NimBLE Version - MANUAL FORCE FOR NIMBLE 2.x
+// NimBLE Version Detection - Must match ble_common.h
 //=============================================================================
 
-#ifndef NIMBLE_V2_PLUS
+// Detect NimBLE 2.x by checking for features only available in v2+
+#if defined(NIMBLE_VERSION)
+    #if NIMBLE_VERSION >= 20000
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#elif defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
     #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
+    #define NIMBLE_V2_PLUS 1
+#elif __has_include(<NimBLEExtAdvertising.h>)
+    #define NIMBLE_V2_PLUS 1
+#endif
+
+// If none of the above matched, default to v1 behavior (safe fallback)
+#ifndef NIMBLE_V2_PLUS
+    #define NIMBLE_V2_PLUS 0
 #endif
 
 //=============================================================================
@@ -40,10 +55,6 @@ bool check(int key);
 #define PASSIVE_SCAN_TIME 8
 #define SCAN_INT 100
 #define SCAN_WINDOW 99
-
-//=============================================================================
-// Note: AdvertisedDeviceCallbacks is defined in ble_common.h
-//=============================================================================
 
 //=============================================================================
 // Enums
