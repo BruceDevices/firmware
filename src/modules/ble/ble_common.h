@@ -12,11 +12,38 @@
 #include <globals.h>
 
 //=============================================================================
-// NimBLE Version - MANUAL FORCE FOR NIMBLE 2.x
+// NimBLE Version Detection - Must be consistent across all files
 //=============================================================================
 
-#ifndef NIMBLE_V2_PLUS
+// Detect NimBLE 2.x by checking for features only available in v2+
+#if defined(NIMBLE_VERSION)
+    #if NIMBLE_VERSION >= 20000
+        #define NIMBLE_V2_PLUS 1
+    #endif
+#elif defined(NIMBLE_CPP_VERSION) && NIMBLE_CPP_VERSION >= 2
     #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR >= 2
+    #define NIMBLE_V2_PLUS 1
+#elif defined(NIMBLE_VERSION_MAJOR) && NIMBLE_VERSION_MAJOR == 1 && NIMBLE_VERSION_MINOR >= 5
+    #define NIMBLE_V2_PLUS 1
+#elif __has_include(<NimBLEExtAdvertising.h>)
+    #define NIMBLE_V2_PLUS 1
+#endif
+
+// If none of the above matched, check if NimBLEScanResults is a type
+#ifndef NIMBLE_V2_PLUS
+    #ifdef __has_include
+        #if __has_include(<NimBLEScan.h>)
+            #if defined(ESP_IDF_VERSION) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+                #define NIMBLE_V2_PLUS 1
+            #endif
+        #endif
+    #endif
+#endif
+
+// If we still don't know, default to v1 behavior (safe fallback)
+#ifndef NIMBLE_V2_PLUS
+    #define NIMBLE_V2_PLUS 0
 #endif
 
 //=============================================================================
@@ -28,61 +55,25 @@
 #define SCAN_INT 100
 #define SCAN_WINDOW 99
 
+// Maximum number of BLE devices to display to prevent memory issues
 #define MAX_DISPLAY_DEVICES 100
 
-//=============================================================================
-// AdvertisedDeviceCallbacks - SINGLE DEFINITION (Header Only)
-//=============================================================================
-
-// Forward declaration of pBLEScan for the callback
-extern BLEScan *pBLEScan;
-
-// This is the ONLY definition of AdvertisedDeviceCallbacks
-// It's defined inline in the header so it's visible everywhere
-class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {
-public:
-    void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
-        if (!advertisedDevice) return;
-        
-        if (options.size() >= MAX_DISPLAY_DEVICES) {
-            if (pBLEScan) {
-                pBLEScan->stop();
-                Serial.println("Reached max devices, stopping scan");
-            }
-            return;
-        }
-        
-        String bt_title;
-        String bt_name;
-        String bt_address;
-        String bt_signal;
-
-        bt_name = advertisedDevice->getName().c_str();
-        bt_address = advertisedDevice->getAddress().toString().c_str();
-        bt_signal = String(advertisedDevice->getRSSI());
-        
-        if (bt_name.isEmpty()) bt_name = "<no name>";
-        bt_title = bt_name;
-        if (bt_title.isEmpty()) bt_title = bt_address;
-        
-        if (options.size() < MAX_DISPLAY_DEVICES) {
-            options.emplace_back(bt_title.c_str(), [=]() { 
-                ble_info(bt_name, bt_address, bt_signal); 
-            });
-        }
-    }
-};
-
-// External reference to g_scanCallbacks
-extern AdvertisedDeviceCallbacks* g_scanCallbacks;
+// Memory protection: Reduce scan time in low-memory situations
+#define SCAN_TIME_REDUCED 3
 
 extern BLEScan *pBLEScan;
 extern int scanTime;
 
-// Function declarations
-void ble_info(const String &name, const String &address, const String &signal);
 void ble_test();
+#if 0
+#ifdef BOARD_HAS_PSRAM
 constexpr bool FORCE_RADIO_TEARDOWN_ON_SWITCH = false;
+#else
+constexpr bool FORCE_RADIO_TEARDOWN_ON_SWITCH = true;
+#endif
+#else
+constexpr bool FORCE_RADIO_TEARDOWN_ON_SWITCH = false;
+#endif
 
 bool ble_scan_setup();
 void ble_scan();
