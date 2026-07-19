@@ -24,11 +24,10 @@ HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
 
 void cleanupDuckyBLE() {
-    if (NimBLEDevice::getAdvertising()) {
-        NimBLEDevice::getAdvertising()->stop();
-    }
-    if (pBLEScan) {
-        pBLEScan->stop();
+    if (hid_ble) {
+        delete hid_ble;
+        hid_ble = nullptr;
+        Serial.println("[cleanupDuckyBLE] hid_ble deleted");
     }
     BLEConnected = false;
 }
