@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 17/07/2026
+ * Last Updated: 19/07/2026
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
@@ -16,6 +16,7 @@
 #include "ble_common.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
 #include "fastpair_crypto.h"
@@ -326,6 +327,11 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
 
     if (bleInitialized) deinitBLE(true);
 
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return false;
+    }
+
     std::string nameStr = name.c_str();
     NimBLEDevice::init(nameStr);
     NimBLEDevice::setPower((esp_power_level_t)powerLevel);
@@ -341,6 +347,8 @@ void BLEStateManager::deinitBLE(bool immediate) {
     NimBLEDevice::deinit(true);
     bleInitialized = false;
     currentDeviceName = "";
+    g_pBLEScan = nullptr;
+    g_bleScanActive = false;
 }
 
 void BLEStateManager::registerClient(NimBLEClient *client) {
@@ -3309,12 +3317,6 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
 
     // Use the same version detection as ble_common.h
 #if NIMBLE_V2_PLUS
-    // NimBLE 2.x: start returns bool, getResults returns NimBLEScanResults
-    bool scanStarted = pScan->start(duration * 1000, false);
-    if (!scanStarted) {
-        showAttackProgress("Failed to start FastPair scan", TFT_RED);
-        return discoveredDevices;
-    }
     NimBLEScanResults results = pScan->getResults(duration * 1000, false);
 #else
     // NimBLE 1.x: start returns NimBLEScanResults directly
@@ -3959,12 +3961,7 @@ void BLE_Sniffer() {
                 padprintln("Status: CAPTURING...");
                 padprintln("Press [SEL] to stop");
 
-#if NIMBLE_V2_PLUS
-                pScan->start(10 * 1000, true);
                 NimBLEScanResults results = pScan->getResults(10 * 1000, true);
-#else
-                NimBLEScanResults results = pScan->getResults(10 * 1000, true);
-#endif
 
                 for (int i = 0; i < results.getCount(); i++) {
 #if NIMBLE_V2_PLUS
@@ -4249,12 +4246,6 @@ String selectTargetFromScan(const char *title) {
 
     try {
 #if NIMBLE_V2_PLUS
-        // NimBLE 2.x API: start returns bool, getResults returns NimBLEScanResults
-        bool scanStarted = g_pBLEScan->start(activeScanTime * 1000, false);
-        if (!scanStarted) {
-            displayError("Failed to start BLE scan");
-            return "";
-        }
         BLEScanResults activeResults = g_pBLEScan->getResults(activeScanTime * 1000, false);
 #else
         // NimBLE 1.x API: start returns NimBLEScanResults
@@ -4300,11 +4291,6 @@ String selectTargetFromScan(const char *title) {
         tft.print("Passive scan (" + String(passiveScanTime) + "s)...");
 
 #if NIMBLE_V2_PLUS
-        bool passiveScanStarted = g_pBLEScan->start(passiveScanTime * 1000, false);
-        if (!passiveScanStarted) {
-            displayError("Failed to start passive BLE scan");
-            return "";
-        }
         BLEScanResults passiveResults = g_pBLEScan->getResults(passiveScanTime * 1000, false);
 #else
         BLEScanResults passiveResults = g_pBLEScan->start(passiveScanTime, false);
@@ -4359,7 +4345,6 @@ String selectTargetFromScan(const char *title) {
     // Get snapshot of discovered devices
     DeviceSnapshot* snapshot = scannerData.getSnapshot();
     if (!snapshot || snapshot->count == 0) {
-        if (snapshot) delete snapshot;
         tft.fillScreen(TFT_YELLOW);
         tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
         tft.setTextColor(TFT_BLACK, TFT_YELLOW);
@@ -4408,7 +4393,9 @@ String selectTargetFromScan(const char *title) {
     }
 
     // UI selection loop
-    int maxVisibleDevices = 4, deviceItemHeight = 30, menuStartY = 60;
+    int deviceItemHeight = 30, menuStartY = 60;
+    int maxVisibleDevices = (tftHeight - 45 - menuStartY) / deviceItemHeight;
+    if (maxVisibleDevices < 1) maxVisibleDevices = 1;
     int selectedIdx = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
     bool exitLoop = false;
@@ -4512,15 +4499,13 @@ String selectTargetFromScan(const char *title) {
             
             String returnMac = selectedMAC;
             returnMac.trim();
-            
-            delete snapshot;
+
             // DO NOT clear scannerData here - keep it for potential reuse
             return returnMac;
         }
         delay(50);
     }
-    
-    delete snapshot;
+
     // DO NOT clear scannerData here - keep it for potential reuse
     return "";
 }
@@ -4530,7 +4515,6 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
 
     DeviceSnapshot* snapshot = scannerData.getSnapshot();
     if (!snapshot || snapshot->count == 0) {
-        if (snapshot) delete snapshot;
         showErrorMessage("No devices found. Run scan first.");
         return "";
     }
@@ -4600,7 +4584,6 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
             delay(200);
             exitMenu = true;
             targets.clear();
-            delete snapshot;
             return "";
         } else if (check(PrevPress)) {
             delay(150);
@@ -4640,7 +4623,6 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
         delay(50);
     }
 
-    delete snapshot;
     if (targets.empty()) return "";
     return String(targets.size()) + " targets selected";
 }
