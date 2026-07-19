@@ -364,19 +364,11 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
 }
 
 //=============================================================================
-// iBeacon - FIXED: No deinit, just stop advertising
+// iBeacon - FIXED: No init, no deinit - just uses existing BLE stack
 //=============================================================================
 
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
-    NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
-    if (!pAdv) {
-        BLEDevice::init(DeviceName);
-        pAdv = NimBLEDevice::getAdvertising();
-        if (!pAdv) {
-            displayError("Failed to init BLE");
-            return;
-        }
-    }
+    // Use existing BLE stack - DO NOT call BLEDevice::init()
     
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
@@ -391,12 +383,18 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     myBeacon.setSignalPower(0xc5);
     myBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
 
-    pAdv->stop();
+    pAdvertising = BLEDevice::getAdvertising();
+    if (!pAdvertising) {
+        displayError("Failed to get advertising");
+        return;
+    }
+    
+    pAdvertising->stop();
     
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x1A);
     advertisementData.setManufacturerData(myBeacon.getData());
-    pAdv->setAdvertisementData(advertisementData);
+    pAdvertising->setAdvertisementData(advertisementData);
 
     drawMainBorderWithTitle("iBeacon");
     padprintln("");
@@ -404,14 +402,14 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     padprintln("");
     padprintln("Press Any key to STOP.");
 
-    pAdv->start();
+    pAdvertising->start();
     BLEConnected = true;
 
     while (!check(AnyKeyPress)) {
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
-    pAdv->stop();
+    pAdvertising->stop();
     BLEConnected = false;
 }
 
@@ -1388,7 +1386,8 @@ static bool bleSpamBuildAdvertisementData(
 
 #ifdef NIMBLE_V2_PLUS
             advertisementData.addData(packet, i);
-#else            std::vector<uint8_t> dataVec(packet, packet + i);
+#else
+            std::vector<uint8_t> dataVec(packet, packet + i);
             advertisementData.addData(dataVec);
 #endif
             return true;
