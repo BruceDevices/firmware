@@ -5,6 +5,7 @@
 #include "core/radio_mem.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
+#include <NimBLEDevice.h>
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
@@ -35,25 +36,12 @@ void cleanupDuckyBLE() {
     extern BLEScan *pBLEScan;
     if (pBLEScan) {
         pBLEScan->stop();
-        // Don't clear results - other modules might need them
     }
-    
-    // Clean up clients from BLE Suite
-    #if !defined(LITE_VERSION)
-    BLEStateManager::cleanupAllClients();
-    #endif
     
     // Reset flags
     BLEConnected = false;
     deviceConnected = false;
-    
-    // DO NOT call BLEDevice::deinit()!
-    // The stack is shared with other modules
 }
-
-//=============================================================================
-// Ducky Type Commands
-//=============================================================================
 
 enum DuckyCommandType {
     DuckyCommandType_Cmd,
@@ -980,9 +968,8 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
-    // Clean up BLE state on exit
     cleanupDuckyBLE();
-    
+
     if (!ble) {
         delete hid; // Keep the hid object alive for BLE
         hid = nullptr;
@@ -991,7 +978,6 @@ EXIT:
         Serial.begin(115200); // Force restart of Serial, just in case....
 #endif
     }
-    // For BLE: keep hid alive, but BLE state is cleaned up
 }
 
 // Send media commands through BLE or USB HID
@@ -1036,8 +1022,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         hid->releaseAll();
         if (!returnToMenu) goto reMenu;
     }
-    
-    // Clean up BLE state on exit
+
     cleanupDuckyBLE();
     returnToMenu = true;
 }
@@ -1400,7 +1385,6 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     }
 
     hid->releaseAll();
-    // Clean up BLE state on exit
     cleanupDuckyBLE();
     returnToMenu = true;
 }
