@@ -62,10 +62,20 @@ bool EvilPortal::setup() {
     if (apGateway == IPAddress((uint32_t)0)) {
         if (!apGateway.fromString(bruceConfig.evilPortalGatewayIp)) apGateway = IPAddress(172, 0, 0, 1);
     }
-    if (apName.isEmpty()) {
-        apName_from_keyboard();
-        if (apName.isEmpty()) apName = "Free Wifi";
+    if (apName.isEmpty() && !_autoMode) {
+        if (bruceConfig.evilWifiNames.empty()) {
+            apName_from_keyboard();
+        } else {
+            options = {
+                {"Custom Wifi", [this]() { apName_from_keyboard(); }}
+            };
+            for (const auto &_wifi : bruceConfig.evilWifiNames) {
+                options.emplace_back(_wifi.c_str(), [this, _wifi]() { this->apName = _wifi; });
+            }
+            loopOptions(options);
+        }
     }
+    if (apName.isEmpty()) apName = "Free Wifi";
 
     if (_autoMode) {
         if (apName.indexOf("router") != -1 || apName.indexOf("update") != -1 ||
@@ -93,20 +103,6 @@ bool EvilPortal::setup() {
 
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
     wsl_bypasser_send_raw_frame(&ap_record, _channel);
-
-    if (apName == "") {
-        if (bruceConfig.evilWifiNames.empty()) {
-            apName_from_keyboard();
-        } else {
-            options = {
-                {"Custom Wifi", [this]() { apName_from_keyboard(); }}
-            };
-            for (const auto &_wifi : bruceConfig.evilWifiNames) {
-                options.emplace_back(_wifi.c_str(), [this, _wifi]() { this->apName = _wifi; });
-            }
-            loopOptions(options);
-        }
-    }
 
     options = {
         {"Default",
