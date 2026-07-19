@@ -57,5 +57,8 @@ bool handlePauseResume();
 // Presenter mode - press button to advance slides
 void PresenterMode(HIDInterface *&hid, bool ble = true);
 
+// Shared cleanup for ducky_typer BLE functions
+void cleanupDuckyBLE();
+
 #endif
 #endif
