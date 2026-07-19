@@ -363,17 +363,13 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
     return AdvData;
 }
 
-//=============================================================================
-// iBeacon - FIXED: No init, no deinit - just uses existing BLE stack
-//=============================================================================
-
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
-    // Use existing BLE stack - DO NOT call BLEDevice::init()
-    
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
-    
+
+    BLEDevice::init(DeviceName);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
 
     NimBLEBeacon myBeacon;
@@ -384,13 +380,6 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     myBeacon.setProximityUUID(BLEUUID(BEACON_UUID));
 
     pAdvertising = BLEDevice::getAdvertising();
-    if (!pAdvertising) {
-        displayError("Failed to get advertising");
-        return;
-    }
-    
-    pAdvertising->stop();
-    
     BLEAdvertisementData advertisementData = BLEAdvertisementData();
     advertisementData.setFlags(0x1A);
     advertisementData.setManufacturerData(myBeacon.getData());
@@ -402,15 +391,20 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     padprintln("");
     padprintln("Press Any key to STOP.");
 
-    pAdvertising->start();
-    BLEConnected = true;
-
     while (!check(AnyKeyPress)) {
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        pAdvertising->start();
+        Serial.println("Advertizing started...");
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+        pAdvertising->stop();
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+        Serial.println("Advertizing stop");
     }
 
-    pAdvertising->stop();
-    BLEConnected = false;
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+    esp_bt_controller_deinit();
+#else
+    BLEDevice::deinit();
+#endif
 }
 
 enum BleSpamAttackType {
