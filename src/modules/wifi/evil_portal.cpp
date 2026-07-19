@@ -76,6 +76,7 @@ bool EvilPortal::setup() {
         }
     }
     if (apName.isEmpty()) apName = "Free Wifi";
+    if (apName.length() > 32) apName = apName.substring(0, 32);
 
     if (_autoMode) {
         if (apName.indexOf("router") != -1 || apName.indexOf("update") != -1 ||
