@@ -6,6 +6,7 @@
 #include "core/sd_functions.h"
 #include "core/utils.h"
 #include <NimBLEDevice.h>
+#include "modules/ble/ble_common.h"
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
@@ -33,7 +34,6 @@ void cleanupDuckyBLE() {
     }
     
     // Stop scanning if running
-    extern BLEScan *pBLEScan;
     if (pBLEScan) {
         pBLEScan->stop();
     }
