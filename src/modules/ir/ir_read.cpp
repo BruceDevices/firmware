@@ -140,7 +140,9 @@ void IrRead::setup() {
 }
 
 void IrRead::loop() {
+    returnToMenu = false;
     while (1) {
+        if (returnToMenu) break;
         if (check(EscPress)) {
             returnToMenu = true;
             button_pos = 0;
@@ -162,7 +164,14 @@ void IrRead::loop() {
                 save_signal();
             }
         } else {
-            if (check(NextPress)) save_signal();
+            if (check(NextPress)) {
+                if (quickloop && !_read_signal) {
+                    button_pos++;
+                    if (button_pos < quickButtons.size()) begin();
+                } else {
+                    save_signal();
+                }
+            }
             if (quickloop && button_pos == quickButtons.size()) save_device();
             if (check(SelPress)) {
                 if (_read_signal) emulate_signal();
@@ -181,6 +190,7 @@ void IrRead::begin() {
     display_banner();
     if (quickloop) {
         padprintln("Waiting for signal of button: " + String(quickButtons[button_pos]));
+        padprintln("Button " + String(button_pos + 1) + " of " + String(quickButtons.size()));
     } else {
         padprintln("Waiting for signal...");
     }
@@ -220,6 +230,7 @@ void IrRead::display_btn_options() {
         padprintln("Press [NEXT] to save signal");
         padprintln("Press [PREV] to discard");
     } else {
+        if (quickloop) padprintln("Press [NEXT] to skip button");
         if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     }
     padprintln("Press [ESC]  to exit");
@@ -422,6 +433,12 @@ void IrRead::save_device() {
         displaySuccess("File saved to " + String((fs == &SD) ? "SD Card" : "LittleFS") + ".", true);
         signals_read = 0;
         strDeviceContent = "";
+        if (quickloop) {
+            button_pos = 0;
+            quickloop = false;
+            returnToMenu = true;
+            return;
+        }
     } else displayError(fs ? "Error writing file." : "No storage available.", true);
 
     delay(1000);
