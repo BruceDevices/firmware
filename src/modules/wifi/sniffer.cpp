@@ -527,7 +527,7 @@ static void registerBeacon(const uint8_t *apAddr) {
     if (!apAddr) return;
     BeaconList beacon;
     memcpy(beacon.MAC, apAddr, sizeof(beacon.MAC));
-    beacon.channel = ch;
+    beacon.channel = all_wifi_channels[ch];
     registeredBeacons.insert(beacon);
 }
 
@@ -1349,8 +1349,8 @@ void sniffer_setup() {
             if (registeredBeacons.size() > 40)
                 registeredBeacons.clear(); // Clear registered beacons to restart search and avoid restarts
             Serial.println("<<---- Starting Deauthentication Process ---->>");
-            for (auto registeredBeacon : registeredBeacons) {
-                if (registeredBeacon.channel == ch) {
+            for (const auto &registeredBeacon : registeredBeacons) {
+                if (registeredBeacon.channel == all_wifi_channels[ch]) {
                     memcpy(&ap_record.bssid, registeredBeacon.MAC, 6);
                     wsl_bypasser_send_raw_frame(
                         &ap_record, registeredBeacon.channel
@@ -1359,7 +1359,7 @@ void sniffer_setup() {
                     send_raw_frame(deauth_frame, 26);
                     deauth_sent = true;
                     deauth_counter++;
-                    vTaskDelay(2 / portTICK_RATE_MS);
+                    vTaskDelay(pdMS_TO_TICKS(2));
                 }
             }
 
