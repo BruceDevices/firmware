@@ -62,10 +62,23 @@ bool EvilPortal::setup() {
     if (apGateway == IPAddress((uint32_t)0)) {
         if (!apGateway.fromString(bruceConfig.evilPortalGatewayIp)) apGateway = IPAddress(172, 0, 0, 1);
     }
-    if (apName.isEmpty()) {
-        apName_from_keyboard();
-        if (apName.isEmpty()) apName = "Free Wifi";
+    if (apName.isEmpty() && !_autoMode) {
+        if (bruceConfig.evilWifiNames.empty()) {
+            apName_from_keyboard();
+        } else {
+            options = {
+                {"Custom Wifi", [this]() { apName_from_keyboard(); }}
+            };
+            for (const auto &_wifi : bruceConfig.evilWifiNames) {
+                options.emplace_back(_wifi.c_str(), [this, _wifi]() { this->apName = _wifi; });
+            }
+            loopOptions(options);
+        }
     }
+    if (apName.isEmpty()) apName = "Free Wifi";
+    if (apName.length() > 32) apName = apName.substring(0, 32);
+
+    if (!_autoMode && !_verifyPwd) apPassword_from_keyboard();
 
     if (_autoMode) {
         if (apName.indexOf("router") != -1 || apName.indexOf("update") != -1 ||
@@ -94,20 +107,6 @@ bool EvilPortal::setup() {
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
     wsl_bypasser_send_raw_frame(&ap_record, _channel);
 
-    if (apName == "") {
-        if (bruceConfig.evilWifiNames.empty()) {
-            apName_from_keyboard();
-        } else {
-            options = {
-                {"Custom Wifi", [this]() { apName_from_keyboard(); }}
-            };
-            for (const auto &_wifi : bruceConfig.evilWifiNames) {
-                options.emplace_back(_wifi.c_str(), [this, _wifi]() { this->apName = _wifi; });
-            }
-            loopOptions(options);
-        }
-    }
-
     options = {
         {"Default",
          [this]() {
@@ -134,7 +133,7 @@ void EvilPortal::beginAP() {
     if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
         Serial.println("[PORTAL] softAPConfig failed");
     }
-    if (!WiFi.softAP(apName, emptyString, _channel)) {
+    if (!WiFi.softAP(apName, apPassword.isEmpty() ? emptyString : apPassword, _channel)) {
         Serial.printf("[PORTAL] softAP failed for SSID '%s' on ch%d\n", apName.c_str(), _channel);
     }
     wifiConnected = true;
@@ -265,7 +264,7 @@ void EvilPortal::restartWiFi(bool reset) {
     _captiveHandler = nullptr;
 
     wifiDisconnect();
-    WiFi.softAP(apName, emptyString, _channel);
+    WiFi.softAP(apName, apPassword.isEmpty() ? emptyString : apPassword, _channel);
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
     setupRoutes();
@@ -803,6 +802,20 @@ void EvilPortal::saveToCSV(const String &csvLine, bool isAPname) {
 void EvilPortal::apName_from_keyboard() {
     apName = keyboard("Free Wifi", 30, "Evil Portal SSID:");
     if (apName == "\x1B") apName = "Free Wifi";
+}
+
+void EvilPortal::apPassword_from_keyboard() {
+    String pwd = "";
+    while (true) {
+        pwd = keyboard(pwd, 63, "AP Password (empty=open, 8-63):");
+        if (pwd == "\x1B") {
+            pwd = "";
+            break;
+        }
+        if (pwd.isEmpty() || (pwd.length() >= 8 && pwd.length() <= 63)) break;
+        displayWarning("Password must be 8-63 chars or empty", true);
+    }
+    apPassword = pwd;
 }
 
 bool EvilPortal::verifyCreds(String &Ssid, String &Password) {
