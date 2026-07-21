@@ -31,6 +31,19 @@ HIDInterface *hid_presenter = nullptr;
 int activeBLEInstances = 0;
 
 // ============================================================================
+// PER-FUNCTION MAC ADDRESSES - Logitech OUIs (look like real keyboards!)
+// ============================================================================
+
+// All using Logitech OUI 88:3B:5F
+// The suffixes are fixed but look random
+static const uint8_t FUNC_MACS[4][6] = {
+    {0x88, 0x3B, 0x5F, 0x7A, 0x3F, 0x1E},  // Keyboard - Logitech
+    {0x88, 0x3B, 0x5F, 0x4B, 0x8C, 0x2A},  // Media - Logitech
+    {0x88, 0x3B, 0x5F, 0x9E, 0x5F, 0x37},  // BadUSB - Logitech
+    {0x88, 0x3B, 0x5F, 0x6C, 0x92, 0x4D}   // Presenter - Logitech
+};
+
+// ============================================================================
 // FUNCTION IDS AND SUFFIXES FOR UNIQUE BLE NAMES
 // ============================================================================
 
@@ -589,6 +602,16 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 displayError("Low RAM: free WiFi/SD first", true);
                 returnToMenu = true;
                 return;
+            }
+
+            // Set function-specific MAC address (Logitech OUIs)
+            if (functionId >= 0 && functionId < 4) {
+                Serial.printf("[ducky_startKb] Setting MAC for function %d: ", functionId);
+                for (int i = 0; i < 6; i++) {
+                    Serial.printf("%02X%s", FUNC_MACS[functionId][i], i < 5 ? ":" : "");
+                }
+                Serial.println();
+                esp_iface_mac_addr_set(FUNC_MACS[functionId], ESP_MAC_BT);
             }
 
             // Build device name with suffix for unique identification
