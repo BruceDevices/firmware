@@ -29,22 +29,33 @@ HIDInterface *hid_ble = nullptr;
 
 void cleanupDuckyBLE(bool fullCleanup = false) {
     if (hid_ble) {
-        // Cast to BleKeyboard to access end() method
+        // Cast to BleKeyboard to access methods
         BleKeyboard* bleKb = static_cast<BleKeyboard*>(hid_ble);
         
+        // Stop advertising first
+        if (NimBLEDevice::getAdvertising()) {
+            NimBLEDevice::getAdvertising()->stop();
+            Serial.println("[cleanupDuckyBLE] Advertising stopped");
+        }
+        
+        // Check if connected and disconnect gracefully
         if (bleKb->isConnected()) {
-            // Stop advertising first
-            if (NimBLEDevice::getAdvertising()) {
-                NimBLEDevice::getAdvertising()->stop();
-                Serial.println("[cleanupDuckyBLE] Advertising stopped");
+            Serial.println("[cleanupDuckyBLE] Disconnecting from host...");
+            // Get the server and disconnect all clients
+            NimBLEServer* pServer = NimBLEDevice::getServer();
+            if (pServer) {
+                // Get all connected peers and disconnect them
+                auto connectedPeers = pServer->getConnectedPeers();
+                for (auto &peer : connectedPeers) {
+                    pServer->disconnect(peer);
+                    Serial.println("[cleanupDuckyBLE] Disconnected peer");
+                }
             }
             delay(100);
         }
         
-        // Call end() which properly disconnects and cleans up
-        bleKb->end();
-        Serial.println("[cleanupDuckyBLE] BleKeyboard::end() called");
-        
+        // Delete the HID device WITHOUT calling end() which deinitializes BLE
+        // We'll manually clean up the HID resources
         delete hid_ble;
         hid_ble = nullptr;
         Serial.println("[cleanupDuckyBLE] hid_ble deleted (RAM freed)");
@@ -54,12 +65,9 @@ void cleanupDuckyBLE(bool fullCleanup = false) {
     _Ask_for_restart = 0;
     Serial.println("[cleanupDuckyBLE] Flags reset");
 
-    // ONLY deinit if explicitly requested (e.g., device reboot, memory pressure)
-    // Note: BleKeyboard::end() already calls BLEDevice::deinit() internally!
-    // So we should NOT call it again unless we're doing a full cleanup
+    // Only fully deinit if requested (memory pressure or reboot)
     if (fullCleanup) {
         Serial.println("[cleanupDuckyBLE] FULL CLEANUP: Deinitializing BLE stack...");
-        // BleKeyboard::end() already deinitialized, but just in case
         NimBLEDevice::deinit();
         Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
     } else {
@@ -68,10 +76,9 @@ void cleanupDuckyBLE(bool fullCleanup = false) {
         if (NimBLEDevice::getAdvertising()) {
             NimBLEDevice::getAdvertising()->stop();
         }
-        // IMPORTANT: We need to re-initialize the device if it was deinitialized by end()
-        // Check if BLE is still initialized
+        // Verify BLE is still initialized
         if (!NimBLEDevice::isInitialized()) {
-            Serial.println("[cleanupDuckyBLE] BLE was deinitialized, re-initializing for reuse...");
+            Serial.println("[cleanupDuckyBLE] BLE was deinitialized, re-initializing...");
             NimBLEDevice::init(std::string(bruceConfigPins.bleName.c_str()));
             Serial.println("[cleanupDuckyBLE] BLE re-initialized");
         }
@@ -535,6 +542,8 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 returnToMenu = true;
                 return;
             }
+            
+            // First, try to free up memory by disconnecting WiFi if needed
             if (!radioHasMemForBle()) {
                 displayError("Low RAM: free WiFi/SD first", true);
                 returnToMenu = true;
@@ -557,6 +566,17 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 if (NimBLEDevice::getAdvertising()) {
                     NimBLEDevice::getAdvertising()->stop();
                     Serial.println("[ducky_startKb] Stopped existing advertising");
+                }
+                
+                // Clean up any lingering server
+                NimBLEServer* pServer = NimBLEDevice::getServer();
+                if (pServer) {
+                    // Disconnect any lingering connections
+                    auto connectedPeers = pServer->getConnectedPeers();
+                    for (auto &peer : connectedPeers) {
+                        pServer->disconnect(peer);
+                        Serial.println("[ducky_startKb] Disconnected lingering peer");
+                    }
                 }
             }
 
