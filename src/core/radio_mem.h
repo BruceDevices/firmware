@@ -17,6 +17,8 @@
 */
 #include <esp_heap_caps.h>
 #include <stddef.h>
+#include "core/wifi/wifi_common.h"
+#include <WiFi.h>
 
 // Largest contiguous DMA-capable internal block, in bytes. This is the number
 // that gates Wi-Fi/BLE controller init.
@@ -36,7 +38,35 @@ static inline bool radioHasMemForWifi() {
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
-    return radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK;
+    
+    // First check if we have enough DMA memory
+    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
+        return true;
+    }
+    
+    // Not enough DMA memory - try to free WiFi
+    Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
+    
+    // Disconnect WiFi if active
+    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+        wifiDisconnect();
+        delay(200);
+        #ifdef WIFI_DEINIT_ON_DISCONNECT
+        WiFi.mode(WIFI_OFF);
+        #endif
+        delay(300);
+    }
+    
+    // Recheck after freeing WiFi
+    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
+        Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
+        return true;
+    }
+    
+    // Still not enough - return false, caller shows error
+    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n", 
+                  radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
+    return false;
 }
 
 #endif // __RADIO_MEM_H__
