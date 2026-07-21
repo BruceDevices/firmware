@@ -24,64 +24,60 @@ HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
 
 // ============================================================================
-// CLEANUP - Frees RAM, resets flags, stops BLE advertising
+// FUNCTION IDS AND SUFFIXES FOR UNIQUE BLE NAMES
 // ============================================================================
 
-void cleanupDuckyBLE(bool fullCleanup = false) {
+enum BleFunctionId {
+    BLE_FUNC_KEYBOARD = 0,
+    BLE_FUNC_MEDIA = 1,
+    BLE_FUNC_BADUSB = 2,
+    BLE_FUNC_PRESENTER = 3
+};
+
+// Suffixes appended to base name from brucepins.conf
+// Keyboard keeps no suffix for backward compatibility
+static const char* FUNC_SUFFIXES[4] = {
+    "",      // BLE_FUNC_KEYBOARD - no suffix (default)
+    "_1",    // BLE_FUNC_MEDIA
+    "_2",    // BLE_FUNC_BADUSB
+    "_3"     // BLE_FUNC_PRESENTER
+};
+
+// ============================================================================
+// CLEANUP - Frees RAM, resets flags, deinits BLE stack
+// ============================================================================
+
+void cleanupDuckyBLE() {
     if (hid_ble) {
-        // Cast to BleKeyboard to access methods
         BleKeyboard* bleKb = static_cast<BleKeyboard*>(hid_ble);
         
-        // Stop advertising first
+        // Stop advertising first (gentle)
         if (NimBLEDevice::getAdvertising()) {
             NimBLEDevice::getAdvertising()->stop();
             Serial.println("[cleanupDuckyBLE] Advertising stopped");
         }
+        delay(50);
         
-        // Check if connected and disconnect gracefully
-        if (bleKb->isConnected()) {
-            Serial.println("[cleanupDuckyBLE] Disconnecting from host...");
-            // Get the server and disconnect all clients
-            NimBLEServer* pServer = NimBLEDevice::getServer();
-            if (pServer) {
-                // Get all connected peers and disconnect them
-                auto connectedPeers = pServer->getConnectedPeers();
-                for (auto &peer : connectedPeers) {
-                    pServer->disconnect(peer);
-                    Serial.println("[cleanupDuckyBLE] Disconnected peer");
-                }
-            }
-            delay(100);
-        }
+        // end() handles everything: disconnect, delete HID, deinit BLE
+        bleKb->end();
+        Serial.println("[cleanupDuckyBLE] BleKeyboard::end() called (disconnected, HID deleted, BLE deinited)");
         
-        // Delete the HID device WITHOUT calling end() which deinitializes BLE
-        // We'll manually clean up the HID resources
+        // Delete the wrapper object
         delete hid_ble;
         hid_ble = nullptr;
-        Serial.println("[cleanupDuckyBLE] hid_ble deleted (RAM freed)");
+        Serial.println("[cleanupDuckyBLE] hid_ble deleted");
     }
 
     BLEConnected = false;
     _Ask_for_restart = 0;
     Serial.println("[cleanupDuckyBLE] Flags reset");
-
-    // Only fully deinit if requested (memory pressure or reboot)
-    if (fullCleanup) {
-        Serial.println("[cleanupDuckyBLE] FULL CLEANUP: Deinitializing BLE stack...");
-        NimBLEDevice::deinit();
-        Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
+    
+    // Verify BLE is really deinitialized (safety check)
+    if (NimBLEDevice::isInitialized()) {
+        Serial.println("[cleanupDuckyBLE] WARNING: BLE still initialized after end()!");
+        NimBLEDevice::deinit(); // Safety cleanup
     } else {
-        Serial.println("[cleanupDuckyBLE] Keeping BLE stack active for reconnection");
-        // Ensure advertising is stopped
-        if (NimBLEDevice::getAdvertising()) {
-            NimBLEDevice::getAdvertising()->stop();
-        }
-        // Verify BLE is still initialized
-        if (!NimBLEDevice::isInitialized()) {
-            Serial.println("[cleanupDuckyBLE] BLE was deinitialized, re-initializing...");
-            NimBLEDevice::init(std::string(bruceConfigPins.bleName.c_str()));
-            Serial.println("[cleanupDuckyBLE] BLE re-initialized");
-        }
+        Serial.println("[cleanupDuckyBLE] BLE stack successfully deinitialized by end()");
     }
     delay(50);
 }
@@ -531,8 +527,8 @@ DuckyCombination* findDuckyCombination(const char *cmd) {
 // START KEYBOARD - Creates fresh BLE instance with new stack
 // ============================================================================
 
-void ducky_startKb(HIDInterface *&hid, bool ble) {
-    Serial.printf("\nducky_startKb: BLE=%d, hid=%p\n", ble, hid);
+void ducky_startKb(HIDInterface *&hid, bool ble, int functionId = BLE_FUNC_KEYBOARD) {
+    Serial.printf("\nducky_startKb: BLE=%d, hid=%p, func=%d\n", ble, hid, functionId);
 
     if (hid == nullptr) {
         Serial.printf("Creating new HID instance for BLE=%d\n", ble);
@@ -542,45 +538,36 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 returnToMenu = true;
                 return;
             }
-            
-            // First, try to free up memory by disconnecting WiFi if needed
             if (!radioHasMemForBle()) {
                 displayError("Low RAM: free WiFi/SD first", true);
                 returnToMenu = true;
                 return;
             }
 
-            // Check if BLE is already initialized
-            bool bleAlreadyInit = NimBLEDevice::isInitialized();
-            
-            if (!bleAlreadyInit) {
-                // First time initialization only
+            // Check if BLE needs initialization
+            // Since end() deinits, we always need to init fresh
+            if (!NimBLEDevice::isInitialized()) {
                 Serial.println("[ducky_startKb] Initializing BLE stack...");
                 NimBLEDevice::init(std::string(bruceConfigPins.bleName.c_str()));
                 Serial.println("[ducky_startKb] BLE stack initialized");
             } else {
-                // BLE already initialized, we're reusing it
-                Serial.println("[ducky_startKb] BLE stack already initialized, reusing");
-                
+                Serial.println("[ducky_startKb] BLE stack already initialized");
                 // Stop any existing advertising
                 if (NimBLEDevice::getAdvertising()) {
                     NimBLEDevice::getAdvertising()->stop();
                     Serial.println("[ducky_startKb] Stopped existing advertising");
                 }
-                
-                // Clean up any lingering server
-                NimBLEServer* pServer = NimBLEDevice::getServer();
-                if (pServer) {
-                    // Disconnect any lingering connections
-                    auto connectedPeers = pServer->getConnectedPeers();
-                    for (auto &peer : connectedPeers) {
-                        pServer->disconnect(peer);
-                        Serial.println("[ducky_startKb] Disconnected lingering peer");
-                    }
-                }
             }
 
-            hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
+            // Build device name with suffix for unique identification
+            String deviceName = bruceConfigPins.bleName;
+            if (functionId >= 0 && functionId < 4 && strlen(FUNC_SUFFIXES[functionId]) > 0) {
+                deviceName += FUNC_SUFFIXES[functionId];
+            }
+            Serial.printf("[ducky_startKb] Device name: %s\n", deviceName.c_str());
+
+            // Create and start HID service
+            hid = new BleKeyboard(deviceName, "BruceFW", 100);
             Serial.println("[ducky_startKb] New BleKeyboard created");
 
             const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
@@ -588,7 +575,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
 
             _Ask_for_restart = 1;
-            Serial.println("[ducky_startKb] Advertising started");
+            Serial.println("[ducky_startKb] HID service started, advertising");
             return;
         } else {
 #if defined(USB_as_HID)
@@ -684,7 +671,7 @@ void ducky_setup(HIDInterface *&hid, bool ble) {
 
         if (first_time) {
             printStatusBadUSBBLE("Preparing USB");
-            ducky_startKb(hid, ble);
+            ducky_startKb(hid, ble, BLE_FUNC_BADUSB);
             if (returnToMenu) goto EXIT;
             first_time = false;
             if (!ble) {
@@ -738,8 +725,7 @@ EXIT:
         Serial.begin(115200);
 #endif
     }
-    // Keep BLE stack alive for reconnection
-    cleanupDuckyBLE(false);
+    cleanupDuckyBLE();
     returnToMenu = true;
 }
 
@@ -949,7 +935,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
-    ducky_startKb(hid, ble);
+    ducky_startKb(hid, ble, BLE_FUNC_KEYBOARD);
     if (returnToMenu) return;
 
     if (ble) {
@@ -1115,8 +1101,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
-    // Keep BLE stack alive for reconnection
-    cleanupDuckyBLE(false);
+    cleanupDuckyBLE();
 
     if (!ble) {
         delete hid;
@@ -1138,7 +1123,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, true);
+    ducky_startKb(hid, true, BLE_FUNC_MEDIA);
 
     displayTextLine("Pairing...");
 
@@ -1174,8 +1159,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         if (!returnToMenu) goto reMenu;
     }
 
-    // Keep BLE stack alive for reconnection
-    cleanupDuckyBLE(false);
+    cleanupDuckyBLE();
     returnToMenu = true;
 }
 
@@ -1352,7 +1336,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, ble);
+    ducky_startKb(hid, ble, BLE_FUNC_PRESENTER);
 
     displayTextLine("Pairing...");
 
@@ -1498,8 +1482,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     }
 
     hid->releaseAll();
-    // Keep BLE stack alive for reconnection
-    cleanupDuckyBLE(false);
+    cleanupDuckyBLE();
     returnToMenu = true;
 }
 #endif
