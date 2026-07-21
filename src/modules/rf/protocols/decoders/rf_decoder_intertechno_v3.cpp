@@ -17,9 +17,11 @@ static inline unsigned int itv3_diff(unsigned int a, unsigned int b) {
 }
 
 bool rf_decode_intertechno_v3(const std::vector<int>& durations, RfCodes& out) {
+    if (durations.size() < 8) return false;
+
     enum {
         ST_RESET,
-        ST_HEADER, ST_SYNC_H, ST_SYNC_L,
+        ST_HEADER, ST_SYNC_H,
         ST_SAVE, ST_CHECK, ST_END
     } step = ST_RESET;
 
@@ -55,6 +57,7 @@ bool rf_decode_intertechno_v3(const std::vector<int>& durations, RfCodes& out) {
             break;
 
         case ST_SAVE:
+            if (bits > ITV3_DIMMING_BITS) { step = ST_RESET; break; }
             if (!level) {
                 if (dur >= ITV3_TE_SHORT * 11) {
                     if (bits == ITV3_MIN_BITS || bits == ITV3_DIMMING_BITS) {
@@ -103,7 +106,8 @@ bool rf_decode_intertechno_v3(const std::vector<int>& durations, RfCodes& out) {
             if (!level) {
                 if (itv3_diff(dur, ITV3_TE_SHORT) < ITV3_TE_DELTA ||
                     itv3_diff(dur, ITV3_TE_LONG) < ITV3_TE_DELTA * 2) {
-                    step = ST_SAVE;
+                    if (bits <= ITV3_DIMMING_BITS) step = ST_SAVE;
+                    else step = ST_RESET;
                 } else if (dur >= ITV3_TE_SHORT * 11) {
                     if (bits == ITV3_MIN_BITS || bits == ITV3_DIMMING_BITS) {
                         out.key = data;

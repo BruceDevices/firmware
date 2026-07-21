@@ -694,10 +694,11 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
             "Protocol: " +
             (codes.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(codes.protocol)) + "\n";
         subfile_out += "Bit: " + String(codes.Bit) + "\n";
-        // The Key (64-bit) is always written so the signal can be replayed; for
-        // KeeLoq the rolling-code fields are added as informative extras.
+        // The Key (64-bit) is always written so the signal can be replayed; when
+        // KeeLoq or a rolling-code protocol is detected the extra fields are also
+        // included so the encoder can reconstruct the frame on re-transmit.
         subfile_out += "Key: " + String(key) + "\n";
-        if (codes.hop != 0) {
+        if (codes.hop != 0 || codes.serial != 0 || codes.cnt != 0) {
             char hexString[64] = {0};
             decimalToHexString(codes.serial, hexString);
             if (codes.seed != 0) {
@@ -875,12 +876,13 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
                 subfile_out +=
-                    "Protocol: " + String(received.protocol == "" ? "RcSwitch" : received.protocol) + "\n";
+                    "Protocol: " +
+                    (received.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(received.protocol)) + "\n";
                 subfile_out += "Bit: " + String(received.Bit) + "\n";
                 subfile_out += "Key: " + String(hexString) + "\n";
-                if (received.fix != 0) { // KeeLoq: include the resolved rolling-code fields
+                if (received.hop != 0 || received.serial != 0 || received.cnt != 0) {
                     char tmp[32] = {0};
-                    subfile_out += "Manufacture: " + received.mf_name + "\n";
+                    if (received.fix != 0) subfile_out += "Manufacture: " + received.mf_name + "\n";
                     decimalToHexString(received.serial, tmp);
                     subfile_out += "Serial: " + String(tmp) + "\n";
                     subfile_out += "Button: " + String(received.btn) + "\n";

@@ -24,6 +24,8 @@ static bool ps_check_valid(uint64_t packet) {
 }
 
 bool rf_decode_power_smart(const std::vector<int>& durations, RfCodes& out) {
+    if (durations.size() < 16) return false;
+
     ManchesterState ms;
     manchester_reset(ms);
 
@@ -47,7 +49,10 @@ bool rf_decode_power_smart(const std::vector<int>& durations, RfCodes& out) {
             bits = 0;
         }
 
-        if (bits >= PS_MIN_BITS) {
+        if (bits >= 128) {
+            data = 0;
+            bits = 0;
+        } else if (bits >= PS_MIN_BITS) {
             if ((data & PS_HEADER_MASK) == PS_HEADER && ps_check_valid(data)) {
                 out.key = data;
                 out.Bit = PS_MIN_BITS;

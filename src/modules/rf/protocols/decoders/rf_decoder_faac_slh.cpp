@@ -12,6 +12,8 @@ static inline unsigned int faac_diff(unsigned int a, unsigned int b) {
 }
 
 bool rf_decode_faac_slh(const std::vector<int>& durations, RfCodes& out) {
+    if (durations.size() < 4) return false;
+
     enum {
         ST_RESET,
         ST_PREAMBLE,
@@ -44,9 +46,10 @@ bool rf_decode_faac_slh(const std::vector<int>& durations, RfCodes& out) {
             break;
 
         case ST_SAVE:
+            if (bits > 64) { step = ST_RESET; break; }
             if (level) {
                 if (dur >= (unsigned int)(FAAC_TE_SHORT * 3 + FAAC_TE_DELTA)) {
-                    if (bits >= FAAC_MIN_BITS) {
+                    if (bits == FAAC_MIN_BITS) {
                         out.key = data;
                         out.Bit = FAAC_MIN_BITS;
                         out.te = FAAC_TE_SHORT;
@@ -86,7 +89,7 @@ bool rf_decode_faac_slh(const std::vector<int>& durations, RfCodes& out) {
         }
     }
 
-    if (bits >= FAAC_MIN_BITS) {
+    if (bits == FAAC_MIN_BITS) {
         out.key = data;
         out.Bit = FAAC_MIN_BITS;
         out.te = FAAC_TE_SHORT;

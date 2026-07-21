@@ -77,6 +77,7 @@ static const RfProtoAlias rf_proto_aliases[] = {
     {"Holtec 12bit", "Holtek_12bit"},
     {"Holtek_HT12X", "Holtek_HT12"},
     {"Phoenix_V2", "PhoenixV2"},
+    {"hormann", "Hormann_HSM"},
 };
 
 const RfProtocolDef *rf_find_protocol(const String &name) {
@@ -91,7 +92,7 @@ const RfProtocolDef *rf_find_protocol(const String &name) {
     for (const auto &p : rf_protocols) {
         if (wanted == p.name) return &p;
     }
-    return rf_find_ext_protocol(name);
+    return rf_find_ext_protocol(wanted);
 }
 
 String rf_flipper_protocol_name(const String &canonical) {
