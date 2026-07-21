@@ -14,6 +14,7 @@
 #include <BleKeyboard.h>
 
 extern HIDInterface *hid_usb;
+extern HIDInterface *hid_ble;          // Points to currently active BLE instance
 extern HIDInterface *hid_keyboard;
 extern HIDInterface *hid_media;
 extern HIDInterface *hid_badusb;
