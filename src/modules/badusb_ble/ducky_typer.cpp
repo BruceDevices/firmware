@@ -8,8 +8,6 @@
 #include <NimBLEDevice.h>
 #include "modules/ble/ble_common.h"
 #include "esp_mac.h"
-#include "esp_bt_main.h"
-#include "esp_bt_device.h"
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
