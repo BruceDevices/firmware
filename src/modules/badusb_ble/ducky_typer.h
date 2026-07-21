@@ -14,7 +14,7 @@
 #include <BleKeyboard.h>
 
 extern HIDInterface *hid_usb;
-extern HIDInterface *hid_ble;          // Points to currently active BLE instance
+extern HIDInterface *hid_ble;
 extern HIDInterface *hid_keyboard;
 extern HIDInterface *hid_media;
 extern HIDInterface *hid_badusb;
@@ -65,6 +65,9 @@ void PresenterMode(HIDInterface *&hid, bool ble = true);
 
 // Shared cleanup for ducky_typer BLE functions - cleans a specific instance
 void cleanupDuckyBLE(HIDInterface *&hid);
+
+// Double cleanup with cooling delay
+void safeCleanupDuckyBLE(HIDInterface *&hid);
 
 #endif
 #endif
