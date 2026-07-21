@@ -2,7 +2,7 @@
  * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 3.1
- * Last Updated: 19/07/2026
+ * Last Updated: 21/07/2026
  *
  * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
@@ -28,10 +28,9 @@
 #include <globals.h>
 
 //=============================================================================
-// NimBLE Version Detection - Must match ble_common.h
+// NimBLE Version Detection
 //=============================================================================
 
-// Detect NimBLE 2.x by checking for features only available in v2+
 #if defined(NIMBLE_VERSION)
     #if NIMBLE_VERSION >= 20000
         #define NIMBLE_V2_PLUS 1
@@ -46,7 +45,6 @@
     #define NIMBLE_V2_PLUS 1
 #endif
 
-// If none of the above matched, default to v1 behavior (safe fallback)
 #ifndef NIMBLE_V2_PLUS
     #define NIMBLE_V2_PLUS 0
 #endif
@@ -151,7 +149,7 @@ void ScannerData::addDevice(
             deviceTypes.push_back(type);
             foundCount++;
             dataVersion++;
-            
+
             if (snapshotCache) {
                 delete snapshotCache;
                 snapshotCache = nullptr;
@@ -165,13 +163,13 @@ DeviceSnapshot* ScannerData::getSnapshot() {
     if (snapshotCache && (millis() - cacheTimestamp) < 1000) {
         return snapshotCache;
     }
-    
+
     if (xSemaphoreTake(mutex, 50 / portTICK_PERIOD_MS)) {
         if (snapshotCache) {
             delete snapshotCache;
             snapshotCache = nullptr;
         }
-        
+
         snapshotCache = new DeviceSnapshot();
         snapshotCache->version = dataVersion;
         snapshotCache->count = deviceAddresses.size();
@@ -182,7 +180,7 @@ DeviceSnapshot* ScannerData::getSnapshot() {
         snapshotCache->fastPair = deviceFastPair;
         snapshotCache->hfp = deviceHasHFP;
         snapshotCache->types = deviceTypes;
-        
+
         cacheTimestamp = millis();
         xSemaphoreGive(mutex);
         return snapshotCache;
@@ -217,7 +215,7 @@ void ScannerData::clear() {
         deviceTypes.clear();
         foundCount = 0;
         dataVersion++;
-        
+
         if (snapshotCache) {
             delete snapshotCache;
             snapshotCache = nullptr;
@@ -310,7 +308,7 @@ const FastPairModelInfo fastpair_models[] = {
 };
 
 //=============================================================================
-// BLE State Manager
+// BLE State Manager - FIXED: Always init, handle deinit'd stack
 //=============================================================================
 
 bool BLEStateManager::initBLE(const String &name, int powerLevel) {
@@ -324,8 +322,6 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
             vTaskDelay(300 / portTICK_PERIOD_MS);
         }
     }
-
-    if (bleInitialized) deinitBLE(true);
 
     if (!radioHasMemForBle()) {
         displayError("Low RAM: free WiFi/SD first", true);
@@ -3282,7 +3278,7 @@ String getScriptFromUser() {
 }
 
 //=============================================================================
-// v3.1: FastPair Exploit Engine with Samsung Detection
+// FastPair Exploit Engine
 //=============================================================================
 
 bool FastPairExploitEngine::smartExploit(NimBLEAddress target) {
@@ -3315,11 +3311,9 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setInterval(97);
     pScan->setWindow(67);
 
-    // Use the same version detection as ble_common.h
 #if NIMBLE_V2_PLUS
     NimBLEScanResults results = pScan->getResults(duration * 1000, false);
 #else
-    // NimBLE 1.x: start returns NimBLEScanResults directly
     NimBLEScanResults results = pScan->start(duration, false);
 #endif
 
@@ -3836,7 +3830,7 @@ void FastPairExploitEngine::generateRandomMac(uint8_t *mac) {
 }
 
 //=============================================================================
-// v3.1: BLE Sniffer - Enhanced with more manufacturer IDs
+// v3.1: BLE Sniffer - FIXED: Always init
 //=============================================================================
 
 struct SnifferPacket {
@@ -3915,6 +3909,9 @@ static String parseManufacturerData(const std::vector<uint8_t> &payload) {
 }
 
 void BLE_Sniffer() {
+    // FIX: Always init - handles case where stack was deinit'd by another module
+    BLEStateManager::initBLE("BruceSniffer", ESP_PWR_LVL_P9);
+    
     drawMainBorderWithTitle("BLE SNIFFER");
     padprintln("");
     padprintln("Press [SEL] to start/stop capture");
@@ -4168,7 +4165,7 @@ void BLE_Sniffer() {
 }
 
 //=============================================================================
-// Target Selection Functions - Uses snapshot for safe data access
+// Target Selection Functions
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
@@ -4177,21 +4174,20 @@ String selectTargetFromScan(const char *title) {
         displayError("Low memory, scan may be unstable", true);
         // Don't return - let the user decide
     }
-    
+
     // DO NOT clear scannerData here - it persists between operations
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
-    
+
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
     bleWasActiveBefore = bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
 #endif
 
-    if (!bleWasActiveBefore) {
-        if (!BLEStateManager::initBLE("Bruce-Scanner", ESP_PWR_LVL_P9)) {
-            displayError("Failed to init BLE");
-            return "";
-        }
+    // FIX: Always call initBLE - it handles the case where stack was deinit'd
+    if (!BLEStateManager::initBLE("Bruce-Scanner", ESP_PWR_LVL_P9)) {
+        displayError("Failed to init BLE");
+        return "";
     }
 
     if (g_pBLEScan == nullptr) {
@@ -4229,11 +4225,9 @@ String selectTargetFromScan(const char *title) {
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
 
-    // Use fixed scan times
     int activeScanTime = ACTIVE_SCAN_TIME;
     int passiveScanTime = PASSIVE_SCAN_TIME;
 
-    // If memory is very low, use reduced scan times
     if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 15000) {
         activeScanTime = 3;
         passiveScanTime = 3;
@@ -4248,7 +4242,6 @@ String selectTargetFromScan(const char *title) {
 #if NIMBLE_V2_PLUS
         BLEScanResults activeResults = g_pBLEScan->getResults(activeScanTime * 1000, false);
 #else
-        // NimBLE 1.x API: start returns NimBLEScanResults
         BLEScanResults activeResults = g_pBLEScan->start(activeScanTime, false);
 #endif
 
@@ -4259,7 +4252,7 @@ String selectTargetFromScan(const char *title) {
             NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
 #endif
             if (!device) continue;
-            
+
             String address = String(device->getAddress().toString().c_str());
             String name = String(device->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
@@ -4303,7 +4296,7 @@ String selectTargetFromScan(const char *title) {
             NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
 #endif
             if (!device) continue;
-            
+
             String address = String(device->getAddress().toString().c_str());
             String name = String(device->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
@@ -4336,13 +4329,11 @@ String selectTargetFromScan(const char *title) {
         return "";
     }
 
-    // Stop the scan but DON'T clear results yet - we need them for display
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_bleScanActive = false;
     }
 
-    // Get snapshot of discovered devices
     DeviceSnapshot* snapshot = scannerData.getSnapshot();
     if (!snapshot || snapshot->count == 0) {
         tft.fillScreen(TFT_YELLOW);
@@ -4363,8 +4354,7 @@ String selectTargetFromScan(const char *title) {
     }
 
     size_t deviceCount = snapshot->count;
-    
-    // Sort with manual swap for vector<bool>
+
     for (size_t i = 0; i < deviceCount - 1; i++) {
         for (size_t j = i + 1; j < deviceCount; j++) {
             bool swapNeeded = false;
@@ -4372,27 +4362,25 @@ String selectTargetFromScan(const char *title) {
             else if (snapshot->fastPair[j] == snapshot->fastPair[i] && 
                      snapshot->rssi[j] > snapshot->rssi[i])
                 swapNeeded = true;
-            
+
             if (swapNeeded) {
                 std::swap(snapshot->names[i], snapshot->names[j]);
                 std::swap(snapshot->addresses[i], snapshot->addresses[j]);
                 std::swap(snapshot->rssi[i], snapshot->rssi[j]);
-                
-                // Manual swap for vector<bool> proxy references
+
                 bool tempFast = snapshot->fastPair[i];
                 snapshot->fastPair[i] = snapshot->fastPair[j];
                 snapshot->fastPair[j] = tempFast;
-                
+
                 bool tempHfp = snapshot->hfp[i];
                 snapshot->hfp[i] = snapshot->hfp[j];
                 snapshot->hfp[j] = tempHfp;
-                
+
                 std::swap(snapshot->types[i], snapshot->types[j]);
             }
         }
     }
 
-    // UI selection loop
     int deviceItemHeight = 30, menuStartY = 60;
     int maxVisibleDevices = (tftHeight - 45 - menuStartY) / deviceItemHeight;
     if (maxVisibleDevices < 1) maxVisibleDevices = 1;
@@ -4486,27 +4474,25 @@ String selectTargetFromScan(const char *title) {
         } else if (check(SelPress)) {
             String selectedMAC = snapshot->addresses[selectedIdx];
             String selectedName = snapshot->names[selectedIdx];
-            
+
             selectedMAC.trim();
             selectedMAC.toUpperCase();
-            
+
             g_selectedDevice.address = selectedMAC;
             g_selectedDevice.name = selectedName;
             g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
             g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
             g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
             g_selectedDevice.deviceType = snapshot->types[selectedIdx];
-            
+
             String returnMac = selectedMAC;
             returnMac.trim();
 
-            // DO NOT clear scannerData here - keep it for potential reuse
             return returnMac;
         }
         delay(50);
     }
 
-    // DO NOT clear scannerData here - keep it for potential reuse
     return "";
 }
 
@@ -4635,11 +4621,11 @@ NimBLEAddress parseAddress(const String &addressInfo) {
     String cleanAddr = addressInfo;
     cleanAddr.trim();
     cleanAddr.toUpperCase();
-    
+
     if (cleanAddr.endsWith(":0")) {
         cleanAddr = cleanAddr.substring(0, cleanAddr.length() - 2);
     }
-    
+
     int start = -1;
     int colonCount = 0;
     for (int i = 0; i < cleanAddr.length(); i++) {
@@ -4676,7 +4662,7 @@ NimBLEAddress parseAddress(const String &addressInfo) {
             }
         }
     }
-    
+
     for (int i = 0; i < addressInfo.length() - 17; i++) {
         String substr = addressInfo.substring(i, i + 17);
         bool valid = true;
@@ -4699,13 +4685,13 @@ NimBLEAddress parseAddress(const String &addressInfo) {
             return NimBLEAddress(std::string(substr.c_str()), BLE_ADDR_PUBLIC);
         }
     }
-    
+
     Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
     return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
 }
 
 //=============================================================================
-// Attack Functions - Updated to use SelectedDevice
+// Attack Functions
 //=============================================================================
 
 void runHFPVulnerabilityTest(NimBLEAddress target) {
@@ -4933,7 +4919,7 @@ void runAdvertisingSpam(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Menu System - Clear data ONLY at entry and exit
+// Menu System
 //=============================================================================
 
 static bool welcomeShown = false;
@@ -4961,12 +4947,19 @@ void showWelcomeScreen() {
     welcomeShown = true;
 }
 
+//=============================================================================
+// BleSuiteMenu - FIXED: Init ONCE at entry
+//=============================================================================
+
 void BleSuiteMenu() {
+    // FIX: Init BLE stack ONCE when entering the suite
+    BLEStateManager::initBLE("Bruce-BLESuite", ESP_PWR_LVL_P9);
+    
     // Clear data when entering the menu
     scannerData.clear();
     g_selectedDevice.address = "";
     g_selectedDevice.name = "";
-    
+
     showWelcomeScreen();
 
     const int MENU_ITEMS = 12;
@@ -5046,6 +5039,9 @@ void BleSuiteMenu() {
             scannerData.clear();
             g_selectedDevice.address = "";
             g_selectedDevice.name = "";
+            
+            // Deinit BLE stack when exiting the suite
+            BLEStateManager::deinitBLE(true);
             return;
         }
         if (check(PrevPress)) {
@@ -5063,7 +5059,6 @@ void BleSuiteMenu() {
         if (check(SelPress)) {
             if (selected == MENU_ITEMS - 1) {
                 BLE_Sniffer();
-                // Don't clear data - keep it for the menu
             } else {
                 executeAttackWithTargetScan(selected);
             }
@@ -5095,6 +5090,9 @@ const char *getScanTitle(int attackIndex) {
 }
 
 void executeAttackWithTargetScan(int attackIndex) {
+    // FIX: Ensure BLE is initialized for the attack
+    BLEStateManager::initBLE("Bruce-Attack", ESP_PWR_LVL_P9);
+    
     String targetInfo = selectTargetFromScan(getScanTitle(attackIndex));
     if (targetInfo.isEmpty()) return;
 
@@ -5119,14 +5117,12 @@ void executeAttackWithTargetScan(int attackIndex) {
 
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
-    
-    // Clean up scan state but DON'T clear scannerData
+
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
         g_bleScanActive = false;
     }
-    // Keep scannerData and g_selectedDevice for potential reuse
     delay(100);
 }
 
@@ -5223,7 +5219,7 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
 }
 
 //=============================================================================
-// Attack Submenus - Updated to use SelectedDevice
+// Attack Submenus
 //=============================================================================
 
 void showFastPairSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
