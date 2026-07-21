@@ -21,31 +21,21 @@ HardwareSerial mySerial(1);
 #endif
 
 HIDInterface *hid_usb = nullptr;
-HIDInterface *hid_ble = nullptr;
+HIDInterface *hid_keyboard = nullptr;
+HIDInterface *hid_media = nullptr;
+HIDInterface *hid_badusb = nullptr;
+HIDInterface *hid_presenter = nullptr;
+
+// Track active BLE instances to know when to deinit
+int activeBLEInstances = 0;
 
 // ============================================================================
-// FUNCTION IDS AND SUFFIXES FOR UNIQUE BLE NAMES
+// CLEANUP - Cleans a specific HID instance
 // ============================================================================
 
-// Function ID mapping:
-// 0 = Keyboard (no suffix, backward compatible)
-// 1 = Media Commands (_1 suffix)
-// 2 = BadUSB/BLE script runner (_2 suffix)
-// 3 = Presenter Mode (_3 suffix)
-static const char* FUNC_SUFFIXES[4] = {
-    "",      // 0: Keyboard - no suffix (backward compatible)
-    "_1",    // 1: Media Commands
-    "_2",    // 2: BadUSB/BLE script runner
-    "_3"     // 3: Presenter Mode
-};
-
-// ============================================================================
-// CLEANUP - Frees RAM, resets flags, deinits BLE stack
-// ============================================================================
-
-void cleanupDuckyBLE() {
-    if (hid_ble) {
-        BleKeyboard* bleKb = static_cast<BleKeyboard*>(hid_ble);
+void cleanupDuckyBLE(HIDInterface *&hid) {
+    if (hid) {
+        BleKeyboard* bleKb = static_cast<BleKeyboard*>(hid);
         
         // Release all keys first (clean state)
         bleKb->releaseAll();
@@ -58,27 +48,32 @@ void cleanupDuckyBLE() {
         }
         delay(50);
         
-        // end() handles everything: disconnect, delete HID, deinit BLE
+        // end() handles disconnect and HID cleanup (but NOT BLE deinit)
         bleKb->end();
         Serial.println("[cleanupDuckyBLE] BleKeyboard::end() called");
         
         // Delete the wrapper object
-        delete hid_ble;
-        hid_ble = nullptr;
-        Serial.println("[cleanupDuckyBLE] hid_ble deleted");
+        delete hid;
+        hid = nullptr;
+        Serial.println("[cleanupDuckyBLE] hid deleted");
+        
+        // Decrement active instance count
+        if (activeBLEInstances > 0) {
+            activeBLEInstances--;
+            Serial.printf("[cleanupDuckyBLE] Active BLE instances: %d\n", activeBLEInstances);
+        }
     }
-
-    BLEConnected = false;
-    _Ask_for_restart = 0;
-    Serial.println("[cleanupDuckyBLE] Flags reset");
     
-    // Force deinit if still initialized (safety)
-    if (NimBLEDevice::isInitialized()) {
-        Serial.println("[cleanupDuckyBLE] Force deinitializing BLE stack...");
+    // Only deinit BLE when NO instances are left
+    if (activeBLEInstances == 0 && NimBLEDevice::isInitialized()) {
+        Serial.println("[cleanupDuckyBLE] Last instance, deinitializing BLE stack...");
         NimBLEDevice::deinit();
         delay(50);
+        Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
     }
-    Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
+    
+    BLEConnected = false;
+    _Ask_for_restart = 0;
 }
 
 // ============================================================================
@@ -543,30 +538,33 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 return;
             }
 
-            // Build device name with suffix
+            // Use the SAME name for ALL functions - no suffixes!
             String deviceName = bruceConfigPins.bleName;
             if (deviceName.isEmpty()) {
-                deviceName = "keyboard_99";  // Fallback default
+                deviceName = "keyboard_99";
             }
-            if (functionId >= 0 && functionId < 4 && strlen(FUNC_SUFFIXES[functionId]) > 0) {
-                deviceName += FUNC_SUFFIXES[functionId];
-            }
-            Serial.printf("[ducky_startKb] Final device name: %s\n", deviceName.c_str());
+            Serial.printf("[ducky_startKb] Device name: %s\n", deviceName.c_str());
 
-            // Force clean start - deinit if already initialized
-            if (NimBLEDevice::isInitialized()) {
-                Serial.println("[ducky_startKb] Deinitializing existing BLE...");
-                NimBLEDevice::deinit();
-                delay(100);
+            // Check if BLE needs initialization
+            if (!NimBLEDevice::isInitialized()) {
+                Serial.println("[ducky_startKb] Initializing BLE stack...");
+                NimBLEDevice::init(std::string(deviceName.c_str()));
+                Serial.println("[ducky_startKb] BLE stack initialized");
+                delay(50);
+            } else {
+                Serial.println("[ducky_startKb] BLE stack already initialized");
+                // Stop any existing advertising
+                if (NimBLEDevice::getAdvertising()) {
+                    NimBLEDevice::getAdvertising()->stop();
+                    Serial.println("[ducky_startKb] Stopped existing advertising");
+                }
             }
-            
-            // Initialize BLE with the full device name
-            Serial.println("[ducky_startKb] Initializing BLE stack...");
-            NimBLEDevice::init(std::string(deviceName.c_str()));
-            Serial.println("[ducky_startKb] BLE stack initialized");
-            delay(50);
 
-            // Create HID service with the unique name
+            // Increment active instance count
+            activeBLEInstances++;
+            Serial.printf("[ducky_startKb] Active BLE instances: %d\n", activeBLEInstances);
+
+            // Create HID service
             hid = new BleKeyboard(deviceName, "BruceFW", 100);
             Serial.println("[ducky_startKb] New BleKeyboard created");
 
@@ -576,14 +574,14 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
             hid->begin(layout);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
             
-            // Critical: Wait for HID service to be fully registered
+            // CRITICAL: Wait for HID service to be fully registered
             delay(200);
             
             // Force a clean state
             hid->releaseAll();
 
             _Ask_for_restart = 1;
-            Serial.printf("[ducky_startKb] HID service started as '%s', advertising\n", deviceName.c_str());
+            Serial.println("[ducky_startKb] HID service started, advertising");
             return;
         } else {
 #if defined(USB_as_HID)
@@ -733,7 +731,7 @@ EXIT:
         Serial.begin(115200);
 #endif
     }
-    cleanupDuckyBLE();
+    cleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 
@@ -922,7 +920,7 @@ EXIT:
 // ============================================================================
 
 void key_input_from_string(const String &text) {
-    ducky_startKb(hid_usb, false, 0); // functionId 0 = Keyboard (USB doesn't use suffix)
+    ducky_startKb(hid_usb, false, 0);
     hid_usb->print(text.c_str());
     delete hid_usb;
     hid_usb = nullptr;
@@ -943,7 +941,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
-    ducky_startKb(hid, ble, 0); // functionId 0 = Keyboard (no suffix)
+    ducky_startKb(hid, ble, 0); // functionId 0 = Keyboard
     if (returnToMenu) return;
 
     if (ble) {
@@ -1109,7 +1107,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
-    cleanupDuckyBLE();
+    cleanupDuckyBLE(hid);
 
     if (!ble) {
         delete hid;
@@ -1131,7 +1129,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, true, 1); // functionId 1 = Media Commands (_1 suffix)
+    ducky_startKb(hid, true, 1); // functionId 1 = Media
 
     displayTextLine("Pairing...");
 
@@ -1167,7 +1165,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         if (!returnToMenu) goto reMenu;
     }
 
-    cleanupDuckyBLE();
+    cleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 
@@ -1344,7 +1342,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, ble, 3); // functionId 3 = Presenter Mode (_3 suffix)
+    ducky_startKb(hid, ble, 3); // functionId 3 = Presenter
 
     displayTextLine("Pairing...");
 
@@ -1490,7 +1488,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     }
 
     hid->releaseAll();
-    cleanupDuckyBLE();
+    cleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 #endif
