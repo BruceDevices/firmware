@@ -31,6 +31,9 @@
 #include "ble_spam.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
+#include "core/sd_functions.h"
+#include "core/utils.h"
 #ifdef CONFIG_BT_NIMBLE_ENABLED
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
@@ -363,11 +366,29 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
     return AdvData;
 }
 
+// ============================================================================
+// iBeacon - FIXED: Proper button handling + stack init/deinit
+// ============================================================================
+
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
+    // CRITICAL: Clear any pending button presses before starting
+    delay(50);
+    while (check(AnyKeyPress)) {
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    // Reset all button states
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    AnyKeyPress = false;
+    
     uint8_t macAddr[6];
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
+    // FIX: Always init - if already init'd, it's a no-op
+    // This handles the case where another module deinit'd the stack
     BLEDevice::init(DeviceName);
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
@@ -391,21 +412,36 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     padprintln("");
     padprintln("Press Any key to STOP.");
 
-    while (!check(AnyKeyPress)) {
+    // Main loop - with proper button handling
+    bool running = true;
+    while (running) {
         pAdvertising->start();
-        Serial.println("Advertizing started...");
-        vTaskDelay(20 / portTICK_PERIOD_MS);
+        Serial.println("Advertising started...");
+        
+        // Check for button press with debounce
+        for (int i = 0; i < 20; i++) {
+            vTaskDelay(1 / portTICK_PERIOD_MS);
+            if (check(AnyKeyPress) || check(EscPress) || check(SelPress)) {
+                running = false;
+                break;
+            }
+        }
+        
         pAdvertising->stop();
         vTaskDelay(5 / portTICK_PERIOD_MS);
-        Serial.println("Advertizing stop");
+        Serial.println("Advertising stop");
+        
+        esp_task_wdt_reset();
     }
 
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
+    // Deinit the BLE stack - self-contained module
     BLEDevice::deinit();
-#endif
+    Serial.println("[iBeacon] BLE stack deinitialized");
 }
+
+// ============================================================================
+// BLE Spam Attack Types and Configuration
+// ============================================================================
 
 enum BleSpamAttackType {
     BLE_SPAM_ATTACK_APPLE_PAIRING,
@@ -1417,6 +1453,10 @@ bleSpamSelectAdvertisement(BleSpamRunState &state, BleSpamAttackType attackType,
     return &state.working_advertisement;
 }
 
+// ============================================================================
+// BLE Spam Advertiser Functions - FIXED: Always init/deinit
+// ============================================================================
+
 static void bleSpamInitAdvertiser(
     BleSpamRunState &state, const BleSpamConfig &config, const uint8_t *mac, bool resetStats
 ) {
@@ -1427,6 +1467,7 @@ static void bleSpamInitAdvertiser(
         state.mac_initialized = false;
     }
 
+    // FIX: Always init - if already init'd, it's a no-op
     BLEDevice::init("");
     vTaskDelay(5 / portTICK_PERIOD_MS);
 
@@ -1458,11 +1499,8 @@ static void bleSpamDeinitAdvertiser() {
         vTaskDelay(5 / portTICK_PERIOD_MS);
         pAdvertising = nullptr;
     }
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
+    // FIX: Always deinit - self-contained module
     BLEDevice::deinit();
-#endif
 #ifdef CONFIG_BT_NIMBLE_ENABLED
     // NimBLEDevice::m_ownAddrType is a static class member that survives
     // deinit()/init() cycles. bleSpamRestartAdvertiserForMac() flips it to
