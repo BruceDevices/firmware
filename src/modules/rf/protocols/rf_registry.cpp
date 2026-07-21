@@ -5,6 +5,7 @@
 // and contributors; the Flipper-name mapping mirrors the Flipper Zero firmware
 // (GPL-3.0-or-later). See THIRD_PARTY.md for full attribution.
 #include "rf_registry.h"
+#include "rf_registry_ext.h"
 
 // Canonical static OOK protocol table. Timings use the classic factor model
 // ({high,low} multiples of `te` µs). The numbered "RcSwitch_N" entries mirror
@@ -90,7 +91,7 @@ const RfProtocolDef *rf_find_protocol(const String &name) {
     for (const auto &p : rf_protocols) {
         if (wanted == p.name) return &p;
     }
-    return nullptr;
+    return rf_find_ext_protocol(name);
 }
 
 String rf_flipper_protocol_name(const String &canonical) {
