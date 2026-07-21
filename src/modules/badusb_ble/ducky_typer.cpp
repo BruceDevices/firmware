@@ -7,6 +7,9 @@
 #include "core/utils.h"
 #include <NimBLEDevice.h>
 #include "modules/ble/ble_common.h"
+#include "esp_mac.h"
+#include "esp_bt_main.h"
+#include "esp_bt_device.h"
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
@@ -55,6 +58,20 @@ static const char* FUNC_SUFFIXES[4] = {
     "_2",    // 2: BadUSB/BLE script runner
     "_3"     // 3: Presenter Mode
 };
+
+// ============================================================================
+// MAC ADDRESS SETTING - Works across ESP32 variants
+// ============================================================================
+
+void setBleMac(const uint8_t* mac) {
+    #ifdef ESP_MAC_BT
+        esp_iface_mac_addr_set(mac, ESP_MAC_BT);
+        Serial.println("[setBleMac] Set MAC using esp_iface_mac_addr_set");
+    #else
+        esp_base_mac_addr_set(mac);
+        Serial.println("[setBleMac] Set MAC using esp_base_mac_addr_set");
+    #endif
+}
 
 // ============================================================================
 // CLEANUP - Cleans a specific HID instance
@@ -611,7 +628,8 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                     Serial.printf("%02X%s", FUNC_MACS[functionId][i], i < 5 ? ":" : "");
                 }
                 Serial.println();
-                esp_iface_mac_addr_set(FUNC_MACS[functionId], ESP_MAC_BT);
+                setBleMac(FUNC_MACS[functionId]);
+                delay(50);
             }
 
             // Build device name with suffix for unique identification
