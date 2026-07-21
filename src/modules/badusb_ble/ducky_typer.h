@@ -25,7 +25,8 @@ struct DuckyCombination;
 void ducky_setup(HIDInterface *&hid, bool ble = false);
 
 // Setup the keyboard for badUSB or badBLE
-void ducky_startKb(HIDInterface *&hid, bool ble);
+// functionId: 0=Keyboard, 1=Media, 2=BadUSB, 3=Presenter (default 0)
+void ducky_startKb(HIDInterface *&hid, bool ble, int functionId = 0);
 
 // Parses a file to run in the badUSB
 void key_input(FS fs, const String &bad_script, HIDInterface *hid);
