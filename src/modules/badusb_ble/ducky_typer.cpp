@@ -27,20 +27,13 @@ HIDInterface *hid_ble = nullptr;
 // FUNCTION IDS AND SUFFIXES FOR UNIQUE BLE NAMES
 // ============================================================================
 
-enum BleFunctionId {
-    BLE_FUNC_KEYBOARD = 0,
-    BLE_FUNC_MEDIA = 1,
-    BLE_FUNC_BADUSB = 2,
-    BLE_FUNC_PRESENTER = 3
-};
-
-// Suffixes appended to base name from brucepins.conf
-// Keyboard keeps no suffix for backward compatibility
+// These match the functionId parameter in ducky_startKb()
+// 0=Keyboard, 1=Media, 2=BadUSB, 3=Presenter
 static const char* FUNC_SUFFIXES[4] = {
-    "",      // BLE_FUNC_KEYBOARD - no suffix (default)
-    "_1",    // BLE_FUNC_MEDIA
-    "_2",    // BLE_FUNC_BADUSB
-    "_3"     // BLE_FUNC_PRESENTER
+    "",      // 0: Keyboard - no suffix (backward compatible)
+    "_1",    // 1: Media Commands
+    "_2",    // 2: BadUSB/BLE script runner
+    "_3"     // 3: Presenter Mode
 };
 
 // ============================================================================
@@ -527,7 +520,7 @@ DuckyCombination* findDuckyCombination(const char *cmd) {
 // START KEYBOARD - Creates fresh BLE instance with new stack
 // ============================================================================
 
-void ducky_startKb(HIDInterface *&hid, bool ble, int functionId = BLE_FUNC_KEYBOARD) {
+void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
     Serial.printf("\nducky_startKb: BLE=%d, hid=%p, func=%d\n", ble, hid, functionId);
 
     if (hid == nullptr) {
@@ -671,7 +664,7 @@ void ducky_setup(HIDInterface *&hid, bool ble) {
 
         if (first_time) {
             printStatusBadUSBBLE("Preparing USB");
-            ducky_startKb(hid, ble, BLE_FUNC_BADUSB);
+            ducky_startKb(hid, ble, 2); // functionId 2 = BadUSB
             if (returnToMenu) goto EXIT;
             first_time = false;
             if (!ble) {
@@ -914,7 +907,7 @@ EXIT:
 // ============================================================================
 
 void key_input_from_string(const String &text) {
-    ducky_startKb(hid_usb, false);
+    ducky_startKb(hid_usb, false, 0); // functionId 0 = Keyboard (USB doesn't use it but keep consistent)
     hid_usb->print(text.c_str());
     delete hid_usb;
     hid_usb = nullptr;
@@ -935,7 +928,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
-    ducky_startKb(hid, ble, BLE_FUNC_KEYBOARD);
+    ducky_startKb(hid, ble, 0); // functionId 0 = Keyboard
     if (returnToMenu) return;
 
     if (ble) {
@@ -1123,7 +1116,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, true, BLE_FUNC_MEDIA);
+    ducky_startKb(hid, true, 1); // functionId 1 = Media
 
     displayTextLine("Pairing...");
 
@@ -1336,7 +1329,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         return;
     }
 
-    ducky_startKb(hid, ble, BLE_FUNC_PRESENTER);
+    ducky_startKb(hid, ble, 3); // functionId 3 = Presenter
 
     displayTextLine("Pairing...");
 
