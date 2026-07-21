@@ -21,7 +21,7 @@ HardwareSerial mySerial(1);
 #endif
 
 HIDInterface *hid_usb = nullptr;
-HIDInterface *hid_ble = nullptr;          // Points to currently active BLE instance
+HIDInterface *hid_ble = nullptr;
 HIDInterface *hid_keyboard = nullptr;
 HIDInterface *hid_media = nullptr;
 HIDInterface *hid_badusb = nullptr;
@@ -29,6 +29,19 @@ HIDInterface *hid_presenter = nullptr;
 
 // Track active BLE instances to know when to deinit
 int activeBLEInstances = 0;
+
+// ============================================================================
+// FUNCTION IDS AND SUFFIXES FOR UNIQUE BLE NAMES
+// ============================================================================
+
+// These match the functionId parameter in ducky_startKb()
+// 0=Keyboard, 1=Media, 2=BadUSB, 3=Presenter
+static const char* FUNC_SUFFIXES[4] = {
+    "",      // 0: Keyboard - no suffix (backward compatible)
+    "_1",    // 1: Media Commands
+    "_2",    // 2: BadUSB/BLE script runner
+    "_3"     // 3: Presenter Mode
+};
 
 // ============================================================================
 // CLEANUP - Cleans a specific HID instance
@@ -49,31 +62,38 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
         }
         delay(50);
         
-        // end() handles disconnect and HID cleanup (but NOT BLE deinit)
-        bleKb->end();
-        Serial.println("[cleanupDuckyBLE] BleKeyboard::end() called");
-        
         // If this was the active instance, clear the pointer
         if (hid_ble == hid) {
             hid_ble = nullptr;
             Serial.println("[cleanupDuckyBLE] Cleared hid_ble pointer");
         }
         
-        // Delete the wrapper object
-        delete hid;
-        hid = nullptr;
-        Serial.println("[cleanupDuckyBLE] hid deleted");
-        
         // Decrement active instance count
         if (activeBLEInstances > 0) {
             activeBLEInstances--;
             Serial.printf("[cleanupDuckyBLE] Active BLE instances: %d\n", activeBLEInstances);
         }
+        
+        // CRITICAL: Only call end() if this is the LAST instance
+        // end() deinits the BLE stack, so we only want to do it once
+        if (activeBLEInstances == 0) {
+            // Last instance - call end() to fully clean up
+            bleKb->end();
+            Serial.println("[cleanupDuckyBLE] Last instance: BleKeyboard::end() called (deinits BLE)");
+        } else {
+            // Not the last instance - just delete the object without calling end()
+            Serial.println("[cleanupDuckyBLE] Not last instance: deleting HID without end()");
+        }
+        
+        // Delete the wrapper object
+        delete hid;
+        hid = nullptr;
+        Serial.println("[cleanupDuckyBLE] hid deleted");
     }
     
-    // Only deinit BLE when NO instances are left
+    // Only deinit BLE when NO instances are left (safety)
     if (activeBLEInstances == 0 && NimBLEDevice::isInitialized()) {
-        Serial.println("[cleanupDuckyBLE] Last instance, deinitializing BLE stack...");
+        Serial.println("[cleanupDuckyBLE] Last instance, ensuring BLE deinit...");
         NimBLEDevice::deinit();
         delay(50);
         Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
@@ -81,6 +101,32 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
     
     BLEConnected = false;
     _Ask_for_restart = 0;
+}
+
+// ============================================================================
+// SAFE CLEANUP - Double cleanup with cooling delay
+// ============================================================================
+
+void safeCleanupDuckyBLE(HIDInterface *&hid) {
+    Serial.println("[safeCleanupDuckyBLE] First cleanup pass...");
+    cleanupDuckyBLE(hid);
+    delay(200);
+    
+    // Second pass to catch anything lingering
+    if (hid != nullptr) {
+        Serial.println("[safeCleanupDuckyBLE] Second cleanup pass...");
+        cleanupDuckyBLE(hid);
+        delay(200);
+    }
+    
+    // Extra safety: if BLE is still initialized, force deinit
+    if (NimBLEDevice::isInitialized()) {
+        Serial.println("[safeCleanupDuckyBLE] Force deinitializing BLE...");
+        NimBLEDevice::deinit();
+        delay(200);
+    }
+    
+    Serial.println("[safeCleanupDuckyBLE] Cleanup complete");
 }
 
 // ============================================================================
@@ -545,10 +591,13 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 return;
             }
 
-            // Use the SAME name for ALL functions - no suffixes!
+            // Build device name with suffix for unique identification
             String deviceName = bruceConfigPins.bleName;
             if (deviceName.isEmpty()) {
                 deviceName = "keyboard_99";
+            }
+            if (functionId >= 0 && functionId < 4 && strlen(FUNC_SUFFIXES[functionId]) > 0) {
+                deviceName += FUNC_SUFFIXES[functionId];
             }
             Serial.printf("[ducky_startKb] Device name: %s\n", deviceName.c_str());
 
@@ -688,6 +737,8 @@ void ducky_setup(HIDInterface *&hid, bool ble) {
 
         if (first_time) {
             printStatusBadUSBBLE("Preparing USB");
+            // Double cleanup before starting
+            if (ble) safeCleanupDuckyBLE(hid);
             ducky_startKb(hid, ble, 2); // functionId 2 = BadUSB
             if (returnToMenu) goto EXIT;
             first_time = false;
@@ -742,7 +793,7 @@ EXIT:
         Serial.begin(115200);
 #endif
     }
-    cleanupDuckyBLE(hid);
+    if (ble) safeCleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 
@@ -952,6 +1003,9 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
+    
+    // Double cleanup before starting
+    if (ble) safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, ble, 0); // functionId 0 = Keyboard
     if (returnToMenu) return;
 
@@ -1118,7 +1172,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
-    cleanupDuckyBLE(hid);
+    if (ble) safeCleanupDuckyBLE(hid);
 
     if (!ble) {
         delete hid;
@@ -1140,6 +1194,8 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         return;
     }
 
+    // Double cleanup before starting
+    safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, true, 1); // functionId 1 = Media
 
     displayTextLine("Pairing...");
@@ -1176,7 +1232,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         if (!returnToMenu) goto reMenu;
     }
 
-    cleanupDuckyBLE(hid);
+    safeCleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 
@@ -1353,6 +1409,8 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         return;
     }
 
+    // Double cleanup before starting
+    if (ble) safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, ble, 3); // functionId 3 = Presenter
 
     displayTextLine("Pairing...");
@@ -1499,7 +1557,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     }
 
     hid->releaseAll();
-    cleanupDuckyBLE(hid);
+    if (ble) safeCleanupDuckyBLE(hid);
     returnToMenu = true;
 }
 #endif
