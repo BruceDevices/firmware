@@ -26,7 +26,6 @@ HardwareSerial mySerial(1);
 
 HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
-static bool bleStackOwnedByDucky = false; // Track if we own the BLE stack
 
 // ============================================================================
 // CLEANUP - Frees RAM, resets flags, DEINITS BLE STACK
@@ -58,16 +57,10 @@ void cleanupDuckyBLE() {
     Serial.println("[cleanupDuckyBLE] Flags reset");
     
     // 3. Deinit the BLE stack - gives us a completely fresh state!
-    // Safe because modules are self-contained and we track ownership
-    if (bleStackOwnedByDucky) {
-        Serial.println("[cleanupDuckyBLE] Deinitializing BLE stack...");
-        NimBLEDevice::deinit();
-        bleStackOwnedByDucky = false;
-        Serial.println("[cleanupDuckyBLE] BLE stack deinitialized (fresh state for next use)");
-        delay(50);
-    } else {
-        Serial.println("[cleanupDuckyBLE] BLE stack not owned by ducky, skipping deinit");
-    }
+    Serial.println("[cleanupDuckyBLE] Deinitializing BLE stack...");
+    NimBLEDevice::deinit();
+    Serial.println("[cleanupDuckyBLE] BLE stack deinitialized (fresh state for next use)");
+    delay(50);
 }
 
 // ============================================================================
@@ -512,7 +505,7 @@ DuckyCombination* findDuckyCombination(const char *cmd) {
 }
 
 // ============================================================================
-// START KEYBOARD - Creates fresh BLE instance with new stack if needed
+// START KEYBOARD - Creates fresh BLE instance with new stack
 // ============================================================================
 
 void ducky_startKb(HIDInterface *&hid, bool ble) {
@@ -532,16 +525,10 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 return;
             }
             
-            // Initialize BLE stack fresh
-            if (!NimBLEDevice::getInitialized()) {
-                Serial.println("[ducky_startKb] Initializing BLE stack...");
-                NimBLEDevice::init(bruceConfigPins.bleName);
-                bleStackOwnedByDucky = true;
-                Serial.println("[ducky_startKb] BLE stack initialized");
-            } else {
-                Serial.println("[ducky_startKb] BLE stack already initialized, reusing");
-                bleStackOwnedByDucky = false; // Someone else owns it
-            }
+            // Initialize BLE stack - convert String to std::string
+            Serial.println("[ducky_startKb] Initializing BLE stack...");
+            NimBLEDevice::init(std::string(bruceConfigPins.bleName.c_str()));
+            Serial.println("[ducky_startKb] BLE stack initialized");
             
             // Create fresh BLE instance
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
