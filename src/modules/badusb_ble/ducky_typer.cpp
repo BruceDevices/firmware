@@ -21,6 +21,7 @@ HardwareSerial mySerial(1);
 #endif
 
 HIDInterface *hid_usb = nullptr;
+HIDInterface *hid_ble = nullptr;          // Points to currently active BLE instance
 HIDInterface *hid_keyboard = nullptr;
 HIDInterface *hid_media = nullptr;
 HIDInterface *hid_badusb = nullptr;
@@ -51,6 +52,12 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
         // end() handles disconnect and HID cleanup (but NOT BLE deinit)
         bleKb->end();
         Serial.println("[cleanupDuckyBLE] BleKeyboard::end() called");
+        
+        // If this was the active instance, clear the pointer
+        if (hid_ble == hid) {
+            hid_ble = nullptr;
+            Serial.println("[cleanupDuckyBLE] Cleared hid_ble pointer");
+        }
         
         // Delete the wrapper object
         delete hid;
@@ -567,6 +574,10 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
             // Create HID service
             hid = new BleKeyboard(deviceName, "BruceFW", 100);
             Serial.println("[ducky_startKb] New BleKeyboard created");
+
+            // Set hid_ble to point to the active instance
+            hid_ble = hid;
+            Serial.printf("[ducky_startKb] hid_ble now points to instance %p\n", hid_ble);
 
             const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             
