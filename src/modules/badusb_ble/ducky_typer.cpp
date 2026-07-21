@@ -28,35 +28,37 @@ HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
 
 // ============================================================================
-// CLEANUP - Stops advertising + deletes hid_ble
-// Stops advertising to force disconnection from target
-// Does NOT deinit BLE stack so other modules can still use it
+// CLEANUP - Frees RAM and resets flags for next BLE function
+// Stops advertising to disconnect from phone
+// Deletes hid_ble to free RAM (fixes low RAM warning)
+// Resets _Ask_for_restart to 0 (fixes "Restart Device" error)
+// Does NOT deinit BLE stack - let common module handle it!
 // ============================================================================
 
 void cleanupDuckyBLE() {
+    // Stop advertising to disconnect from client
     if (NimBLEDevice::getAdvertising()) {
         NimBLEDevice::getAdvertising()->stop();
         Serial.println("[cleanupDuckyBLE] Advertising stopped");
-    } else {
-        Serial.println("[cleanupDuckyBLE] No advertising to stop");
     }
     
+    // Delete BLE instance to free RAM
     if (hid_ble) {
         delete hid_ble;
         hid_ble = nullptr;
-        Serial.println("[cleanupDuckyBLE] hid_ble deleted");
-    } else {
-        Serial.println("[cleanupDuckyBLE] hid_ble already null");
+        Serial.println("[cleanupDuckyBLE] hid_ble deleted (RAM freed)");
     }
     
+    // Reset flags - CRITICAL: set to 0, NOT 2!
     BLEConnected = false;
-    Serial.println("[cleanupDuckyBLE] BLEConnected = false");
+    _Ask_for_restart = 0;
+    Serial.println("[cleanupDuckyBLE] Flags reset, ready for next BLE function");
+    
+    // DO NOT deinit BLE stack - let common module handle it!
 }
 
 // ============================================================================
 // DUCKY COMMAND STRUCTURES - Stored in PROGMEM to save RAM
-// These are large lookup tables that don't change at runtime
-// Moving to PROGMEM saves ~6-8KB of RAM
 // ============================================================================
 
 enum DuckyCommandType {
@@ -212,8 +214,7 @@ const uint8_t *keyboardLayouts[] PROGMEM = {
 };
 
 // ============================================================================
-// MENU KEY STRUCTURES - Also stored in PROGMEM to save RAM
-// Only used when user navigates menus, saves ~2-3KB of RAM
+// MENU KEY STRUCTURES - Stored in PROGMEM to save RAM
 // ============================================================================
 
 struct KeyboardMenuKey {
@@ -223,7 +224,7 @@ struct KeyboardMenuKey {
 
 struct QueuedHIDKey {
     uint8_t key;
-    String label;  // TODO: Optimize this to avoid heap allocation
+    String label;
 };
 
 static const KeyboardMenuKey modifierMenuKeys[] PROGMEM = {
@@ -498,24 +499,38 @@ DuckyCombination* findDuckyCombination(const char *cmd) {
 }
 
 // ============================================================================
-// MAIN FUNCTIONS
+// START KEYBOARD - Creates or reuses HID instance with fresh advertising
 // ============================================================================
 
 void ducky_startKb(HIDInterface *&hid, bool ble) {
-    Serial.printf("\nducky_startKb before hid==null: BLE: %d\n", ble);
+    Serial.printf("\nducky_startKb: BLE=%d, hid=%p\n", ble, hid);
+    
     if (hid == nullptr) {
-        Serial.printf("ducky_startKb after hid==null: BLE: %d\n", ble);
+        Serial.printf("Creating new HID instance for BLE=%d\n", ble);
         if (ble) {
             if (_Ask_for_restart == 2) {
                 displayError("Restart your Device");
                 returnToMenu = true;
+                return;
             }
             if (!radioHasMemForBle()) {
                 displayError("Low RAM: free WiFi/SD first", true);
                 returnToMenu = true;
                 return;
             }
+            
+            // Create fresh BLE instance
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
+            Serial.println("[ducky_startKb] New BleKeyboard created");
+            
+            // Start advertising immediately
+            const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
+            hid->begin(layout);
+            hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
+            
+            _Ask_for_restart = 1;
+            Serial.println("[ducky_startKb] Advertising started");
+            return;
         } else {
 #if defined(USB_as_HID)
             hid = new USBHIDKeyboard();
@@ -534,14 +549,19 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
 #endif
         }
     }
+    
+    // Handle existing instance or reconnection
     if (ble) {
         if (hid->isConnected()) {
-            Serial.println("BLE Already connected, changing layout and delay");
+            Serial.println("BLE Already connected, updating settings");
             const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             hid->setLayout(layout);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
             return;
         }
+        
+        // Not connected - restart advertising
+        Serial.println("Starting/restarting BLE advertising");
         if (!_Ask_for_restart) _Ask_for_restart = 1;
         const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
         hid->begin(layout);
@@ -560,6 +580,10 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
 #endif
     }
 }
+
+// ============================================================================
+// DUCKY SETUP - Main entry for BadUSB/BLE script runner
+// ============================================================================
 
 void ducky_setup(HIDInterface *&hid, bool ble) {
     Serial.println("Ducky typer begin");
@@ -660,24 +684,21 @@ EXIT:
 }
 
 // ============================================================================
-// key_input - Main Ducky script parser
-// Uses static buffers to avoid heap fragmentation from String objects
-// Max line length is 128 chars - adjust if needed
+// KEY_INPUT - Main Ducky script parser
 // ============================================================================
 
 void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
-    static char lineBuffer[128];
-    static char cmdBuffer[25];
-    static char argBuffer[96];
-    static char repeatBuffer[10];
-    
     if (!fs.exists(bad_script) || bad_script == "") return;
     File payloadFile = fs.open(bad_script, "r");
     if (!payloadFile) return;
-    
+    String lineContent = "";
+    String Command = "";
+    char Cmd[25];
+    String Argument = "";
+    String RepeatTmp = "";
+
     static int nextStringDelay = -1;
-    static int defaultStringDelay = 0;
-    if (defaultStringDelay == 0) defaultStringDelay = bruceConfig.badUSBBLEKeyDelay;
+    static int defaultStringDelay = bruceConfig.badUSBBLEKeyDelay;
     currentOutputY = 0;
 
     _hid->releaseAll();
@@ -712,54 +733,49 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
         if (check(SelPress)) {
             if (!handlePauseResume()) { goto EXIT; }
         }
-        
-        if (!payloadFile.readBytesUntil('\n', lineBuffer, sizeof(lineBuffer) - 1)) break;
-        lineBuffer[sizeof(lineBuffer) - 1] = '\0';
-        
-        size_t len = strlen(lineBuffer);
-        if (len > 0 && lineBuffer[len-1] == '\r') lineBuffer[len-1] = '\0';
+        lineContent = payloadFile.readStringUntil('\n');
+        if (lineContent.endsWith("\r")) lineContent.remove(lineContent.length() - 1);
 
-        if (strlen(lineBuffer) == 0) continue;
+        if (lineContent.length() == 0) continue;
 
-        char* spacePtr = strchr(lineBuffer, ' ');
-        
-        if (spacePtr && strncmp(lineBuffer, "REPEAT", 6) == 0 && (spacePtr - lineBuffer) == 6) {
-            strlcpy(repeatBuffer, spacePtr + 1, sizeof(repeatBuffer));
-            int repeatVal = atoi(repeatBuffer);
-            if (repeatVal <= 0) {
-                strcpy(repeatBuffer, "1");
+        int spaceIndex = lineContent.indexOf(' ');
+
+        if (spaceIndex > 0 && lineContent.substring(0, spaceIndex) == "REPEAT") {
+            RepeatTmp = lineContent.substring(spaceIndex + 1);
+            if (RepeatTmp.toInt() <= 0) {
+                RepeatTmp = "1";
                 printTFTBadUSBBLE("REPEAT argument NaN, repeating once", ALCOLOR, true);
             }
-        } else if (spacePtr == NULL && strcmp(lineBuffer, "REPEAT") == 0) {
-            strcpy(repeatBuffer, "1");
+        } else if (spaceIndex == -1 && lineContent == "REPEAT") {
+            RepeatTmp = "1";
             printTFTBadUSBBLE("REPEAT without argument, repeating once", ALCOLOR, true);
         } else {
-            if (spacePtr) {
-                size_t cmdLen = spacePtr - lineBuffer;
-                strlcpy(cmdBuffer, lineBuffer, min(cmdLen + 1, sizeof(cmdBuffer)));
-                strlcpy(argBuffer, spacePtr + 1, sizeof(argBuffer));
+            if (spaceIndex > 0) {
+                Command = lineContent.substring(0, spaceIndex);
+                Argument = lineContent.substring(spaceIndex + 1);
             } else {
-                strlcpy(cmdBuffer, lineBuffer, sizeof(cmdBuffer));
-                argBuffer[0] = '\0';
+                Command = lineContent;
+                Argument = "";
             }
-            strcpy(repeatBuffer, "1");
+            strlcpy(Cmd, Command.c_str(), sizeof(Cmd));
+            RepeatTmp = "1";
         }
 
-        int repeatCount = atoi(repeatBuffer);
-        for (int i = 0; i < repeatCount; i++) {
-            DuckyCommandLookup *PriCmd = findDuckyCommand(cmdBuffer);
-            DuckyCommandLookup *ArgCmd = findDuckyCommand(argBuffer);
+        uint16_t i;
+        uint16_t repeatCount = RepeatTmp.toInt();
+        for (i = 0; i < repeatCount; i++) {
+            DuckyCommandLookup *PriCmd = findDuckyCommand(Cmd);
+            DuckyCommandLookup *ArgCmd = findDuckyCommand(Argument.c_str());
 
             if (PriCmd != nullptr) {
                 vTaskDelay(1);
                 if (PriCmd->type == DuckyCommandType_Comment) {
-                    // Comments do nothing
                 }
                 else if (PriCmd->type == DuckyCommandType_Print) {
                     int currentDelay = (nextStringDelay >= 0) ? nextStringDelay : defaultStringDelay;
                     _hid->setDelay(currentDelay);
 
-                    _hid->print(argBuffer);
+                    _hid->print(Argument);
                     if (strcmp(PriCmd->command, "STRINGLN") == 0) _hid->println();
 
                     if (nextStringDelay >= 0) { nextStringDelay = -1; }
@@ -777,31 +793,31 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
                 else if (PriCmd->type == DuckyCommandType_Delay) {
                     if ((int)PriCmd->key > 0) delay(DEF_DELAY);
                     else {
-                        int delayTime = atoi(argBuffer);
+                        int delayTime = Argument.toInt();
                         if (delayTime > 0) delay(delayTime);
                         else delay(DEF_DELAY);
                     }
                 }
                 else if (PriCmd->type == DuckyCommandType_AltChar) {
-                    int charCode = atoi(argBuffer);
+                    int charCode = Argument.toInt();
                     if (charCode > 0 && charCode <= 255) { sendAltChar(_hid, (uint8_t)charCode); }
                 }
                 else if (PriCmd->type == DuckyCommandType_AltString) {
-                    sendAltString(_hid, argBuffer);
+                    sendAltString(_hid, Argument);
                 }
                 else if (PriCmd->type == DuckyCommandType_StringDelay) {
-                    int delayValue = atoi(argBuffer);
+                    int delayValue = Argument.toInt();
                     if (delayValue >= 0) { nextStringDelay = delayValue; }
                 }
                 else if (PriCmd->type == DuckyCommandType_DefaultStringDelay) {
-                    int delayValue = atoi(argBuffer);
+                    int delayValue = Argument.toInt();
                     if (delayValue >= 0) { defaultStringDelay = delayValue; }
                 }
                 else if (PriCmd->type == DuckyCommandType_Cmd) {
                     _hid->press(PriCmd->key);
                 }
                 else if (PriCmd->type == DuckyCommandType_Combination) {
-                    DuckyCombination *comb = findDuckyCombination(cmdBuffer);
+                    DuckyCombination *comb = findDuckyCombination(Cmd);
                     if (comb != nullptr) {
                         _hid->press(comb->key1);
                         _hid->press(comb->key2);
@@ -814,10 +830,10 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
                         PriCmd->type == DuckyCommandType_Cmd) {
                         _hid->press(ArgCmd->key);
                     } else if (
-                        PriCmd != nullptr && PriCmd->type == DuckyCommandType_Cmd && strlen(argBuffer) > 0
+                        PriCmd != nullptr && PriCmd->type == DuckyCommandType_Cmd && Argument.length() > 0
                     ) {
-                        for (size_t idx = 0; idx < strlen(argBuffer); idx++) {
-                            _hid->press(argBuffer[idx]);
+                        for (int idx = 0; idx < Argument.length(); idx++) {
+                            _hid->press(Argument.charAt(idx));
                         }
                     }
                     _hid->releaseAll();
@@ -825,14 +841,14 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
             }
 
             if (PriCmd == nullptr) {
-                printTFTBadUSBBLE(String(cmdBuffer) + " - UNKNOWN COMMAND", ALCOLOR, true);
+                printTFTBadUSBBLE(Command + " - UNKNOWN COMMAND", ALCOLOR, true);
             } else if (PriCmd->type != DuckyCommandType_Comment) {
-                printTFTBadUSBBLE(cmdBuffer, bruceConfig.priColor);
-                if (strlen(argBuffer) > 0) {
-                    printTFTBadUSBBLE(" " + String(argBuffer), (ArgCmd == nullptr ? TFT_WHITE : TFT_WHITE), true);
+                printTFTBadUSBBLE(Command, bruceConfig.priColor);
+                if (Argument.length() > 0) {
+                    printTFTBadUSBBLE(" " + Argument, (ArgCmd == nullptr ? TFT_WHITE : TFT_WHITE), true);
                 } else printTFTBadUSBBLE("", TFT_WHITE, true);
             } else if (PriCmd->type == DuckyCommandType_Comment) {
-                printTFTBadUSBBLE(argBuffer, TFT_DARKGREEN, true);
+                printTFTBadUSBBLE(Argument, TFT_DARKGREEN, true);
             }
         }
 
@@ -848,7 +864,7 @@ EXIT:
 }
 
 // ============================================================================
-// OTHER FUNCTIONS
+// KEY_INPUT_FROM_STRING - Simple text input via USB
 // ============================================================================
 
 void key_input_from_string(const String &text) {
@@ -864,6 +880,10 @@ void key_input_from_string(const String &text) {
 #ifndef KB_HID_EXIT_MSG
 #define KB_HID_EXIT_MSG "Exit"
 #endif
+
+// ============================================================================
+// DUCKY_KEYBOARD - Interactive keyboard mode (USB or BLE)
+// ============================================================================
 
 void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
@@ -1035,6 +1055,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
+    // Clean up BLE properly (stops advertising, frees RAM, resets flags)
     cleanupDuckyBLE();
 
     if (!ble) {
@@ -1048,7 +1069,7 @@ EXIT:
 }
 
 // ============================================================================
-// MEDIA COMMANDS
+// MEDIA COMMANDS - BLE Media Controller
 // ============================================================================
 
 void MediaCommands(HIDInterface *hid, bool ble) {
@@ -1093,6 +1114,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         if (!returnToMenu) goto reMenu;
     }
 
+    // Clean up BLE properly (stops advertising, frees RAM, resets flags)
     cleanupDuckyBLE();
     returnToMenu = true;
 }
@@ -1187,10 +1209,6 @@ void printHeaderBadUSBBLE(const String &bad_script) {
     tft.println("Status:");
 }
 
-// ============================================================================
-// printTFTBadUSBBLE - TODO: Optimize to avoid String creation
-// ============================================================================
-
 void printTFTBadUSBBLE(const String &text, uint16_t color, bool newline) {
     if (!bruceConfig.badUSBBLEShowOutput) return;
 
@@ -1264,7 +1282,7 @@ bool handlePauseResume() {
 }
 
 // ============================================================================
-// PRESENTER MODE
+// PRESENTER MODE - BLE Presentation Remote
 // ============================================================================
 
 void PresenterMode(HIDInterface *&hid, bool ble) {
