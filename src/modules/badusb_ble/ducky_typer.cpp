@@ -13,10 +13,6 @@
 
 #define DEF_DELAY 100
 
-// ============================================================================
-// GLOBALS
-// ============================================================================
-
 uint8_t _Ask_for_restart = 0;
 int currentOutputY = 0;
 
@@ -29,42 +25,34 @@ HIDInterface *hid_ble = nullptr;
 
 // ============================================================================
 // CLEANUP - Frees RAM, resets flags, DEINITS BLE STACK
-// Since all BLE modules are self-contained, we can safely deinit
-// This gives us a completely fresh BLE state every time!
 // ============================================================================
 
 void cleanupDuckyBLE() {
-    // 1. Clean up the HID instance
     if (hid_ble) {
-        // Try to disconnect gracefully first
         if (hid_ble->isConnected()) {
             if (NimBLEDevice::getAdvertising()) {
                 NimBLEDevice::getAdvertising()->stop();
                 Serial.println("[cleanupDuckyBLE] Advertising stopped");
             }
-            delay(100); // Give time for disconnection
+            delay(100);
         }
-        
-        // Delete the HID instance to free RAM
         delete hid_ble;
         hid_ble = nullptr;
         Serial.println("[cleanupDuckyBLE] hid_ble deleted (RAM freed)");
     }
     
-    // 2. Reset flags
     BLEConnected = false;
     _Ask_for_restart = 0;
     Serial.println("[cleanupDuckyBLE] Flags reset");
     
-    // 3. Deinit the BLE stack - gives us a completely fresh state!
     Serial.println("[cleanupDuckyBLE] Deinitializing BLE stack...");
     NimBLEDevice::deinit();
-    Serial.println("[cleanupDuckyBLE] BLE stack deinitialized (fresh state for next use)");
+    Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
     delay(50);
 }
 
 // ============================================================================
-// DUCKY COMMAND STRUCTURES - Stored in PROGMEM to save RAM
+// DUCKY COMMAND STRUCTURES - Stored in PROGMEM
 // ============================================================================
 
 enum DuckyCommandType {
@@ -220,7 +208,7 @@ const uint8_t *keyboardLayouts[] PROGMEM = {
 };
 
 // ============================================================================
-// MENU KEY STRUCTURES - Stored in PROGMEM to save RAM
+// MENU KEY STRUCTURES - Stored in PROGMEM
 // ============================================================================
 
 struct KeyboardMenuKey {
@@ -459,7 +447,7 @@ sendQueuedKeys(HIDInterface *hid, bool &queueRecording, const std::vector<Queued
 }
 
 // ============================================================================
-// FIND FUNCTIONS - Optimized with caching to reduce PROGMEM reads
+// FIND FUNCTIONS - Optimized with caching
 // ============================================================================
 
 DuckyCommandLookup* findDuckyCommand(const char *cmd) {
@@ -525,16 +513,14 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
                 return;
             }
             
-            // Initialize BLE stack - convert String to std::string
+            // FIX: Always init - if already init'd, it's a no-op
             Serial.println("[ducky_startKb] Initializing BLE stack...");
             NimBLEDevice::init(std::string(bruceConfigPins.bleName.c_str()));
             Serial.println("[ducky_startKb] BLE stack initialized");
             
-            // Create fresh BLE instance
             hid = new BleKeyboard(bruceConfigPins.bleName, "BruceFW", 100);
             Serial.println("[ducky_startKb] New BleKeyboard created");
             
-            // Start advertising
             const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             hid->begin(layout);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
@@ -561,7 +547,6 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
         }
     }
     
-    // Handle existing instance or reconnection
     if (ble) {
         if (hid->isConnected()) {
             Serial.println("BLE Already connected, updating settings");
@@ -571,7 +556,6 @@ void ducky_startKb(HIDInterface *&hid, bool ble) {
             return;
         }
         
-        // Not connected - restart advertising
         Serial.println("Starting/restarting BLE advertising");
         if (!_Ask_for_restart) _Ask_for_restart = 1;
         const uint8_t* layout = (const uint8_t*)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
@@ -1066,7 +1050,6 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 #endif
     }
 EXIT:
-    // Clean up BLE properly (deletes instance, deinits stack, resets flags)
     cleanupDuckyBLE();
 
     if (!ble) {
@@ -1125,7 +1108,6 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         if (!returnToMenu) goto reMenu;
     }
 
-    // Clean up BLE properly
     cleanupDuckyBLE();
     returnToMenu = true;
 }
