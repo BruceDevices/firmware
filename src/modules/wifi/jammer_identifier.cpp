@@ -88,6 +88,7 @@ void drawStatus(const String &message, bool active) {
     tft.drawCentreString("2.4GHz only", screenWidth / 2, infoY, SMOOTH_FONT);
 
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
+    const int16_t footerY = screenHeight - 10;
     tft.drawCentreString("Press any key to stop", screenWidth / 2, tft.height() - 18, SMOOTH_FONT);
 }
 }  // namespace
