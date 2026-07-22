@@ -44,12 +44,17 @@ void sendCustomRF() {
     returnToMenu = false;
     filepath = "";
 
+    String startPath = "/BruceRF";
+
     while (!returnToMenu) {
         num_steps_keeloq = 1;
         num_signal_repeat = 4;
         delay(200);
-        filepath = loopSD(*filesystem, true, "SUB", "/BruceRF");
+        filepath = loopSD(*filesystem, true, "SUB", startPath);
         if (filepath == "" || check(EscPress)) return; //  cancelled
+
+        startPath = filepath.substring(0, filepath.lastIndexOf("/"));
+        if (startPath == "") startPath = "/";
 
         RfCodes data{};
 
