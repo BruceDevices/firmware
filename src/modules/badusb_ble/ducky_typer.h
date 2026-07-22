@@ -15,11 +15,6 @@
 
 extern HIDInterface *hid_usb;
 extern HIDInterface *hid_ble;
-extern HIDInterface *hid_keyboard;
-extern HIDInterface *hid_media;
-extern HIDInterface *hid_badusb;
-extern HIDInterface *hid_presenter;
-extern uint8_t _Ask_for_restart;
 extern int activeBLEInstances;
 
 struct DuckyCommand;
