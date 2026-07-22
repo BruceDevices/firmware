@@ -61,28 +61,34 @@ void drawStatus(const String &message, bool active) {
     tft.fillRect(0, 0, tft.width(), tft.height(), bruceConfig.bgColor);
     drawMainBorderWithTitle("Jammer Identifier");
 
+    const int16_t screenHeight = tft.height();
+    const int16_t screenWidth = tft.width();
+    const int16_t titleY = screenHeight * 0.25;      
+    const int16_t messageY = screenHeight * 0.50;    
+    const int16_t infoY = screenHeight - 35;         
+
     if (active) {
         tft.setTextColor(TFT_RED, bruceConfig.bgColor);
         tft.setTextSize(2);
-        tft.drawCentreString("ACTIVE JAMMER ATTACK", tft.width() / 2, 58, SMOOTH_FONT);
+        tft.drawCentreString("ACTIVE JAMMER ATTACK", screenWidth / 2, titleY, SMOOTH_FONT);
         tft.setTextSize(1);
         tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-        tft.drawCentreString("Deauth/Disassoc frames detected", tft.width() / 2, 110, SMOOTH_FONT);
+        tft.drawCentreString("Deauth/Disassoc frames detected", screenWidth / 2, messageY, SMOOTH_FONT);
     } else {
         tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
         tft.setTextSize(2);
-        tft.drawCentreString("SCANNING", tft.width() / 2, 70, SMOOTH_FONT);
+        tft.drawCentreString("SCANNING", screenWidth / 2, titleY, SMOOTH_FONT);
         tft.setTextSize(1);
         tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-        tft.drawCentreString(message, tft.width() / 2, 110, SMOOTH_FONT);
+        tft.drawCentreString(message, screenWidth  / 2, messageY, SMOOTH_FONT);
     }
 
     tft.setTextColor(TFT_ORANGE, bruceConfig.bgColor);
     tft.setTextSize(1);
-    tft.drawCentreString("2.4GHz only", tft.width() / 2, tft.height() - 35, SMOOTH_FONT);
+    tft.drawCentreString("2.4GHz only", screenWidth / 2, infoY, SMOOTH_FONT);
 
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
-    tft.drawCentreString("Press any key to stop", tft.width() / 2, tft.height() - 18, SMOOTH_FONT);
+    tft.drawCentreString("Press any key to stop", screenWidth / 2, tft.height() - 18, SMOOTH_FONT);
 }
 }  // namespace
 
@@ -124,10 +130,13 @@ void jammerIdentifier() {
             lastStatusUpdate = millis();
             drawStatus(active ? "Active deauth flood detected" : statusText, active);
             if (active) {
+                const int16_t screenHeight = tft.height();
+                const int16_t screenWidth = tft.width();
+                const int16_t statsY = screenHeight * 0.65;
                 tft.setTextColor(TFT_RED, bruceConfig.bgColor);
                 tft.setTextSize(1);
                 tft.drawCentreString("Deauths: " + String(sampleDeauths) + " / Packets: " + String(samplePackets),
-                                     tft.width() / 2, 140, SMOOTH_FONT);
+                                    screenWidth  / 2, statsY, SMOOTH_FONT);
             }
         }
 
