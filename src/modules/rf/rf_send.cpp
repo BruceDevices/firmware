@@ -338,7 +338,7 @@ bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
     }
 
     Serial.printf("\nSent %d of %d signals\n", sent, total);
-    if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), true); }
+    if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), false); }
 
     // Reset vectors
     bitList.clear();
