@@ -629,7 +629,7 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
             padprintln("Security: " + encryptionTypeStr);
             padprintln("");
 
-            if (phase == CAPTURED && hasBeacons) {
+            if (phase == CAPTURED) {
                 tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
                 padprintln("Status: CAPTURED!");
             } else if (hasBeacons) {
