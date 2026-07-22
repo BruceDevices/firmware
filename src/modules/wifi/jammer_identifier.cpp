@@ -77,6 +77,10 @@ void drawStatus(const String &message, bool active) {
         tft.drawCentreString(message, tft.width() / 2, 110, SMOOTH_FONT);
     }
 
+    tft.setTextColor(TFT_ORANGE, bruceConfig.bgColor);
+    tft.setTextSize(1);
+    tft.drawCentreString("2.4GHz only", tft.width() / 2, tft.height() - 35, SMOOTH_FONT);
+
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
     tft.drawCentreString("Press any key to stop", tft.width() / 2, tft.height() - 18, SMOOTH_FONT);
 }
