@@ -217,12 +217,14 @@ bool tryMonitorMode(uint8_t channel) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
     esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
     wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL};
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous(true);
     esp_err_t err = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     if (err != ESP_OK) {
         esp_wifi_set_promiscuous(false);
+        esp_wifi_stop();
         esp_wifi_set_mode(current_mode);
         esp_wifi_start();
         return false;
