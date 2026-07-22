@@ -33,7 +33,7 @@ void jammerSniffer(void *buf, wifi_promiscuous_pkt_type_t type) {
     if (!pkt || pkt->rx_ctrl.sig_len < 24) return;
 
     ++g_jammer_packets;
-    if (isDeauthOrDisassocFrame(pkt->payload)) ++g_jammer_deauths;
+    if (isDeauthOrDisassocFrame(pkt->payload)) g_jammer_deauths = g_jammer_deauths + 1;
 }
 
 bool detectJammerAttack(uint32_t &samplePackets, uint32_t &sampleDeauths) {
@@ -102,7 +102,8 @@ void jammerIdentifier() {
     delay(60);
 
     esp_wifi_set_promiscuous(true);
-    esp_wifi_set_promiscuous_filter(&(wifi_promiscuous_filter_t){.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL});
+    wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL};
+    esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous_rx_cb(jammerSniffer);
 
     g_jammer_packets = 0;
