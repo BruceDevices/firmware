@@ -54,19 +54,19 @@ static const uint8_t SCK = 18;
 #define NRF24_MISO_PIN SPI_MISO_PIN
 
 #define FP 1
-#define FM 2
-#define FG 3
+#define FM 1
+#define FG 1
 
-#define HAS_SCREEN 1
-#define ROTATION 1
+#define HAS_SCREEN
+#define ROTATION 3
 #define MINBRIGHT (uint8_t)1
 
-#define USER_SETUP_LOADED 1
-#define ST7789_DRIVER 1
-#define TFT_RGB_ORDER 0
-#define TFT_ 170
-#define TFT_HEIGHT 320
-#define TFT_BACKLIGHT_ON 1
+#define USER_SETUP_LOADED
+#define ST7735_DRIVER
+#define TFT_RGB_ORDER TFT_BGR
+#define TFT_ 80
+#define TFT_HEIGHT 160
+#define TFT_BACKLIGHT_ON HIGH
 #define TFT_BL 6
 #define TFT_RST 16
 #define TFT_DC 15
@@ -76,9 +76,13 @@ static const uint8_t SCK = 18;
 #define TFT_CS 7
 #define TOUCH_CS -1 // SDCARD_CS to make sure SDCard works
 #define SMOOTH_FONT 1
+#define ST7735_GREENTAB160x80
 #define SPI_FREQUENCY 20000000
 #define SPI_READ_FREQUENCY 20000000
 #define SPI_TOUCH_FREQUENCY 2500000
+#define TFT_INVERSION_ON
+
+
 
 #define SDCARD_CS 3
 #define SDCARD_SCK 18
