@@ -24,7 +24,6 @@ pip install platformio
 # 2. Get the code
 git clone https://github.com/tsuinami-r1/brucecustom.git
 cd brucecustom
-git checkout claude/camera-features-bruce-port-l191ww   # branch with the camera features
 
 # 3. Build for your device (replace <env> with your board)
 pio run -e <env>
