@@ -65,13 +65,13 @@ void WifiMenu::optionsMenu() {
                            EvilPortal();
                        }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
-    options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
     options.push_back({"SOCKS4 Proxy", []() { socks4Proxy(1080); }});
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
+    options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Channel Analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
