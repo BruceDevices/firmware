@@ -24,7 +24,7 @@
 #include "modules/wifi/wifi_recover.h"
 #endif
 
-// #include "modules/reverseShell/reverseShell.h"
+#include "modules/reverseShell/reverseShell.h"
 //  Developed by Fourier (github.com/9dl)
 //  Use BruceC2 to interact with the reverse shell server
 //  BruceC2: https://github.com/9dl/Bruce-C2
@@ -65,7 +65,7 @@ void WifiMenu::optionsMenu() {
                            EvilPortal();
                        }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
-    // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
+    options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
