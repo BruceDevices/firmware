@@ -73,7 +73,7 @@ static const uint8_t SCK = SPI_SCK_PIN;
 
 // ------------------------------------------------------------------ Display setup
 #define HAS_SCREEN
-#define ROTATION 0 // Portrait, buttons at the bottom edge
+#define ROTATION 1 // Landscape, buttons on the right edge
 #define MINBRIGHT (uint8_t)1
 
 // Font sizes
