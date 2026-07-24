@@ -1,6 +1,7 @@
 #include "config.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
+#include <algorithm>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -824,8 +825,15 @@ void BruceConfig::validateMifareKeysItems() {
 }
 
 void BruceConfig::addDisabledMenu(String value) {
-    // TODO: check if duplicate
+    if (std::find(disabledMenus.begin(), disabledMenus.end(), value) != disabledMenus.end()) return;
     disabledMenus.push_back(value);
+    saveFile();
+}
+
+void BruceConfig::removeDisabledMenu(String value) {
+    auto it = std::find(disabledMenus.begin(), disabledMenus.end(), value);
+    if (it == disabledMenus.end()) return;
+    disabledMenus.erase(it);
     saveFile();
 }
 
