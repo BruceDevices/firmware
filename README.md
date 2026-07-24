@@ -4,28 +4,11 @@
 
 Bruce is a versatile ESP32 firmware that supports a ton of offensive features focusing on facilitating Red Team operations.
 It also supports M5stack and Lilygo products and works great with Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
+This is an unofficial custom fork.
 
 **Check our fully open-source hardware too:** https://bruce.computer/boards
 
 **Also Check Our official Shop!! Buy here and support us** https://bruce-devices.myshopify.com/
-
-## :building_construction: How to install
-
-### The easiest way to install Bruce is using our official Web Flasher!
-
-### Check out: https://bruce.computer/flasher
-
-Alternatively, you can download the latest binary from releases or actions and flash locally using esptool.py
-
-```sh
-esptool.py --port /dev/ttyACM0 write_flash 0x00000 Bruce-<device>.bin
-```
-
-**For m5stack devices**
-
-If you already use M5Launcher to manage your m5stack device, you can install it with OTA
-
-Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/download), just search for 'Bruce' (My official builds will be uploaded by "owner" and have photos.) on the device category you want to and click on burn
 
 ## :hammer_and_wrench: Build & flash from source (this fork)
 
