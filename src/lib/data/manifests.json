@@ -47,9 +47,10 @@
 		{ "id": "nm-cyd-c5", "name": "NM-CYD-C5", "family": "ESP32-C5" }
 	],
 	"ESP32": [
-    { "id": "esp32-s3-devkitc-1", "name": "ESP32-S3", "family": "ESP32-S3" },
+    	{ "id": "esp32-s3-devkitc-1", "name": "ESP32-S3", "family": "ESP32-S3" },
+		{ "id": "esp32-s3-devkitc-1-psram", "name": "ESP32-S3 (PSRAM)", "family": "ESP32-S3" },
 		{ "id": "esp32-c5", "name": "ESP32-C5", "family": "ESP32-C5" },
-    { "id": "esp32-c5-tft", "name": "ESP32-C5-TFT", "family": "ESP32-C5" }
+    	{ "id": "esp32-c5-tft", "name": "ESP32-C5-TFT", "family": "ESP32-C5" }
   ],
 	"Custom Boards": [
 		{ "id": "Awok-Mini", "name": "AWOK dual Mini v2", "family": "ESP32" },
