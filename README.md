@@ -27,6 +27,46 @@ If you already use M5Launcher to manage your m5stack device, you can install it 
 
 Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/download), just search for 'Bruce' (My official builds will be uploaded by "owner" and have photos.) on the device category you want to and click on burn
 
+## :hammer_and_wrench: Build & flash from source (this fork)
+
+This fork is built with [PlatformIO](https://platformio.org/). Each supported device is a
+PlatformIO *environment* (e.g. `m5stack-cardputer`, `CYD-2432S028`, `lilygo-t-embed-cc1101`).
+The full list is in `platformio.ini` under `[platformio] default_envs` and in the `boards/`
+directory.
+
+```sh
+# 1. Install PlatformIO core (once)
+pip install platformio
+
+# 2. Get the code
+git clone https://github.com/tsuinami-r1/brucecustom.git
+cd brucecustom
+git checkout claude/camera-features-bruce-port-l191ww   # branch with the camera features
+
+# 3. Build for your device (replace <env> with your board)
+pio run -e <env>
+#   e.g. pio run -e CYD-2432S028
+```
+
+A successful build produces a single merged image `Bruce-<env>.bin` in the project root
+(bootloader + partitions + app are merged automatically by `build.py`).
+
+**Flash it** — plug the board in (hold BOOT while connecting if it isn't detected) and either:
+
+```sh
+# Option A: let PlatformIO build + upload in one step
+pio run -e <env> -t upload
+
+# Option B: flash the merged Bruce-<env>.bin with esptool (offset 0x0)
+esptool.py --chip esp32 --port /dev/ttyACM0 write_flash 0x0 Bruce-<env>.bin
+```
+
+> The merged `Bruce-<env>.bin` is also what the [Web Flasher](https://bruce.computer/flasher)
+> expects, so you can drag it into the flasher instead of using esptool.
+
+For the camera features (Cam Detector / Camera Scan / Camera Deauther) any ESP32 board with
+built-in Wi-Fi + BLE works — no CC1101/nRF24 add-on is required.
+
 ## :keyboard: Discord Server
 
 Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT)!
