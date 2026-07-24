@@ -1,5 +1,21 @@
 [
 	{
+		"device": "Bruce Reaper RF",
+		"CC1101": true,
+		"NRF24": true,
+		"FMRadio": "Module Required",
+		"NFC": true,
+		"Mic": false,
+		"BadUSB": true,
+		"RGB_Led": true,
+		"Audio": true,
+		"Screen": "170x320",
+		"ESP": "ESP32-S3 N16R8",
+		"Battery": "None",
+		"Flash": "16MB",
+		"PSRAM": "8MB"
+	},
+	{
 		"device": "M5Stack Cardputer",
 		"CC1101": "Module Required",
 		"NRF24": "Module Required",
