@@ -1,6 +1,7 @@
 #include "cam_detector.h"
 #include "ble_common.h"
 #include "camera_brands.h"
+#include "tutk_watch.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -649,6 +650,7 @@ void camDetectorMenu() {
         {"Auto-Sweep",      cameraAutoSweep           },
         {"Camera Deauther", cameraDeauther            },
         {"P2P LAN Scan",    p2pLanScan                },
+        {"TUTK Watch",      tutkWatch                 },
         {"Flock Detector",  flockDetector             },
         {"Axon Detector",   axonDetector              },
         {"RayBan Detector", raybanDetector            },

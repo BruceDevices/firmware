@@ -127,6 +127,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   - [x] Camera Deauther - deauths detected camera APs
   - [x] P2P LAN Scan - active discovery + targeted deauth of iLnkP2P/CS2 P2P cameras (UDP 32108)
   - [x] Auto-Sweep - wardrive mode: auto-joins open APs + camera setup-APs and P2P-probes them, flashing an alert on each new camera
+  - [x] TUTK Watch - experimental half-MITM traffic classifier: flags TUTK/Kalay cameras by their cloud traffic (UDP 32100 / Kalay DNS)
   - [x] Flock / Axon / RayBan detectors
 </details>
 
