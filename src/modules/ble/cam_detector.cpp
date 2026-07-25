@@ -299,7 +299,10 @@ static void cameraDeauther() {
 // target the camera station directly. Requires being connected to the same
 // network as the cameras (active, not passive).
 // ---------------------------------------------------------------------------
-static const uint16_t P2P_PORT = 32108;
+static const uint16_t P2P_PORT = 32108;      // iLnkP2P / CS2 Yunni LAN search
+static const uint16_t P2P_PORT_TUTK = 32100; // TUTK/Kalay master port; legacy
+                                             // PPPP-family (pre-hardening) cams
+                                             // often still answer LAN search here
 
 struct P2PCam {
     String uid;
@@ -320,13 +323,18 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
     const uint8_t probeSearch[4] = {0xF1, 0x30, 0x00, 0x00};    // MSG_LAN_SEARCH
     const uint8_t probeSearchExt[4] = {0xF1, 0x32, 0x00, 0x00}; // MSG_LAN_SEARCH_EXT
 
+    // Tier-1 TUTK: probe the classic iLnkP2P/CS2 port and the TUTK master port.
+    // Devices reply to our source port, so the single bound socket catches both.
+    const uint16_t dstPorts[2] = {P2P_PORT, P2P_PORT_TUTK};
     for (int r = 0; r < 3; r++) {
-        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
-        udp.write(probeSearch, sizeof(probeSearch));
-        udp.endPacket();
-        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
-        udp.write(probeSearchExt, sizeof(probeSearchExt));
-        udp.endPacket();
+        for (uint16_t dp : dstPorts) {
+            udp.beginPacket(IPAddress(255, 255, 255, 255), dp);
+            udp.write(probeSearch, sizeof(probeSearch));
+            udp.endPacket();
+            udp.beginPacket(IPAddress(255, 255, 255, 255), dp);
+            udp.write(probeSearchExt, sizeof(probeSearchExt));
+            udp.endPacket();
+        }
         delay(60);
     }
 
