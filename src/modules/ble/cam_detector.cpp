@@ -5,8 +5,6 @@
 #include "core/mykeyboard.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "esp_netif.h"
-#include "esp_netif_net_stack.h"
 #include "esp_wifi.h"
 #include "lwip/etharp.h"
 #include "modules/wifi/wifi_atks.h"
@@ -311,12 +309,6 @@ struct P2PCam {
     bool haveMac;
 };
 
-static struct netif *p2pStaNetif() {
-    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (!sta) return nullptr;
-    return (struct netif *)esp_netif_get_netif_impl(sta);
-}
-
 // Broadcast the LAN-search probes and collect responders.
 static void p2pDiscover(std::vector<P2PCam> &out) {
     WiFiUDP udp;
@@ -360,7 +352,8 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
                     char check[7] = {0};
                     for (int i = 0; i < 6; i++) {
                         char c = (char)buf[16 + i];
-                        check[i] = (c >= 32 && c < 127) ? c : '\0';
+                        if (c >= 32 && c < 127) check[i] = c;
+                        else break; // stop at first non-printable (padding)
                     }
                     char uid[40];
                     snprintf(uid, sizeof(uid), "%s-%06lu-%s", prefix, (unsigned long)serial, check);
@@ -394,14 +387,18 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
 
 // Resolve each camera IP -> station MAC via the lwIP ARP table.
 static void p2pResolveMacs(std::vector<P2PCam> &cams) {
-    struct netif *nif = p2pStaNetif();
-    if (!nif) return;
-
+    // Nudge ARP resolution the thread-safe way: a unicast datagram to each
+    // camera makes lwIP ARP for it through the normal (core-locked) UDP send
+    // path, so we avoid calling lwIP internals (etharp_request) from this task.
+    WiFiUDP udp;
+    udp.begin(0);
+    const uint8_t ping[4] = {0xF1, 0x30, 0x00, 0x00};
     for (auto &c : cams) {
-        ip4_addr_t ip;
-        ip.addr = (uint32_t)c.ip;
-        etharp_request(nif, &ip); // trigger ARP so the table gets populated
+        udp.beginPacket(c.ip, P2P_PORT);
+        udp.write(ping, sizeof(ping));
+        udp.endPacket();
     }
+    udp.stop();
     delay(500);
 
     for (uint32_t i = 0; i < ARP_TABLE_SIZE; i++) {
