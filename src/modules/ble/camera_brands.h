@@ -33,4 +33,13 @@ struct CameraBrand {
 // *methodOut (if non-null) is set to "OUI" or "name".
 const char *identifyCamera(const String &macLower, const String &nameLower, const char **methodOut = nullptr);
 
+// Identify an iLnkP2P / CS2 Network P2P camera by its UID prefix (the leading
+// letters of a UID like "VSTF-123456-ABCDE"). These P2P cameras are the cheap
+// OEM class that OUI/SSID fingerprinting misses: they ship generic Wi-Fi chips
+// and self-identify only via the LAN-search protocol (UDP 32108).
+//
+// `prefixUpper` should be the upper-case letter prefix. Returns a brand/family
+// label for a known prefix, or nullptr (caller falls back to a generic label).
+const char *identifyP2PPrefix(const String &prefixUpper);
+
 #endif
