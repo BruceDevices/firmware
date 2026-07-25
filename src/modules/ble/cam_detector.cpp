@@ -530,9 +530,115 @@ static void p2pLanScan() {
     options.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Auto-Sweep: wardrive-style continuous discovery. Repeatedly scans for APs,
+// flags any AP that is itself a camera (passive), and for every OPEN network
+// auto-joins and runs the P2P LAN probe (active) - no SSID/password typing.
+// Each new hit triggers a subtle screen flash + a brief detail card.
+// ---------------------------------------------------------------------------
+static void sweepAlert(const CamDevice &d) {
+    // subtle flash
+    tft.fillScreen(bruceConfig.priColor);
+    delay(80);
+    tft.fillScreen(bruceConfig.bgColor);
+
+    drawMainBorderWithTitle("Camera Found");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 40);
+    padprintln(" " + d.brand);
+    padprintln(" " + d.name);
+    padprintln(" " + d.address);
+    padprintln(" " + d.method);
+    delay(1200);
+}
+
+static void cameraAutoSweep() {
+    std::vector<CamDevice> found;
+    std::vector<String> tried; // OPEN bssids already joined this session
+
+    auto seen = [&](const String &k) {
+        for (auto &f : found)
+            if (f.name == k || f.address == k) return true;
+        return false;
+    };
+
+    WiFi.mode(WIFI_MODE_STA);
+    WiFi.disconnect(false);
+    delay(100);
+
+    while (!check(EscPress)) {
+        drawMainBorderWithTitle("Auto-Sweep");
+        tft.setTextSize(FP);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.setCursor(6, 40);
+        padprintln(" Scanning APs...");
+        padprintln(" Cameras: " + String((int)found.size()));
+
+        int nets = WiFi.scanNetworks(false, true);
+        for (int i = 0; i < nets && !check(EscPress); i++) {
+            String ssid = WiFi.SSID(i);
+            String bssid = WiFi.BSSIDstr(i);
+
+            // Passive: is the AP itself a known camera?
+            const char *method = nullptr;
+            const char *brand = identifyCamera(lc(bssid), lc(ssid), &method);
+            if (brand && !seen(bssid)) {
+                CamDevice d = {
+                    ssid.isEmpty() ? String("<hidden>") : ssid, bssid, (int)WiFi.RSSI(i),
+                    String("WiFi ") + method, String(brand)
+                };
+                found.push_back(d);
+                sweepAlert(d);
+            }
+
+            // Active: OPEN network -> join and run the P2P probe (once per BSSID).
+            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN || ssid.isEmpty()) continue;
+            bool already = false;
+            for (auto &t : tried)
+                if (t == bssid) {
+                    already = true;
+                    break;
+                }
+            if (already) continue;
+            tried.push_back(bssid);
+
+            drawMainBorderWithTitle("Auto-Sweep");
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setCursor(6, 40);
+            padprintln(" Join: " + ssid.substring(0, 18));
+            padprintln(" Cameras: " + String((int)found.size()));
+
+            WiFi.begin(ssid.c_str());
+            uint32_t t0 = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress)) delay(100);
+
+            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) {
+                std::vector<P2PCam> cams;
+                p2pDiscover(cams);
+                p2pResolveMacs(cams);
+                for (auto &c : cams) {
+                    if (seen(c.uid)) continue;
+                    CamDevice d = {c.uid, c.ip.toString(), 0, String("P2P"), c.brand};
+                    found.push_back(d);
+                    sweepAlert(d);
+                }
+            }
+            WiFi.disconnect(false);
+            delay(50);
+        }
+        WiFi.scanDelete();
+    }
+
+    WiFi.disconnect(true);
+    showResults("Sweep Cams", found);
+}
+
 void camDetectorMenu() {
     options = {
         {"Camera Scan",     cameraScan                },
+        {"Auto-Sweep",      cameraAutoSweep           },
         {"Camera Deauther", cameraDeauther            },
         {"P2P LAN Scan",    p2pLanScan                },
         {"Flock Detector",  flockDetector             },
