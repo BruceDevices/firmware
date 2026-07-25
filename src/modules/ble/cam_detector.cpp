@@ -363,7 +363,7 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
                         check[i] = (c >= 32 && c < 127) ? c : '\0';
                     }
                     char uid[40];
-                    snprintf(uid, sizeof(uid), "%s-%06u-%s", prefix, serial, check);
+                    snprintf(uid, sizeof(uid), "%s-%06lu-%s", prefix, (unsigned long)serial, check);
 
                     bool dup = false;
                     for (auto &c : out)
