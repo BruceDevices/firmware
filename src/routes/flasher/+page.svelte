@@ -78,7 +78,7 @@
 		// using alternative Launcher CORS proxy until Bruce's proxy doesn't get fixed
 		// Change "activated" to False to get back to original code, 
 		// keep the alternative proxy in the code, DO NOT remove!!
-		const activated = true; 
+		const activated = false; 
 		
 		if (activated && releaseTag === 'betaRelease') {
 			return (
@@ -91,7 +91,7 @@
 		}
 
 		return (
-			'https://bruce.iceis.co.uk/service/github/' +
+			'https://dl.bruce.computer/' +
 			releaseTag +
 			'/Bruce-' +
 			encodeURIComponent(selectedDevice) +
