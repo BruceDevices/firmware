@@ -108,6 +108,8 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   - [x] Camera Scan - multi-brand Wi-Fi + BLE camera detector (Hikvision, Dahua, EZVIZ, Reolink, Tapo, Xiaomi, Arlo, Ring, Eufy, Wyze, Imou, Lorex, Swann, Aqara, ... tuned for AU/HK markets)
   - [x] Camera Deauther - deauths detected camera APs
   - [x] P2P LAN Scan - active discovery + targeted deauth of iLnkP2P/CS2 P2P cameras (UDP 32108)
+  - [x] Auto-Sweep - wardrive mode: auto-joins open APs + camera setup-APs and P2P-probes them, flashing an alert on each new camera
+  - [x] TUTK Watch - experimental half-MITM traffic classifier: flags TUTK/Kalay cameras by their cloud traffic (UDP 32100 / Kalay DNS)
   - [x] Flock / Axon / RayBan detectors
 </details>
 

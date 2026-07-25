@@ -1,12 +1,11 @@
 #include "cam_detector.h"
 #include "ble_common.h"
 #include "camera_brands.h"
+#include "tutk_watch.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "esp_netif.h"
-#include "esp_netif_net_stack.h"
 #include "esp_wifi.h"
 #include "lwip/etharp.h"
 #include "modules/wifi/wifi_atks.h"
@@ -301,7 +300,10 @@ static void cameraDeauther() {
 // target the camera station directly. Requires being connected to the same
 // network as the cameras (active, not passive).
 // ---------------------------------------------------------------------------
-static const uint16_t P2P_PORT = 32108;
+static const uint16_t P2P_PORT = 32108;      // iLnkP2P / CS2 Yunni LAN search
+static const uint16_t P2P_PORT_TUTK = 32100; // TUTK/Kalay master port; legacy
+                                             // PPPP-family (pre-hardening) cams
+                                             // often still answer LAN search here
 
 struct P2PCam {
     String uid;
@@ -310,12 +312,6 @@ struct P2PCam {
     uint8_t mac[6];
     bool haveMac;
 };
-
-static struct netif *p2pStaNetif() {
-    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    if (!sta) return nullptr;
-    return (struct netif *)esp_netif_get_netif_impl(sta);
-}
 
 // Broadcast the LAN-search probes and collect responders.
 static void p2pDiscover(std::vector<P2PCam> &out) {
@@ -328,13 +324,18 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
     const uint8_t probeSearch[4] = {0xF1, 0x30, 0x00, 0x00};    // MSG_LAN_SEARCH
     const uint8_t probeSearchExt[4] = {0xF1, 0x32, 0x00, 0x00}; // MSG_LAN_SEARCH_EXT
 
+    // Tier-1 TUTK: probe the classic iLnkP2P/CS2 port and the TUTK master port.
+    // Devices reply to our source port, so the single bound socket catches both.
+    const uint16_t dstPorts[2] = {P2P_PORT, P2P_PORT_TUTK};
     for (int r = 0; r < 3; r++) {
-        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
-        udp.write(probeSearch, sizeof(probeSearch));
-        udp.endPacket();
-        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
-        udp.write(probeSearchExt, sizeof(probeSearchExt));
-        udp.endPacket();
+        for (uint16_t dp : dstPorts) {
+            udp.beginPacket(IPAddress(255, 255, 255, 255), dp);
+            udp.write(probeSearch, sizeof(probeSearch));
+            udp.endPacket();
+            udp.beginPacket(IPAddress(255, 255, 255, 255), dp);
+            udp.write(probeSearchExt, sizeof(probeSearchExt));
+            udp.endPacket();
+        }
         delay(60);
     }
 
@@ -360,7 +361,8 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
                     char check[7] = {0};
                     for (int i = 0; i < 6; i++) {
                         char c = (char)buf[16 + i];
-                        check[i] = (c >= 32 && c < 127) ? c : '\0';
+                        if (c >= 32 && c < 127) check[i] = c;
+                        else break; // stop at first non-printable (padding)
                     }
                     char uid[40];
                     snprintf(uid, sizeof(uid), "%s-%06lu-%s", prefix, (unsigned long)serial, check);
@@ -394,14 +396,18 @@ static void p2pDiscover(std::vector<P2PCam> &out) {
 
 // Resolve each camera IP -> station MAC via the lwIP ARP table.
 static void p2pResolveMacs(std::vector<P2PCam> &cams) {
-    struct netif *nif = p2pStaNetif();
-    if (!nif) return;
-
+    // Nudge ARP resolution the thread-safe way: a unicast datagram to each
+    // camera makes lwIP ARP for it through the normal (core-locked) UDP send
+    // path, so we avoid calling lwIP internals (etharp_request) from this task.
+    WiFiUDP udp;
+    udp.begin(0);
+    const uint8_t ping[4] = {0xF1, 0x30, 0x00, 0x00};
     for (auto &c : cams) {
-        ip4_addr_t ip;
-        ip.addr = (uint32_t)c.ip;
-        etharp_request(nif, &ip); // trigger ARP so the table gets populated
+        udp.beginPacket(c.ip, P2P_PORT);
+        udp.write(ping, sizeof(ping));
+        udp.endPacket();
     }
+    udp.stop();
     delay(500);
 
     for (uint32_t i = 0; i < ARP_TABLE_SIZE; i++) {
@@ -533,11 +539,118 @@ static void p2pLanScan() {
     options.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Auto-Sweep: wardrive-style continuous discovery. Repeatedly scans for APs,
+// flags any AP that is itself a camera (passive), and for every OPEN network
+// auto-joins and runs the P2P LAN probe (active) - no SSID/password typing.
+// Each new hit triggers a subtle screen flash + a brief detail card.
+// ---------------------------------------------------------------------------
+static void sweepAlert(const CamDevice &d) {
+    // subtle flash
+    tft.fillScreen(bruceConfig.priColor);
+    delay(80);
+    tft.fillScreen(bruceConfig.bgColor);
+
+    drawMainBorderWithTitle("Camera Found");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 40);
+    padprintln(" " + d.brand);
+    padprintln(" " + d.name);
+    padprintln(" " + d.address);
+    padprintln(" " + d.method);
+    delay(1200);
+}
+
+static void cameraAutoSweep() {
+    std::vector<CamDevice> found;
+    std::vector<String> tried; // OPEN bssids already joined this session
+
+    auto seen = [&](const String &k) {
+        for (auto &f : found)
+            if (f.name == k || f.address == k) return true;
+        return false;
+    };
+
+    WiFi.mode(WIFI_MODE_STA);
+    WiFi.disconnect(false);
+    delay(100);
+
+    while (!check(EscPress)) {
+        drawMainBorderWithTitle("Auto-Sweep");
+        tft.setTextSize(FP);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.setCursor(6, 40);
+        padprintln(" Scanning APs...");
+        padprintln(" Cameras: " + String((int)found.size()));
+
+        int nets = WiFi.scanNetworks(false, true);
+        for (int i = 0; i < nets && !check(EscPress); i++) {
+            String ssid = WiFi.SSID(i);
+            String bssid = WiFi.BSSIDstr(i);
+
+            // Passive: is the AP itself a known camera?
+            const char *method = nullptr;
+            const char *brand = identifyCamera(lc(bssid), lc(ssid), &method);
+            if (brand && !seen(bssid)) {
+                CamDevice d = {
+                    ssid.isEmpty() ? String("<hidden>") : ssid, bssid, (int)WiFi.RSSI(i),
+                    String("WiFi ") + method, String(brand)
+                };
+                found.push_back(d);
+                sweepAlert(d);
+            }
+
+            // Active: OPEN network -> join and run the P2P probe (once per BSSID).
+            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN || ssid.isEmpty()) continue;
+            bool already = false;
+            for (auto &t : tried)
+                if (t == bssid) {
+                    already = true;
+                    break;
+                }
+            if (already) continue;
+            tried.push_back(bssid);
+
+            drawMainBorderWithTitle("Auto-Sweep");
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setCursor(6, 40);
+            padprintln(" Join: " + ssid.substring(0, 18));
+            padprintln(" Cameras: " + String((int)found.size()));
+
+            WiFi.begin(ssid.c_str());
+            uint32_t t0 = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress)) delay(100);
+
+            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) {
+                std::vector<P2PCam> cams;
+                p2pDiscover(cams);
+                p2pResolveMacs(cams);
+                for (auto &c : cams) {
+                    if (seen(c.uid)) continue;
+                    CamDevice d = {c.uid, c.ip.toString(), 0, String("P2P"), c.brand};
+                    found.push_back(d);
+                    sweepAlert(d);
+                }
+            }
+            WiFi.disconnect(false);
+            delay(50);
+        }
+        WiFi.scanDelete();
+    }
+
+    WiFi.disconnect(true);
+    showResults("Sweep Cams", found);
+}
+
 void camDetectorMenu() {
     options = {
         {"Camera Scan",     cameraScan                },
+        {"Auto-Sweep",      cameraAutoSweep           },
         {"Camera Deauther", cameraDeauther            },
         {"P2P LAN Scan",    p2pLanScan                },
+        {"TUTK Watch",      tutkWatch                 },
         {"Flock Detector",  flockDetector             },
         {"Axon Detector",   axonDetector              },
         {"RayBan Detector", raybanDetector            },
