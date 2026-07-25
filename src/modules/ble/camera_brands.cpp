@@ -121,6 +121,47 @@ static const CameraBrand kBrands[] = {
     {"D-Link", nullptr, 0, pat_dlink, ARRSZ(pat_dlink)},
 };
 
+// ---------------------------------------------------------------------------
+// iLnkP2P / CS2 Network P2P UID prefixes. Any device answering the LAN-search
+// probe on UDP 32108 is a P2P camera; the prefix adds vendor colour. Only a few
+// mappings are asserted with confidence (VStarcam's VSTx family); the rest are
+// labelled by P2P family. Extend from published iLnkP2P prefix research.
+// ---------------------------------------------------------------------------
+struct P2PPrefix {
+    const char *prefix;
+    const char *brand;
+};
+
+static const P2PPrefix kP2PPrefixes[] = {
+    // VStarcam / Eye4 (well documented)
+    {"VSTA", "VStarcam"},
+    {"VSTB", "VStarcam"},
+    {"VSTC", "VStarcam"},
+    {"VSTD", "VStarcam"},
+    {"VSTF", "VStarcam"},
+    {"VSTG", "VStarcam"},
+    {"VSTH", "VStarcam"},
+    // Generic iLnkP2P / Yunni families recognised by the reference tool.
+    // Brand is white-label/OEM, so only the family is asserted.
+    {"EEEE", "iLnkP2P OEM"},
+    {"FFFF", "iLnkP2P OEM"},
+    {"QHSV", "iLnkP2P"},
+    {"ROSS", "iLnkP2P"},
+    {"ISRP", "iLnkP2P"},
+    {"GCMN", "iLnkP2P"},
+    {"ELSA", "iLnkP2P"},
+    {"MEYE", "iLnkP2P"},
+    {"PPBB", "iLnkP2P"},
+    {"HWAA", "iLnkP2P OEM"},
+};
+
+const char *identifyP2PPrefix(const String &prefixUpper) {
+    for (const auto &e : kP2PPrefixes) {
+        if (prefixUpper.equalsIgnoreCase(e.prefix)) return e.brand;
+    }
+    return nullptr;
+}
+
 const char *identifyCamera(const String &macLower, const String &nameLower, const char **methodOut) {
     // Pass 1: OUI (high confidence) across all brands.
     if (macLower.length() >= 8) {

