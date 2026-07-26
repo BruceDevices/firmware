@@ -478,10 +478,10 @@ struct BleSpamAttackOption {
 };
 
 struct BleSpamConfig {
-    uint32_t adv_ms = 15;
+    uint32_t adv_ms = 5;
     uint32_t gap_ms = 5;
     BleSpamTxPower tx_power = BLE_SPAM_TX_MAX;
-    BleSpamMacRandMode mac_rand_mode = BLE_SPAM_MAC_EVERY_3;
+    BleSpamMacRandMode mac_rand_mode = BLE_SPAM_MAC_EVERY_PACKET;
 };
 
 struct BleSpamSelection {
@@ -694,9 +694,9 @@ static BleSpamConfig bleSpamLoadConfig() {
     if (prefs.begin("ble_spam", false)) {
         uint8_t tx_init = prefs.getUChar("tx_init", 0);
         if (tx_init == 0) {
-            config.adv_ms = 15;
+            config.adv_ms = 5;
             config.gap_ms = 5;
-            config.mac_rand_mode = BLE_SPAM_MAC_EVERY_3;
+            config.mac_rand_mode = BLE_SPAM_MAC_EVERY_PACKET;
             config.tx_power = BLE_SPAM_TX_MAX;
             prefs.putUInt("adv_ms", config.adv_ms);
             prefs.putUInt("gap_ms", config.gap_ms);
