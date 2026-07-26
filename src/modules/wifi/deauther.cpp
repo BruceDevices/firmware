@@ -178,7 +178,7 @@ const uint8_t* getDeauthReasons(int band, int* count) {
     return DEAUTH_REASONS;
 }
 
-int getAPChannel(const uint8_t *target_bssid, bool *found = nullptr) {
+int getAPChannel(const uint8_t *target_bssid, bool *found) {
     static unsigned long cache_time = 0;
     static uint8_t cached_bssid[6] = {0};
     static int cached_channel = 0;
@@ -215,8 +215,7 @@ int getAPChannel(const uint8_t *target_bssid, bool *found = nullptr) {
 }
 
 void buildOptimizedDeauthFrame(
-    uint8_t *frame, const uint8_t *dest, const uint8_t *src, const uint8_t *bssid, uint8_t reason = 0x07,
-    bool is_disassoc = false
+    uint8_t *frame, const uint8_t *dest, const uint8_t *src, const uint8_t *bssid, uint8_t reason, bool is_disassoc
 ) {
     frame[0] = is_disassoc ? 0xA0 : 0xC0;
     frame[1] = 0x00;
