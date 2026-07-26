@@ -52,7 +52,7 @@
 			>
 			<div class="hidden items-center gap-5 lg:flex">
 				<NavLink href="/" selected={$current_page == Page.Home}>Home</NavLink>
-				<NavLink href="https://github.com/pr3y/Bruce" target="_blank">GitHub</NavLink>
+				<NavLink href="https://github.com/BruceDevices/firmware" target="_blank">GitHub</NavLink>
 				<NavLink href="{base}/flasher" variant="install">Install</NavLink>
 				<NavLink href="https://wiki.bruce.computer" target="_blank">Docs</NavLink>
 				<NavLink href="{base}/appstore" selected={$current_page == Page.AppStore}>App Store</NavLink>
@@ -68,7 +68,7 @@
 				<div class="fixed top-0 z-[1000] flex h-full w-full flex-col items-center bg-[#111] pt-[60px] transition-[right] duration-300 ease-in-out">
 					<button class="close-btn" onclick={() => (navOpen = false)} aria-label="Close navigation">✖</button>
 					<NavLink href={base} selected={$current_page == Page.Home}>Home</NavLink>
-					<NavLink href="https://github.com/pr3y/Bruce" target="_blank">GitHub</NavLink>
+					<NavLink href="https://github.com/BruceDevices/firmware" target="_blank">GitHub</NavLink>
 					<NavLink href="{base}/flasher" variant="install">Install</NavLink>
 					<NavLink href="https://wiki.bruce.computer/" target="_blank">Docs</NavLink>
 					<NavLink href="{base}/boards">Boards</NavLink>
