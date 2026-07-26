@@ -47,15 +47,14 @@
 			<a
 				href="https://github.com/BruceDevices/Firmware"
 				target="_blank"
-				class="inline-blocktransition rounded-lg bg-[#9B51E0] px-6 py-2 text-center text-lg font-bold text-white"
+				class="inline-flex items-center justify-center rounded-lg bg-[#9B51E0] px-6 py-2 text-lg font-bold text-white transition hover:bg-[#7A2FA0]"
 				style="color: white;"
 			>
 				Explore GitHub
 			</a>
 			<a
 				href={resolve('/flasher')}
-				target="_blank"
-				class="ml-4 inline-block rounded-lg border-2 border-[#9B51E0] px-6 py-2 text-center text-lg text-[#9B51E0] transition"
+				class="ml-4 inline-flex items-center justify-center rounded-lg border-2 border-[#9B51E0] bg-black px-6 py-2 text-lg text-[#9B51E0] transition hover:border-[#7A2FA0] hover:bg-[#7A2FA0] hover:!text-white"
 			>
 				<b>Install Now</b>
 			</a>

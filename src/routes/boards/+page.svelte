@@ -1,10 +1,13 @@
 <script>
+	import { Page, current_page } from '$lib/store';
 	import SectionBackground from '$lib/components/SectionBackground.svelte';
 	import BoardCard from '$lib/components/BoardCard.svelte';
 	import Btn from '$lib/components/Btn.svelte';
 
 	const boardImages = ['/img/bruce-pcb.png', '/img/bruce-pcb2.png'];
 	const reaperImages = ['/img/reaper-pcb.png', '/img/reaper-pcb2.png'];
+
+	$current_page = Page.Boards;
 </script>
 
 <!-- Hero Section -->

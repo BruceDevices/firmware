@@ -40,8 +40,8 @@
 <header class="fixed top-0 left-0 z-[100] w-full bg-[#111] py-3.5">
 	<div class="mx-auto w-11/12 max-w-full">
 		<nav class="flex items-center justify-between">
-			<a href={resolve('/')} class="flex items-center">
-				<img src={asset('/img/bruce.png')} alt="Bruce Logo" class="h-[50px]" />
+			<a href={resolve('/')} class="flex flex-shrink-0 items-center">
+				<img src={asset('/img/bruce.png')} alt="Bruce Logo" class="h-[50px] w-auto" />
 			</a>
 			<button
 				class="inline-block text-white hover:text-purple-500 lg:hidden"
@@ -49,33 +49,34 @@
 				style="color:white;"
 				aria-label="Open navigation">☰</button
 			>
-			<div class="hidden items-center gap-5 lg:flex">
-				<NavLink href="/" selected={$current_page == Page.Home}>Home</NavLink>
+			<div class="hidden items-center gap-2 xl:gap-5 lg:flex">
+				<NavLink href={resolve('/')} selected={$current_page == Page.Home}>Home</NavLink>
 				<NavLink href="https://github.com/BruceDevices/firmware" target="_blank">GitHub</NavLink>
-				<NavLink href={resolve('/flasher')} variant="install">Install</NavLink>
+				<NavLink href={resolve('/flasher')} selected={$current_page == Page.Flasher} variant="install">Install</NavLink>
 				<NavLink href="https://wiki.bruce.computer" target="_blank">Docs</NavLink>
+
 				<NavLink href={resolve('/appstore')} selected={$current_page == Page.AppStore}>App Store</NavLink>
 				<NavLink href={asset('/build_theme.html')}>Theme Builder</NavLink>
 				<NavLink href={resolve('/my_bruce')} selected={$current_page == Page.MyBruce}>Bruce Lab</NavLink>
-				<NavLink href={resolve('/boards')}>Boards</NavLink>
+				<NavLink href={resolve('/boards')} selected={$current_page == Page.Boards}>Boards</NavLink>
+				<NavLink href={resolve('/donate')} selected={$current_page == Page.Donate}>Donate</NavLink>
 				<!-- <Dropdown title="Bruce Lab" links={bruce_lab_links}></Dropdown> -->
 				<!-- <NavLink href="/boards">Boards</NavLink>
 				<NavLink href="/community">Community</NavLink> -->
-				<NavLink href={resolve('/donate')} selected={$current_page == Page.Donate}>Donate</NavLink>
 			</div>
 			{#if navOpen}
 				<div class="fixed top-0 z-[1000] flex h-full w-full flex-col items-center bg-[#111] pt-[60px] transition-[right] duration-300 ease-in-out">
 					<button class="close-btn" onclick={() => (navOpen = false)} aria-label="Close navigation">✖</button>
 					<NavLink href={resolve('/')} selected={$current_page == Page.Home}>Home</NavLink>
 					<NavLink href="https://github.com/BruceDevices/firmware" target="_blank">GitHub</NavLink>
-					<NavLink href={resolve('/flasher')} variant="install">Install</NavLink>
-					<NavLink href="https://wiki.bruce.computer/" target="_blank">Docs</NavLink>
-					<NavLink href={resolve('/boards')}>Boards</NavLink>
-					<!-- <Dropdown title="Bruce Lab"></Dropdown> -->
+					<NavLink href={resolve('/flasher')} selected={$current_page == Page.Flasher} variant="install">Install</NavLink>
+					<NavLink href="https://wiki.bruce.computer" target="_blank">Docs</NavLink>
 					<NavLink href={resolve('/appstore')} selected={$current_page == Page.AppStore}>App Store</NavLink>
 					<NavLink href={asset('/build_theme.html')}>Theme Builder</NavLink>
 					<NavLink href={resolve('/my_bruce')} selected={$current_page == Page.MyBruce}>Bruce Lab</NavLink>
+					<NavLink href={resolve('/boards')} selected={$current_page == Page.Boards}>Boards</NavLink>
 					<NavLink href={resolve('/donate')} selected={$current_page == Page.Donate}>Donate</NavLink>
+					<!-- <Dropdown title="Bruce Lab"></Dropdown> -->
 				</div>
 			{/if}
 		</nav>
