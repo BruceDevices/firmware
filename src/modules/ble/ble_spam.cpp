@@ -1590,7 +1590,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
             int footerH = FP * LH + 4;
             int footerY = tftHeight - footerH - 8;
             int available = footerY - rowStart - 4;
-            int rowH = max(FP * LH, min(FP * LH + 4, available / 5));
+            int rowH = max(1, min(FP * LH + 4, available / 5));
             int startRowY = rowStart + rowH * 4;
 
             bleSpamRenderConfigRows(config, cursor, editState, rowStart, rowH);
@@ -1702,7 +1702,7 @@ static void bleSpamRenderRunningScreen(
         int footerY = tftHeight - footerH - 8;
         int sepGap = 4;
         int available = footerY - statsY - sepGap - 2;
-        rowH = max(FP * LH, min(FP * LH + 4, available / 6));
+        rowH = max(1, min(FP * LH + 4, available / 6));
         configStartY = statsY + rowH * 2 + sepGap;
 
         tft.drawFastHLine(8, statsY + rowH * 2 - 2, tftWidth - 16, bruceConfig.priColor);
