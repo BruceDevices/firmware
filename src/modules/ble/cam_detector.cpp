@@ -642,45 +642,76 @@ static void cameraRadar() {
 
     g_radar.clear();
 
-    displayTextLine("Scanning APs..");
-    radarScanAPs(wardrive);
-    displayTextLine("Scanning BLE..");
-    radarScanBLE(wardrive);
-
-    // On-LAN detection needs to be joined to a network. Passive mode prompts to
-    // join once (this is how a client-only cam like Meari gets caught). Wardrive
-    // stays hands-off - it auto-joins open APs below instead of prompting.
-    if (!wardrive && WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
-    if (WiFi.status() == WL_CONNECTED) {
-        displayTextLine("Scanning LAN..");
-        radarScanLan(wardrive);
-    }
-
-    if (wardrive) {
-        // Join each open AP in turn and sweep its clients (apBssid/chan captured
-        // by radarScanLan via WiFi.BSSID()/channel() while joined).
-        std::vector<String> openSsids;
-        int nets = WiFi.scanNetworks(false, true);
-        for (int i = 0; i < nets; i++) {
-            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) continue;
-            if (WiFi.SSID(i).isEmpty()) continue;
-            openSsids.push_back(WiFi.SSID(i));
+    if (!wardrive) {
+        // Passive: a single pass over every surface.
+        displayTextLine("Scanning APs..");
+        radarScanAPs(false);
+        displayTextLine("Scanning BLE..");
+        radarScanBLE(false);
+        // On-LAN detection needs a joined network; prompt once (this is how a
+        // client-only cam like Meari gets caught).
+        if (WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
+        if (WiFi.status() == WL_CONNECTED) {
+            displayTextLine("Scanning LAN..");
+            radarScanLan(false);
         }
-        WiFi.scanDelete();
-        for (auto &ssid : openSsids) {
-            if (check(EscPress)) break;
+    } else {
+        // Wardrive: keep sweeping every surface until the user exits. Only new
+        // (deduped) cameras flash an alert; a status + exit window ends each round.
+        uint16_t round = 0;
+        bool stop = false;
+        while (!stop) {
+            round++;
+            radarScanAPs(true);
+            radarScanBLE(true);
+            if (WiFi.status() == WL_CONNECTED) radarScanLan(true);
+
+            // Auto-join each open AP and sweep its clients.
+            std::vector<String> openSsids;
+            int nets = WiFi.scanNetworks(false, true);
+            for (int i = 0; i < nets; i++) {
+                if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN && !WiFi.SSID(i).isEmpty())
+                    openSsids.push_back(WiFi.SSID(i));
+            }
+            WiFi.scanDelete();
+            for (auto &ssid : openSsids) {
+                if (check(EscPress)) {
+                    stop = true;
+                    break;
+                }
+                drawMainBorderWithTitle("Wardrive");
+                tft.setTextSize(FP);
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.setCursor(6, 40);
+                padprintln(" Join: " + ssid.substring(0, 18));
+                padprintln(" Cameras: " + String((int)g_radar.size()));
+                WiFi.begin(ssid.c_str());
+                uint32_t t0 = millis();
+                while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress))
+                    delay(100);
+                if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
+                WiFi.disconnect(false);
+                delay(50);
+            }
+            if (stop) break;
+
+            // Status + responsive exit window between rounds.
             drawMainBorderWithTitle("Wardrive");
             tft.setTextSize(FP);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.setCursor(6, 40);
-            padprintln(" Join: " + ssid.substring(0, 18));
             padprintln(" Cameras: " + String((int)g_radar.size()));
-            WiFi.begin(ssid.c_str());
-            uint32_t t0 = millis();
-            while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress)) delay(100);
-            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
-            WiFi.disconnect(false);
-            delay(50);
+            padprintln(" Rounds:  " + String(round));
+            padprintln("");
+            padprintln(" Press Esc to stop");
+            uint32_t until = millis() + 1500;
+            while (millis() < until) {
+                if (check(EscPress)) {
+                    stop = true;
+                    break;
+                }
+                delay(50);
+            }
         }
     }
 
