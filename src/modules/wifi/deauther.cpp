@@ -63,14 +63,6 @@ static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
 static bool clientScanActive = false;
 
-// Helper function to convert MAC to string
-String macToString(const uint8_t *mac) {
-    char buf[18];
-    snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return String(buf);
-}
-
 WiFiState saveWiFiState() {
     WiFiState state;
     state.was_connected = WiFi.isConnected();
