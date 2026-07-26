@@ -7,21 +7,21 @@
 	import Btn from '$lib/components/Btn.svelte';
 	import CompatibilityTable from '$lib/components/CompatibilityTable.svelte';
 	import SectionBackground from '$lib/components/SectionBackground.svelte';
-	import { base } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	import { current_page, Page } from '$lib/store';
 
 	$current_page = Page.Home;
 
 	let activeIndex = $state(0);
 	let slides = [
-		`${base}/img/bruce-pcb.png`,
-		`${base}/img/reaper-pcb2.png`,
-		`${base}/img/cardputer.png`,
-		`${base}/img/core2.png`,
-		`${base}/img/cyd.png`,
-		`${base}/img/lilygo.png`,
-		`${base}/img/t-embed.png`,
-		`${base}/img/m5stick.png`
+		asset('/img/bruce-pcb.png'),
+		asset('/img/reaper-pcb2.png'),
+		asset('/img/cardputer.png'),
+		asset('/img/core2.png'),
+		asset('/img/cyd.png'),
+		asset('/img/lilygo.png'),
+		asset('/img/t-embed.png'),
+		asset('/img/m5stick.png')
 	];
 
 	let interval: number;
@@ -53,7 +53,7 @@
 				Explore GitHub
 			</a>
 			<a
-				href="/flasher"
+				href={resolve('/flasher')}
 				target="_blank"
 				class="ml-4 inline-block rounded-lg border-2 border-[#9B51E0] px-6 py-2 text-center text-lg text-[#9B51E0] transition"
 			>
