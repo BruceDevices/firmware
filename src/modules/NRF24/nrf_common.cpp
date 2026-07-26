@@ -60,15 +60,46 @@ bool nrf_start(NRF24_MODE mode) {
     }
     delay(10);
 
-    if (NRFradio.begin(
-            NRFSPI,
-            rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.io0),
-            rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.cs)
-        )) {
-        result = true;
-    } else {
+    const rf24_gpio_pin_t ce = rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.io0);
+    const rf24_gpio_pin_t cs = rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.cs);
+
+    result = NRFradio.begin(NRFSPI, ce, cs);
+    if (!result && restartAuxSPIBus(
+                       NRFSPI,
+                       bruceConfigPins.NRF24_bus.sck,
+                       bruceConfigPins.NRF24_bus.miso,
+                       bruceConfigPins.NRF24_bus.mosi
+                   )) {
+        // M5StickC Plus/Plus2 legacy modules share the auxiliary controller with CC1101.
+        // Reclaiming the same pin tuple used to skip begin(), even when the previous owner had
+        // left the controller or GPIO matrix unusable. A clean controller restart makes the
+        // probe deterministic without replacing any of the newer NRF24 feature code.
+        pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+        digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+        pinMode(bruceConfigPins.NRF24_bus.io0, OUTPUT);
+        digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+        delay(10);
+        result = NRFradio.begin(NRFSPI, ce, cs);
+    }
+    if (!result) {
+        Serial.printf(
+            "NRF24 probe failed (SCK=%d MISO=%d MOSI=%d CS=%d CE=%d)\n",
+            (int)bruceConfigPins.NRF24_bus.sck,
+            (int)bruceConfigPins.NRF24_bus.miso,
+            (int)bruceConfigPins.NRF24_bus.mosi,
+            (int)bruceConfigPins.NRF24_bus.cs,
+            (int)bruceConfigPins.NRF24_bus.io0
+        );
         return false;
     }
+    Serial.printf(
+        "NRF24 detected (SCK=%d MISO=%d MOSI=%d CS=%d CE=%d)\n",
+        (int)bruceConfigPins.NRF24_bus.sck,
+        (int)bruceConfigPins.NRF24_bus.miso,
+        (int)bruceConfigPins.NRF24_bus.mosi,
+        (int)bruceConfigPins.NRF24_bus.cs,
+        (int)bruceConfigPins.NRF24_bus.io0
+    );
     return result;
 }
 

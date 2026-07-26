@@ -336,3 +336,16 @@ SPIClass *acquireSPIBus(gpio_num_t sck, gpio_num_t miso, gpio_num_t mosi) {
     // SPI controller, shared across every other peripheral one owner at a time.
     return acquireSharedSPI(sck, miso, mosi);
 }
+
+bool restartAuxSPIBus(SPIClass *bus, gpio_num_t sck, gpio_num_t miso, gpio_num_t mosi) {
+    if (bus != &AUX_SPI) return false;
+    if (sck == GPIO_NUM_NC || miso == GPIO_NUM_NC || mosi == GPIO_NUM_NC) return false;
+
+    AUX_SPI.end();
+    delay(2);
+    AUX_SPI.begin((int8_t)sck, (int8_t)miso, (int8_t)mosi);
+    sharedSpiSck = sck;
+    sharedSpiMiso = miso;
+    sharedSpiMosi = mosi;
+    return true;
+}

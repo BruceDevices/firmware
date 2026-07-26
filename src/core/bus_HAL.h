@@ -80,3 +80,8 @@ bool trylockSysI2CBus();
 // bus only when the requested pins differ from whoever last used it). Returns nullptr if sck,
 // miso or mosi is unset, or if the pins matched the display's bus but the board is headless.
 SPIClass *acquireSPIBus(gpio_num_t sck, gpio_num_t miso, gpio_num_t mosi);
+
+// Reinitializes the auxiliary SPI controller on the requested pins. This is intended as a
+// recovery path for peripherals whose first probe failed after another driver previously owned
+// the auxiliary controller. Display/SD buses are never reset by this function.
+bool restartAuxSPIBus(SPIClass *bus, gpio_num_t sck, gpio_num_t miso, gpio_num_t mosi);
