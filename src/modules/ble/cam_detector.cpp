@@ -647,9 +647,10 @@ static void cameraRadar() {
     displayTextLine("Scanning BLE..");
     radarScanBLE(wardrive);
 
-    // On-LAN detection needs to be joined to a network. Prompt once if not
-    // already connected (this is how a client-only cam like Meari gets caught).
-    if (WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
+    // On-LAN detection needs to be joined to a network. Passive mode prompts to
+    // join once (this is how a client-only cam like Meari gets caught). Wardrive
+    // stays hands-off - it auto-joins open APs below instead of prompting.
+    if (!wardrive && WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
     if (WiFi.status() == WL_CONNECTED) {
         displayTextLine("Scanning LAN..");
         radarScanLan(wardrive);
