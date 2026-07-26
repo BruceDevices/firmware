@@ -6,8 +6,12 @@
 #include "core/mykeyboard.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
+#include "esp_netif.h"
+#include "esp_netif_net_stack.h"
 #include "esp_wifi.h"
 #include "lwip/etharp.h"
+#include "lwip/inet.h"
+#include "lwip/tcpip.h"
 #include "modules/wifi/wifi_atks.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -444,9 +448,21 @@ static void radarScanBLE(bool alert) {
     stopBLEStack();
 }
 
+static struct netif *radarStaNetif() {
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!sta) return nullptr;
+    return (struct netif *)esp_netif_get_netif_impl(sta);
+}
+
+// Diagnostic: total unique LAN hosts the last ARP sweep resolved (cameras or
+// not). 0-1 means station-to-station ARP is blocked (client isolation / wrong
+// subnet), not a detection bug.
+static int g_lanHostsSeen = 0;
+
 // On the currently-joined LAN: ARP-sweep + P2P probe -> camera client stations.
 static void radarScanLan(bool alert) {
     if (WiFi.status() != WL_CONNECTED) return;
+    struct netif *nif = radarStaNetif();
     uint8_t curBssid[6];
     memcpy(curBssid, WiFi.BSSID(), 6);
     uint8_t curCh = (uint8_t)WiFi.channel();
@@ -459,9 +475,7 @@ static void radarScanLan(bool alert) {
     uint32_t last = (bcastHost > netHost) ? bcastHost - 1 : netHost;
     if (last > first + 1021) last = first + 1021;
 
-    WiFiUDP udp;
-    udp.begin(0);
-    uint8_t bb = 0;
+    std::vector<String> hostMacs; // every LAN host resolved (dedup) - diagnostic
     auto harvest = [&]() {
         for (uint32_t i = 0; i < ARP_TABLE_SIZE; i++) {
             ip4_addr_t *ipr = nullptr;
@@ -471,13 +485,21 @@ static void radarScanLan(bool alert) {
             if (!ipr || !ethr) continue;
             char macs[18];
             macToStr6(ethr->addr, macs);
+            String mac = macs;
+            bool knownHost = false;
+            for (auto &hm : hostMacs)
+                if (hm == mac) {
+                    knownHost = true;
+                    break;
+                }
+            if (!knownHost) hostMacs.push_back(mac);
             const char *method = nullptr;
-            const char *brand = identifyCamera(String(macs), String(""), &method);
+            const char *brand = identifyCamera(mac, String(""), &method);
             if (!brand || radarSeen(ethr->addr)) continue;
             RadarCam c = {};
             c.brand = brand;
             c.name = IPAddress(ipr->addr).toString();
-            c.macStr = macs;
+            c.macStr = mac;
             memcpy(c.mac, ethr->addr, 6);
             c.surface = RS_CLIENT;
             c.method = "LAN OUI";
@@ -490,18 +512,24 @@ static void radarScanLan(bool alert) {
             if (alert) radarAlert(g_radar.back());
         }
     };
+    // Use the proven ARP-request path (as netcut) rather than UDP pings. The
+    // ESP32 ARP table is tiny (~10 entries), so harvest after every request so a
+    // resolved host is read within its own window before later requests evict it.
     for (uint32_t h = first; h <= last && !check(EscPress); h++) {
         if (h == myHost) continue;
-        IPAddress ip((h >> 24) & 0xFF, (h >> 16) & 0xFF, (h >> 8) & 0xFF, h & 0xFF);
-        udp.beginPacket(ip, 1);
-        udp.write(&bb, 1);
-        udp.endPacket();
-        delay(3);
-        if ((h & 0x03) == 0) harvest();
+        if (nif) {
+            ip4_addr_t target;
+            target.addr = htonl(h);
+            LOCK_TCPIP_CORE();
+            etharp_request(nif, &target);
+            UNLOCK_TCPIP_CORE();
+        }
+        delay(8);
+        harvest();
     }
-    delay(200);
+    delay(300);
     harvest();
-    udp.stop();
+    g_lanHostsSeen = (int)hostMacs.size();
 
     // P2P responders (UID as name).
     std::vector<P2PCam> p2p;
@@ -642,45 +670,86 @@ static void cameraRadar() {
 
     g_radar.clear();
 
-    displayTextLine("Scanning APs..");
-    radarScanAPs(wardrive);
-    displayTextLine("Scanning BLE..");
-    radarScanBLE(wardrive);
-
-    // On-LAN detection needs to be joined to a network. Passive mode prompts to
-    // join once (this is how a client-only cam like Meari gets caught). Wardrive
-    // stays hands-off - it auto-joins open APs below instead of prompting.
-    if (!wardrive && WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
-    if (WiFi.status() == WL_CONNECTED) {
-        displayTextLine("Scanning LAN..");
-        radarScanLan(wardrive);
-    }
-
-    if (wardrive) {
-        // Join each open AP in turn and sweep its clients (apBssid/chan captured
-        // by radarScanLan via WiFi.BSSID()/channel() while joined).
-        std::vector<String> openSsids;
-        int nets = WiFi.scanNetworks(false, true);
-        for (int i = 0; i < nets; i++) {
-            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) continue;
-            if (WiFi.SSID(i).isEmpty()) continue;
-            openSsids.push_back(WiFi.SSID(i));
+    if (!wardrive) {
+        // Passive: a single pass over every surface.
+        displayTextLine("Scanning APs..");
+        radarScanAPs(false);
+        displayTextLine("Scanning BLE..");
+        radarScanBLE(false);
+        // On-LAN detection needs a joined network; prompt once (this is how a
+        // client-only cam like Meari gets caught).
+        if (WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
+        if (WiFi.status() == WL_CONNECTED) {
+            displayTextLine("Scanning LAN..");
+            radarScanLan(false);
+            // Diagnostic: if 0-1 hosts were reachable, station-to-station ARP is
+            // blocked (client isolation / IoT subnet), not a detection failure.
+            drawMainBorderWithTitle("LAN Scan");
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setCursor(6, 40);
+            padprintln(" LAN hosts seen: " + String(g_lanHostsSeen));
+            padprintln(" Cameras so far: " + String((int)g_radar.size()));
+            if (g_lanHostsSeen <= 1) padprintln(" (client isolation?)");
+            delay(2600);
         }
-        WiFi.scanDelete();
-        for (auto &ssid : openSsids) {
-            if (check(EscPress)) break;
+    } else {
+        // Wardrive: keep sweeping every surface until the user exits. Only new
+        // (deduped) cameras flash an alert; a status + exit window ends each round.
+        uint16_t round = 0;
+        bool stop = false;
+        while (!stop) {
+            round++;
+            radarScanAPs(true);
+            radarScanBLE(true);
+            if (WiFi.status() == WL_CONNECTED) radarScanLan(true);
+
+            // Auto-join each open AP and sweep its clients.
+            std::vector<String> openSsids;
+            int nets = WiFi.scanNetworks(false, true);
+            for (int i = 0; i < nets; i++) {
+                if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN && !WiFi.SSID(i).isEmpty())
+                    openSsids.push_back(WiFi.SSID(i));
+            }
+            WiFi.scanDelete();
+            for (auto &ssid : openSsids) {
+                if (check(EscPress)) {
+                    stop = true;
+                    break;
+                }
+                drawMainBorderWithTitle("Wardrive");
+                tft.setTextSize(FP);
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.setCursor(6, 40);
+                padprintln(" Join: " + ssid.substring(0, 18));
+                padprintln(" Cameras: " + String((int)g_radar.size()));
+                WiFi.begin(ssid.c_str());
+                uint32_t t0 = millis();
+                while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress))
+                    delay(100);
+                if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
+                WiFi.disconnect(false);
+                delay(50);
+            }
+            if (stop) break;
+
+            // Status + responsive exit window between rounds.
             drawMainBorderWithTitle("Wardrive");
             tft.setTextSize(FP);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.setCursor(6, 40);
-            padprintln(" Join: " + ssid.substring(0, 18));
             padprintln(" Cameras: " + String((int)g_radar.size()));
-            WiFi.begin(ssid.c_str());
-            uint32_t t0 = millis();
-            while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress)) delay(100);
-            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
-            WiFi.disconnect(false);
-            delay(50);
+            padprintln(" Rounds:  " + String(round));
+            padprintln("");
+            padprintln(" Press Esc to stop");
+            uint32_t until = millis() + 1500;
+            while (millis() < until) {
+                if (check(EscPress)) {
+                    stop = true;
+                    break;
+                }
+                delay(50);
+            }
         }
     }
 

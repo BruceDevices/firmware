@@ -12,7 +12,7 @@ nothing here affects firmware operation. Safe to delete or regenerate anytime.
 
 ```sh
 sha256sum Bruce-CYD-2432S028.bin
-# 64a71390fbf16efc3abda14e49ade349c7e1baa998f8c69465c06e97b471e175
+# d60ff47fbe1cb905e44a12aba4a1400b995d927e1bc3d2a793c4c0c52e914788
 
 esptool.py --chip esp32 --port /dev/ttyACM0 write_flash 0x0 Bruce-CYD-2432S028.bin
 ```
