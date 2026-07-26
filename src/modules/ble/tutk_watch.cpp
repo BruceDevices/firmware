@@ -17,14 +17,17 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Kalay / ThroughTek DNS name fragments (lowercase). A device resolving any of
-// these is almost certainly a TUTK camera. Conservative list; easy to extend.
+// Camera-cloud DNS name fragments (lowercase). A device resolving any of these
+// is almost certainly an IP camera phoning home. Covers TUTK/Kalay plus the
+// common OEM ecosystems (Meari/CloudEdge, Tuya, V380, Yoosee/Gwell, CamHi ...).
 // ---------------------------------------------------------------------------
-static const char *const kTutkDomains[] = {
-    "iotcplatform", // TUTK IOTC master servers
-    "kalayservice", // Kalay network
-    "throughtek",   // vendor
-    "tutk",         "iotc",
+static const char *const kCloudDomains[] = {
+    // TUTK / Kalay
+    "iotcplatform", "kalayservice", "throughtek", "tutk", "iotc",
+    // Meari / CloudEdge (Zhuhai Dingzhi ODM)
+    "meari", "cloudedge",
+    // other common OEM clouds
+    "tuya", "v380", "yoosee", "gwell", "camhi", "ubox", "icsee",
 };
 
 // TUTK master / PPPP ports that a camera sends UDP to.
@@ -102,7 +105,7 @@ static String classify(const uint8_t *buf, int len) {
         int dnsOff = udpOff + 8;
         if (dnsOff + 12 >= len) return "";
         String q = dnsQName(buf, len, dnsOff + 12); // skip 12-byte DNS header
-        for (auto d : kTutkDomains)
+        for (auto d : kCloudDomains)
             if (q.indexOf(d) >= 0) return "DNS " + q;
     }
     return "";
@@ -190,7 +193,7 @@ static void tutkAlert(const TutkHit &h) {
     tft.fillScreen(bruceConfig.priColor);
     delay(80);
     tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorderWithTitle("TUTK Camera");
+    drawMainBorderWithTitle("Cloud Camera");
     tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setCursor(6, 40);
