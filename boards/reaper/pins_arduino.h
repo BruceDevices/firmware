@@ -18,6 +18,8 @@ static const uint8_t RX = SERIAL_RX;
 // Main I2C Bus
 #define GROVE_SDA 47
 #define GROVE_SCL 48
+#define SYS_I2C_SDA 47
+#define SYS_I2C_SCL 48
 
 static const uint8_t SDA = 47;
 static const uint8_t SCL = 48;
@@ -60,11 +62,11 @@ static const uint8_t SCK = SPI_SCK_PIN;
 
 // NRF24
 #define USE_NRF24_VIA_SPI
-#define NRF24_CE_PIN 14
-#define NRF24_SS_PIN 13
-#define NRF24_MOSI_PIN SPI_MOSI_PIN
-#define NRF24_SCK_PIN SPI_SCK_PIN
-#define NRF24_MISO_PIN SPI_MISO_PIN
+#define NRF24_CE_PIN -1
+#define NRF24_SS_PIN -1
+#define NRF24_MOSI_PIN -1
+#define NRF24_SCK_PIN -1
+#define NRF24_MISO_PIN -1
 
 // FONT SIZE
 #define FP 1
@@ -119,8 +121,6 @@ static const uint8_t SCK = SPI_SCK_PIN;
 
 #define XPOWERS_CHIP_BQ25896
 
-
-
 // Fuel Gauge
 #define USE_BQ27220_VIA_I2C
 #define BQ27220_I2C_ADDRESS 0x55
@@ -153,11 +153,16 @@ static const uint8_t SCK = SPI_SCK_PIN;
 #define LORA_MISO SPI_MISO_PIN
 #define LORA_MOSI SPI_MOSI_PIN
 #define LORA_CS 4
-#define LORA_RST 43///OR 44
+#define LORA_RST 43 /// OR 44
 #define LORA_BUSY 5
-
 #define LORA_IRQ 42
 
-
+// NFC ST25R3916
+#define HAS_ST25R3916
+#define ST25R_MISO SPI_MISO_PIN
+#define ST25R_MOSI SPI_MOSI_PIN
+#define ST25R_SCLK SPI_SCK_PIN
+#define ST25R_CS 11
+#define ST25R_IRQ 12
 
 #endif /* Pins_Arduino_h */

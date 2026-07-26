@@ -2,6 +2,7 @@
 #include "core/display.h"    // using displayRedStripe as error msg
 #include "core/mykeyboard.h" // using keyboard when calling rename
 #include "core/passwords.h"
+#include "core/ram_profile.h"
 #include "core/sd_functions.h" // using sd functions called to rename and manage sd files
 #include "core/serialcmds.h"
 #include "core/settings.h"
@@ -123,7 +124,7 @@ String humanReadableSize(uint64_t bytes) {
 **  Function: listFiles
 **  list all of the files, if ishtml=true, return html rather than simple text
 **********************************************************************/
-String listFiles(FS &fs, String folder) {
+String listFiles(FS &fs, const String &folder) {
     // log_i("Listfiles Start");
     String returnText = "pa:" + folder + ":0\n";
     // Serial.println("Listing files stored on SD");
@@ -155,7 +156,7 @@ String listFiles(FS &fs, String folder) {
                 }
             }
         } else break;
-        esp_task_wdt_reset();
+        delay(1);
     }
     root.close();
     // log_i("ListFiles End");
@@ -192,7 +193,7 @@ bool checkUserWebAuth(AsyncWebServerRequest *request, bool onFailureReturnLoginP
 **  Function: createDirRecursive
 ** Create folders recursivelly
 **********************************************************************/
-void createDirRecursive(String path, FS fs) {
+void createDirRecursive(const String &path, FS fs) {
     String currentPath = "";
     int startIndex = 0;
     // Serial.print("Verifying folder: ");
@@ -291,7 +292,7 @@ void drawWebUiScreen(bool mode_ap) {
     }
 
     tft.setCursor(padX, currentY);
-    tft.print("Url: http://bruce.local");
+    if (mdnsRunning) tft.print("Url: http://bruce.local");
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
@@ -338,11 +339,11 @@ String color565ToWebHex(uint16_t color565) {
 **  Function: serveWebUIFile
 **  serves files for WebUI and checks for custom WebUI files
 **********************************************************************/
-void serveWebUIFile(AsyncWebServerRequest *request, String filename, const char *contentType) {
+void serveWebUIFile(AsyncWebServerRequest *request, const String &filename, const char *contentType) {
     serveWebUIFile(request, filename, contentType, false, nullptr, 0);
 }
 void serveWebUIFile(
-    AsyncWebServerRequest *request, String filename, const char *contentType, bool gzip,
+    AsyncWebServerRequest *request, const String &filename, const char *contentType, bool gzip,
     const uint8_t *originaFile, uint32_t originalFileSize
 ) {
     AsyncWebServerResponse *response = nullptr;
@@ -376,22 +377,15 @@ void serveWebUIFile(
 **  Try to start mDNS only if there is enough internal heap available
 **********************************************************************/
 static bool startMdnsResponder() {
-    constexpr size_t kMinInternalHeap = 20 * 1024; // bytes reserved for mDNS buffers
-    size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    if (freeInternalHeap < kMinInternalHeap) {
-        log_e(
-            "Skipping mDNS responder. Only %lu bytes of internal heap available (need %lu).\n",
-            static_cast<unsigned long>(freeInternalHeap),
-            static_cast<unsigned long>(kMinInternalHeap)
-        );
-        return false;
-    }
+    RAM_LOG("before MDNS");
 
     if (!MDNS.begin(host)) {
-        log_e("Error setting up MDNS responder!");
+        RAM_LOG("MDNS failed");
+        Serial.printf("Error setting up MDNS responder!\n");
         return false;
     }
 
+    RAM_LOG("after MDNS");
     return true;
 }
 

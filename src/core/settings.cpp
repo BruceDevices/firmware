@@ -171,6 +171,7 @@ void setSleepMode() {
             returnToMenu = true;
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -693,7 +694,7 @@ void setRFModuleMenu() {
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
             deinitRfModule();
-            if (pins_setup == 1) CC_NRF_SPI.end();
+            if (pins_setup == 1) AUX_SPI.end();
             return;
         }
         // else display an error
@@ -758,6 +759,14 @@ void setRFIDModuleMenu() {
         {"RC522 on SPI",
          [=]() { bruceConfigPins.setRfidModule(RC522_SPI_MODULE); },
          bruceConfigPins.rfidModule == RC522_SPI_MODULE    },
+#if !defined(LITE_VERSION)
+        {"ST25R3916 SPI",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE},
+        {"ST25R3916 I2C",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+#endif
     };
     loopOptions(options, bruceConfigPins.rfidModule);
 }
@@ -1568,6 +1577,10 @@ RELOAD:
 **  Main Menu to manually set SPI Pins
 **********************************************************************/
 void setI2CPinsMenu(BruceConfigPins::I2CPins &value) {
+#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0
+    displayError("I2C Pins cannot be changed on this board", true);
+    return;
+#else
     uint8_t opt = 0;
     bool changed = false;
     BruceConfigPins::I2CPins points = value;
@@ -1604,6 +1617,7 @@ RELOAD:
         changed = true;
         goto RELOAD;
     }
+#endif
 }
 
 /*********************************************************************
@@ -1709,7 +1723,7 @@ void installAppStoreJS() {
     }
 
     HTTPClient http;
-    http.begin("http://ghp.iceis.co.uk/service/appstore/");
+    http.begin("https://ghp.iceis.co.uk/service/appstore/");
     int httpCode = http.GET();
     if (httpCode != 200) {
         http.end();

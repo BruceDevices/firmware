@@ -17,10 +17,6 @@
 
 #define MAX_WAIT 5000
 
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
-
 static bool parseMacToU64(const String &mac, uint64_t &out) {
     uint64_t value = 0;
     int nibbles = 0;
@@ -104,11 +100,7 @@ bool Wardriving::begin_gps() {
 void Wardriving::end() {
     if (scanWiFi) wifiDisconnect();
     if (scanBLE) {
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-        esp_bt_controller_deinit();
-#else
         BLEDevice::deinit(true);
-#endif
         pBLEScan = nullptr;
         bleInitialized = false;
     }

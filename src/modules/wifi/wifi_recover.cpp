@@ -1027,10 +1027,11 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     uint64_t last_ui = start_time;
     PwEntry entry;
     bool producer_done = false;
+    SelPress = false;
 
     while (!shared.found && !shared.abort) {
 
-        if (check(AnyKeyPress)) {
+        if (check(SelPress)) {
             shared.abort = true;
             g_abortRequested = true;
             padprintln("");

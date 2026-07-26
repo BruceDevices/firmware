@@ -33,9 +33,6 @@ extern BLEService *pService;
 extern BLECharacteristic *pTxCharacteristic;
 extern BLECharacteristic *pRxCharacteristic;
 extern bool bleDataTransferEnabled;
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
 PN532KillerTools::PN532KillerTools() { setup(); }
 
 PN532KillerTools::~PN532KillerTools() {
@@ -54,7 +51,7 @@ void PN532KillerTools::setup() {
         bruceConfigPins.CC1101_bus.checkConflict(TXD_PIN) ||
         bruceConfigPins.NRF24_bus.checkConflict(RXD_PIN) ||
         bruceConfigPins.NRF24_bus.checkConflict(TXD_PIN)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
     pinMode(RXD_PIN, INPUT);
     pinMode(TXD_PIN, OUTPUT);
@@ -788,11 +785,7 @@ bool PN532KillerTools::disableBleDataTransfer() {
 
     if (pServer) {
         pServer->getAdvertising()->stop();
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-        esp_bt_controller_deinit();
-#else
         BLEDevice::deinit();
-#endif
     }
 
     pServer = nullptr;

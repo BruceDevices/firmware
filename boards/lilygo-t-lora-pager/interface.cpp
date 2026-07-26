@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
@@ -6,14 +7,10 @@
 #include <interface.h>
 
 // Rotary encoder
-#include <RotaryEncoder.h>
-extern RotaryEncoder *encoder;
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() { encoder->tick(); }
-
-// GPIO expander
-#include <ExtensionIOXL9555.hpp>
-ExtensionIOXL9555 io;
+#include <rotary_decoder.h>
+extern RotaryDecoder *encoder;
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 // Charger chip
 #define XPOWERS_CHIP_BQ25896
@@ -123,6 +120,33 @@ int handleSpecialKeys(uint8_t k, bool pressed) {
     return 0;
 }
 
+void initPeripherals() {
+    if (ioExpander.init()) {
+        const uint8_t expands[] = {
+            EXPANDS_DRV_EN,
+            EXPANDS_AMP_EN,
+            EXPANDS_KB_RST,
+            EXPANDS_LORA_EN,
+            EXPANDS_GPS_EN,
+            EXPANDS_NFC_EN,
+            EXPANDS_GPS_RST,
+            EXPANDS_KB_PWR,
+            EXPANDS_KB_EN,
+            EXPANDS_GPIO_EN,
+            EXPANDS_SD_EN
+        };
+        for (auto pin : expands) {
+            ioExpander.pinMode(pin, OUTPUT);
+            ioExpander.digitalWrite(pin, HIGH);
+            delay(1);
+        }
+        ioExpander.pinMode(EXPANDS_SD_DET, INPUT);
+        Serial.println("Initializing expander OK");
+    } else {
+        Serial.println("Initializing expander failed");
+    }
+    delay(50);
+}
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Description:   initial setup for the device
@@ -131,6 +155,7 @@ void _setup_gpio() {
 
     pinMode(SEL_BTN, INPUT);
     pinMode(BK_BTN, INPUT);
+    pinMode(ST25R_IRQ, INPUT);
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
@@ -146,10 +171,15 @@ void _setup_gpio() {
 
     pinMode(LORA_RST, OUTPUT);
     digitalWrite(LORA_RST, HIGH);
+    setSysI2CBus(&Wire); // PMU/keyboard/RTC/codec all live on the default Wire object
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     // Power management
     bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
         // https://github.com/Xinyuan-LilyGO/LilyGoLib/blob/a64fc6ca94757baa5401ad71b39fb7f92cd1a7e9/src/LilyGo_LoRa_Pager.cpp#L442-L452
         PPM.resetDefault();
@@ -161,48 +191,7 @@ void _setup_gpio() {
 
     // Battery gauge
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
-
-    // IO Expander
-    // TODO: Needs updating to use the same interface as the other IO Expanders (io_expander ioExpander)
-    // if (ioExpander.init(IO_EXPANDER_ADDRESS, &Wire)) {
-    //     const uint8_t expands[] = {
-    //         EXPANDS_KB_RST,
-    //         EXPANDS_KB_EN,
-    //         EXPANDS_SD_EN,
-    //         EXPANDS_DRV_EN,
-    //         EXPANDS_AMP_EN, // Audio
-    //     };
-    //     for (auto pin : expands) {
-    //         ioExpander.pinMode(pin, OUTPUT);
-    //         ioExpander.digitalWrite(pin, HIGH);
-    //         delay(1);
-    //     }
-    //     ioExpander.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    //     ioExpander.digitalWrite(EXPANDS_DRV_EN, LOW);
-    // } else {
-    //     Serial.println("Initializing expander failed");
-    // }
-    if (io.begin(Wire, IO_EXPANDER_ADDRESS)) {
-        const uint8_t expands[] = {
-            EXPANDS_KB_RST,
-            EXPANDS_KB_EN,
-            EXPANDS_SD_EN,
-            EXPANDS_DRV_EN,
-            EXPANDS_AMP_EN, // Audio
-            EXPANDS_LORA_EN,
-            EXPANDS_GPS_EN,
-            EXPANDS_GPS_RST,
-            EXPANDS_NFC_EN,
-        };
-        for (auto pin : expands) {
-            io.pinMode(pin, OUTPUT);
-            io.digitalWrite(pin, HIGH);
-            delay(1);
-        }
-        io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    } else {
-        Serial.println("Initializing expander failed");
-    }
+    initPeripherals();
 
     // Initialise keyboard
     keyboard = new Adafruit_TCA8418();
@@ -223,9 +212,10 @@ void _setup_gpio() {
 
     // Encoder
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::FOUR3);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 4);
 
     // Haptic driver
     if (!drv.begin(Wire, SDA, SCL)) {
@@ -260,6 +250,8 @@ void _setup_gpio() {
     cfg.i2s.rate = RATE_44K;
     board.begin(cfg);
 }
+
+void _post_setup_gpio() { initPeripherals(); }
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -317,6 +309,11 @@ void InputHandler(void) {
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
         lastPos = newPos;
         lastEncoderMoveMs = millis();
     } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {

@@ -195,6 +195,11 @@ void ConfigMenu::advancedMenu() {
             {"Toggle BLE API", [this]() { enableBLEAPI(); }       },
             {"BadUSB/BLE",     [this]() { setBadUSBBLEMenu(); }   },
 #endif
+            {"BLE name",
+                                      [this]() {
+                 String name = keyboard(bruceConfigPins.bleName, 30, "BLE device name");
+                 if (name.length() > 0 && name != "\x1B") bruceConfigPins.setBleName(name);
+             }                                                                             },
             {"Network Creds",  [this]() { setNetworkCredsMenu(); }},
             {"Factory Reset",
                                       []() {
@@ -266,6 +271,7 @@ void ConfigMenu::devMenu() {
             {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
 #if !defined(LITE_VERSION)
             {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
+            {"ST25R3916 Pins",  [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
             {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
 #endif
             {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
@@ -317,7 +323,7 @@ void ConfigMenu::switchToUARTSerial() {
         bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
 
     // Configure UART pins and switch serial output

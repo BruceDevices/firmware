@@ -43,7 +43,12 @@ public:
     static std::vector<uint8_t> urlNdefAbbrv(std::string url);
     static std::vector<uint8_t> newMessage(std::vector<uint8_t> ndef);
     static const uint8_t TNF_WELL_KNOWN;
+    static const uint8_t TNF_MEDIA;
     static const uint8_t RTD_URI;
+    static std::vector<uint8_t> mimeRecord(
+        const std::string &mimeType, const std::vector<uint8_t> &payload, const std::vector<uint8_t> &id = {}
+    );
+    static std::vector<uint8_t> wifiCredentialPayload(const std::string &ssid, const std::string &password);
 };
 
 enum class TagFile : int { NONE = 0, CC = 1, NDEF = 2 };

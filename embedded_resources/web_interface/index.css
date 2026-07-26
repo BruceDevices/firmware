@@ -527,3 +527,58 @@ svg > path {
     transform: rotate(360deg);
   }
 }
+
+@media (max-width: 600px) {
+  body {
+    padding: 6px;
+  }
+  .container .header {
+    flex-wrap: wrap;
+  }
+  .container .header .title {
+    flex: 1 1 100%;
+    border-bottom: 1px solid var(--color);
+  }
+  .left-part,
+  .right-part {
+    text-align: center;
+  }
+  .container .header button {
+    width: auto;
+    min-width: 90px;
+  }
+  .container .free-space {
+    flex-direction: column;
+  }
+  .container .free-space .block-space {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--color);
+  }
+  .container .free-space .block-space:last-child {
+    border-bottom: 0;
+  }
+  .dialog .dialog-body input {
+    min-width: 0;
+  }
+  .dialog.upload .upload-loading {
+    width: 100%;
+  }
+  .upload-area::before {
+    width: auto;
+    height: auto;
+    max-width: 90vw;
+    font-size: 18px;
+    padding: 16px;
+  }
+  .loading-area .text {
+    min-width: 0;
+    max-width: 90vw;
+  }
+  .container .content .table .col-action {
+    width: 96px;
+  }
+  .container .content .table .col-size {
+    width: 64px;
+  }
+}

@@ -3,7 +3,7 @@
 ScrollableTextArea::ScrollableTextArea(const String &title)
     : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
       _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
-      _height(tftHeight - BORDER_PAD_X - BORDER_PAD_Y) {
+      _height(tftHeight - 4 - BORDER_PAD_X - BORDER_PAD_Y) {
     drawMainBorder();
 
     if (!_title.isEmpty()) {
@@ -87,8 +87,27 @@ void ScrollableTextArea::show(bool force) {
 uint32_t ScrollableTextArea::getMaxVisibleTextLength() { return _maxVisibleLines * _maxCharactersPerLine; }
 
 void ScrollableTextArea::update(bool force) {
-    if (check(PrevPress) || check(UpPress)) scrollUp();
-    else if (check(NextPress) || check(DownPress)) scrollDown();
+#ifdef HAS_ENCODER
+    int32_t rotarySteps = drainRotarySteps();
+    if (rotarySteps != 0) {
+        check(PrevPress);
+        check(NextPress);
+        check(UpPress);
+        check(DownPress);
+        while (rotarySteps > 0) {
+            scrollUp();
+            rotarySteps--;
+        }
+        while (rotarySteps < 0) {
+            scrollDown();
+            rotarySteps++;
+        }
+    } else
+#endif
+    {
+        if (check(PrevPress) || check(UpPress)) scrollUp();
+        else if (check(NextPress) || check(DownPress)) scrollDown();
+    }
 
     draw(force);
 }
@@ -121,7 +140,7 @@ void ScrollableTextArea::fromString(const String &text) {
         endIdx++;
     }
 
-    // Add the last line if there’s remaining text (text does not ends with \n)
+    // Add the last line if there's remaining text (text does not ends with \n)
     if (startIdx < text.length()) { addLine(text.substring(startIdx, endIdx)); }
 }
 

@@ -1,11 +1,12 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <M5Unified.h>
 #include <interface.h>
 
 // Rotary encoder
-#include <RotaryEncoder.h>
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() { encoder->tick(); }
+#include <rotary_decoder.h>
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -14,11 +15,13 @@ IRAM_ATTR void checkPosition() { encoder->tick(); }
 ***************************************************************************************/
 void _setup_gpio() {
     M5.begin();
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
     bruceConfig.colorInverted = 0;
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::TWO03);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
 }
 /*********************************************************************
 ** Function: setBrightness
@@ -51,6 +54,11 @@ void InputHandler(void) {
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
         lastPos = newPos;
         lastEncoderMoveMs = millis();
     } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
@@ -79,6 +87,12 @@ void InputHandler(void) {
         posDifference = 0;
         SelPress = true;
         tm = millis();
+    }
+
+    if (PrevPress && SelPress) {
+        EscPress = true;
+        SelPress = false;
+        PrevPress = false;
     }
 }
 

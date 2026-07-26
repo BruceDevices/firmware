@@ -34,6 +34,20 @@ bool wifiConnecttoKnownNet(void);
 String checkMAC();
 
 /**
+ * @brief Transmits a raw 802.11 frame while respecting TX-buffer backpressure.
+ *
+ * esp_wifi_80211_tx() returns ESP_ERR_NO_MEM when the static TX buffers are
+ * temporarily full. Callers that ignore the return value (beacon spam, deauth
+ * flood, karma, pwngrid) silently drop frames when the injection loop runs faster
+ * than the driver, especially under -flto with CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM
+ * reduced. Here we retry briefly, yielding 1 tick for the driver to drain: injection
+ * becomes self-regulated and independent of LTO and buffer count.
+ *
+ * @return ESP_OK if the frame was accepted; otherwise the last error.
+ */
+esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries = 8);
+
+/**
  * @brief tries to connect to min(found_networks, maxSearch) networks
  * using stored passwords
  * @TODO fix: rn it skips open networks due to password == "" check

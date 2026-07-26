@@ -45,11 +45,7 @@ void BLE_API::update_mtu(uint16_t mtu) {
 void BLE_API::end() {
     battery_service.end();
     serial_service.end();
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_bt_controller_deinit();
-#else
     BLEDevice::deinit();
-#endif
     serialDevice = &USBserial;
 }
 #endif

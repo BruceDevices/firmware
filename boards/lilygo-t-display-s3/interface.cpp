@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <globals.h>
@@ -53,6 +54,7 @@ void _setup_gpio() {
     digitalWrite(21, LOW);  // PIN_TOUCH_RES
     delay(500);
     digitalWrite(21, HIGH); // PIN_TOUCH_RES
+    setSysI2CBus(&Wire);    // Touch lives on the default Wire object
     Wire.begin(18, 17);     // SDA, SCL
     if (!touch.init()) { Serial.println("Touch IC not found"); }
 

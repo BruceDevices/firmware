@@ -289,6 +289,18 @@ Other media can be [found here](./media/).
 - [TH3_KR4K3N]() for Stick cplus extender PCB design.
 - Everyone who contributed in some way to the project, thanks :heart:
 
+Bruce also stands on the shoulders of other great open-source firmware projects,
+which inspired features and code across the project:
+
+- [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) by [@justcallmekoko](https://github.com/justcallmekoko) — WiFi/Bluetooth offensive toolkit.
+- [Launcher](https://github.com/bmorcelli/Launcher) by [@bmorcelli](https://github.com/bmorcelli) — the multi-app launcher/bootloader for the devices.
+- [Evil-M5Project](https://github.com/7h30th3r0n3/Evil-M5Project) by [@7h30th3r0n3](https://github.com/7h30th3r0n3) — WiFi attack suite for M5Stack.
+- [M5Stick-Nemo](https://github.com/n0xa/m5stick-nemo) by [@n0xa](https://github.com/n0xa) — multi-tool firmware for M5Stick devices.
+
+Bruce builds on many free-software libraries, and parts of the RF and NFC/RFID
+modules are derived from other projects. See [THIRD_PARTY.md](./THIRD_PARTY.md)
+for third-party attribution and copyleft-compliance details.
+
 ## :construction: Disclaimer
 
 Bruce is a tool for cyber offensive and red team operations, distributed under the terms of the Affero General Public License (AGPL). It is intended for legal and authorized security testing purposes only. Use of this software for any malicious or unauthorized activities is strictly prohibited. By downloading, installing, or using Bruce, you agree to comply with all applicable laws and regulations. This software is provided free of charge, and we do not accept payments for copies or modifications. The developers of Bruce assume no liability for any misuse of the software. Use at your own risk.

@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION)
 #include "LoRaRF.h"
 #include "WString.h"
+#include "core/bus_HAL.h"
 #include "core/config.h"
 #include "core/configPins.h"
 #include <Arduino.h>
@@ -84,36 +85,13 @@ void onLoraPacket() {
 }
 
 SPIClass *selectLoraSPIBus() {
-    SPIClass *selectedSPI = &SPI;
-    if (bruceConfigPins.LoRa_bus.mosi == TFT_MOSI) {
-#if TFT_MOSI > 0
-        selectedSPI = &tft.getSPIinstance();
-#endif
-        Serial.println("Using TFT SPI for LoRa");
-    } else if (bruceConfigPins.SDCARD_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
-        selectedSPI = &sdcardSPI;
-        Serial.println("Using SDCard SPI for LoRa");
-    } else if (
-        bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.LoRa_bus.mosi ||
-        bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.LoRa_bus.mosi
-    ) {
-        selectedSPI = &CC_NRF_SPI;
-        CC_NRF_SPI.begin(
-            (int8_t)bruceConfigPins.LoRa_bus.sck,
-            (int8_t)bruceConfigPins.LoRa_bus.miso,
-            (int8_t)bruceConfigPins.LoRa_bus.mosi
-        );
-        Serial.println("Using CC/NRF SPI for LoRa");
-    } else {
-        SPI.begin(
-            bruceConfigPins.LoRa_bus.sck,
-            bruceConfigPins.LoRa_bus.miso,
-            bruceConfigPins.LoRa_bus.mosi,
-            bruceConfigPins.LoRa_bus.cs
-        );
-        Serial.println("Using dedicated SPI for LoRa");
+    SPIClass *bus =
+        acquireSPIBus(bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi);
+    if (!bus) {
+        Serial.println("No hardware SPI bus available for LoRa, falling back to default SPI");
+        return &SPI;
     }
-    return selectedSPI;
+    return bus;
 }
 
 bool startLoraRadio(float bandMHz) {

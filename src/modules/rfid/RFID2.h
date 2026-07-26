@@ -35,7 +35,7 @@ public:
     int write(int cardBaudRate = 0);
     int write_ndef();
     int load();
-    int save(String filename);
+    int save(const String &filename);
 
 private:
     bool _use_i2c;

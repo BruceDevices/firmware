@@ -7,10 +7,14 @@
  */
 
 #include "tag_o_matic.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
 
+#if !defined(LITE_VERSION)
+#include "ST25R3916.h"
+#endif
 #include "PN532.h"
 #include "RFID2.h"
 
@@ -37,6 +41,7 @@ TagOMatic::~TagOMatic() {
         _scanned_tags.clear();
     }
     delete _rfid; // Deallocate memory for _rfid object
+    releaseI2CBus();
 }
 
 void TagOMatic::set_rfid_module() {
@@ -47,6 +52,10 @@ void TagOMatic::set_rfid_module() {
 #endif
         case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
         case RC522_SPI_MODULE: _rfid = new RFID2(false); break;
+#if !defined(LITE_VERSION)
+        case ST25R3916_SPI_MODULE: _rfid = new ST25R3916(ST25R3916::SPI_MODE); break;
+        case ST25R3916_I2C_MODULE: _rfid = new ST25R3916(ST25R3916::I2C_MODE); break;
+#endif
         case M5_RFID2_MODULE:
         default: _rfid = new RFID2(); break;
     }
@@ -85,9 +94,11 @@ void TagOMatic::loop() {
             case WRITE_MODE: write_data(); break;
             case WRITE_NDEF_MODE: write_ndef_data(); break;
             case EMULATE_MODE: emulate_card(); break;
+            case EMULATE_NDEF_MODE: emulate_ndef_data(); break;
             case ERASE_MODE: erase_card(); break;
             case SAVE_MODE: save_file(); break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -104,6 +115,9 @@ void TagOMatic::select_state() {
     options.emplace_back("Read tag", [this]() { set_state(READ_MODE); });
     options.emplace_back("Scan tags", [this]() { set_state(SCAN_MODE); });
     options.emplace_back("Load file", [this]() { set_state(LOAD_MODE); });
+    if (ndefEmulationSupported()) {
+        options.emplace_back("Emulate NDEF", [this]() { set_state(EMULATE_NDEF_MODE); });
+    }
     options.emplace_back("Write NDEF", [this]() { set_state(WRITE_NDEF_MODE); });
     options.emplace_back("Erase tag", [this]() { set_state(ERASE_MODE); });
 
@@ -145,10 +159,29 @@ void TagOMatic::set_state(RFID_State state) {
             padprintln("");
             break;
         case WRITE_NDEF_MODE: _ndef_created = false; break;
+        case EMULATE_NDEF_MODE:
+            _ndef_created = false;
+            // Only content-carrying emulation, no captured/loaded tag identity.
+            // ST25R3916 needs an explicit T4T request to synthesize a UID; PN532
+            // ignores emuMode and always serves NDEF over ISO-DEP regardless.
+            _rfid->emuMode = "t4t";
+            padprintln("Choose NDEF content, then wait for a reader.");
+            padprintln("Press [BACK] to stop.");
+            padprintln("");
+            break;
         case EMULATE_MODE:
+            if (_rfid->printableUID.uid.length() > 0) {
+                padprintln("UID: " + _rfid->printableUID.uid);
+                padprintln("Type: " + _rfid->printableUID.picc_type);
+            } else {
+                padprintln("Using loaded/read NDEF");
+                padprintln("(fallback: test URL)");
+            }
+            {
+                String caveat = _rfid->emulationCaveat();
+                if (caveat.length() > 0) padprintln("[!] " + caveat);
+            }
             padprintln("Waiting for an NFC reader...");
-            padprintln("Using loaded/read NDEF");
-            padprintln("(fallback: test URL)");
             padprintln("Press [BACK] to stop.");
             padprintln("");
             break;
@@ -173,6 +206,7 @@ void TagOMatic::display_banner() {
         case WRITE_MODE: printSubtitle("WRITE DATA MODE"); break;
         case WRITE_NDEF_MODE: printSubtitle("WRITE NDEF MODE"); break;
         case EMULATE_MODE: printSubtitle("EMULATE MODE"); break;
+        case EMULATE_NDEF_MODE: printSubtitle("EMULATE NDEF MODE"); break;
         case SAVE_MODE: printSubtitle("SAVE MODE"); break;
     }
 
@@ -190,6 +224,9 @@ void TagOMatic::dump_card_details() {
         padprintln("UID: " + _rfid->printableUID.uid);
         padprintln("ATQA: " + _rfid->printableUID.atqa);
         padprintln("SAK: " + _rfid->printableUID.sak);
+        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
+            padprintln("Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages));
+        }
     } else {
         padprintln("IDm: " + _rfid->printableUID.uid);
         padprintln("PMm: " + _rfid->printableUID.sak);
@@ -213,6 +250,12 @@ void TagOMatic::dump_check_details() {
 
 void TagOMatic::dump_ndef_details() {
     if (!_ndef_created) return;
+
+    if (!_rfid->rawNdefRecord.empty()) {
+        padprintln("Payload type: Wi-Fi (WSC)");
+        padprintln("Payload size: " + String(_rfid->rawNdefRecord.size()) + " bytes");
+        return;
+    }
 
     String payload_type = "";
     switch (_rfid->ndefMessage.payloadType) {
@@ -309,7 +352,7 @@ void TagOMatic::emulate_card() {
             set_state(EMULATE_MODE);
             break;
         case RFIDInterface::NOT_IMPLEMENTED:
-            displayError("Not implemented for this module.", true);
+            displayError("Card emulation not supported.", true);
             set_state(READ_MODE);
             break;
         case RFIDInterface::FAILURE:
@@ -320,6 +363,49 @@ void TagOMatic::emulate_card() {
             displayError("Emulation failed. Re-try.", true);
             set_state(EMULATE_MODE);
             break;
+    }
+}
+
+void TagOMatic::emulate_ndef_data() {
+    if (!_ndef_created) {
+        create_ndef_message();
+        if (!_ndef_created) {
+            set_state(READ_MODE);
+            return; // user backed out of the content picker
+        }
+        display_banner();
+        dump_ndef_details();
+        String caveat = _rfid->emulationCaveat();
+        if (caveat.length() > 0) padprintln("[!] " + caveat);
+        padprintln("Waiting for an NFC reader...");
+        padprintln("Press [BACK] to stop.");
+        padprintln("");
+    }
+
+    int result = _rfid->emulate();
+    if (returnToMenu) return;
+
+    switch (result) {
+        case RFIDInterface::SUCCESS:
+            displaySuccess("Reader interaction complete.");
+            delay(400);
+            _ndef_created = false;
+            set_state(READ_MODE);
+            break;
+        case RFIDInterface::TAG_NOT_PRESENT: return; // keep waiting, same content
+        case RFIDInterface::NOT_IMPLEMENTED:
+            displayError("Card emulation not supported.", true);
+            _ndef_created = false;
+            set_state(READ_MODE);
+            break;
+        case RFIDInterface::FAILURE:
+            displayError("Target mode start failed.", true);
+            delayWithReturn(800);
+            break; // retry with the same content
+        default:
+            displayError("Emulation failed. Re-try.", true);
+            delayWithReturn(800);
+            break; // retry with the same content
     }
 }
 
@@ -354,7 +440,7 @@ void TagOMatic::erase_card() {
 
     switch (result) {
         case RFIDInterface::TAG_NOT_PRESENT: return; break;
-        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully."); break;
+        case RFIDInterface::SUCCESS: displaySuccess("Tag erased successfully.", true); break;
         default: displayError("Error erasing data from tag."); break;
     }
 
@@ -403,88 +489,136 @@ void TagOMatic::write_ndef_data() {
 
 void TagOMatic::create_ndef_message() {
     options = {
-        {"Text", [this]() { create_ndef_text(); }},
-        {"URL",  [this]() { create_ndef_url(); } },
+        {"Text",         [this]() { create_ndef_text(); }},
+        {"URL",          [this]() { create_ndef_url(); } },
+        {"Wifi Network", [this]() { create_ndef_wifi(); }},
+        {"Saved links",  [this]() { create_ndef_link(); }},
     };
 
     loopOptions(options);
 }
 
-void TagOMatic::create_ndef_text() {
+void TagOMatic::build_ndef_text_payload(const String &text) {
     _rfid->ndefMessage.payloadType = RFIDInterface::NDEF_TEXT;
-    byte uic = 0;
     byte i;
 
     _rfid->ndefMessage.payload[0] = 0x02; // language size
     _rfid->ndefMessage.payload[1] = 0x65; // "en" language
     _rfid->ndefMessage.payload[2] = 0x6E;
 
-    String ndef_data = keyboard("", NDEF_DATA_SIZE, "NDEF data:");
-    if (ndef_data == "\x1B") return;
-
-    for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 3] = ndef_data.charAt(i); }
+    for (i = 0; i < text.length() && (size_t)(i + 3) < sizeof(_rfid->ndefMessage.payload); i++) {
+        _rfid->ndefMessage.payload[i + 3] = text.charAt(i);
+    }
     _rfid->ndefMessage.payloadSize = i + 3;
     _rfid->ndefMessage.messageSize = _rfid->ndefMessage.payloadSize + 4;
 
     _ndef_created = true;
 }
 
-void TagOMatic::create_ndef_url() {
-    _rfid->ndefMessage.payloadType = RFIDInterface::NDEF_URI;
-    byte uic = 0;
-    String prefix = "";
-    byte i;
-
-    options = {
-        {"http://www.",
-         [&]() {
-             uic = 1;
-             prefix = "http://www.";
-         }                },
-        {"https://www.",
-         [&]() {
-             uic = 2;
-             prefix = "https://www.";
-         }                },
-        {"http://",
-         [&]() {
-             uic = 3;
-             prefix = "http://";
-         }                },
-        {"https://",
-         [&]() {
-             uic = 4;
-             prefix = "https://";
-         }                },
-        {"tel:",
-         [&]() {
-             uic = 5;
-             prefix = "tel:";
-         }                },
-        {"mailto:",
-         [&]() {
-             uic = 6;
-             prefix = "mailto:";
-         }                },
-        {"None",         [&]() {
-             uic = 0;
-             prefix = "None";
-         }},
+void TagOMatic::build_ndef_url_payload(const String &url) {
+    // Same abbreviation codes NFC Forum URI records use, matched longest
+    // prefix first so "https://www." isn't shadowed by "https://".
+    static const struct {
+        const char *prefix;
+        byte uic;
+    } kUriAbbrev[] = {
+        {"https://www.", 2},
+        {"http://www.",  1},
+        {"https://",     4},
+        {"http://",      3},
+        {"tel:",         5},
+        {"mailto:",      6},
     };
 
-    loopOptions(options);
+    byte uic = 0;
+    String data = url;
+    for (auto &entry : kUriAbbrev) {
+        if (data.startsWith(entry.prefix)) {
+            uic = entry.uic;
+            data = data.substring(strlen(entry.prefix));
+            break;
+        }
+    }
 
+    _rfid->ndefMessage.payloadType = RFIDInterface::NDEF_URI;
     _rfid->ndefMessage.payload[0] = uic;
-
-    String ndef_data = keyboard(prefix, NDEF_DATA_SIZE, "NDEF data:");
-    if (ndef_data == "\x1B") return;
-    ndef_data = ndef_data.substring(prefix.length());
-
-    for (i = 0; i < ndef_data.length(); i++) { _rfid->ndefMessage.payload[i + 1] = ndef_data.charAt(i); }
+    byte i;
+    for (i = 0; i < data.length() && (size_t)(i + 1) < sizeof(_rfid->ndefMessage.payload); i++) {
+        _rfid->ndefMessage.payload[i + 1] = data.charAt(i);
+    }
     _rfid->ndefMessage.payloadSize = i + 1;
     _rfid->ndefMessage.messageSize = _rfid->ndefMessage.payloadSize + 4;
 
     _ndef_created = true;
+}
+
+void TagOMatic::buildWifiNdef(const String &ssid, const String &password) {
+    _rfid->buildWifiNdef(ssid, password);
+    _ndef_created = true;
+}
+
+void TagOMatic::create_ndef_text() {
+    String ndef_data = keyboard("", NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
+    build_ndef_text_payload(ndef_data);
+}
+
+void TagOMatic::create_ndef_url() {
+    String prefix = "";
+
+    options = {
+        {"http://www.",  [&]() { prefix = "http://www."; } },
+        {"https://www.", [&]() { prefix = "https://www."; }},
+        {"http://",      [&]() { prefix = "http://"; }     },
+        {"https://",     [&]() { prefix = "https://"; }    },
+        {"tel:",         [&]() { prefix = "tel:"; }        },
+        {"mailto:",      [&]() { prefix = "mailto:"; }     },
+        {"None",         [&]() { prefix = ""; }            },
+    };
+
+    loopOptions(options);
+
+    String ndef_data = keyboard(prefix, NDEF_DATA_SIZE, "NDEF data:");
+    if (ndef_data == "\x1B") return;
+
+    build_ndef_url_payload(ndef_data);
+}
+
+void TagOMatic::create_ndef_wifi() {
+    // A proper NFC Forum Wi-Fi Simple Config record (MIME type
+    // "application/vnd.wfa.wsc" with a binary WSC Credential payload) is what
+    // phones actually look for to show the "connect to this network" prompt.
+    options = {};
+    for (auto const &entry : bruceConfig.wifi) {
+        String ssid = entry.first;
+        options.emplace_back(ssid, [this, ssid]() {
+            buildWifiNdef(ssid, bruceConfig.getWifiPassword(ssid));
+        });
+    }
+    options.emplace_back("Manual entry", [this]() {
+        String ssid = keyboard("", 32, "SSID:");
+        if (ssid == "\x1B") return;
+        String pwd = keyboard("", 63, "Password:", true);
+        if (pwd == "\x1B") return;
+        buildWifiNdef(ssid, pwd);
+    });
+
+    loopOptions(options);
+}
+
+void TagOMatic::create_ndef_link() {
+    if (bruceConfig.qrCodes.empty()) {
+        displayError("No saved links.", true);
+        return;
+    }
+
+    options = {};
+    for (auto const &entry : bruceConfig.qrCodes) {
+        String content = entry.content;
+        options.emplace_back(entry.menuName, [this, content]() { build_ndef_url_payload(content); });
+    }
+
+    loopOptions(options);
 }
 
 void TagOMatic::load_file() {
@@ -644,7 +778,7 @@ int TagOMatic::write_tag_headless(int timeout_seconds) {
     return finalResult;
 }
 
-String TagOMatic::save_file_headless(String filename) {
+String TagOMatic::save_file_headless(const String &filename) {
     if (!_rfid) return "";
 
     // Check for valid data
@@ -663,15 +797,16 @@ String TagOMatic::save_file_headless(String filename) {
     return ""; // Error
 }
 
-int TagOMatic::load_file_headless(String filename) {
+int TagOMatic::load_file_headless(const String &filename) {
     if (!_rfid) return RFIDInterface::TAG_NOT_PRESENT;
 
     FS *fs;
     if (!getFsStorage(fs)) return RFIDInterface::FAILURE;
 
-    if (!filename.endsWith(".rfid")) { filename += ".rfid"; }
+    String fname = filename;
+    if (!fname.endsWith(".rfid")) { fname += ".rfid"; }
 
-    String filepath = "/BruceRFID/" + filename;
+    String filepath = "/BruceRFID/" + fname;
 
     if (!(*fs).exists(filepath)) {
         return RFIDInterface::TAG_NOT_PRESENT; // File not found
@@ -767,6 +902,22 @@ int TagOMatic::load_file_headless(String filename) {
 }
 
 #endif
+
+bool TagOMatic::ndefEmulationSupported() {
+    switch (bruceConfigPins.rfidModule) {
+        case PN532_I2C_MODULE:
+        case PN532_SPI_MODULE:
+#ifdef M5STICK
+        case PN532_I2C_SPI_MODULE:
+#endif
+#if !defined(LITE_VERSION)
+        case ST25R3916_SPI_MODULE:
+        case ST25R3916_I2C_MODULE:
+#endif
+            return true;
+        default: return false;
+    }
+}
 
 void TagOMatic::delayWithReturn(uint32_t ms) {
     auto tm = millis();

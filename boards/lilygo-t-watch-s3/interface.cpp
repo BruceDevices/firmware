@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
@@ -19,6 +20,10 @@ SensorDRV2605 drv;
 ***************************************************************************************/
 void _setup_gpio() {
     pinMode(16, INPUT); // Touch IRQ
+    // NOTE: this board permanently reserves BOTH hardware I2C controllers for system peripherals
+    // (sensors/PMU/RTC on Wire, touch on Wire1) — bus_HAL only tracks one "sys" bus, so
+    // bruceConfigPins.i2c_bus only has a real hardware bus free if its pins match one of these two.
+    setSysI2CBus(&Wire);
     Wire.begin(10, 11); // sensors
     delay(10);
     Wire1.begin(39, 40); // touchscreen

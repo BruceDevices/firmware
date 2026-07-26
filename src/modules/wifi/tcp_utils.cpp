@@ -69,6 +69,7 @@ void listenTcpPort() {
                     }
                     if (check(SelPress)) { inputMode = true; }
                 }
+                vTaskDelay(pdMS_TO_TICKS(1));
             }
             client.stop();
             Serial.println("Client disconnected");
@@ -79,6 +80,7 @@ void listenTcpPort() {
             server.stop();
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -140,6 +142,7 @@ void clientTCP() {
             client.stop();
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     displayError("Connection closed.");

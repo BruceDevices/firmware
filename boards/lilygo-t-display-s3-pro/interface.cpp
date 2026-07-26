@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <SD_MMC.h>
@@ -10,8 +11,6 @@ static PowersSY6970 PMU;
 #include <Wire.h>
 #define LCD_MODULE_CMD_1
 
-#define BOARD_I2C_SDA 5
-#define BOARD_I2C_SCL 6
 #define BOARD_SENSOR_IRQ 21
 #define BOARD_TOUCH_RST 13
 TouchDrvCSTXXX touch;
@@ -48,19 +47,20 @@ void _setup_gpio() {
     pinMode(BOARD_TOUCH_RST, OUTPUT);   // PIN_TOUCH_RES
     digitalWrite(BOARD_TOUCH_RST, LOW); // PIN_TOUCH_RES
     delay(500);
-    digitalWrite(BOARD_TOUCH_RST, HIGH);      // PIN_TOUCH_RES
-    Wire.begin(BOARD_I2C_SDA, BOARD_I2C_SCL); // SDA, SCL
+    digitalWrite(BOARD_TOUCH_RST, HIGH);  // PIN_TOUCH_RES
+    setSysI2CBus(&Wire);                  // Touch + PMU both live on the default Wire object
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL); // SDA, SCL
 
     // Initialize capacitive touch
     touch.setPins(BOARD_TOUCH_RST, BOARD_SENSOR_IRQ);
-    touch.begin(Wire, CST226SE_SLAVE_ADDRESS, BOARD_I2C_SDA, BOARD_I2C_SCL);
+    touch.begin(Wire, CST226SE_SLAVE_ADDRESS, SYS_I2C_SDA, SYS_I2C_SCL);
     touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
     touch.setSwapXY(true);
     touch.setMirrorXY(false, false);
     // Set the screen to turn on or off after pressing the screen Home touch button
     touch.setHomeButtonCallback(touchHomeKeyCallback);
 
-    bool hasPMU = PMU.init(Wire, BOARD_I2C_SDA, BOARD_I2C_SCL, SY6970_SLAVE_ADDRESS);
+    bool hasPMU = PMU.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, SY6970_SLAVE_ADDRESS);
     if (!hasPMU) {
         Serial.println("PMU is not online...");
     } else {

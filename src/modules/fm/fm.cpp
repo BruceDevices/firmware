@@ -210,6 +210,7 @@ void fm_spectrum() {
                     tft.drawLine(lineX, startY, lineX, endY, bruceConfig.priColor);
                 }
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         fm_stop();
         delay(100);
