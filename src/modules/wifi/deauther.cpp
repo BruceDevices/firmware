@@ -29,7 +29,6 @@
 #include <lwip/timeouts.h>
 #include <sstream>
 
-// WiFi header structure for parsing packets
 struct wifi_header_t {
     uint16_t frame_ctrl;
     uint16_t duration;
@@ -58,7 +57,6 @@ struct APInfo {
 };
 static std::vector<APInfo> sameSSID_APs;
 
-// Client detection globals
 static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
 static bool clientScanActive = false;
@@ -238,15 +236,12 @@ void buildOptimizedDeauthFrame(
 bool initializeDeauthMode(int channel, WiFiState& savedState) {
     savedState = saveWiFiState();
     
-    // Clean up WiFi completely - like wifi_atk_setWifi()
     wifiDisconnect();
     delay(10);
     
-    // Stop WiFi
     esp_wifi_stop();
     delay(10);
     
-    // Try to set AP mode with proper initialization
     if (WiFi.getMode() != WIFI_MODE_AP) {
         if (!WiFi.mode(WIFI_MODE_AP)) {
             displayError("Failed to set AP mode", true);
@@ -255,13 +250,11 @@ bool initializeDeauthMode(int channel, WiFiState& savedState) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     
-    // Generate AP name
     String currentSsid = WiFi.SSID();
     if (currentSsid.length() == 0) {
-        currentSsid = "DEAUTH_" + String(random(1000, 9999));
+        currentSsid = "Wi-Fi_AP";
     }
     
-    // Try multiple times to start AP
     int attempts = 0;
     bool apStarted = false;
     while (attempts < 5 && !apStarted) {
@@ -273,7 +266,6 @@ bool initializeDeauthMode(int channel, WiFiState& savedState) {
     }
     
     if (!apStarted) {
-        // Try one more time with full reset
         WiFi.disconnect(true);
         delay(100);
         WiFi.mode(WIFI_OFF);
@@ -288,7 +280,6 @@ bool initializeDeauthMode(int channel, WiFiState& savedState) {
         return false;
     }
     
-    // Set channel after AP is started
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     vTaskDelay(50 / portTICK_PERIOD_MS);
     
