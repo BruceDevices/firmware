@@ -123,11 +123,8 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 - [x] Android Spam
 - [x] Spam All
 - [x] Cam Detector
-  - [x] Camera Scan - multi-brand Wi-Fi + BLE camera detector (Hikvision, Dahua, EZVIZ, Reolink, Tapo, Xiaomi, Arlo, Ring, Eufy, Wyze, Imou, Lorex, Swann, Aqara, ... tuned for AU/HK markets)
-  - [x] Camera Deauther - deauths detected camera APs
-  - [x] P2P LAN Scan - active discovery + targeted deauth of iLnkP2P/CS2 P2P cameras (UDP 32108)
-  - [x] Auto-Sweep - wardrive mode: auto-joins open APs + camera setup-APs and P2P-probes them, flashing an alert on each new camera
-  - [x] TUTK Watch - experimental half-MITM traffic classifier: flags TUTK/Kalay cameras by their cloud traffic (UDP 32100 / Kalay DNS)
+  - [x] Camera Radar - unified catch-all scan. Merges Wi-Fi APs + BLE + on-LAN ARP hosts + P2P responders, deduped by MAC, matched against a market-share-ranked vendor DB (Hikvision, Dahua, EZVIZ, Uniview, Amcrest, Reolink, Imou, Ring, Arlo, Wyze, Lorex, Meari/CloudEdge, Tapo, Xiaomi, Eufy, Swann, Aqara, Nest, Foscam, Annke, Blink, XMeye/CamHi, V380, Yoosee, iCSee, Tuya, ...). Passive (prompts to join once) or Wardrive (auto-joins open APs). Results offer Deauth All + per-camera Target Deauth (AP-broadcast for camera APs, targeted station deauth for client cams)
+  - [x] TUTK Watch - experimental half-MITM traffic classifier: flags cloud cameras by their traffic (UDP 32100 / camera-cloud DNS: Kalay, Meari, Tuya, V380, ...)
   - [x] Flock / Axon / RayBan detectors
 </details>
 

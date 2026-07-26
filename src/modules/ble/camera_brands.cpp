@@ -58,6 +58,17 @@ static const char *const oui_wyze[] = {
 // Lorex Technology (1).
 static const char *const oui_lorex[] = {"00:1f:54"};
 
+// Zhuhai Dingzhi Electronic — ODM behind Meari / CloudEdge cameras (rebranded
+// by many labels, e.g. "SPEED"). Proprietary Meari cloud/P2P, so only OUI/name
+// detection applies (no iLnkP2P/TUTK LAN probe).
+static const char *const oui_meari[] = {"68:76:27"};
+
+// Zhejiang Uniview (UNV) — top-tier surveillance vendor.
+static const char *const oui_uniview[] = {"6c:f1:7e", "48:ea:63", "c4:79:05", "88:26:3f"};
+
+// Amcrest Technologies (US; Dahua-lineage).
+static const char *const oui_amcrest[] = {"00:65:1e", "9c:8e:cd", "a0:60:32", "34:46:63"};
+
 // Axon Enterprise body cameras (from nyanBOX).
 static const char *const oui_axon[] = {"00:25:df"};
 
@@ -78,6 +89,7 @@ static const char *const pat_dahua[] = {"dahua", "dh-ipc", "dh_ipc"};
 static const char *const pat_ezviz[] = {"ezviz"};
 static const char *const pat_imou[] = {"imou"};
 static const char *const pat_reolink[] = {"reolink"};
+static const char *const pat_meari[] = {"meari", "cloudedge"};
 static const char *const pat_arlo[] = {"arlo"};
 static const char *const pat_ring[] = {"ring setup", "ring-", "ring_"};
 static const char *const pat_wyze[] = {"wyze"};
@@ -94,6 +106,20 @@ static const char *const pat_swann[] = {"swann"};
 static const char *const pat_aqara[] = {"aqara", "lumi-"};
 static const char *const pat_nest[] = {"nest cam", "nestcam", "google-nest"};
 static const char *const pat_dlink[] = {"dcs-", "d-link cam", "dlink_cam"};
+static const char *const pat_uniview[] = {"uniview", "unv-", "unv_"};
+static const char *const pat_amcrest[] = {"amcrest", "amc-"};
+static const char *const pat_foscam[] = {"foscam", "fosbaby"};
+static const char *const pat_annke[] = {"annke"};
+static const char *const pat_vivotek[] = {"vivotek"};
+static const char *const pat_blink[] = {"blink-", "blink_"};
+static const char *const pat_simplisafe[] = {"simplisafe", "simplicam"};
+// Big OEM / white-label ecosystems (Xiongmai/XMeye, CamHi, V380, Yoosee/Gwell,
+// iCSee, Ubox, Tuya). These ship generic Wi-Fi chips, so name/SSID/app only.
+static const char *const pat_xmeye[] = {"xiongmai", "xmeye", "xm-", "camhi", "ipcam"};
+static const char *const pat_v380[] = {"v380", "macrovideo"};
+static const char *const pat_yoosee[] = {"yoosee", "gwell", "yhcam"};
+static const char *const pat_icsee[] = {"icsee", "ubox", "bccam"};
+static const char *const pat_tuyacam[] = {"tuya", "smartlife", "smart_cam", "smartcam"};
 
 // ---------------------------------------------------------------------------
 // Brand table. OUI-backed vendors first (most precise), then name-only vendors.
@@ -108,10 +134,14 @@ static const CameraBrand kBrands[] = {
     {"Arlo", oui_arlo, ARRSZ(oui_arlo), pat_arlo, ARRSZ(pat_arlo)},
     {"Ring", oui_ring, ARRSZ(oui_ring), pat_ring, ARRSZ(pat_ring)},
     {"Wyze", oui_wyze, ARRSZ(oui_wyze), pat_wyze, ARRSZ(pat_wyze)},
+    {"Uniview", oui_uniview, ARRSZ(oui_uniview), pat_uniview, ARRSZ(pat_uniview)},
+    {"Amcrest", oui_amcrest, ARRSZ(oui_amcrest), pat_amcrest, ARRSZ(pat_amcrest)},
     {"Lorex", oui_lorex, ARRSZ(oui_lorex), nullptr, 0},
+    {"Meari/CloudEdge", oui_meari, ARRSZ(oui_meari), pat_meari, ARRSZ(pat_meari)},
     {"Axon", oui_axon, ARRSZ(oui_axon), pat_axon, ARRSZ(pat_axon)},
     {"Flock", oui_flock, ARRSZ(oui_flock), pat_flock, ARRSZ(pat_flock)},
-    // Name-only (multi-product vendors)
+    // Name-only (multi-product vendors + OEM ecosystems). Ordered roughly by
+    // popularity; matched only on camera-specific SSID/BLE/app tokens.
     {"Tapo", nullptr, 0, pat_tplink_cam, ARRSZ(pat_tplink_cam)},
     {"Xiaomi", nullptr, 0, pat_xiaomi_cam, ARRSZ(pat_xiaomi_cam)},
     {"Eufy", nullptr, 0, pat_eufy, ARRSZ(pat_eufy)},
@@ -119,6 +149,16 @@ static const CameraBrand kBrands[] = {
     {"Aqara", nullptr, 0, pat_aqara, ARRSZ(pat_aqara)},
     {"Nest", nullptr, 0, pat_nest, ARRSZ(pat_nest)},
     {"D-Link", nullptr, 0, pat_dlink, ARRSZ(pat_dlink)},
+    {"Foscam", nullptr, 0, pat_foscam, ARRSZ(pat_foscam)},
+    {"Annke", nullptr, 0, pat_annke, ARRSZ(pat_annke)},
+    {"Vivotek", nullptr, 0, pat_vivotek, ARRSZ(pat_vivotek)},
+    {"Blink", nullptr, 0, pat_blink, ARRSZ(pat_blink)},
+    {"SimpliSafe", nullptr, 0, pat_simplisafe, ARRSZ(pat_simplisafe)},
+    {"XMeye/CamHi", nullptr, 0, pat_xmeye, ARRSZ(pat_xmeye)},
+    {"V380", nullptr, 0, pat_v380, ARRSZ(pat_v380)},
+    {"Yoosee", nullptr, 0, pat_yoosee, ARRSZ(pat_yoosee)},
+    {"iCSee", nullptr, 0, pat_icsee, ARRSZ(pat_icsee)},
+    {"Tuya Cam", nullptr, 0, pat_tuyacam, ARRSZ(pat_tuyacam)},
 };
 
 // ---------------------------------------------------------------------------
