@@ -1586,9 +1586,6 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
         }
 
         if (redrawRows) {
-            // Reserve footer space first, then fit the 4 config rows + Start row into
-            // what's left, shrinking rowH on short screens instead of letting the
-            // fixed-height stack run into the footer (matches nrf_mousejack.cpp).
             int rowStart = BORDER_PAD_Y + FM * LH + 10;
             int footerH = FP * LH + 4;
             int footerY = tftHeight - footerH - 8;
@@ -1700,10 +1697,6 @@ static void bleSpamRenderRunningScreen(
         String title = bleSpamGetDeviceName(selection.attack_type, selection.device_index);
         drawMainBorderWithTitle(bleSpamMakeTitle(title));
 
-        // Reserve footer space first, then fit 2 stats rows + 4 config rows (7 row
-        // units of content) into what's left, shrinking rowH on short screens instead
-        // of letting the fixed-height stack run into the footer (matches
-        // nrf_mousejack.cpp's reserve-then-fit pattern).
         statsY = BORDER_PAD_Y + FM * LH + 8;
         int footerH = FP * LH + 4;
         int footerY = tftHeight - footerH - 8;
