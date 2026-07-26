@@ -1586,9 +1586,15 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
         }
 
         if (redrawRows) {
-            int rowH = max(12, FP * LH + 4);
+            // Reserve footer space first, then fit the 4 config rows + Start row into
+            // what's left, shrinking rowH on short screens instead of letting the
+            // fixed-height stack run into the footer (matches nrf_mousejack.cpp).
             int rowStart = BORDER_PAD_Y + FM * LH + 10;
-            int startRowY = rowStart + rowH * 4 + ((tftHeight > 135) ? rowH : 0);
+            int footerH = FP * LH + 4;
+            int footerY = tftHeight - footerH - 8;
+            int available = footerY - rowStart - 4;
+            int rowH = max(12, min(FP * LH + 4, available / 5));
+            int startRowY = rowStart + rowH * 4;
 
             bleSpamRenderConfigRows(config, cursor, editState, rowStart, rowH);
 
@@ -1598,8 +1604,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
             tft.drawCentreString("[ Start ]", tftWidth / 2, startRowY + 2, 1);
 
             tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
-            int footerY = tftHeight - FP * LH - 12;
-            tft.fillRect(8, footerY, tftWidth - 16, FP * LH + 4, bruceConfig.bgColor);
+            tft.fillRect(8, footerY, tftWidth - 16, footerH, bruceConfig.bgColor);
             tft.drawCentreString("Click=Select  ESC=Back", tftWidth / 2, footerY + 2, 1);
 
             redrawRows = false;
@@ -1695,16 +1700,22 @@ static void bleSpamRenderRunningScreen(
         String title = bleSpamGetDeviceName(selection.attack_type, selection.device_index);
         drawMainBorderWithTitle(bleSpamMakeTitle(title));
 
-        rowH = max(12, FP * LH + 4);
+        // Reserve footer space first, then fit 2 stats rows + 4 config rows (7 row
+        // units of content) into what's left, shrinking rowH on short screens instead
+        // of letting the fixed-height stack run into the footer (matches
+        // nrf_mousejack.cpp's reserve-then-fit pattern).
         statsY = BORDER_PAD_Y + FM * LH + 8;
-        configStartY = statsY + rowH * 2 + rowH;
+        int footerH = FP * LH + 4;
+        int footerY = tftHeight - footerH - 8;
+        int available = footerY - statsY - 4;
+        rowH = max(12, min(FP * LH + 4, available / 7));
+        configStartY = statsY + rowH * 3;
 
         tft.drawFastHLine(8, statsY + rowH * 2 - 2, tftWidth - 16, bruceConfig.priColor);
         tft.drawFastHLine(8, configStartY + rowH * 4 - 2, tftWidth - 16, bruceConfig.priColor);
 
         tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
-        int footerY = tftHeight - FP * LH - 12;
-        tft.fillRect(8, footerY, tftWidth - 16, FP * LH + 4, bruceConfig.bgColor);
+        tft.fillRect(8, footerY, tftWidth - 16, footerH, bruceConfig.bgColor);
         tft.drawCentreString("Click=Edit  ESC=Stop", tftWidth / 2, footerY + 2, 1);
     }
 
