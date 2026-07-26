@@ -238,27 +238,34 @@ void buildOptimizedDeauthFrame(
 bool initializeDeauthMode(int channel, WiFiState& savedState) {
     savedState = saveWiFiState();
     
+    // Clean up WiFi completely - like wifi_atk_setWifi()
     wifiDisconnect();
     delay(10);
     
+    // Stop WiFi
     esp_wifi_stop();
     delay(10);
     
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_start();
-    delay(10);
+    // Try to set AP mode with proper initialization
+    if (WiFi.getMode() != WIFI_MODE_AP) {
+        if (!WiFi.mode(WIFI_MODE_AP)) {
+            displayError("Failed to set AP mode", true);
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
     
+    // Generate AP name
     String currentSsid = WiFi.SSID();
     if (currentSsid.length() == 0) {
         currentSsid = "DEAUTH_" + String(random(1000, 9999));
     }
     
+    // Try multiple times to start AP
     int attempts = 0;
     bool apStarted = false;
-    while (attempts < 3 && !apStarted) {
-        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 1, 4, false);
+    while (attempts < 5 && !apStarted) {
+        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 0, 1, false);
         if (!apStarted) {
             delay(100);
             attempts++;
@@ -266,10 +273,22 @@ bool initializeDeauthMode(int channel, WiFiState& savedState) {
     }
     
     if (!apStarted) {
+        // Try one more time with full reset
+        WiFi.disconnect(true);
+        delay(100);
+        WiFi.mode(WIFI_OFF);
+        delay(100);
+        WiFi.mode(WIFI_AP);
+        delay(100);
+        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 0, 1, false);
+    }
+    
+    if (!apStarted) {
         displayError("Failed to start Deauth AP", true);
         return false;
     }
     
+    // Set channel after AP is started
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     vTaskDelay(50 / portTICK_PERIOD_MS);
     
