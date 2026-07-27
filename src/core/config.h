@@ -32,6 +32,13 @@ public:
         bool allowSetSsid;
         bool allowGetCreds;
     };
+    struct SSHProfile {
+        String name;
+        String host;
+        String port;
+        String user;
+        String pwd;
+    };
 
     const char *filepath = "/bruce.conf";
 
@@ -64,6 +71,7 @@ public:
     WiFiCredential wifiAp = {"BruceNet", "brucenet"};
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
+    std::vector<SSHProfile> sshProfiles = {};
     String wifiMAC = ""; //@IncursioHack
     bool TerminalLog = true;
 
@@ -166,6 +174,8 @@ public:
     String getWifiPassword(const String &ssid) const;
     void addEvilWifiName(String value);
     void removeEvilWifiName(String value);
+    void addSSHProfile(const SSHProfile &profile);
+    void removeSSHProfile(const String &name);
     void setEvilEndpointCreds(String value);
     void setEvilEndpointSsid(String value);
     void setEvilAllowEndpointDisplay(bool value);

@@ -1178,31 +1178,7 @@ char *stringTochar(const String &s) {
     return arr;
 }
 
-void ssh_setup(const String &host) {
-    if (!wifiConnected) wifiConnectMenu();
-    if (!initClientMutex()) {
-        displayError("SSH mutex creation failed.", true);
-        returnToMenu = true;
-        return;
-    }
-
-    resetClientScreen("SSH");
-    if (host != "") {
-        ssh_host = host;
-    } else {
-        String my_net =
-            WiFi.gatewayIP().toString().substring(0, WiFi.gatewayIP().toString().lastIndexOf(".") + 1);
-        ssh_host = keyboard(my_net, 100, "SSH HOST (IP or Hostname)");
-        if (ssh_host == "\x1B") return;
-    }
-
-    ssh_port = num_keyboard("22", 5, "SSH PORT");
-    if (ssh_port == "\x1B") return;
-    ssh_user = keyboard("", 76, "SSH USER");
-    if (ssh_user == "\x1B") return;
-    ssh_password = keyboard("", 76, "SSH PASSWORD", true);
-    if (ssh_password == "\x1B") return;
-
+static void ssh_start_session() {
     IPAddress resolvedIp;
     if (WiFi.hostByName(ssh_host.c_str(), resolvedIp)) {
         ssh_host = resolvedIp.toString();
@@ -1230,6 +1206,110 @@ void ssh_setup(const String &host) {
 
     startSessionLog(ClientProtocol::SSH);
     runSessionUiLoop("SSH");
+}
+
+void ssh_setup(const String &host) {
+    if (!wifiConnected) wifiConnectMenu();
+    if (!initClientMutex()) {
+        displayError("SSH mutex creation failed.", true);
+        returnToMenu = true;
+        return;
+    }
+
+    resetClientScreen("SSH");
+    if (host != "") {
+        ssh_host = host;
+    } else {
+        String my_net =
+            WiFi.gatewayIP().toString().substring(0, WiFi.gatewayIP().toString().lastIndexOf(".") + 1);
+        ssh_host = keyboard(my_net, 100, "SSH HOST (IP or Hostname)");
+        if (ssh_host == "\x1B") return;
+    }
+
+    ssh_port = num_keyboard("22", 5, "SSH PORT");
+    if (ssh_port == "\x1B") return;
+    ssh_user = keyboard("", 76, "SSH USER");
+    if (ssh_user == "\x1B") return;
+    ssh_password = keyboard("", 76, "SSH PASSWORD", true);
+    if (ssh_password == "\x1B") return;
+
+    ssh_start_session();
+}
+
+void ssh_setup_profile(const String &host, const String &port, const String &user, const String &pwd) {
+    ssh_host = host;
+    ssh_port = port;
+    ssh_user = user;
+    ssh_password = pwd;
+
+    if (!wifiConnected) wifiConnectMenu();
+    if (!initClientMutex()) {
+        displayError("SSH mutex creation failed.", true);
+        returnToMenu = true;
+        return;
+    }
+
+    resetClientScreen("SSH");
+
+    ssh_start_session();
+}
+
+static void ssh_add_profile_menu() {
+    BruceConfig::SSHProfile p;
+    p.name = keyboard("", 30, "Profile Name");
+    if (p.name == "\x1B" || p.name.isEmpty()) return;
+    String my_net =
+        WiFi.gatewayIP().toString().substring(0, WiFi.gatewayIP().toString().lastIndexOf(".") + 1);
+    p.host = keyboard(my_net, 100, "SSH HOST (IP or Hostname)");
+    if (p.host == "\x1B") return;
+    p.port = num_keyboard("22", 5, "SSH PORT");
+    if (p.port == "\x1B") return;
+    p.user = keyboard("", 76, "SSH USER");
+    if (p.user == "\x1B") return;
+    p.pwd = keyboard("", 76, "SSH PASSWORD", true);
+    if (p.pwd == "\x1B") return;
+    bruceConfig.addSSHProfile(p);
+}
+
+static void ssh_profile_actions_menu(BruceConfig::SSHProfile prof) {
+    bool goBack = false;
+    while (!goBack) {
+        options = {
+            {"Connect", [&]() { ssh_setup_profile(prof.host, prof.port, prof.user, prof.pwd); }},
+            {"Delete",  [&]() { bruceConfig.removeSSHProfile(prof.name); goBack = true; }},
+            {"Back",    [&]() { goBack = true; }},
+        };
+        int idx = loopOptions(options, MENU_TYPE_SUBMENU, prof.name.c_str());
+        if (idx == -1 || returnToMenu) goBack = true;
+    }
+}
+
+static void ssh_saved_profiles_menu() {
+    bool goBack = false;
+    while (!goBack) {
+        options = {};
+        for (const auto &p : bruceConfig.sshProfiles) {
+            BruceConfig::SSHProfile prof = p;
+            options.push_back({prof.name, [prof]() { ssh_profile_actions_menu(prof); }});
+        }
+        options.push_back({"Add Profile", ssh_add_profile_menu});
+        options.push_back({"Back", [&goBack]() { goBack = true; }});
+        int idx = loopOptions(options, MENU_TYPE_SUBMENU, "Saved Profiles");
+        if (idx == -1 || returnToMenu) goBack = true;
+    }
+}
+
+void ssh_connection_menu() {
+    bool goBack = false;
+    while (!goBack) {
+        options = {
+            {"New Connection", []() { ssh_setup(""); }},
+            {"Saved Profiles", ssh_saved_profiles_menu             },
+            {"Back",           [&goBack]() { goBack = true; }},
+        };
+        int idx = loopOptions(options, MENU_TYPE_SUBMENU, "SSH");
+        if (idx == -1 || returnToMenu) goBack = true;
+    }
 }
 
 void ssh_loop(void *pvParameters) { sshWorkerTask(pvParameters); }

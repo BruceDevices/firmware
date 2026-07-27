@@ -48,6 +48,16 @@ JsonDocument BruceConfig::toJson() const {
     JsonArray _evilWifiNames = setting["evilWifiNames"].to<JsonArray>();
     for (auto key : evilWifiNames) _evilWifiNames.add(key);
 
+    JsonArray _sshProfiles = setting["sshProfiles"].to<JsonArray>();
+    for (const auto &p : sshProfiles) {
+        JsonObject o = _sshProfiles.add<JsonObject>();
+        o["name"] = p.name;
+        o["host"] = p.host;
+        o["port"] = p.port;
+        o["user"] = p.user;
+        o["pwd"] = p.pwd;
+    }
+
     JsonObject _evilWifiEndpoints = setting["evilWifiEndpoints"].to<JsonObject>();
     _evilWifiEndpoints["getCredsEndpoint"] = evilPortalEndpoints.getCredsEndpoint;
     _evilWifiEndpoints["setSsidEndpoint"] = evilPortalEndpoints.setSsidEndpoint;
@@ -316,6 +326,20 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+
+    if (!setting["sshProfiles"].isNull()) {
+        sshProfiles.clear();
+        JsonArray _sshProfiles = setting["sshProfiles"].as<JsonArray>();
+        for (JsonObject o : _sshProfiles) {
+            SSHProfile p;
+            p.name = o["name"].as<String>();
+            p.host = o["host"].as<String>();
+            p.port = o["port"].as<String>();
+            p.user = o["user"].as<String>();
+            p.pwd = o["pwd"].as<String>();
+            sshProfiles.push_back(p);
+        }
     }
 
     if (!setting["evilWifiEndpoints"].isNull()) {
@@ -673,6 +697,28 @@ void BruceConfig::addEvilWifiName(String value) {
 void BruceConfig::removeEvilWifiName(String value) {
     evilWifiNames.erase(value);
     saveFile();
+}
+
+void BruceConfig::addSSHProfile(const SSHProfile &profile) {
+    for (auto &p : sshProfiles) {
+        if (p.name == profile.name) {
+            p = profile;
+            saveFile();
+            return;
+        }
+    }
+    sshProfiles.push_back(profile);
+    saveFile();
+}
+
+void BruceConfig::removeSSHProfile(const String &name) {
+    for (auto it = sshProfiles.begin(); it != sshProfiles.end(); ++it) {
+        if (it->name == name) {
+            sshProfiles.erase(it);
+            saveFile();
+            return;
+        }
+    }
 }
 
 void BruceConfig::setEvilEndpointCreds(String value) {
