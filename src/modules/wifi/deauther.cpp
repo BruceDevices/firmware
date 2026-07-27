@@ -61,6 +61,61 @@ static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
 static bool clientScanActive = false;
 
+// =============================================================================
+// Vendor OUI Lookup
+// =============================================================================
+
+String getVendorFromMAC(const String& mac) {
+    static const std::pair<String, String> oui_list[] = {
+        {"00:1A:2B", "Apple"},
+        {"00:1E:52", "Apple"},
+        {"00:25:00", "Apple"},
+        {"00:11:22", "Samsung"},
+        {"00:23:E7", "Samsung"},
+        {"00:24:FE", "Samsung"},
+        {"00:0C:29", "VMware"},
+        {"00:50:56", "VMware"},
+        {"00:1C:42", "Cisco"},
+        {"00:1A:A0", "Cisco"},
+        {"00:0F:FE", "TP-Link"},
+        {"00:1A:2B", "Netgear"},
+        {"00:18:4D", "Netgear"},
+        {"00:1F:33", "Asus"},
+        {"00:0D:88", "Microsoft"},
+        {"00:1A:11", "Google"},
+        {"00:1A:7D", "Google"},
+        {"00:0F:52", "Intel"},
+        {"00:10:18", "Intel"},
+        {"00:04:23", "Intel"},
+        {"00:0E:58", "HP"},
+        {"00:17:A4", "HP"},
+        {"00:1F:3A", "Dell"},
+        {"00:11:43", "Dell"},
+        {"00:1E:C9", "Dell"},
+        {"00:1A:80", "Sony"},
+        {"00:1F:E1", "Sony"},
+        {"00:1B:FC", "Nintendo"},
+        {"00:1F:32", "Nintendo"},
+        {"00:1C:BE", "Roku"},
+        {"00:1E:5E", "Amazon"},
+        {"00:1A:22", "Amazon"},
+        {"00:0F:53", "Belkin"},
+        {"00:1D:7E", "Belkin"},
+        {"00:18:F8", "D-Link"},
+        {"00:1B:11", "D-Link"},
+        {"00:1E:8C", "Linksys"},
+        {"00:1A:70", "Linksys"}
+    };
+    
+    String prefix = mac.substring(0, 8); // "XX:XX:XX"
+    for (auto& entry : oui_list) {
+        if (prefix == entry.first) {
+            return entry.second;
+        }
+    }
+    return "Unknown";
+}
+
 WiFiState saveWiFiState() {
     WiFiState state;
     state.was_connected = WiFi.isConnected();
@@ -965,7 +1020,11 @@ void clientSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
                 ip.addr = 0;
                 eth_addr eth;
                 memcpy(eth.addr, clientMAC, 6);
-                Host client(&ip, &eth);
+                
+                int rssi = pkt->rx_ctrl.rssi;
+                String vendor = getVendorFromMAC(MAC(eth.addr));
+                
+                Host client(&ip, &eth, "", vendor, rssi);
                 detectedClients.push_back(client);
             }
         }
@@ -1053,8 +1112,19 @@ void showClientSelectionForDeauth(const std::vector<Host>& clients, uint8_t* tar
 
     if (!clients.empty()) {
         for (auto& client : clients) {
-            String clientMac = client.mac;
-            options.push_back({clientMac.c_str(), [=]() {
+            String displayText;
+            String macShort = client.mac;
+            String rssiStr = String(client.rssi) + "dBm";
+
+            if (!client.hostname.isEmpty()) {
+                displayText = client.hostname + " (" + macShort + ") " + rssiStr;
+            } else if (!client.vendor.isEmpty() && client.vendor != "Unknown") {
+                displayText = client.vendor + " (" + macShort + ") " + rssiStr;
+            } else {
+                displayText = macShort + " " + rssiStr;
+            }
+
+            options.push_back({displayText.c_str(), [=]() {
                 stationDeauth(client, apBssid);
             }});
         }
