@@ -152,12 +152,19 @@ bool _setupAP() {
 void wifiDisconnect() {
     wifiTransitioning = true;
 
-    WiFi.softAPdisconnect(true); // turn off AP mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.disconnect(true, true); // turn off STA mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.mode(WIFI_OFF); // enforces WIFI_OFF mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    wifi_mode_t mode = WiFi.getMode();
+    if (mode & WIFI_MODE_AP) {
+        WiFi.softAPdisconnect();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    if (mode & WIFI_MODE_STA) {
+        WiFi.disconnect(false, true);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    if (mode != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
 
     wifiConnected = false;
     wifiTransitioning = false;

@@ -37,36 +37,44 @@ extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32
 uint8_t deauth_frame[sizeof(deauth_frame_default)];
 
 wifi_ap_record_t ap_record;
-
+// Beacon packet template
+// clang-format off
 constexpr size_t BEACON_PKT_LEN = 109;
 const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
-    0x80, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-    0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
-    0x00, 0x00,
-    0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00,
-    0xe8, 0x03,
-    0x31, 0x00,
-    0x00, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x01, 0x08,
-    0x82, 0x84, 0x8b, 0x96, 0x24, 0x30, 0x48, 0x6c,
-    0x03, 0x01,
-    0x01,
-    0x30, 0x18,
-    0x01, 0x00,
-    0x00, 0x0f, 0xac, 0x02,
-    0x02, 0x00,
-    0x00, 0x0f, 0xac, 0x04, 0x00, 0x0f, 0xac, 0x04,
-    0x01, 0x00,
-    0x00, 0x0f, 0xac, 0x02,
-    0x00, 0x00
+    /*  0 - 3  */ 0x80, 0x00, 0x00, 0x00, // Type/Subtype: management beacon frame
+    /*  4 - 9  */ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast
+    /* 10 - 15 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, // Source (placeholder - overwritten)
+    /* 16 - 21 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, // BSSID (placeholder - overwritten)
+    /* 22 - 23 */ 0x00, 0x00, // Fragment & sequence number (SDK will set)
+    /* 24 - 31 */ 0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, // Timestamp
+    /* 32 - 33 */ 0xe8, 0x03, // Interval (1s)
+    /* 34 - 35 */ 0x31, 0x00, // Capability info (will set WPA flag later)
+    /* 36 - 37 */ 0x00, 0x20, // Tag: SSID parameter set, tag length 32 (we will write SSID into bytes 38..69)
+    /* 38 - 69 */ 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+    /* 70 - 71 */ 0x01, 0x08, // Supported rates tag length 8
+    /* 72 */ 0x82,
+    /* 73 */ 0x84,
+    /* 74 */ 0x8b,
+    /* 75 */ 0x96,
+    /* 76 */ 0x24,
+    /* 77 */ 0x30,
+    /* 78 */ 0x48,
+    /* 79 */ 0x6c,
+    /* 80 - 81 */ 0x03, 0x01, // Current Channel tag
+    /* 82 */      0x01,       // Current channel (overwritten)
+    /* 83 - 84 */ 0x30, 0x18, // RSN information (start)
+    /* 85 - 86 */ 0x01, 0x00,
+    /* 87 - 90 */ 0x00, 0x0f, 0xac, 0x02,
+    /* 91 - 92 */ 0x02, 0x00,
+    /* 93 -100 */ 0x00, 0x0f, 0xac, 0x04, 0x00, 0x0f, 0xac, 0x04,
+    /*101 -102 */ 0x01, 0x00,
+    /*103 -106 */ 0x00, 0x0f, 0xac, 0x02,
+    /*107 -108 */ 0x00, 0x00
 };
-
+// clang-format on
 constexpr size_t BEACON_TAIL_OFFSET = 70;
 constexpr size_t BEACON_TAIL_LEN = BEACON_PKT_LEN - BEACON_TAIL_OFFSET;
 constexpr size_t BEACON_TAIL_CHANNEL_OFFSET = 82 - BEACON_TAIL_OFFSET;
@@ -198,7 +206,7 @@ bool wifi_atk_setWifi() {
 
     if (WiFi.softAPSSID() != bruceConfig.wifiAp.ssid && WiFi.softAPSSID() != WIFI_ATK_NAME) {
         uint8_t randomChannel = random(1, 12);
-        
+
         int attempts = 0;
         bool apStarted = false;
         while (attempts < 5 && !apStarted) {
@@ -208,7 +216,7 @@ bool wifi_atk_setWifi() {
                 attempts++;
             }
         }
-        
+
         if (!apStarted) {
             displayError("Failed starting AP Attacker", true);
             return false;
@@ -291,9 +299,7 @@ void wifi_atk_menu() {
             }
 
             String displaySSID = ssid;
-            if (displaySSID.length() == 0) {
-                displaySSID = "<Hidden SSID> " + WiFi.BSSIDstr(i);
-            }
+            if (displaySSID.length() == 0) { displaySSID = "<Hidden SSID> " + WiFi.BSSIDstr(i); }
 
             String optionText = encryptionPrefix + displaySSID + " (" + String(rssi) + "|" +
                                 encryptionTypeStr + "|ch." + String(ch) + ")";
@@ -352,9 +358,7 @@ ScanNets:
     while (true) {
         for (const auto &record : ap_records) {
             channel = record.primary;
-            wsl_bypasser_send_raw_frame(
-                &record, record.primary, _default_target
-            );
+            wsl_bypasser_send_raw_frame(&record, record.primary, _default_target);
             tft.setCursor(10, tftHeight - 45);
             tft.println("Channel " + String(record.primary) + "    ");
             for (int i = 0; i < 100; i++) {
@@ -640,8 +644,7 @@ AGAIN:
 #endif
         {"Clone Portal",        [=]() { EvilPortal(tssid, channel, false, false); }},
         {"Deauth+Clone",        [=]() { EvilPortal(tssid, channel, true, false); } },
-        {"Deauth+Clone+Verify",
-         [=]() { EvilPortal(tssid, channel, true, true); }                               },
+        {"Deauth+Clone+Verify", [=]() { EvilPortal(tssid, channel, true, true); }  },
     };
     addOptionToMainMenu();
 
@@ -651,16 +654,23 @@ AGAIN:
 
 void target_atk(const String &tssid, const String &mac, uint8_t channel) {
     uint8_t mac_array[6];
-    sscanf(mac.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-           &mac_array[0], &mac_array[1], &mac_array[2],
-           &mac_array[3], &mac_array[4], &mac_array[5]);
-    
+    sscanf(
+        mac.c_str(),
+        "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+        &mac_array[0],
+        &mac_array[1],
+        &mac_array[2],
+        &mac_array[3],
+        &mac_array[4],
+        &mac_array[5]
+    );
+
     eth_addr eth;
     memcpy(eth.addr, mac_array, 6);
     ip4_addr_t ip;
     ip.addr = 0;
     Host target(&ip, &eth);
-    
+
     stationDeauth(target);
 }
 
