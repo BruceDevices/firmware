@@ -7,7 +7,7 @@ Added universal power-off codes for multi-device support (parsed + raw)
 
 #ifndef WORLD_IR_CODES_H
 #define WORLD_IR_CODES_H
-
+// clang-format off
 // Makes the codes more readable
 #define freq_to_timerval(x) (x / 1000)
 
@@ -8406,5 +8406,5 @@ const RawIrCode *const UniversalRawCodes[] = {
     &code_universal_power_raw2Code,
 };
 const uint8_t num_UniversalRawCodes = sizeof(UniversalRawCodes) / sizeof(UniversalRawCodes[0]);
-
+// clang-format on
 #endif

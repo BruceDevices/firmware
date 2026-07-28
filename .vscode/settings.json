@@ -6,8 +6,6 @@
     "editor.detectIndentation": true,
     "editor.guides.bracketPairs": "active",
 
-    "idf.portWin": "COM4",
-
     "files.associations": {
         "Jenkinsfile": "groovy",
         "*.toml": "properties",
@@ -93,12 +91,9 @@
         "main"
     ],
 
-    "cmake.ignoreCMakeListsMissing": true,
-    "cmake.sourceDirectory": "C:/Projetos/Bruce/lib/M5GFX",
-
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools",
-        "editor.rulers": [120],
+        "editor.rulers": [110],
         "editor.tabSize": 4,
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
