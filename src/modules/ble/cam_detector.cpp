@@ -657,6 +657,41 @@ static void radarResults() {
     options.clear();
 }
 
+// --- wardrive on-screen exit control ---------------------------------------
+// Touch devices (e.g. CYD) never map a tap to EscPress and can't interrupt the
+// blocking Wi-Fi/BLE scans, so wardrive draws a top-left [X]: solid = tap to
+// stop now; greyed = a scan is running and the stop registers right after.
+static const int RADAR_XBOX_X = 6, RADAR_XBOX_Y = 4, RADAR_XBOX_W = 30, RADAR_XBOX_H = 26;
+
+static bool radarExitTapped() {
+    if (check(EscPress)) return true; // physical Esc/back on button devices
+    if (touchPoint.pressed) {
+        bool in = touchPoint.x >= RADAR_XBOX_X && touchPoint.x <= RADAR_XBOX_X + RADAR_XBOX_W &&
+                  touchPoint.y >= RADAR_XBOX_Y && touchPoint.y <= RADAR_XBOX_Y + RADAR_XBOX_H;
+        touchPoint.Clear();
+        AnyKeyPress = false;
+        return in;
+    }
+    return false;
+}
+
+static void radarWardriveScreen(const String &phase, bool exitActive, int round) {
+    drawMainBorderWithTitle("Wardrive");
+    uint16_t xcol = exitActive ? bruceConfig.priColor : tft.color565(96, 96, 96);
+    tft.drawRoundRect(RADAR_XBOX_X, RADAR_XBOX_Y, RADAR_XBOX_W, RADAR_XBOX_H, 4, xcol);
+    tft.setTextColor(xcol, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setCursor(RADAR_XBOX_X + 8, RADAR_XBOX_Y + 6);
+    tft.print("X");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 44);
+    padprintln(" " + phase);
+    padprintln(" Cameras: " + String((int)g_radar.size()));
+    padprintln(" Rounds:  " + String(round));
+    padprintln(exitActive ? " Tap X to stop" : " Scanning - please wait");
+}
+
 static void cameraRadar() {
     bool wardrive = false;
     bool cancelled = true;
@@ -695,16 +730,29 @@ static void cameraRadar() {
         }
     } else {
         // Wardrive: keep sweeping every surface until the user exits. Only new
-        // (deduped) cameras flash an alert; a status + exit window ends each round.
+        // (deduped) cameras flash an alert. The [X] is greyed while a scan is
+        // running (exit registers right after) and solid in the idle window.
         uint16_t round = 0;
         bool stop = false;
+        radarWardriveScreen("Starting...", false, 0); // immediate feedback, no blank hang
         while (!stop) {
             round++;
+            radarWardriveScreen("Scanning APs", false, round);
             radarScanAPs(true);
+            if (radarExitTapped()) break;
+
+            radarWardriveScreen("Scanning BLE", false, round);
             radarScanBLE(true);
-            if (WiFi.status() == WL_CONNECTED) radarScanLan(true);
+            if (radarExitTapped()) break;
+
+            if (WiFi.status() == WL_CONNECTED) {
+                radarWardriveScreen("Sweeping LAN", false, round);
+                radarScanLan(true);
+                if (radarExitTapped()) break;
+            }
 
             // Auto-join each open AP and sweep its clients.
+            radarWardriveScreen("Finding open APs", false, round);
             std::vector<String> openSsids;
             int nets = WiFi.scanNetworks(false, true);
             for (int i = 0; i < nets; i++) {
@@ -713,42 +761,37 @@ static void cameraRadar() {
             }
             WiFi.scanDelete();
             for (auto &ssid : openSsids) {
-                if (check(EscPress)) {
+                if (radarExitTapped()) {
                     stop = true;
                     break;
                 }
-                drawMainBorderWithTitle("Wardrive");
-                tft.setTextSize(FP);
-                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-                tft.setCursor(6, 40);
-                padprintln(" Join: " + ssid.substring(0, 18));
-                padprintln(" Cameras: " + String((int)g_radar.size()));
+                radarWardriveScreen("Join " + ssid.substring(0, 12), false, round);
                 WiFi.begin(ssid.c_str());
                 uint32_t t0 = millis();
-                while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000 && !check(EscPress))
-                    delay(100);
-                if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) radarScanLan(true);
+                while (WiFi.status() != WL_CONNECTED && millis() - t0 < 5000) {
+                    if (radarExitTapped()) {
+                        stop = true;
+                        break;
+                    }
+                    delay(80);
+                }
+                if (!stop && WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0)
+                    radarScanLan(true);
                 WiFi.disconnect(false);
                 delay(50);
+                if (stop) break;
             }
             if (stop) break;
 
-            // Status + responsive exit window between rounds.
-            drawMainBorderWithTitle("Wardrive");
-            tft.setTextSize(FP);
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.setCursor(6, 40);
-            padprintln(" Cameras: " + String((int)g_radar.size()));
-            padprintln(" Rounds:  " + String(round));
-            padprintln("");
-            padprintln(" Press Esc to stop");
-            uint32_t until = millis() + 1500;
+            // Idle window: exit is responsive here (solid X).
+            radarWardriveScreen("Idle", true, round);
+            uint32_t until = millis() + 2000;
             while (millis() < until) {
-                if (check(EscPress)) {
+                if (radarExitTapped()) {
                     stop = true;
                     break;
                 }
-                delay(50);
+                delay(40);
             }
         }
     }
