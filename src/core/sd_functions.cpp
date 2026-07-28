@@ -1,5 +1,6 @@
 #include "sd_functions.h"
 #include "bus_HAL.h"
+#include "core/quick_access.h"
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
@@ -848,8 +849,30 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                              delay(200);
                                                              txIrFile(&fs, filepath);
                                                          }});
+                        { // Pin / Unpin
+                            String label = getQuickAccessManager().isPinned(filepath)
+                                               ? "Unpin from Quick Access"
+                                               : "Pin to Quick Access";
+                            options.insert(options.begin() + 2, {label, [&]() {
+                                    auto &qa = getQuickAccessManager();
+                                    if (qa.isPinned(filepath)) {
+                                        qa.unpin(filepath);
+                                        displaySuccess("Unpinned!", true);
+                                    } else {
+                                        PinnedItem item;
+                                        item.filepath = filepath;
+                                        item.label   = filename.substring(0, filename.lastIndexOf('.'));
+                                        item.type    = "ir";
+                                        item.fsType  = (&fs == &SD) ? 1 : 0;
+                                        if (qa.pin(item))
+                                            displaySuccess("Pinned!", true);
+                                        else
+                                            displayError("Pin failed (max 15 or duplicate)", true);
+                                    }
+                                }});
+                        }
                     }
-                    if (filepath.endsWith(".sub"))
+                    if (filepath.endsWith(".sub")) {
                         options.insert(options.begin(), {"Subghz Tx", [&]() {
                                                              delay(200);
                                                              RfCodes data{};
@@ -857,6 +880,29 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                              if (readSubFile(&fs, filepath, data))
                                                                  txSubFile(data);
                                                          }});
+                        { // Pin / Unpin
+                            String label = getQuickAccessManager().isPinned(filepath)
+                                               ? "Unpin from Quick Access"
+                                               : "Pin to Quick Access";
+                            options.insert(options.begin() + 1, {label, [&]() {
+                                    auto &qa = getQuickAccessManager();
+                                    if (qa.isPinned(filepath)) {
+                                        qa.unpin(filepath);
+                                        displaySuccess("Unpinned!", true);
+                                    } else {
+                                        PinnedItem item;
+                                        item.filepath = filepath;
+                                        item.label   = filename.substring(0, filename.lastIndexOf('.'));
+                                        item.type    = "sub";
+                                        item.fsType  = (&fs == &SD) ? 1 : 0;
+                                        if (qa.pin(item))
+                                            displaySuccess("Pinned!", true);
+                                        else
+                                            displayError("Pin failed (max 15 or duplicate)", true);
+                                    }
+                                }});
+                        }
+                    }
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
                                                              delay(200);
@@ -902,6 +948,28 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                displayRedStripe("Typing");
                                                key_input_from_string(t);
                                            }});
+                        { // Pin / Unpin
+                            String label = getQuickAccessManager().isPinned(filepath)
+                                               ? "Unpin from Quick Access"
+                                               : "Pin to Quick Access";
+                            options.push_back({label, [&]() {
+                                    auto &qa = getQuickAccessManager();
+                                    if (qa.isPinned(filepath)) {
+                                        qa.unpin(filepath);
+                                        displaySuccess("Unpinned!", true);
+                                    } else {
+                                        PinnedItem item;
+                                        item.filepath = filepath;
+                                        item.label   = filename.substring(0, filename.lastIndexOf('.'));
+                                        item.type    = "txt";
+                                        item.fsType  = (&fs == &SD) ? 1 : 0;
+                                        if (qa.pin(item))
+                                            displaySuccess("Pinned!", true);
+                                        else
+                                            displayError("Pin failed (max 15 or duplicate)", true);
+                                    }
+                                }});
+                        }
                     }
                     if (filepath.endsWith(".enc")) { // encrypted files
                         options.insert(
