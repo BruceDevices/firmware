@@ -7,34 +7,32 @@
  * Max 15 pinned items.
  */
 
-#ifndef __QUICK_ACCESS_H__
-#define __QUICK_ACCESS_H__
+#ifndef QUICK_ACCESS_H
+#define QUICK_ACCESS_H
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <vector>
 
 struct PinnedItem {
-    String filepath;  // full path, e.g. "/BruceIR/kipas.ir"
-    String label;     // display name (filename without extension)
-    String type;      // "ir", "sub", or "txt"
-    uint8_t fsType;   // 0 = LittleFS, 1 = SD
+    String filepath; // full path, e.g. "/BruceIR/kipas.ir"
+    String label;    // display name (filename without extension)
+    String type;     // "ir", "sub", or "txt"
+    uint8_t fsType;  // 0 = LittleFS, 1 = SD
 
-    JsonDocument toJson() const {
-        JsonDocument doc;
+    void toJson(JsonDocument &doc) const {
         doc["filepath"] = filepath;
-        doc["label"]    = label;
-        doc["type"]     = type;
-        doc["fsType"]   = fsType;
-        return doc;
+        doc["label"] = label;
+        doc["type"] = type;
+        doc["fsType"] = fsType;
     }
 
     static PinnedItem fromJson(const JsonObjectConst &obj) {
         PinnedItem item;
         item.filepath = obj["filepath"].as<String>();
-        item.label    = obj["label"].as<String>();
-        item.type     = obj["type"].as<String>();
-        item.fsType   = obj["fsType"].as<uint8_t>();
+        item.label = obj["label"].as<String>();
+        item.type = obj["type"].as<String>();
+        item.fsType = obj["fsType"].as<uint8_t>();
         return item;
     }
 };
@@ -80,4 +78,4 @@ private:
 // Global singleton accessor
 QuickAccessManager &getQuickAccessManager();
 
-#endif // __QUICK_ACCESS_H__
+#endif // QUICK_ACCESS_H

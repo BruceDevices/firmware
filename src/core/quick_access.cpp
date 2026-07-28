@@ -6,6 +6,7 @@
 #include "quick_access.h"
 #include "sd_functions.h"
 #include <LittleFS.h>
+#include <algorithm>
 
 // ── Global singleton ──────────────────────────────────────────────────────
 QuickAccessManager &getQuickAccessManager() {
@@ -43,9 +44,7 @@ bool QuickAccessManager::load() {
     }
 
     JsonArray arr = doc.as<JsonArray>();
-    for (const auto &v : arr) {
-        _items.push_back(PinnedItem::fromJson(v.as<JsonObjectConst>()));
-    }
+    for (const auto &v : arr) { _items.push_back(PinnedItem::fromJson(v.as<JsonObjectConst>())); }
 
     // Clamp to MAX_ITEMS on load (defensive)
     if (_items.size() > MAX_ITEMS) _items.resize(MAX_ITEMS);
@@ -73,7 +72,9 @@ bool QuickAccessManager::save() {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     for (const auto &item : _items) {
-        arr.add(item.toJson().as<JsonObjectConst>());
+        JsonDocument itemDoc;
+        item.toJson(itemDoc);
+        arr.add(itemDoc.as<JsonObjectConst>());
     }
 
     size_t bytes = serializeJson(doc, file);
@@ -85,6 +86,15 @@ bool QuickAccessManager::save() {
 
 // ── Pin ──────────────────────────────────────────────────────────────────
 bool QuickAccessManager::pin(const PinnedItem &item) {
+    // Validate input
+    if (item.filepath.length() == 0 || item.label.length() == 0) return false;
+
+    // Block path traversal sequences
+    if (item.filepath.indexOf("..") >= 0) {
+        log_e("Path traversal blocked: %s", item.filepath.c_str());
+        return false;
+    }
+
     if (isPinned(item.filepath)) return false;
     if (_items.size() >= MAX_ITEMS) return false;
 
@@ -104,14 +114,14 @@ bool QuickAccessManager::unpin(size_t index) {
 
 // ── Unpin by filepath ────────────────────────────────────────────────────
 bool QuickAccessManager::unpin(const String &filepath) {
-    for (size_t i = 0; i < _items.size(); i++) {
-        if (_items[i].filepath == filepath) {
-            _items.erase(_items.begin() + i);
-            save();
-            return true;
-        }
-    }
-    return false;
+    auto it = std::find_if(_items.begin(), _items.end(), [&filepath](const PinnedItem &item) {
+        return item.filepath == filepath;
+    });
+    if (it == _items.end()) return false;
+
+    _items.erase(it);
+    save();
+    return true;
 }
 
 // ── Check pinned ─────────────────────────────────────────────────────────

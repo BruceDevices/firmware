@@ -13,6 +13,10 @@
 #include "modules/rf/rf_send.h"
 #include <globals.h>
 
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+#include "modules/bjs_interpreter/interpreter.h"
+#endif
+
 #if defined(USB_as_HID)
 #include "modules/badusb_ble/ducky_typer.h"
 #endif
@@ -28,6 +32,12 @@ static FS *resolveFs(const PinnedItem &item) {
 
 // ── Helper: execute a pinned item ────────────────────────────────────────
 static void executePinnedItem(const PinnedItem &item) {
+    // Defensive: block path traversal
+    if (item.filepath.indexOf("..") >= 0) {
+        displayError("Invalid path", true);
+        return;
+    }
+
     FS *fs = resolveFs(item);
     if (!fs) {
         displayError("SD not mounted", true);
@@ -38,10 +48,12 @@ static void executePinnedItem(const PinnedItem &item) {
         displayError("File not found", true);
         // Offer to remove the stale pin
         options = {
-            {"Remove Pin", [&]() {
+            {"Remove Pin",
+             [&]() {
                  getQuickAccessManager().unpin(item.filepath);
-                 displaySuccess("Pin removed", true);
-             }},
+                 displaySuccess("Pin removed");
+                 delay(1200);
+             }                                           },
             {"Main Menu",  [&]() { returnToMenu = true; }},
         };
         loopOptions(options);
@@ -55,9 +67,7 @@ static void executePinnedItem(const PinnedItem &item) {
     } else if (item.type == "sub") {
         delay(200);
         RfCodes data{};
-        if (readSubFile(fs, item.filepath, data)) {
-            txSubFile(data);
-        }
+        if (readSubFile(fs, item.filepath, data)) { txSubFile(data); }
     }
 #if defined(USB_as_HID)
     else if (item.type == "txt") {
@@ -66,6 +76,12 @@ static void executePinnedItem(const PinnedItem &item) {
         key_input(*fs, item.filepath, hid_usb);
         delete hid_usb;
         hid_usb = nullptr;
+    }
+#endif
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    else if (item.type == "js") {
+        delay(200);
+        run_bjs_script_headless(*fs, item.filepath);
     }
 #endif
 }
@@ -77,39 +93,38 @@ void QuickAccessMenu::optionsMenu() {
 
     options.clear();
 
-    if (qa.count() == 0) {
-        // Friendly empty-state hint
-        options.push_back(
-            {"(empty) Browse files to pin", []() { delay(500); }, false}
-        );
-    } else {
-        for (size_t i = 0; i < qa.count(); i++) {
-            const auto &item = qa.items()[i];
+    for (size_t i = 0; i < qa.count(); i++) {
+        const auto &item = qa.items()[i];
 
-            // Build a short label: "label (type)" — trim to fit display
-            String suffix;
-            if (item.type == "ir")  suffix = " (IR)";
-            else if (item.type == "sub") suffix = " (RF)";
-            else if (item.type == "txt") suffix = " (BadUSB)";
+        // Build a short label: "label (type)" — trim to fit display
+        String suffix;
+        if (item.type == "ir") suffix = " (IR)";
+        else if (item.type == "sub") suffix = " (RF)";
+        else if (item.type == "txt") suffix = " (BadUSB)";
+        else if (item.type == "js") suffix = " (JS)";
 
-            String displayName = item.label + suffix;
+        String displayName = item.label + suffix;
 
-            options.push_back({displayName, [item]() { executePinnedItem(item); }});
-        }
+        options.push_back({displayName, [item]() { executePinnedItem(item); }});
     }
 
-    // Separator & management options
+    // Management options (always shown, even when empty)
     if (qa.count() > 0) {
-        options.push_back({"Manage Pins", [this]() { managePinsMenu(); }});
-        options.push_back({"Clear All",   [&]() {
-                               qa.clear();
-                               displaySuccess("All pins cleared", true);
+        options.push_back({"Manage Quick Access", [this]() { managePinsMenu(); }});
+        options.push_back({"Clear All", [&]() {
+                               options = {
+                                   {"Cancel", []() { /* do nothing */ }},
+                                   {"Clear All", [&]() {
+                                        qa.clear();
+                                        displaySuccess("All pins cleared");
+                                        delay(1200);
+                                    }},
+                               };
+                               loopOptions(options, MENU_TYPE_SUBMENU, "Clear all pins?");
                            }});
     }
 
-    options.push_back({"Browse & Pin", [&]() {
-                           loopSD(LittleFS, false, ".ir,.sub,.txt");
-                       }});
+    options.push_back({"Add Files", [this]() { addFilesMenu(); }});
     addOptionToMainMenu();
 
     loopOptions(options, MENU_TYPE_SUBMENU, "Quick Access");
@@ -125,9 +140,17 @@ void QuickAccessMenu::managePinsMenu() {
         for (size_t i = 0; i < qa.count(); i++) {
             const auto &item = qa.items()[i];
 
-            options.push_back({item.label, [i, &qa]() {
-                                   qa.unpin(i);
-                                   displaySuccess("Pin removed", true);
+            options.push_back({item.label, [i, &qa, item]() {
+                                   options = {
+                                       {"Cancel", []() { /* do nothing */ }},
+                                       {"Remove", [i, &qa]() {
+                                            qa.unpin(i);
+                                            displaySuccess("Pin removed");
+                                            delay(1200);
+                                        }},
+                                   };
+                                   String msg = "Remove " + item.label + "?";
+                                   loopOptions(options, MENU_TYPE_SUBMENU, msg.c_str());
                                }});
         }
 
@@ -146,12 +169,73 @@ void QuickAccessMenu::managePinsMenu() {
     }
 }
 
+// ── Helper: open picker and pin selected file ────────────────────────────
+static void pinFromFilePicker(FS &fs, uint8_t fsType) {
+    String filepath = loopSD(fs, true, "ir|sub|txt|js|bjs", "/");
+    if (filepath == "") return; // user pressed back
+
+    // Extract filename for the label
+    String filename = filepath.substring(filepath.lastIndexOf('/') + 1);
+    // Determine type from extension
+    String type;
+    if (filepath.endsWith(".ir")) type = "ir";
+    else if (filepath.endsWith(".sub")) type = "sub";
+    else if (filepath.endsWith(".txt")) type = "txt";
+    else if (filepath.endsWith(".js") || filepath.endsWith(".bjs")) type = "js";
+    else type = "";
+
+    if (type == "") {
+        displayError("Unsupported file type", true);
+        return;
+    }
+
+    // Proactive max-pin check
+    if (getQuickAccessManager().count() >= QuickAccessManager::MAX_ITEMS) {
+        displayError("Max 15 pins reached", true);
+        return;
+    }
+
+    PinnedItem item;
+    item.filepath = filepath;
+    item.label = filename.substring(0, filename.lastIndexOf('.'));
+    item.type = type;
+    item.fsType = fsType;
+
+    auto &qa = getQuickAccessManager();
+    if (qa.pin(item)) {
+        displaySuccess("Pinned: " + item.label);
+        delay(1200);
+    } else {
+        if (qa.isPinned(filepath)) displayError("Already pinned", true);
+        else displayError("Pin failed (max 15)", true);
+    }
+}
+
+// ── Add Files menu: pick LittleFS or SD ──────────────────────────────────
+void QuickAccessMenu::addFilesMenu() {
+    if (getQuickAccessManager().count() >= QuickAccessManager::MAX_ITEMS) {
+        displayError("Max 15 pins reached", true);
+        return;
+    }
+
+    options = {
+        {"LittleFS", [&]() { pinFromFilePicker(LittleFS, 0); }},
+    };
+
+    if (sdcardMounted) {
+        options.push_back({"SD Card", [&]() { pinFromFilePicker(SD, 1); }});
+    }
+
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    loopOptions(options, MENU_TYPE_SUBMENU, "Select Source");
+}
+
 // ── Draw star icon ───────────────────────────────────────────────────────
 void QuickAccessMenu::drawIcon(float scale) {
     clearIconArea();
 
-    int r = scale * 28;        // outer radius
-    int innerR = scale * 12;   // inner radius
+    int r = scale * 28;      // outer radius
+    int innerR = scale * 12; // inner radius
     int cx = iconCenterX;
     int cy = iconCenterY;
 

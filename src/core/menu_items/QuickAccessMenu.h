@@ -4,8 +4,8 @@
  * @version 0.1
  */
 
-#ifndef __QUICK_ACCESS_MENU_H__
-#define __QUICK_ACCESS_MENU_H__
+#ifndef QUICK_ACCESS_MENU_H
+#define QUICK_ACCESS_MENU_H
 
 #include <MenuItemInterface.h>
 
@@ -24,6 +24,8 @@ public:
 private:
     // Render a sub-menu to manage (unpin) pinned items
     void managePinsMenu();
+    // Open a file-picker to add files from LittleFS or SD
+    void addFilesMenu();
 };
 
-#endif // __QUICK_ACCESS_MENU_H__
+#endif // QUICK_ACCESS_MENU_H
