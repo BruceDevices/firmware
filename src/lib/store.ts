@@ -3,8 +3,7 @@ export enum Page {
 	Flasher,
 	Donate,
 	MyBruce,
-	AppStore,
-	Boards
+	AppStore
 }
 
 import { writable, get } from 'svelte/store';

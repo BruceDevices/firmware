@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
 	import { capitalize } from '$lib/helper';
 	import {
 		current_page,
@@ -747,7 +747,7 @@
 	<div class="grid grid-cols-3">
 		{#each applications as element}
 			{@const CardApp = element[1].default}
-			<a href={resolve(`/appstore/${element[1].metadata.id}`)}>
+			<a href="{base}/appstore/{element[1].metadata.id}">
 				<CardApp card href="" />
 			</a>
 		{/each}

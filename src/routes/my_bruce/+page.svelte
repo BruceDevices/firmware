@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
 	import Btn from '$lib/components/Btn.svelte';
 	import InfoRow from '$lib/components/InfoRow.svelte';
 	import { current_page, Page } from '$lib/store';
@@ -706,14 +706,14 @@
 
 			<div class="flex w-1/2 flex-shrink-0 items-center justify-center">
 				<img
-					src={resolve('/') + `img/${img}`}
+					src="{base}/img/{img}"
 					alt="Bruce device"
 					class="h-auto w-auto max-h-full max-w-full object-contain"
 				/>
 			</div>
 		</div>
 		<div class="mt-10 mb-10">
-			<Btn href={resolve('/flasher')}>Update</Btn>
+			<Btn href="{base}/flasher">Update</Btn>
 			<Btn onclick={factory_reset}>Factory Reset</Btn>
 			<Btn onclick={reboot_bruce}>Reboot</Btn>
 			<Btn onclick={startNavigator}>Navigator</Btn>

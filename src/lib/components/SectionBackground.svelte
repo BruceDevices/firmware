@@ -1,5 +1,5 @@
 <script>
-	import { asset } from '$app/paths';
+	import { base } from '$app/paths';
 </script>
 
-<img src={asset('/img/purple-aqua.gif')} alt="Background GIF" class="absolute top-0 left-0 h-full w-full object-cover brightness-75" />
+<img src="{base}/img/purple-aqua.gif" alt="Background GIF" class="absolute top-0 left-0 h-full w-full object-cover brightness-75" />

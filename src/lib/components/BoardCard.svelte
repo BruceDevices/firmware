@@ -1,5 +1,5 @@
 <script>
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
 
 	let { images = [], title = '', description = '', className, children } = $props();
 
@@ -51,7 +51,7 @@
 		<div class="relative mx-auto max-w-2xl">
 			<div class="group relative">
 				<img
-					src={resolve('/') + String(images[currentImageIndex]).replace(/^\//, '')}
+					src={base + images[currentImageIndex]}
 					alt={title}
 					class="h-72 w-full rounded-lg object-cover max-sm:p-5"
 					onmouseenter={pauseInterval}
