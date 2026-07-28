@@ -1,5 +1,5 @@
 <script>
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
 
 	let { items = [], autoPlay = false, interval = 3000, showDots = true, showArrows = true } = $props();
 
@@ -72,7 +72,7 @@
 	>
 		{#each items as item, index}
 			<div class="w-full">
-				<img src={resolve('/') + `img/${item}`} alt={`Slide ${index + 1}`} class="h-auto w-96 object-cover" />
+				<img src="{base}/img/{item}" alt={`Slide ${index + 1}`} class="h-auto w-96 object-cover" />
 			</div>
 		{/each}
 	</div>

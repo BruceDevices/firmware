@@ -75,13 +75,12 @@
 	}
 
 	function getBuildPath(releaseTag, selectedDevice) {
-		// Alternative Launcher CORS proxy
-		// Change "alternativeProxyActive" to "true" to use alternative proxy
-		// Keep the alternative proxy in the code, DO NOT remove!!
-		const alternativeProxyActive = false;
-		const betaReleasesOnly = false; // Change to false if you want to allow other releases through the alternative proxy
+		// using alternative Launcher CORS proxy until Bruce's proxy doesn't get fixed
+		// Change "activated" to False to get back to original code, 
+		// keep the alternative proxy in the code, DO NOT remove!!
+		const activated = true; 
 		
-		if (alternativeProxyActive && (!betaReleasesOnly || releaseTag === 'betaRelease')) {
+		if (activated && releaseTag === 'betaRelease') {
 			return (
 				'https://launcher-cors-proxy-99894582617.europe-west1.run.app/?url=https://github.com/BruceDevices/firmware/releases/download/' +
 				releaseTag +
@@ -92,7 +91,7 @@
 		}
 
 		return (
-			'https://dl.bruce.computer/' +
+			'https://bruce.iceis.co.uk/service/github/' +
 			releaseTag +
 			'/Bruce-' +
 			encodeURIComponent(selectedDevice) +

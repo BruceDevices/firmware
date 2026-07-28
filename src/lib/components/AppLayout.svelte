@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { asset, resolve } from '$app/paths';
+	import { base } from '$app/paths';
 
 	let { card, image, category, title, subtitle, author, slideshow, source, filename, download_link, children } = $props();
 	import Carousel from '$lib/components/Carousel.svelte';
@@ -12,7 +12,7 @@
 		<!-- Placeholder Image -->
 		<div class="relative">
 			<div class="flex h-64 w-full items-center justify-center bg-gradient-to-br">
-				<img src={asset(`/img/${image}`)} class="h-48" alt={image} />
+				<img src="{base}/img/{image}" class="h-48" alt={image} />
 			</div>
 
 			<!-- Category Label -->
@@ -78,7 +78,7 @@
 				<!-- Action buttons -->
 				<div class="flex items-center space-x-4">
 					{#if !download_link.includes('http')}
-						<Btn href={resolve(download_link)}>Download</Btn>
+						<Btn href={base + download_link}>Download</Btn>
 					{:else}
 						<!-- Ignore base if link point to another website -->
 						<Btn href={download_link}>Download</Btn>
@@ -97,25 +97,7 @@
 		{@render children()}
 
 		{#if source != null && source != ''}
-			{#if source.startsWith('http')}
-				<button
-					type="button"
-					class="cursor-pointer text-2xl font-bold underline"
-					onclick={() => window.open(source, '_blank', 'noopener,noreferrer')}
-				>
-					<p>Source code</p>
-				</button>
-			{:else}
-				<button
-					type="button"
-					class="cursor-pointer text-2xl font-bold underline"
-					onclick={() => {
-						window.location.href = resolve('/') + source.replace(/^\//, '');
-					}}
-				>
-					<p>Source code</p>
-				</button>
-			{/if}
+			<a class="text-2xl font-bold" href={source}><p>Source code</p></a>
 		{/if}
 		<a class="text-2xl font-bold underline" target="_blank" href="https://github.com/BruceDevices/firmware/edit/WebPage{filename}">
 			<p>Improve this page</p>
