@@ -119,71 +119,156 @@ static void showResults(const String &title, std::vector<CamDevice> &devices) {
     options.clear();
 }
 
-// WiFi-side fingerprinting: SSID substrings + BSSID OUI. Used by Flock.
-static void scanWiFiFlock(std::vector<CamDevice> &out) {
-    displayTextLine("Scanning WiFi..");
-    int nets = WiFi.scanNetworks(false, true);
-    for (int i = 0; i < nets; i++) {
-        String ssid = WiFi.SSID(i);
-        String mac = WiFi.BSSIDstr(i);
-        bool bySsid = ssidPatternMatch(lc(ssid), flock_ssid_patterns);
-        bool byMac = ouiMatch(lc(mac), flock_mac_prefixes);
-        if (!bySsid && !byMac) continue;
-        out.push_back({ssid.isEmpty() ? String("<hidden>") : ssid, mac, (int)WiFi.RSSI(i),
-                       bySsid ? String("WiFi SSID") : String("WiFi MAC")});
+// --- on-screen exit control (shared by persistent detectors + wardrive) -----
+// Touch devices (e.g. CYD) never map a tap to EscPress and can't interrupt the
+// blocking Wi-Fi/BLE scans, so we draw a top-left [X]: solid = tap to stop now;
+// greyed = a scan is running and the stop registers right after.
+static const int RADAR_XBOX_X = 6, RADAR_XBOX_Y = 4, RADAR_XBOX_W = 30, RADAR_XBOX_H = 26;
+
+static bool radarExitTapped() {
+    if (check(EscPress)) return true; // physical Esc/back on button devices
+    if (touchPoint.pressed) {
+        bool in = touchPoint.x >= RADAR_XBOX_X && touchPoint.x <= RADAR_XBOX_X + RADAR_XBOX_W &&
+                  touchPoint.y >= RADAR_XBOX_Y && touchPoint.y <= RADAR_XBOX_Y + RADAR_XBOX_H;
+        touchPoint.Clear();
+        AnyKeyPress = false;
+        return in;
     }
-    WiFi.scanDelete();
+    return false;
 }
 
-// BLE-side fingerprinting. matcher() returns the detection-method string for a
-// matching advertisement, or an empty string to skip it.
-static void scanBleMatching(
-    std::vector<CamDevice> &out, std::function<String(const NimBLEAdvertisedDevice *)> matcher
+// Generic persistent-scan status screen with the top-left [X] exit affordance.
+static void radarScanScreen(
+    const String &title, const String &phase, bool exitActive, const String &countLabel, int count,
+    int round
 ) {
-    displayTextLine("Scanning BLE..");
-    ble_scan_setup();
-    BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
-    for (int i = 0; i < foundDevices.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = foundDevices.getDevice(i);
-        String method = matcher(device);
-        if (method.isEmpty()) continue;
-        String name = String(device->getName().c_str());
-        if (name.isEmpty()) name = "<no name>";
-        out.push_back({name, String(device->getAddress().toString().c_str()), device->getRSSI(), method});
+    drawMainBorderWithTitle(title.c_str());
+    uint16_t xcol = exitActive ? bruceConfig.priColor : tft.color565(96, 96, 96);
+    tft.drawRoundRect(RADAR_XBOX_X, RADAR_XBOX_Y, RADAR_XBOX_W, RADAR_XBOX_H, 4, xcol);
+    tft.setTextColor(xcol, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setCursor(RADAR_XBOX_X + 8, RADAR_XBOX_Y + 6);
+    tft.print("X");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 44);
+    padprintln(" " + phase);
+    padprintln(" " + countLabel + ": " + String(count));
+    padprintln(" Rounds:  " + String(round));
+    padprintln(exitActive ? " Tap X to stop" : " Scanning - please wait");
+}
+
+// Subtle "found something" flash + the new device's details.
+static void bleHitAlert(const String &title, const CamDevice &c) {
+    tft.fillScreen(bruceConfig.priColor);
+    delay(70);
+    tft.fillScreen(bruceConfig.bgColor);
+    drawMainBorderWithTitle(title.c_str());
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(6, 44);
+    padprintln(" " + (c.brand.isEmpty() ? c.name : c.brand));
+    padprintln(" " + c.name);
+    padprintln(" " + c.address);
+    padprintln(" " + c.method);
+    delay(900);
+}
+
+// Persistent detector: keeps sweeping (optional Wi-Fi Flock pass + a BLE pass,
+// matched by `matcher`) until the user exits via [X]/Esc, flashing an alert for
+// each newly-seen device (deduped by address). Mirrors the wardrive UX.
+static void persistentDetector(
+    const String &title, bool doWifiFlock,
+    std::function<String(const NimBLEAdvertisedDevice *)> matcher
+) {
+    std::vector<CamDevice> found;
+    auto seen = [&](const String &addrLc) {
+        for (auto &f : found)
+            if (lc(f.address) == addrLc) return true;
+        return false;
+    };
+
+    uint16_t round = 0;
+    bool stop = false;
+    radarScanScreen(title, "Starting...", false, "Found", 0, 0); // immediate feedback, no blank hang
+    while (!stop) {
+        round++;
+
+        if (doWifiFlock) {
+            radarScanScreen(title, "Scanning WiFi", false, "Found", (int)found.size(), round);
+            int nets = WiFi.scanNetworks(false, true);
+            for (int i = 0; i < nets; i++) {
+                String ssid = WiFi.SSID(i);
+                String mac = WiFi.BSSIDstr(i);
+                bool bySsid = ssidPatternMatch(lc(ssid), flock_ssid_patterns);
+                bool byMac = ouiMatch(lc(mac), flock_mac_prefixes);
+                if (!bySsid && !byMac) continue;
+                if (seen(lc(mac))) continue;
+                CamDevice cd{ssid.isEmpty() ? String("<hidden>") : ssid, mac, (int)WiFi.RSSI(i),
+                             bySsid ? String("WiFi SSID") : String("WiFi MAC"), title};
+                found.push_back(cd);
+                bleHitAlert(title, found.back());
+            }
+            WiFi.scanDelete();
+            if (radarExitTapped()) break;
+        }
+
+        radarScanScreen(title, "Scanning BLE", false, "Found", (int)found.size(), round);
+        ble_scan_setup();
+        BLEScanResults fd = pBLEScan->getResults(scanTime * 1000, false);
+        for (int i = 0; i < fd.getCount(); i++) {
+            const NimBLEAdvertisedDevice *device = fd.getDevice(i);
+            String method = matcher(device);
+            if (method.isEmpty()) continue;
+            String addr = String(device->getAddress().toString().c_str());
+            if (seen(lc(addr))) continue;
+            String name = String(device->getName().c_str());
+            if (name.isEmpty()) name = "<no name>";
+            CamDevice cd{name, addr, device->getRSSI(), method, title};
+            found.push_back(cd);
+            bleHitAlert(title, found.back());
+        }
+        pBLEScan->clearResults();
+        stopBLEStack();
+        if (radarExitTapped()) break;
+
+        // Idle window: exit is responsive here (solid X).
+        radarScanScreen(title, "Idle", true, "Found", (int)found.size(), round);
+        uint32_t until = millis() + 2000;
+        while (millis() < until) {
+            if (radarExitTapped()) {
+                stop = true;
+                break;
+            }
+            delay(40);
+        }
     }
-    pBLEScan->clearResults();
-    stopBLEStack();
+
+    showResults(title, found);
 }
 
 static void flockDetector() {
-    std::vector<CamDevice> devices;
-    scanWiFiFlock(devices);
-    scanBleMatching(devices, [](const NimBLEAdvertisedDevice *device) -> String {
+    persistentDetector("Flock", true, [](const NimBLEAdvertisedDevice *device) -> String {
         String mac = lc(String(device->getAddress().toString().c_str()));
         String name = lc(String(device->getName().c_str()));
         if (ssidPatternMatch(name, flock_ssid_patterns)) return "BLE Name";
         if (ouiMatch(mac, flock_mac_prefixes)) return "BLE MAC";
         return "";
     });
-    showResults("Flock", devices);
 }
 
 static void axonDetector() {
-    std::vector<CamDevice> devices;
-    scanBleMatching(devices, [](const NimBLEAdvertisedDevice *device) -> String {
+    persistentDetector("Axon", false, [](const NimBLEAdvertisedDevice *device) -> String {
         String mac = lc(String(device->getAddress().toString().c_str()));
         return ouiMatch(mac, axon_mac_prefixes) ? "BLE MAC" : "";
     });
-    showResults("Axon", devices);
 }
 
 static void raybanDetector() {
-    std::vector<CamDevice> devices;
     String needle = rayban_service_uuid;
-    scanBleMatching(devices, [needle](const NimBLEAdvertisedDevice *device) -> String {
+    persistentDetector("RayBan", false, [needle](const NimBLEAdvertisedDevice *device) -> String {
         return deviceHasServiceUUID(device, needle) ? "BLE UUID" : "";
     });
-    showResults("RayBan", devices);
 }
 
 // ---------------------------------------------------------------------------
@@ -657,39 +742,8 @@ static void radarResults() {
     options.clear();
 }
 
-// --- wardrive on-screen exit control ---------------------------------------
-// Touch devices (e.g. CYD) never map a tap to EscPress and can't interrupt the
-// blocking Wi-Fi/BLE scans, so wardrive draws a top-left [X]: solid = tap to
-// stop now; greyed = a scan is running and the stop registers right after.
-static const int RADAR_XBOX_X = 6, RADAR_XBOX_Y = 4, RADAR_XBOX_W = 30, RADAR_XBOX_H = 26;
-
-static bool radarExitTapped() {
-    if (check(EscPress)) return true; // physical Esc/back on button devices
-    if (touchPoint.pressed) {
-        bool in = touchPoint.x >= RADAR_XBOX_X && touchPoint.x <= RADAR_XBOX_X + RADAR_XBOX_W &&
-                  touchPoint.y >= RADAR_XBOX_Y && touchPoint.y <= RADAR_XBOX_Y + RADAR_XBOX_H;
-        touchPoint.Clear();
-        AnyKeyPress = false;
-        return in;
-    }
-    return false;
-}
-
 static void radarWardriveScreen(const String &phase, bool exitActive, int round) {
-    drawMainBorderWithTitle("Wardrive");
-    uint16_t xcol = exitActive ? bruceConfig.priColor : tft.color565(96, 96, 96);
-    tft.drawRoundRect(RADAR_XBOX_X, RADAR_XBOX_Y, RADAR_XBOX_W, RADAR_XBOX_H, 4, xcol);
-    tft.setTextColor(xcol, bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    tft.setCursor(RADAR_XBOX_X + 8, RADAR_XBOX_Y + 6);
-    tft.print("X");
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(6, 44);
-    padprintln(" " + phase);
-    padprintln(" Cameras: " + String((int)g_radar.size()));
-    padprintln(" Rounds:  " + String(round));
-    padprintln(exitActive ? " Tap X to stop" : " Scanning - please wait");
+    radarScanScreen("Wardrive", phase, exitActive, "Cameras", (int)g_radar.size(), round);
 }
 
 static void cameraRadar() {
