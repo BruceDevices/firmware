@@ -46,17 +46,14 @@ static void executePinnedItem(const PinnedItem &item) {
 
     if (!fs->exists(item.filepath)) {
         displayError("File not found", true);
-        // Offer to remove the stale pin
-        options = {
-            {"Remove Pin",
-             [&]() {
-                 getQuickAccessManager().unpin(item.filepath);
-                 displaySuccess("Pin removed");
-                 delay(1200);
-             }                                           },
-            {"Main Menu",  [&]() { returnToMenu = true; }},
-        };
-        loopOptions(options);
+        // Offer to remove the stale pin using a horizontal dialog
+        drawMainBorder(true);
+        int8_t res = displayMessage("Remove stale pin?", "YES", nullptr, "NO", bruceConfig.priColor);
+        if (res == 0) { // left button (YES)
+            getQuickAccessManager().unpin(item.filepath);
+            displaySuccess("Pin removed");
+            delay(1200);
+        }
         return;
     }
 
@@ -103,7 +100,11 @@ void QuickAccessMenu::optionsMenu() {
         else if (item.type == "txt") suffix = " (BadUSB)";
         else if (item.type == "js") suffix = " (JS)";
 
-        String displayName = item.label + suffix;
+        String label = item.label;
+        if (label.length() > 14) {
+            label = label.substring(0, 12) + "..";
+        }
+        String displayName = label + suffix;
 
         options.push_back({displayName, [item]() { executePinnedItem(item); }});
     }
@@ -112,15 +113,13 @@ void QuickAccessMenu::optionsMenu() {
     if (qa.count() > 0) {
         options.push_back({"Manage Quick Access", [this]() { managePinsMenu(); }});
         options.push_back({"Clear All", [&]() {
-                               options = {
-                                   {"Cancel", []() { /* do nothing */ }},
-                                   {"Clear All", [&]() {
-                                        qa.clear();
-                                        displaySuccess("All pins cleared");
-                                        delay(1200);
-                                    }},
-                               };
-                               loopOptions(options, MENU_TYPE_SUBMENU, "Clear all pins?");
+                               drawMainBorder(true);
+                               int8_t res = displayMessage("Clear all pins?", "YES", nullptr, "NO", bruceConfig.priColor);
+                               if (res == 0) { // YES
+                                   qa.clear();
+                                   displaySuccess("All pins cleared");
+                                   delay(1200);
+                               }
                            }});
     }
 
@@ -140,17 +139,20 @@ void QuickAccessMenu::managePinsMenu() {
         for (size_t i = 0; i < qa.count(); i++) {
             const auto &item = qa.items()[i];
 
-            options.push_back({item.label, [i, &qa, item]() {
-                                   options = {
-                                       {"Cancel", []() { /* do nothing */ }},
-                                       {"Remove", [i, &qa]() {
-                                            qa.unpin(i);
-                                            displaySuccess("Pin removed");
-                                            delay(1200);
-                                        }},
-                                   };
-                                   String msg = "Remove " + item.label + "?";
-                                   loopOptions(options, MENU_TYPE_SUBMENU, msg.c_str());
+            String label = item.label;
+            if (label.length() > 14) {
+                label = label.substring(0, 12) + "..";
+            }
+
+            options.push_back({label, [i, &qa, item, label]() {
+                                   String msg = "Remove\n" + label + "?";
+                                   drawMainBorder(true);
+                                   int8_t res = displayMessage(msg.c_str(), "YES", nullptr, "NO", bruceConfig.priColor);
+                                   if (res == 0) { // YES
+                                       qa.unpin(i);
+                                       displaySuccess("Pin removed");
+                                       delay(1200);
+                                   }
                                }});
         }
 
