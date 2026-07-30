@@ -1057,6 +1057,21 @@ TELNET_EXIT:
 void runSessionUiLoop(const String &title) {
     resetCommandBufferToPrompt();
     resetClientScreen(title.c_str());
+
+    displayTextLine("Connecting...");
+    while (isSessionConnecting() && !isSessionClosed() && !returnToMenu) {
+        if (check(EscPress)) {
+            finishSessionUi(title);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    if (returnToMenu || isSessionClosed()) {
+        finishSessionUi(title);
+        return;
+    }
+
+    resetClientScreen(title.c_str());
     renderPrompt();
 
     while (!returnToMenu && !isSessionClosed()) {
