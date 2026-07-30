@@ -40,8 +40,79 @@ static const char *const flock_mac_prefixes[] = {
     "74:4c:a1", "08:3a:88", "9c:2f:9d", "94:08:53", "e4:aa:ea"
 };
 
-// ---- Axon (police body cameras) ---------------------------------------------
-static const char *const axon_mac_prefixes[] = {"00:25:df"};
+// ---- Body-worn cameras (law-enforcement / security) -------------------------
+// Reworked from the original Axon-only detector into a multi-vendor bodycam DB.
+// Regional priority: Australian police standardised on Axon (VIC/NSW/WA); the
+// Hong Kong Police Force uses Reveal Media (RS3-SX historically, now the
+// D-Series). After those, the most common worldwide.
+//
+// OUIs are dedicated IEEE blocks (strong signal). `tokens` match a lowercased
+// BLE advertised name or Wi-Fi SSID substring, for vendors that ship generic
+// radio modules (no own OUI) or that name their AP/pairing after the product.
+#define BC_N(a) (int)(sizeof(a) / sizeof((a)[0]))
+
+static const char *const bc_axon_ouis[] = {"00:25:df", "fc:01:9e"}; // TASER/Axon + VIEVU
+static const char *const bc_axon_tokens[] = {"axon", "taser", "vievu"};
+// Reveal Media (HKPF): no own OUI; model tokens D3/D5 are too generic to use.
+static const char *const bc_reveal_tokens[] = {"reveal", "rs3-sx", "rs3sx"};
+// Motorola Solutions bodycam family (WatchGuard V300/V700, Edesix VideoBadge).
+static const char *const bc_moto_tokens[] = {
+    "watchguard", "edesix", "videobadge", "vb-400", "vb400", "vb-300", "vb300"
+};
+static const char *const bc_digitalally_ouis[] = {"00:23:bd"};
+static const char *const bc_digitalally_tokens[] = {"digital ally", "digitalally", "firstvu"};
+static const char *const bc_getac_tokens[] = {"getac"};
+static const char *const bc_hytera_tokens[] = {"hytera"};
+static const char *const bc_zepcam_tokens[] = {"zepcam"};
+static const char *const bc_wolfcom_tokens[] = {"wolfcom"};
+static const char *const bc_transcend_tokens[] = {"drivepro body"};
+static const char *const bc_boblov_tokens[] = {"boblov"};
+
+struct BodycamVendor {
+    const char *name;
+    const char *const *ouis;
+    int ouiCount;
+    const char *const *tokens;
+    int tokenCount;
+};
+
+// Ordered AU -> HK -> worldwide; the identify pass returns the first match.
+static const BodycamVendor kBodycams[] = {
+    {"Axon",         bc_axon_ouis,        BC_N(bc_axon_ouis),        bc_axon_tokens,        BC_N(bc_axon_tokens)       },
+    {"Reveal Media", nullptr,             0,                         bc_reveal_tokens,      BC_N(bc_reveal_tokens)     },
+    {"Motorola",     nullptr,             0,                         bc_moto_tokens,        BC_N(bc_moto_tokens)       },
+    {"Digital Ally", bc_digitalally_ouis, BC_N(bc_digitalally_ouis), bc_digitalally_tokens, BC_N(bc_digitalally_tokens)},
+    {"Getac",        nullptr,             0,                         bc_getac_tokens,       BC_N(bc_getac_tokens)      },
+    {"Hytera",       nullptr,             0,                         bc_hytera_tokens,      BC_N(bc_hytera_tokens)     },
+    {"Zepcam",       nullptr,             0,                         bc_zepcam_tokens,      BC_N(bc_zepcam_tokens)     },
+    {"Wolfcom",      nullptr,             0,                         bc_wolfcom_tokens,     BC_N(bc_wolfcom_tokens)    },
+    {"Transcend",    nullptr,             0,                         bc_transcend_tokens,   BC_N(bc_transcend_tokens)  },
+    {"BOBLOV",       nullptr,             0,                         bc_boblov_tokens,      BC_N(bc_boblov_tokens)     },
+};
+
+// Return the vendor name for a bodycam match (OUI first, then name/SSID token),
+// or nullptr. *method is set to "OUI" or "Name" on a hit.
+static const char *identifyBodycam(const String &macLc, const String &nameLc, const char **method) {
+    for (auto &v : kBodycams) {
+        for (int i = 0; i < v.ouiCount; i++) {
+            if (macLc.startsWith(v.ouis[i])) {
+                if (method) *method = "OUI";
+                return v.name;
+            }
+        }
+    }
+    if (!nameLc.isEmpty()) {
+        for (auto &v : kBodycams) {
+            for (int i = 0; i < v.tokenCount; i++) {
+                if (nameLc.indexOf(v.tokens[i]) >= 0) {
+                    if (method) *method = "Name";
+                    return v.name;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
 
 // ---- Ray-Ban Meta camera glasses --------------------------------------------
 // Identified by the BLE 16-bit service UUID 0xFD5F.
@@ -174,12 +245,22 @@ static void bleHitAlert(const String &title, const CamDevice &c) {
     delay(900);
 }
 
-// Persistent detector: keeps sweeping (optional Wi-Fi Flock pass + a BLE pass,
-// matched by `matcher`) until the user exits via [X]/Esc, flashing an alert for
-// each newly-seen device (deduped by address). Mirrors the wardrive UX.
+// A matcher's verdict: an empty `method` means "no match". `brand` names the
+// specific vendor for multi-vendor detectors (e.g. bodycam); empty falls back
+// to the detector's own title.
+struct DetMatch {
+    String method;
+    String brand;
+};
+
+// Persistent detector: keeps sweeping (an optional Wi-Fi pass + a BLE pass, each
+// classified by its matcher) until the user exits via [X]/Esc, flashing an alert
+// for each newly-seen device (deduped by address). Mirrors the wardrive UX. Pass
+// a null `wifiMatcher` to skip the Wi-Fi surface (BLE-only detectors).
 static void persistentDetector(
-    const String &title, bool doWifiFlock,
-    std::function<String(const NimBLEAdvertisedDevice *)> matcher
+    const String &title,
+    std::function<DetMatch(const String &ssid, const String &macLc, int rssi)> wifiMatcher,
+    std::function<DetMatch(const NimBLEAdvertisedDevice *)> bleMatcher
 ) {
     std::vector<CamDevice> found;
     auto seen = [&](const String &addrLc) {
@@ -187,6 +268,7 @@ static void persistentDetector(
             if (lc(f.address) == addrLc) return true;
         return false;
     };
+    auto brandOf = [&](const String &b) { return b.isEmpty() ? title : b; };
 
     uint16_t round = 0;
     bool stop = false;
@@ -194,18 +276,17 @@ static void persistentDetector(
     while (!stop) {
         round++;
 
-        if (doWifiFlock) {
+        if (wifiMatcher) {
             radarScanScreen(title, "Scanning WiFi", false, "Found", (int)found.size(), round);
             int nets = WiFi.scanNetworks(false, true);
             for (int i = 0; i < nets; i++) {
                 String ssid = WiFi.SSID(i);
                 String mac = WiFi.BSSIDstr(i);
-                bool bySsid = ssidPatternMatch(lc(ssid), flock_ssid_patterns);
-                bool byMac = ouiMatch(lc(mac), flock_mac_prefixes);
-                if (!bySsid && !byMac) continue;
+                DetMatch m = wifiMatcher(ssid, lc(mac), (int)WiFi.RSSI(i));
+                if (m.method.isEmpty()) continue;
                 if (seen(lc(mac))) continue;
                 CamDevice cd{ssid.isEmpty() ? String("<hidden>") : ssid, mac, (int)WiFi.RSSI(i),
-                             bySsid ? String("WiFi SSID") : String("WiFi MAC"), title};
+                             m.method, brandOf(m.brand)};
                 found.push_back(cd);
                 bleHitAlert(title, found.back());
             }
@@ -218,13 +299,13 @@ static void persistentDetector(
         BLEScanResults fd = pBLEScan->getResults(scanTime * 1000, false);
         for (int i = 0; i < fd.getCount(); i++) {
             const NimBLEAdvertisedDevice *device = fd.getDevice(i);
-            String method = matcher(device);
-            if (method.isEmpty()) continue;
+            DetMatch m = bleMatcher(device);
+            if (m.method.isEmpty()) continue;
             String addr = String(device->getAddress().toString().c_str());
             if (seen(lc(addr))) continue;
             String name = String(device->getName().c_str());
             if (name.isEmpty()) name = "<no name>";
-            CamDevice cd{name, addr, device->getRSSI(), method, title};
+            CamDevice cd{name, addr, device->getRSSI(), m.method, brandOf(m.brand)};
             found.push_back(cd);
             bleHitAlert(title, found.back());
         }
@@ -248,27 +329,53 @@ static void persistentDetector(
 }
 
 static void flockDetector() {
-    persistentDetector("Flock", true, [](const NimBLEAdvertisedDevice *device) -> String {
-        String mac = lc(String(device->getAddress().toString().c_str()));
-        String name = lc(String(device->getName().c_str()));
-        if (ssidPatternMatch(name, flock_ssid_patterns)) return "BLE Name";
-        if (ouiMatch(mac, flock_mac_prefixes)) return "BLE MAC";
-        return "";
-    });
+    persistentDetector(
+        "Flock",
+        [](const String &ssid, const String &macLc, int) -> DetMatch {
+            if (ssidPatternMatch(lc(ssid), flock_ssid_patterns)) return {"WiFi SSID", ""};
+            if (ouiMatch(macLc, flock_mac_prefixes)) return {"WiFi MAC", ""};
+            return {"", ""};
+        },
+        [](const NimBLEAdvertisedDevice *device) -> DetMatch {
+            String mac = lc(String(device->getAddress().toString().c_str()));
+            String name = lc(String(device->getName().c_str()));
+            if (ssidPatternMatch(name, flock_ssid_patterns)) return {"BLE Name", ""};
+            if (ouiMatch(mac, flock_mac_prefixes)) return {"BLE MAC", ""};
+            return {"", ""};
+        }
+    );
 }
 
-static void axonDetector() {
-    persistentDetector("Axon", false, [](const NimBLEAdvertisedDevice *device) -> String {
-        String mac = lc(String(device->getAddress().toString().c_str()));
-        return ouiMatch(mac, axon_mac_prefixes) ? "BLE MAC" : "";
-    });
+// Multi-vendor body-worn camera detector (AU/HK first, then worldwide). Matches
+// both the Wi-Fi surface (streaming/pairing APs) and BLE, via the bodycam DB.
+static void bodycamDetector() {
+    persistentDetector(
+        "Bodycam",
+        [](const String &ssid, const String &macLc, int) -> DetMatch {
+            const char *method = nullptr;
+            const char *brand = identifyBodycam(macLc, lc(ssid), &method);
+            if (!brand) return {"", ""};
+            return {String("WiFi ") + method, brand};
+        },
+        [](const NimBLEAdvertisedDevice *device) -> DetMatch {
+            String mac = lc(String(device->getAddress().toString().c_str()));
+            String name = lc(String(device->getName().c_str()));
+            const char *method = nullptr;
+            const char *brand = identifyBodycam(mac, name, &method);
+            if (!brand) return {"", ""};
+            return {String("BLE ") + method, brand};
+        }
+    );
 }
 
 static void raybanDetector() {
     String needle = rayban_service_uuid;
-    persistentDetector("RayBan", false, [needle](const NimBLEAdvertisedDevice *device) -> String {
-        return deviceHasServiceUUID(device, needle) ? "BLE UUID" : "";
-    });
+    persistentDetector(
+        "RayBan", nullptr,
+        [needle](const NimBLEAdvertisedDevice *device) -> DetMatch {
+            return deviceHasServiceUUID(device, needle) ? DetMatch{"BLE UUID", ""} : DetMatch{"", ""};
+        }
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -858,7 +965,7 @@ void camDetectorMenu() {
         {"Camera Radar",    cameraRadar               },
         {"TUTK Watch",      tutkWatch                 },
         {"Flock Detector",  flockDetector             },
-        {"Axon Detector",   axonDetector              },
+        {"Bodycam Detector", bodycamDetector          },
         {"RayBan Detector", raybanDetector            },
     };
     addOptionToMainMenu();
