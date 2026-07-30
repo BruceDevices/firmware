@@ -416,6 +416,19 @@ int adjustInt(int v, int step, int lo, int hi, int dir) {
 
 int cycleIndex(int idx, int count, int dir) { return (idx + dir + count) % count; }
 
+constexpr int kSettingsRowCount = 7;
+constexpr int kSettingsSaveRow = kSettingsRowCount;
+constexpr int kSettingsNumItems = kSettingsRowCount + 1;
+
+void ensureListScroll(int cursor, int itemCount, int visibleRows, int &scroll) {
+    if (itemCount <= visibleRows) {
+        scroll = 0;
+        return;
+    }
+    if (cursor < scroll) scroll = cursor;
+    if (cursor >= scroll + visibleRows) scroll = cursor - visibleRows + 1;
+}
+
 struct SettingsEditState {
     bool editing = false;
     int editRow = -1;
@@ -424,12 +437,13 @@ struct SettingsEditState {
 };
 
 void renderSettingsRows(
-    const BruceLMSettings &s, int cursor, const SettingsEditState &edit, int startY, int rowH
+    const BruceLMSettings &s, int cursor, const SettingsEditState &edit, int startY, int rowH,
+    int scrollOffset, int visibleRows
 ) {
     struct Row {
         const char *label;
         String value;
-    } rows[7] = {
+    } rows[kSettingsRowCount] = {
         {"Temperature", String(s.temperature, 1)},
         {"Top-p", String(s.topP, 2)},
         {"Rep. Penalty", String(s.repetitionPenalty, 2)},
@@ -440,17 +454,30 @@ void renderSettingsRows(
     };
 
     tft.setTextSize(FP);
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < visibleRows; i++) {
+        int idx = scrollOffset + i;
         int rowY = startY + i * rowH;
-        bool selected = (cursor == i);
-        bool editingThis = (edit.editing && edit.editRow == i);
-
         tft.fillRect(BORDER_PAD_X, rowY, tftWidth - 2 * BORDER_PAD_X, rowH, bruceConfig.bgColor);
+        if (idx >= kSettingsNumItems) continue;
+
+        bool selected = (cursor == idx);
+
+        if (idx == kSettingsSaveRow) {
+            tft.setTextColor(selected ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
+            String saveLabel = "[ Save ]";
+            int sx = (tftWidth - (int)(saveLabel.length() * FP * LW)) / 2;
+            tft.setCursor(sx, rowY + 2);
+            tft.print(saveLabel);
+            continue;
+        }
+
+        bool editingThis = (edit.editing && edit.editRow == idx);
+
         tft.setTextColor(selected ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
         tft.setCursor(BORDER_PAD_X, rowY + 2);
-        tft.print(rows[i].label);
+        tft.print(rows[idx].label);
 
-        String valueText = editingThis ? ("[ " + rows[i].value + " ]") : rows[i].value;
+        String valueText = editingThis ? ("[ " + rows[idx].value + " ]") : rows[idx].value;
         int vx = tftWidth - BORDER_PAD_X - (int)(valueText.length() * FP * LW);
         tft.setCursor(vx, rowY + 2);
         tft.print(valueText);
@@ -467,14 +494,18 @@ void showChatTemplateScreen(BruceLMSettings &s) {
     constexpr int kSaveRow = 3; // bottom action row, same spot/style as the parent screen's Save
     constexpr int kNumItems = 4;
     int cursor = 0;
+    int scroll = 0;
     ChatGeometry g = computeGeometry();
     int rowH = g.lineH + 4;
     int startY = g.outputTop;
+    int visibleRows = max(1, (g.footerY - startY) / rowH);
     bool redraw = true;
 
     for (;;) {
         if (redraw) {
             drawMainBorderWithTitle("Chat Template");
+            ensureListScroll(cursor, kNumItems, visibleRows, scroll);
+
             struct Row {
                 const char *label;
                 String value;
@@ -485,27 +516,32 @@ void showChatTemplateScreen(BruceLMSettings &s) {
             };
 
             tft.setTextSize(FP);
-            for (int i = 0; i < kNumRows; i++) {
+            for (int i = 0; i < visibleRows; i++) {
+                int idx = scroll + i;
                 int rowY = startY + i * rowH;
                 tft.fillRect(BORDER_PAD_X, rowY, tftWidth - 2 * BORDER_PAD_X, rowH, bruceConfig.bgColor);
-                tft.setTextColor(cursor == i ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
-                tft.setCursor(BORDER_PAD_X, rowY + 2);
-                tft.print(rows[i].label);
+                if (idx >= kNumItems) continue;
 
-                int labelW = (int)String(rows[i].label).length() + 1;
-                String valueText = truncateToWidth(rows[i].value, max(1, g.maxChars - labelW));
+                bool selected = (cursor == idx);
+                if (idx == kSaveRow) {
+                    tft.setTextColor(selected ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
+                    String saveLabel = "[ Save ]";
+                    int sx = (tftWidth - (int)(saveLabel.length() * FP * LW)) / 2;
+                    tft.setCursor(sx, rowY + 2);
+                    tft.print(saveLabel);
+                    continue;
+                }
+
+                tft.setTextColor(selected ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
+                tft.setCursor(BORDER_PAD_X, rowY + 2);
+                tft.print(rows[idx].label);
+
+                int labelW = (int)String(rows[idx].label).length() + 1;
+                String valueText = truncateToWidth(rows[idx].value, max(1, g.maxChars - labelW));
                 int vx = tftWidth - BORDER_PAD_X - (int)(valueText.length() * FP * LW);
                 tft.setCursor(vx, rowY + 2);
                 tft.print(valueText);
             }
-
-            int saveY = startY + kSaveRow * rowH;
-            tft.fillRect(BORDER_PAD_X, saveY, tftWidth - 2 * BORDER_PAD_X, rowH, bruceConfig.bgColor);
-            tft.setTextColor(cursor == kSaveRow ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
-            String saveLabel = "[ Save ]";
-            int sx = (tftWidth - (int)(saveLabel.length() * FP * LW)) / 2;
-            tft.setCursor(sx, saveY + 2);
-            tft.print(saveLabel);
 
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             String hint = "OK: edit  Esc: save+exit";
@@ -626,29 +662,24 @@ bool showSettingsScreen(FS &fs) {
     BruceLMSettings s = loadSettings(fs);
     SettingsEditState edit;
     int cursor = 0;
+    int scroll = 0;
     ChatGeometry g = computeGeometry();
     int rowH = g.lineH + 4;
     int startY = g.outputTop;
+    int visibleRows = max(1, (g.footerY - startY) / rowH);
 
     bool redraw = true;
     drawMainBorderWithTitle("BruceLM Settings");
 
     constexpr int kChatTemplateRow = 5; // opens showChatTemplateScreen() on Select
     constexpr int kResetRow = 6;        // opens showResetToDefaultScreen() on Select
-    constexpr int kSaveRow = 7;         // bottom action row, ble_spam "[ Start ]"-style
-    constexpr int kNumItems = 8;        // 7 rows + save
+    constexpr int kSaveRow = kSettingsSaveRow; // bottom action row, ble_spam "[ Start ]"-style
+    constexpr int kNumItems = kSettingsNumItems; // 7 rows + save
 
     for (;;) {
         if (redraw) {
-            renderSettingsRows(s, cursor, edit, startY, rowH);
-
-            int saveY = startY + kSaveRow * rowH;
-            tft.fillRect(BORDER_PAD_X, saveY, tftWidth - 2 * BORDER_PAD_X, rowH, bruceConfig.bgColor);
-            tft.setTextColor(cursor == kSaveRow ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
-            String saveLabel = "[ Save ]";
-            int sx = (tftWidth - (int)(saveLabel.length() * FP * LW)) / 2;
-            tft.setCursor(sx, saveY + 2);
-            tft.print(saveLabel);
+            ensureListScroll(cursor, kNumItems, visibleRows, scroll);
+            renderSettingsRows(s, cursor, edit, startY, rowH, scroll, visibleRows);
 
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             String hint = edit.editing ? "OK: confirm  Esc: revert" : "OK: edit  Esc: save+exit";
