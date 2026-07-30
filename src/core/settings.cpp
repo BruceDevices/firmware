@@ -1621,6 +1621,49 @@ RELOAD:
 }
 
 /*********************************************************************
+**  Function: setMicPinsMenu
+**  Menu to change Microphone I2S pins (CLK + DATA)
+**********************************************************************/
+void setMicPinsMenu(BruceConfigPins::I2SPins &value) {
+    uint8_t opt = 0;
+    bool changed = false;
+    BruceConfigPins::I2SPins points = value;
+
+RELOAD:
+    options = {
+        {String("CLK  = " + String(points.clk)).c_str(), [&]() { opt = 1; }},
+        {String("DATA = " + String(points.data)).c_str(), [&]() { opt = 2; }},
+        {"Save Config", [&]() { opt = 7; }, changed},
+        {"Main Menu", [&]() { opt = 0; }},
+    };
+
+    loopOptions(options);
+    if (opt == 0) return;
+    else if (opt == 7) {
+        if (changed) {
+            value = points;
+            bruceConfigPins.setMicPins(value);
+        }
+    } else {
+        options = {};
+        gpio_num_t sel = GPIO_NUM_NC;
+        int index = 0;
+        if (opt == 1) index = points.clk + 1;
+        else if (opt == 2) index = points.data + 1;
+        for (int8_t i = -1; i <= GPIO_NUM_MAX; i++) {
+            String tmp = String(i);
+            options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
+        }
+        loopOptions(options, index);
+        options.clear();
+        if (opt == 1) points.clk = sel;
+        else if (opt == 2) points.data = sel;
+        changed = true;
+        goto RELOAD;
+    }
+}
+
+/*********************************************************************
 **  Function: setTheme
 **  Menu to change Theme
 **********************************************************************/

@@ -134,6 +134,11 @@ bool deinitMicroPhone() {
 bool InitI2SMicroPhone() {
     // Enable codec, if exists
     _setup_codec_mic(true);
+
+    // Use runtime-configurable pins from brucePins.conf
+    int mic_clk = bruceConfigPins.mic_bus.clk;
+    int mic_data = bruceConfigPins.mic_bus.data;
+
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = 8;
     chan_cfg.dma_frame_num = SPECTRUM_HEIGHT;
@@ -147,10 +152,10 @@ bool InitI2SMicroPhone() {
         .slot_cfg = slot_cfg,
         .gpio_cfg = {
                      .mclk = I2S_GPIO_UNUSED,
-                     .bclk = (gpio_num_t)PIN_CLK,
+                     .bclk = (gpio_num_t)mic_clk,
                      .ws = (gpio_num_t)PIN_WS,
                      .dout = I2S_GPIO_UNUSED,
-                     .din = (gpio_num_t)PIN_DATA,
+                     .din = (gpio_num_t)mic_data,
                      .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
                      },
     };
@@ -158,7 +163,7 @@ bool InitI2SMicroPhone() {
 #else
 
     if (mic_bclk_pin != I2S_PIN_NO_CHANGE) {
-        gpio_num_t mic_ws_pin = (gpio_num_t)PIN_CLK;
+        gpio_num_t mic_ws_pin = (gpio_num_t)mic_clk;
         i2s_std_config_t i2s_config;
         memset(&i2s_config, 0, sizeof(i2s_std_config_t));
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
@@ -185,7 +190,7 @@ bool InitI2SMicroPhone() {
         i2s_config.gpio_cfg.ws = (gpio_num_t)mic_ws_pin;
         i2s_config.gpio_cfg.dout = (gpio_num_t)I2S_PIN_NO_CHANGE;
         i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
-        i2s_config.gpio_cfg.din = (gpio_num_t)PIN_DATA;
+        i2s_config.gpio_cfg.din = (gpio_num_t)mic_data;
         err = i2s_channel_init_std_mode(i2s_chan, &i2s_config);
     } else {
 
@@ -197,8 +202,8 @@ bool InitI2SMicroPhone() {
             .clk_cfg = clk_cfg,
             .slot_cfg = slot_cfg,
             .gpio_cfg = {
-                         .clk = (gpio_num_t)PIN_CLK,
-                         .din = (gpio_num_t)PIN_DATA,
+                         .clk = (gpio_num_t)mic_clk,
+                         .din = (gpio_num_t)mic_data,
                          .invert_flags = {.clk_inv = false},
                          },
         };
@@ -1009,10 +1014,10 @@ bool mic_capture_samples(
             .slot_cfg = slot_cfg,
             .gpio_cfg = {
                          .mclk = I2S_GPIO_UNUSED,
-                         .bclk = (gpio_num_t)PIN_CLK,
+                         .bclk = (gpio_num_t)bruceConfigPins.mic_bus.clk,
                          .ws = (gpio_num_t)PIN_WS,
                          .dout = I2S_GPIO_UNUSED,
-                         .din = (gpio_num_t)PIN_DATA,
+                         .din = (gpio_num_t)bruceConfigPins.mic_bus.data,
                          .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
                          },
         };
@@ -1020,7 +1025,7 @@ bool mic_capture_samples(
 #else
         if (mic_bclk_pin != I2S_PIN_NO_CHANGE) {
             // Standard I2S mode
-            gpio_num_t mic_ws_pin = (gpio_num_t)PIN_CLK;
+            gpio_num_t mic_ws_pin = (gpio_num_t)bruceConfigPins.mic_bus.clk;
             i2s_std_config_t i2s_config;
             memset(&i2s_config, 0, sizeof(i2s_std_config_t));
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
@@ -1047,7 +1052,7 @@ bool mic_capture_samples(
             i2s_config.gpio_cfg.ws = (gpio_num_t)mic_ws_pin;
             i2s_config.gpio_cfg.dout = (gpio_num_t)I2S_PIN_NO_CHANGE;
             i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
-            i2s_config.gpio_cfg.din = (gpio_num_t)PIN_DATA;
+            i2s_config.gpio_cfg.din = (gpio_num_t)bruceConfigPins.mic_bus.data;
             err = i2s_channel_init_std_mode(temp_i2s_chan, &i2s_config);
         } else {
             // PDM mode
@@ -1060,8 +1065,8 @@ bool mic_capture_samples(
                 .clk_cfg = clk_cfg,
                 .slot_cfg = slot_cfg,
                 .gpio_cfg = {
-                             .clk = (gpio_num_t)PIN_CLK,
-                             .din = (gpio_num_t)PIN_DATA,
+                             .clk = (gpio_num_t)bruceConfigPins.mic_bus.clk,
+                             .din = (gpio_num_t)bruceConfigPins.mic_bus.data,
                              .invert_flags = {.clk_inv = false},
                              },
             };
