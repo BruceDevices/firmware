@@ -28,6 +28,9 @@ static const char *const kCloudDomains[] = {
     "meari", "cloudedge",
     // other common OEM clouds
     "tuya", "v380", "yoosee", "gwell", "camhi", "ubox", "icsee",
+    // brand clouds (camera-specific fragments, low false-positive risk)
+    "ezviz", "hik-connect", "easy4ip", "reolink", "arlo", "eufylife", "ppstrong", "ajcloud",
+    "vstarcam", "eye4", "wyze",
 };
 
 // TUTK master / PPPP ports that a camera sends UDP to.

@@ -6,7 +6,7 @@
 // OUI tables (lowercase). Vendors that ship almost exclusively cameras / NVRs.
 // ---------------------------------------------------------------------------
 
-// Hangzhou Hikvision Digital Technology (IEEE registry, 83 prefixes).
+// Hangzhou Hikvision Digital Technology (IEEE registry, 85 prefixes).
 static const char *const oui_hikvision[] = {
     "e4:d5:8b", "c8:a7:02", "08:54:11", "08:a1:89", "08:cc:81", "24:0f:9b", "24:32:ae", "24:48:45",
     "2c:a5:9c", "40:ac:bf", "44:19:b6", "44:a6:42", "4c:62:df", "4c:bd:8f", "4c:f5:dc", "50:e5:38",
@@ -18,15 +18,16 @@ static const char *const oui_hikvision[] = {
     "3c:1b:f8", "44:47:cc", "54:8c:81", "54:c4:15", "74:3f:c2", "80:7c:62", "80:be:af", "84:9a:40",
     "98:8b:0a", "ac:b9:2f", "bc:9b:5e", "c4:2f:90", "d4:e8:53", "dc:d2:6a", "ec:c8:9c", "f8:4d:fc",
     "4c:1f:86", "a4:4b:d9", "88:de:39", "84:94:59", "08:3b:c1", "00:bc:99", "04:ee:cd", "8c:22:d2",
-    "48:78:5b", "cc:13:f3", "40:b5:70"
+    "48:78:5b", "cc:13:f3", "40:b5:70", "24:b1:05", "bc:29:78"
 };
 
-// Zhejiang Dahua Technology (31 prefixes).
+// Zhejiang Dahua Technology (33 prefixes).
 static const char *const oui_dahua[] = {
     "08:ed:ed", "14:a7:8b", "38:af:29", "3c:e3:6b", "3c:ef:8c", "5c:f5:1a", "64:fd:29", "74:c9:29",
     "8c:e9:b4", "9c:14:63", "a0:bd:1d", "bc:32:5f", "c0:39:5a", "c4:aa:c4", "d4:43:0e", "e0:50:8b",
     "e4:24:6c", "f8:ce:07", "30:dd:aa", "f4:b1:c2", "fc:b6:9d", "24:52:6a", "4c:11:bf", "6c:1c:71",
-    "90:02:a9", "98:f9:cc", "b4:4c:3b", "e0:2e:fe", "fc:5f:49", "4c:99:e8", "40:7a:a4"
+    "90:02:a9", "98:f9:cc", "b4:4c:3b", "e0:2e:fe", "fc:5f:49", "4c:99:e8", "40:7a:a4", "20:2c:05",
+    "a8:ca:87"
 };
 
 // Hangzhou EZVIZ Software (Hikvision consumer brand, 14 prefixes).
@@ -50,10 +51,8 @@ static const char *const oui_ring[] = {
     "9c:76:13", "cc:3b:fb", "c4:db:ad", "24:2b:d6", "00:b4:63", "50:e4:67"
 };
 
-// Wyze Labs (6).
-static const char *const oui_wyze[] = {
-    "2c:aa:8e", "7c:78:b2", "80:48:2c", "a4:da:22", "d0:3f:27", "f0:c8:8b"
-};
+// Wyze Labs (5). (a4:da:22 removed - it is an IEEE MA-M parent block, not Wyze.)
+static const char *const oui_wyze[] = {"2c:aa:8e", "7c:78:b2", "80:48:2c", "d0:3f:27", "f0:c8:8b"};
 
 // Lorex Technology (1).
 static const char *const oui_lorex[] = {"00:1f:54"};
@@ -66,8 +65,9 @@ static const char *const oui_meari[] = {"68:76:27"};
 // Zhejiang Uniview (UNV) — top-tier surveillance vendor.
 static const char *const oui_uniview[] = {"6c:f1:7e", "48:ea:63", "c4:79:05", "88:26:3f"};
 
-// Amcrest Technologies (US; Dahua-lineage).
-static const char *const oui_amcrest[] = {"00:65:1e", "9c:8e:cd", "a0:60:32", "34:46:63"};
+// Amcrest Technologies (US; Dahua-lineage). (34:46:63 removed - IEEE MA-M
+// parent block, not Amcrest.)
+static const char *const oui_amcrest[] = {"00:65:1e", "9c:8e:cd", "a0:60:32"};
 
 // Axon Enterprise body cameras (from nyanBOX).
 static const char *const oui_axon[] = {"00:25:df"};
@@ -78,6 +78,32 @@ static const char *const oui_flock[] = {
     "38:5b:44", "94:34:69", "b4:e3:f9", "70:c9:4e", "3c:91:80", "d8:f3:bc", "80:30:49",
     "14:5a:fc", "74:4c:a1", "08:3a:88", "9c:2f:9d", "94:08:53", "e4:aa:ea"
 };
+
+// --- Professional / enterprise network-camera vendors (IEEE registry) --------
+// Axis Communications (Sweden) - global market leader in pro network cameras.
+static const char *const oui_axis[] = {"b8:a4:4f", "00:40:8c", "e8:27:25", "ac:cc:8e"};
+// Hanwha Vision / Wisenet (ex-Samsung Techwin). NxMD (machine tools) excluded.
+static const char *const oui_hanwha[] = {"00:09:18", "44:b4:23", "e4:30:22"};
+// VIVOTEK (Taiwan).
+static const char *const oui_vivotek[] = {"00:02:d1"};
+// Tiandy Technologies (China) - fast-growing surveillance vendor.
+static const char *const oui_tiandy[] = {"3c:da:6d", "e4:e6:6c"};
+// Xiamen Milesight IoT.
+static const char *const oui_milesight[] = {"1c:c3:16", "c0:ba:1f", "24:e1:24"};
+// MOBOTIX (Germany).
+static const char *const oui_mobotix[] = {"00:03:c5"};
+// GeoVision (Taiwan).
+static const char *const oui_geovision[] = {"00:13:e2"};
+// Sunell Electronics (China; thermal / surveillance).
+static const char *const oui_sunell[] = {"00:1c:27"};
+
+// --- Consumer brands that also hold dedicated OUI blocks ---------------------
+// Blink by Amazon (5). (enblink 28:a1:86 excluded - unrelated vendor.)
+static const char *const oui_blink[] = {"70:ad:43", "74:13:48", "f0:74:c1", "74:ab:93", "3c:a0:70"};
+// SimpliSafe (US home security).
+static const char *const oui_simplisafe[] = {"f8:51:28"};
+// Swann Communications (Australia).
+static const char *const oui_swann[] = {"bc:51:fe"};
 
 // ---------------------------------------------------------------------------
 // Name / SSID substring tables (lowercase). Camera-specific tokens so we don't
@@ -113,6 +139,15 @@ static const char *const pat_annke[] = {"annke"};
 static const char *const pat_vivotek[] = {"vivotek"};
 static const char *const pat_blink[] = {"blink-", "blink_"};
 static const char *const pat_simplisafe[] = {"simplisafe", "simplicam"};
+// Professional network-camera vendors. "axis-" (not bare "axis") is the Axis
+// default hostname prefix, avoiding false matches on words containing "axis".
+static const char *const pat_axis[] = {"axis-", "axiscam"};
+static const char *const pat_hanwha[] = {"wisenet", "hanwha", "samsung techwin"};
+static const char *const pat_tiandy[] = {"tiandy"};
+static const char *const pat_milesight[] = {"milesight"};
+static const char *const pat_mobotix[] = {"mobotix"};
+static const char *const pat_geovision[] = {"geovision"};
+static const char *const pat_sunell[] = {"sunell"};
 // Big OEM / white-label ecosystems (Xiongmai/XMeye, CamHi, V380, Yoosee/Gwell,
 // iCSee, Ubox, Tuya). These ship generic Wi-Fi chips, so name/SSID/app only.
 static const char *const pat_xmeye[] = {"xiongmai", "xmeye", "xm-", "camhi", "ipcam"};
@@ -136,6 +171,13 @@ static const CameraBrand kBrands[] = {
     {"Wyze", oui_wyze, ARRSZ(oui_wyze), pat_wyze, ARRSZ(pat_wyze)},
     {"Uniview", oui_uniview, ARRSZ(oui_uniview), pat_uniview, ARRSZ(pat_uniview)},
     {"Amcrest", oui_amcrest, ARRSZ(oui_amcrest), pat_amcrest, ARRSZ(pat_amcrest)},
+    {"Axis", oui_axis, ARRSZ(oui_axis), pat_axis, ARRSZ(pat_axis)},
+    {"Hanwha/Wisenet", oui_hanwha, ARRSZ(oui_hanwha), pat_hanwha, ARRSZ(pat_hanwha)},
+    {"Tiandy", oui_tiandy, ARRSZ(oui_tiandy), pat_tiandy, ARRSZ(pat_tiandy)},
+    {"Milesight", oui_milesight, ARRSZ(oui_milesight), pat_milesight, ARRSZ(pat_milesight)},
+    {"Mobotix", oui_mobotix, ARRSZ(oui_mobotix), pat_mobotix, ARRSZ(pat_mobotix)},
+    {"GeoVision", oui_geovision, ARRSZ(oui_geovision), pat_geovision, ARRSZ(pat_geovision)},
+    {"Sunell", oui_sunell, ARRSZ(oui_sunell), pat_sunell, ARRSZ(pat_sunell)},
     {"Lorex", oui_lorex, ARRSZ(oui_lorex), nullptr, 0},
     {"Meari/CloudEdge", oui_meari, ARRSZ(oui_meari), pat_meari, ARRSZ(pat_meari)},
     {"Axon", oui_axon, ARRSZ(oui_axon), pat_axon, ARRSZ(pat_axon)},
@@ -145,15 +187,15 @@ static const CameraBrand kBrands[] = {
     {"Tapo", nullptr, 0, pat_tplink_cam, ARRSZ(pat_tplink_cam)},
     {"Xiaomi", nullptr, 0, pat_xiaomi_cam, ARRSZ(pat_xiaomi_cam)},
     {"Eufy", nullptr, 0, pat_eufy, ARRSZ(pat_eufy)},
-    {"Swann", nullptr, 0, pat_swann, ARRSZ(pat_swann)},
+    {"Swann", oui_swann, ARRSZ(oui_swann), pat_swann, ARRSZ(pat_swann)},
     {"Aqara", nullptr, 0, pat_aqara, ARRSZ(pat_aqara)},
     {"Nest", nullptr, 0, pat_nest, ARRSZ(pat_nest)},
     {"D-Link", nullptr, 0, pat_dlink, ARRSZ(pat_dlink)},
     {"Foscam", nullptr, 0, pat_foscam, ARRSZ(pat_foscam)},
     {"Annke", nullptr, 0, pat_annke, ARRSZ(pat_annke)},
-    {"Vivotek", nullptr, 0, pat_vivotek, ARRSZ(pat_vivotek)},
-    {"Blink", nullptr, 0, pat_blink, ARRSZ(pat_blink)},
-    {"SimpliSafe", nullptr, 0, pat_simplisafe, ARRSZ(pat_simplisafe)},
+    {"Vivotek", oui_vivotek, ARRSZ(oui_vivotek), pat_vivotek, ARRSZ(pat_vivotek)},
+    {"Blink", oui_blink, ARRSZ(oui_blink), pat_blink, ARRSZ(pat_blink)},
+    {"SimpliSafe", oui_simplisafe, ARRSZ(oui_simplisafe), pat_simplisafe, ARRSZ(pat_simplisafe)},
     {"XMeye/CamHi", nullptr, 0, pat_xmeye, ARRSZ(pat_xmeye)},
     {"V380", nullptr, 0, pat_v380, ARRSZ(pat_v380)},
     {"Yoosee", nullptr, 0, pat_yoosee, ARRSZ(pat_yoosee)},
