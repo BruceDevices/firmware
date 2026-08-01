@@ -79,18 +79,18 @@ constexpr int kDefaultSeedPresetIndex = kNumSeedPresets - 1; // "Random"
 
 // Every field here is a real, functioning knob on the engine
 // (llm_engine.cpp's generate() / GenerationParams) - nothing decorative.
-// Defaults are tuned for a model this small (2M params) rather than copied
+// Defaults are tuned for a model this small (3.3M params) rather than copied
 // from typical LLM defaults - see git history/PR for the prompt-comparison
 // data behind the specific values.
 //
 // Wraps prompts as `userTag + prompt + "\n" + botTag` before encoding, so a
 // chat-finetuned model (trained on that exact "<user>: ...\n<bot>: ..." pair
 // format) is cued to answer immediately instead of hallucinating a whole
-// fake turn. On by default to match Chat2M.bin, the default recommended
+// fake turn. On by default to match Chat3.3M.bin, the default recommended
 // model - plain story models (e.g. stories260K.bin) expect raw text instead.
 struct BruceLMSettings {
-    float temperature = 0.4f;
-    float topP = 0.7f;
+    float temperature = 0.3f;
+    float topP = 0.6f;
     float repetitionPenalty = 1.15f;
     int maxTokens = 128;
     int seedPresetIndex = kDefaultSeedPresetIndex;
@@ -866,8 +866,8 @@ void showHowToRunScreen() {
         {"https://archive.org/details/BruceLM", true,  true },
         {"2. Unzip both files to SD card",      false, false},
         {"BruceLM/models/:",                    true,  false},
-        {"models/Chat2M/chat2M.bin",            true,  true },
-        {"models/Chat2M/tok896.bin",            true,  true },
+        {"models/Chat3.3M/chat3.3M.bin",        true,  true },
+        {"models/Chat3.3M/tok1024.bin",         true,  true },
         {"models/Stories260K/stories260K.bin",  true,  true },
         {"models/Stories260K/tok512.bin",       true,  true },
         {"3. Turn off chat templates",          false, false},
@@ -1113,7 +1113,7 @@ void bruceLM_setup() {
         if (!showConfirm(
                 "Select a model checkpoint file.\n"
                 "\n"
-                "(e.g. \"chat2M.bin\")",
+                "(e.g. \"chat3.3M.bin\")",
                 "OK: continue   Esc: cancel",
                 "Press OK to open the file picker"
             ))
@@ -1125,7 +1125,7 @@ void bruceLM_setup() {
                 "Select the tokenizer file that\n"
                 "matches your model.\n"
                 "\n"
-                "(e.g. \"tok896.bin\")",
+                "(e.g. \"tok1024.bin\")",
                 "OK: continue   Esc: cancel",
                 "Press OK to open the file picker"
             ))
