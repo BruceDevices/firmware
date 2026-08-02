@@ -32,8 +32,12 @@ void BLE_API::setup() {
     serialDevice = &serial_service;
 
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
-    pAdvertising->enableScanResponse(false); // Save some battery
-    pAdvertising->setName("Bruc");           // Bruce is too long for adv packet len
+    // The 128-bit NUS UUID + the 16-bit battery UUID + the name overflow the
+    // 31-byte advertising packet, so use the scan response for the extra data.
+    // This keeps the NUS service UUID discoverable, letting the companion app
+    // filter on it during scanning.
+    pAdvertising->enableScanResponse(true);
+    pAdvertising->setName("Bruce");
     pAdvertising->start();
 }
 

@@ -3,14 +3,30 @@
 #include "BruceBLEService.hpp"
 
 #include <SerialDevice.h>
+#include <freertos/semphr.h>
+#include <string>
 
-#define BUFFER_SIZE 128
+// Nordic UART Service (NUS) - standard UUIDs so any generic BLE tooling
+// (nRF Connect, the iOS companion app, ...) can discover and talk to Bruce.
+#define NUS_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_RX_CHAR_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // app -> Bruce (write)
+#define NUS_TX_CHAR_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // Bruce -> app (notify)
 
 class BLESerialCallbacks;
 
 class BLESerialService : public BruceBLEService, public SerialDevice {
-    NimBLECharacteristic *serial_char = nullptr;
+    NimBLECharacteristic *rx_char = nullptr; // written by the central (app)
+    NimBLECharacteristic *tx_char = nullptr; // notified to the central (app)
     BLESerialCallbacks *callbacks = nullptr;
+
+    // Bytes received from the central are queued here by the write callback
+    // (NimBLE host task) and consumed by the serial-commands task, so access
+    // is guarded by a mutex.
+    std::string rxBuffer;
+    SemaphoreHandle_t rxMutex = nullptr;
+
+    // Split a payload into MTU-sized notifications.
+    void notifyChunked(const uint8_t *data, size_t len);
 
 public:
     BLESerialService();
@@ -31,5 +47,8 @@ public:
     String readStringUntil(char terminator) override;
     int available() override;
     void setMTU(uint16_t mtu);
+
+    // Called by the write callback to enqueue received bytes.
+    void feedRx(const uint8_t *data, size_t len);
 };
 #endif

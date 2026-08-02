@@ -1681,6 +1681,15 @@ void enableBLEAPI() {
     }
 
     ble_api_enabled = !ble_api_enabled;
+
+    // Give the user visual feedback about the new state, otherwise the toggle
+    // looks like it does nothing and gets pressed repeatedly (which cycles the
+    // BLE stack setup/teardown and can corrupt the GATT table).
+    if (ble_api_enabled) {
+        displayInfo("BLE API ON > Advertising as 'Bruce'", true);
+    } else {
+        displayInfo("BLE API OFF", true);
+    }
 }
 
 bool appStoreInstalled() {
