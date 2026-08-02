@@ -89,7 +89,7 @@ constexpr int kDefaultSeedPresetIndex = kNumSeedPresets - 1; // "Random"
 // fake turn. On by default to match Chat3.3M.bin, the default recommended
 // model - plain story models (e.g. stories260K.bin) expect raw text instead.
 struct BruceLMSettings {
-    float temperature = 0.3f;
+    float temperature = 0.5f;
     float topP = 0.6f;
     float repetitionPenalty = 1.15f;
     int maxTokens = 128;
@@ -671,9 +671,9 @@ bool showSettingsScreen(FS &fs) {
     bool redraw = true;
     drawMainBorderWithTitle("BruceLM Settings");
 
-    constexpr int kChatTemplateRow = 5; // opens showChatTemplateScreen() on Select
-    constexpr int kResetRow = 6;        // opens showResetToDefaultScreen() on Select
-    constexpr int kSaveRow = kSettingsSaveRow; // bottom action row, ble_spam "[ Start ]"-style
+    constexpr int kChatTemplateRow = 5;          // opens showChatTemplateScreen() on Select
+    constexpr int kResetRow = 6;                 // opens showResetToDefaultScreen() on Select
+    constexpr int kSaveRow = kSettingsSaveRow;   // bottom action row, ble_spam "[ Start ]"-style
     constexpr int kNumItems = kSettingsNumItems; // 7 rows + save
 
     for (;;) {
