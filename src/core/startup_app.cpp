@@ -41,7 +41,7 @@ StartupApp::StartupApp() {
     _startupApps["WardrivingNoRadio"] = []() { Wardriving(); };
     _startupApps["WardrivingBTEOnly"] = []() { Wardriving(false, true); };
     _startupApps["WardrivingWifiOnly"] = []() { Wardriving(true, false); };
-    _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
+    _startupApps["WebUI"] = []() { startWebUi(true); };
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs = nullptr;
@@ -53,9 +53,15 @@ StartupApp::StartupApp() {
 }
 
 bool StartupApp::startApp(const String &appName) const {
-    auto it = _startupApps.find(appName);
+    String effectiveAppName = appName;
+    effectiveAppName.trim();
+    if (effectiveAppName.isEmpty() || effectiveAppName.equalsIgnoreCase("none")) {
+        effectiveAppName = "WebUI";
+    }
+
+    auto it = _startupApps.find(effectiveAppName);
     if (it == _startupApps.end()) {
-        Serial.println("Invalid startup app: " + appName);
+        Serial.println("Invalid startup app: " + effectiveAppName);
         return false;
     }
 

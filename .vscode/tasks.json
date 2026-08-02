@@ -18,6 +18,52 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "Build Cardputer",
+            "type": "shell",
+            "command": "${env:USERPROFILE}\\.platformio\\penv\\Scripts\\platformio.exe",
+            "args": [
+                "run",
+                "-e",
+                "m5stack-cardputer"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\Program Files\\Git\\cmd;${env:PATH}",
+                    "PLATFORMIO_BUILD_DIR": "${env:LOCALAPPDATA}\\BruceFirmware\\build"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Upload Cardputer",
+            "type": "shell",
+            "command": "${env:USERPROFILE}\\.platformio\\penv\\Scripts\\platformio.exe",
+            "args": [
+                "run",
+                "-e",
+                "m5stack-cardputer",
+                "-t",
+                "upload",
+                "--upload-port",
+                "COM3"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\Program Files\\Git\\cmd;${env:PATH}",
+                    "PLATFORMIO_BUILD_DIR": "${env:LOCALAPPDATA}\\BruceFirmware\\build"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
         }
     ]
 }

@@ -14,8 +14,8 @@ enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSW
 class BruceConfig : public BruceTheme {
 public:
     struct WiFiCredential {
-        String ssid;
-        String pwd;
+        String ssid; // teilmann family
+        String pwd; // Massey35
     };
     struct Credential {
         String user;
@@ -81,7 +81,8 @@ public:
     std::set<String> mifareKeys = {};
 
     // Misc
-    String startupApp = "";
+    // Default to the WebUI so the device exposes its AP automatically on boot.
+    String startupApp = "WebUI";
     String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
     String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
@@ -110,7 +111,6 @@ private:
     bool _mifareKeysLoaded = false;
 
 public:
-
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////

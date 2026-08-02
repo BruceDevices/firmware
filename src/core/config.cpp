@@ -349,8 +349,16 @@ void BruceConfig::fromFile(bool checkFS) {
     }
 
     if (!setting["startupApp"].isNull()) {
-        startupApp = setting["startupApp"].as<String>();
+        const String loadedStartupApp = setting["startupApp"].as<String>();
+        String normalizedStartupApp = loadedStartupApp;
+        normalizedStartupApp.trim();
+        if (normalizedStartupApp.isEmpty() || normalizedStartupApp.equalsIgnoreCase("none")) {
+            startupApp = "WebUI";
+        } else {
+            startupApp = normalizedStartupApp;
+        }
     } else {
+        startupApp = "WebUI";
         count++;
         log_e("Fail");
     }

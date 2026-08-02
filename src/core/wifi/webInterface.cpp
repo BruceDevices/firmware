@@ -292,7 +292,11 @@ void drawWebUiScreen(bool mode_ap) {
     }
 
     tft.setCursor(padX, currentY);
-    if (mdnsRunning) tft.print("Url: http://bruce.local");
+    if (mdnsRunning) {
+        tft.print("Url: http://bruce.local");
+    } else {
+        tft.print("Open browser on your phone");
+    }
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
@@ -300,15 +304,11 @@ void drawWebUiScreen(bool mode_ap) {
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
-    tft.print("Usr: " + String(bruceConfig.webUI.user));
+    tft.print("Login: " + String(bruceConfig.webUI.user) + "/" + String(bruceConfig.webUI.pwd));
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
-    tft.print("Pwd: " + String(bruceConfig.webUI.pwd));
-
-    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP - 5, 1);
+    tft.print("Phone-ready AP mode");
 
 #if defined(HAS_TOUCH)
     TouchFooter();
