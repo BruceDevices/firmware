@@ -11,6 +11,10 @@
 
 enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSWORD = 2, SAVE_LENGTH = 3 };
 
+// How the main menu presents the modules:
+// CAROUSEL shows one big icon at a time, GRID exposes every module as a selectable cell
+enum MainMenuStyle { MAIN_MENU_CAROUSEL = 0, MAIN_MENU_GRID = 1 };
+
 class BruceConfig : public BruceTheme {
 public:
     struct WiFiCredential {
@@ -87,6 +91,7 @@ public:
     String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
     int devMode = 0;
     int colorInverted = 1;
+    int mainMenuStyle = MAIN_MENU_CAROUSEL;
     int badUSBBLEKeyboardLayout = 0;
     uint16_t badUSBBLEKeyDelay = 10;
     bool badUSBBLEShowOutput = true;
@@ -192,6 +197,8 @@ public:
     void validateDevModeValue();
     void setColorInverted(int value);
     void validateColorInverted();
+    void setMainMenuStyle(int value);
+    void validateMainMenuStyle();
     void setBadUSBBLEKeyboardLayout(int value);
     void validateBadUSBBLEKeyboardLayout();
     void setBadUSBBLEKeyDelay(uint16_t value);
