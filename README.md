@@ -1,5 +1,11 @@
 ![Bruce Main Menu](./media/pictures/bruce_banner.jpg)
 
+<div align="center"><a href="https://trendshift.io/repositories/20368?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-20368" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/20368" alt="BruceDevices%2Ffirmware | Trendshift" width="250" height="55"/></a>
+
+<a href="https://trendshift.io/repositories/20368?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-20368" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/20368/daily?language=C%2B%2B" alt="BruceDevices%2Ffirmware | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/20368?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-20368" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/20368/monthly?language=C%2B%2B" alt="BruceDevices%2Ffirmware | Trendshift" width="250" height="55"/></a></div>
+
+  
 # :shark: Bruce
 
 Bruce is a versatile ESP32 firmware that supports a ton of offensive features focusing on facilitating Red Team operations.
