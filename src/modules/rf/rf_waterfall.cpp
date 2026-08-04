@@ -1,9 +1,13 @@
 #include "rf_waterfall.h"
+#include "core/display.h"
 #ifndef TFT_MOSI
 #define TFT_MOSI -1
 #endif
 float m_rf_waterfall_start_freq = 433.0;
 float m_rf_waterfall_end_freq = 435.0;
+
+// Height of one text row in the header block.
+#define WF_ROW_H (8 * FP + 1)
 
 void rf_waterfall() {
     if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
@@ -28,7 +32,7 @@ select:
     };
     idx = loopOptions(options, idx);
 
-    tft.fillScreen(0x0);
+    tft.fillScreen(bruceConfig.bgColor);
 
     if (option == 4) {
         return;
@@ -61,10 +65,17 @@ uint16_t swapBytes(uint16_t c) { return (c >> 8) | (c << 8); }
 void rf_waterfall_run() {
     float f_start = m_rf_waterfall_start_freq;
     float f_end = m_rf_waterfall_end_freq;
-    const int screen_width = tft.width();
-    const int screen_height = tft.height();
-    const int display_top = screen_height / 5;
+    const int screen_width = tftWidth;
+    const int screen_height = tftHeight;
+    // three header rows (frequency ruler, peak readout, controls) above the fall
+    const int display_top = max(screen_height / 5, 3 * WF_ROW_H + 2);
     float f_freq_step;
+
+    // Theme-derived chrome. The waterfall itself keeps a full-gamut ramp because
+    // there the colour *is* the measurement, not decoration.
+    const uint16_t bg = bruceConfig.bgColor;
+    const uint16_t label = blendColors(bg, bruceConfig.priColor, 170);
+    const uint16_t gridCol = blendColors(bg, bruceConfig.priColor, 55);
 
     // Alloc framebuffer
     uint16_t frameBuffer[screen_width] = {0};
@@ -76,28 +87,37 @@ void rf_waterfall_run() {
     int max_rssi = -100;
     unsigned long lastMaxUpdate = millis();
 
-    tft.fillRect(0, 0, screen_width, display_top, TFT_BLACK);
+    tft.fillRect(0, 0, screen_width, display_top, bg);
 
     int selected_item = 0;
-    bool exitting = false;
-    unsigned long exit_time = 0;
+    // Header rows are static between edits, so only repaint them when something
+    // they show actually changed — otherwise they flicker once per sweep.
+    int drawn_item = -1;
+    float drawn_start = NAN, drawn_end = NAN;
 
     while (1) {
+        bool headerDirty =
+            (drawn_item != selected_item || drawn_start != f_start || drawn_end != f_end);
+        if (headerDirty) {
+            drawn_item = selected_item;
+            drawn_start = f_start;
+            drawn_end = f_end;
+            tft.fillRect(0, 0, screen_width, WF_ROW_H, bg);
+        }
         for (int i = 0; i < 4; i++) {
             int x = i * (screen_width / 4);
+            // the ruler runs over the fall, so it is repainted every pass
+            tft.drawFastVLine(x, 0, screen_height, gridCol);
+            if (!headerDirty) continue;
+
             float f_freq = f_start + (f_end - f_start) * i / 4.0;
-            tft.setCursor(x, 0);
-            tft.setTextSize(1);
+            tft.setCursor(x + 1, 0);
+            tft.setTextSize(FP);
 
-            if (i == 0 && selected_item == 0) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else if (i == 3 && selected_item == 1) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else {
-                tft.setTextColor(TFT_WHITE, TFT_BLACK);
-            }
-
-            tft.drawFastVLine(x, 0, tft.height(), TFT_DARKGREY);
+            // the first and last ticks are the editable band edges
+            bool editing = (i == 0 && selected_item == 0) || (i == 3 && selected_item == 1);
+            if (editing) tft.setTextColor(bg, bruceConfig.priColor);
+            else tft.setTextColor(label, bg);
             tft.print(String(f_freq, 1));
         }
 
@@ -132,12 +152,13 @@ void rf_waterfall_run() {
                 temp_max_freq = f_freq;
             }
 
-            int rawLevel = map(i_rssi, -100, -30, 0, 255);
-            int level = 255 - constrain(rawLevel, 0, 255);
+            // Cold-to-hot ramp: the noise floor stays dark and fades into the
+            // theme background, strong carriers burn through to red.
+            int level = constrain(map(i_rssi, -100, -30, 0, 255), 0, 255);
 
             uint8_t r = 0, g = 0, b = 0;
             if (level <= 63) {
-                b = map(level, 0, 63, 64, 255);
+                b = map(level, 0, 63, 0, 255);
             } else if (level <= 127) {
                 g = map(level, 64, 127, 0, 255);
                 b = map(level, 64, 127, 255, 0);
@@ -150,6 +171,9 @@ void rf_waterfall_run() {
             }
 
             uint16_t color = tft.color565(r, g, b);
+            // blend the bottom of the ramp into the background so an idle band
+            // looks like the rest of the UI instead of a solid slab
+            if (level < 40) color = blendColors(bg, color, level * 255 / 40);
             frameBuffer[i] = swapBytes(color);
             if (check(SelPress)) {
                 selected_item++;
@@ -175,29 +199,29 @@ void rf_waterfall_run() {
         }
         tft.drawPixel(0, 0, 0); // Cardputer Case, need to call something to the tft.
         tft.pushImage(0, current_line, screen_width, 1, frameBuffer);
-        tft.drawFastHLine(0, current_line + 1, screen_width, TFT_DARKGREY);
+        tft.drawFastHLine(0, current_line + 1, screen_width, gridCol);
 
         if (millis() - lastMaxUpdate >= 5000) {
             max_rssi = temp_max_rssi;
             max_freq = temp_max_freq;
-            tft.fillRect(0, 10, screen_width, 10, TFT_BLACK);
-            tft.setCursor(3, 10);
-            tft.setTextSize(1);
-            tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+            tft.fillRect(0, WF_ROW_H, screen_width, WF_ROW_H, bg);
+            tft.setCursor(3, WF_ROW_H);
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.priColor, bg);
             tft.printf("%d dBm @ %.3f", max_rssi, max_freq);
 
             lastMaxUpdate = millis();
         }
 
-        tft.setCursor(3, 20);
-        tft.setTextColor(TFT_DARKCYAN);
-        tft.print("[OK] Item [PREV/NEXT] Value ");
+        if (headerDirty) {
+            tft.fillRect(0, 2 * WF_ROW_H, screen_width, WF_ROW_H, bg);
+            tft.setCursor(3, 2 * WF_ROW_H);
+            tft.setTextSize(FP);
+            tft.setTextColor(label, bg);
+            tft.print("[OK]Item [</>]Val ");
 
-        if (selected_item == 2) {
-            tft.setTextColor(TFT_RED);
-            tft.print("EXIT");
-        } else {
-            tft.setTextColor(TFT_WHITE);
+            if (selected_item == 2) tft.setTextColor(bg, bruceConfig.priColor);
+            else tft.setTextColor(label, bg);
             tft.print("EXIT");
         }
 
