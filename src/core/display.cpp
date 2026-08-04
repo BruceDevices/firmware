@@ -1737,6 +1737,31 @@ uint16_t getColorVariation(uint16_t color, int delta, int direction) {
     return compl_color;
 }
 
+uint16_t blendColors(uint16_t a, uint16_t b, uint8_t t) {
+    int ar = (a >> 11) & 0x1f, ag = (a >> 5) & 0x3f, ab = a & 0x1f;
+    int br = (b >> 11) & 0x1f, bg = (b >> 5) & 0x3f, bb = b & 0x1f;
+    int r = ar + (br - ar) * t / 255;
+    int g = ag + (bg - ag) * t / 255;
+    int bl = ab + (bb - ab) * t / 255;
+    return (uint16_t)((r << 11) | (g << 5) | bl);
+}
+
+void buildHeatPalette(uint16_t *lut, uint8_t n) {
+    if (!lut || n < 2) return;
+    uint16_t bg = bruceConfig.bgColor;
+    uint16_t pri = bruceConfig.priColor;
+    uint16_t hot = blendColors(pri, TFT_WHITE, 150);
+
+    lut[0] = bg;
+    for (uint8_t i = 1; i < n; i++) {
+        int t = i * 255 / (n - 1);
+        // ramp to the primary for the lower two thirds, then burn toward the
+        // highlight so strong signals stay readable against a busy plot
+        lut[i] = (t < 170) ? blendColors(bg, pri, 55 + t * 200 / 255)
+                           : blendColors(pri, hot, (t - 170) * 255 / 85);
+    }
+}
+
 // Draw BITMAP files
 // These read 16- and 32-bit types from the SD card file.
 // BMP data is stored little-endian, Arduino is little-endian too.
