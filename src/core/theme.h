@@ -17,6 +17,7 @@ struct themeFiles {
     String files = "";
     String gps = "";
     String nrf = "";
+    String bluefish = "";
     String interpreter = "";
     String others = "";
     String clock = "";
@@ -43,6 +44,7 @@ struct themeInfo {
     bool files = false;
     bool gps = false;
     bool nrf = false;
+    bool bluefish = false;
     bool interpreter = false;
     bool others = false;
     bool clock = false;
@@ -72,9 +74,7 @@ public:
 
     bool openThemeFile(FS *fs, String filepath, bool overwriteConfigSettings);
     bool validateImgFile(FS *fs, String filepath);
-    const String& getThemeItemImg(const String& item) const {
-        return item;
-    };
+    const String &getThemeItemImg(const String &item) const { return item; };
     void removeTheme(void);
     FS *themeFS(void);
 };
