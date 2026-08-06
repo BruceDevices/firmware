@@ -20,7 +20,6 @@
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/channel_analyzer.h"
-#include "modules/wifi/jam_detect.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
 
@@ -49,7 +48,8 @@ void WifiMenu::optionsMenu() {
     if (!WiFi.isConnected() && !WiFi.AP.started()) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
-            {"Start WiFi AP", [=]() {
+            {"Start WiFi AP",
+             [=]() {
                  wifiConnectMenu(WIFI_AP);
                  displayInfo("pwd: " + bruceConfig.wifiAp.pwd, true);
              }},
@@ -74,7 +74,6 @@ void WifiMenu::optionsMenu() {
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Channel Analyzer", channel_analyzer_setup});
-    options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!WiFi.isConnected()) doScan = wifiConnectMenu();
