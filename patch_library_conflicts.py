@@ -200,6 +200,44 @@ conflicts = [
         r'#define RFAL_NFCA_N_RETRANS         2U',
         '#define RFAL_NFCA_N_RETRANS         4U'
     ),
+    # SmartRC-CC1101-Driver-Lib (shared-bus safety). SpiStart() used to open every SPI burst
+    # with a spurious cc_spi->endTransaction() "to ensure opening a new session". That call is a
+    # no-op when no transaction is open, but on a bus shared with the display (T-Embed CC1101
+    # reuses &tft.getSPIinstance() via acquireSPIBus) the TFT_eSPI draw holds the SPIClass
+    # transaction mutexes (spi->lock + paramLock) for the whole duration of each drawing
+    # primitive, so the CC1101 task's endTransaction() gave mutexes it never took ->
+    # FreeRTOS `xTaskPriorityDisinherit` assert (task.c:5156) -> PANIC in the dualRF task of the
+    # RF+IR detector. Simply deleting the call deadlocks instead: Reset() and the checkMISO()
+    # early-return paths of SpiWriteReg/SpiStrobe/SpiReadReg/etc. leave the transaction OPEN, and
+    # the old spurious end was what healed those leftovers (the next beginTransaction otherwise
+    # self-blocks forever on the non-recursive bus mutex). Fix: track whether THIS lib left the
+    # transaction open (`_spi_started`), so SpiStart only closes its own leftover and never
+    # touches a transaction the TFT holds. Same-task gives always pass the disinherit check; the
+    # TFT's mutex is never given from another task.
+    (
+        ".pio/libdeps/*/SmartRC-CC1101-Driver-Lib/ELECHOUSE_CC1101_SRC_DRV.h",
+        r'bool _begin_end_logic=false;',
+        'bool _begin_end_logic=false;\n  bool _spi_started=false; // Bruce patch: tracks whether this lib left the SPI transaction open'
+    ),
+    (
+        ".pio/libdeps/*/SmartRC-CC1101-Driver-Lib/ELECHOUSE_CC1101_SRC_DRV.cpp",
+        r'//End transaction to ensure openin a new session with the right SPISettings\n  digitalWrite\(SS_PIN, HIGH\);\n  cc_spi->endTransaction\(\);\n  if\(_begin_end_logic\) cc_spi->end\(\);',
+        '// Bruce patch: only close a transaction THIS lib left open (unbalanced Reset()/early\n'
+        '  // checkMISO() returns); never give the bus mutex the TFT holds (xTaskPriorityDisinherit).\n'
+        '  digitalWrite(SS_PIN, HIGH);\n'
+        '  if(_spi_started) cc_spi->endTransaction();\n'
+        '  if(_begin_end_logic) cc_spi->end();'
+    ),
+    (
+        ".pio/libdeps/*/SmartRC-CC1101-Driver-Lib/ELECHOUSE_CC1101_SRC_DRV.cpp",
+        r'cc_spi->endTransaction\(\);\n  digitalWrite\(SS_PIN, HIGH\);\n  if\(_begin_end_logic\) cc_spi->end\(\);',
+        'cc_spi->endTransaction();\n  _spi_started = false; // Bruce patch: transaction closed\n  digitalWrite(SS_PIN, HIGH);\n  if(_begin_end_logic) cc_spi->end();'
+    ),
+    (
+        ".pio/libdeps/*/SmartRC-CC1101-Driver-Lib/ELECHOUSE_CC1101_SRC_DRV.cpp",
+        r'cc_spi->beginTransaction\(SPISettings\(2000000, MSBFIRST, SPI_MODE0\)\);\n\n\n\}',
+        'cc_spi->beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));\n  _spi_started = true; // Bruce patch: transaction now owned by this lib\n\n\n}'
+    ),
 ]
 
 for file_pattern, search, replace in conflicts:

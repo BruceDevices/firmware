@@ -529,7 +529,13 @@ rmt_channel_handle_t setup_rf_rx() {
     rx_channel_cfg.flags.io_loop_back = false; // do not loop back output to input
 
     rmt_channel_handle_t rx_channel = NULL;
-    ESP_ERROR_CHECK(rmt_new_rx_channel(&rx_channel_cfg, &rx_channel));
+    esp_err_t err = rmt_new_rx_channel(&rx_channel_cfg, &rx_channel);
+    if (err != ESP_OK) {
+        // Never abort the whole device on an RMT allocation failure: log and let
+        // the caller fall back to sequential/limited listening.
+        Serial.printf("rf: rmt_new_rx_channel failed: %d (%s)\n", (int)err, esp_err_to_name(err));
+        return NULL;
+    }
     return rx_channel;
 }
 

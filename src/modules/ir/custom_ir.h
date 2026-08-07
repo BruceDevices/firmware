@@ -47,6 +47,7 @@ void sendRC6Command(String address, String command, bool hideDefaultUI = false);
 void sendSamsungCommand(String address, String command, bool hideDefaultUI = false);
 void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDefaultUI = false);
 void sendKaseikyoCommand(String address, String command, bool hideDefaultUI = false);
+void sendRCACommand(String address, String command, bool hideDefaultUI = false);
 bool sendDecodedCommand(String protocol, String value, uint8_t bits = 32, bool hideDefaultUI = false);
 void otherIRcodes();
 bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);

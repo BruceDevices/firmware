@@ -307,6 +307,8 @@ void sendIRCommand(IRCode *code, bool hideDefaultUI) {
         sendSonyCommand(code->address, code->command, 20, hideDefaultUI);
     else if (code->protocol.equalsIgnoreCase("Kaseikyo"))
         sendKaseikyoCommand(code->address, code->command, hideDefaultUI);
+    else if (code->protocol.equalsIgnoreCase("RCA"))
+        sendRCACommand(code->address, code->command, hideDefaultUI);
     // Others protocols of IRRemoteESP8266, not related to Flipper Zero IR File Format
     else if (
         code->protocol != "" && code->data != "" &&
@@ -540,6 +542,36 @@ void sendKaseikyoCommand(String address, String command, bool hideDefaultUI) {
         "Sent Kaseikyo Command" + (bruceConfigPins.irTxRepeats > 0
                                        ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
                                        : "")
+    );
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+}
+
+void sendRCACommand(String address, String command, bool hideDefaultUI) {
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
+    irsend.begin();
+    if (!hideDefaultUI) { displayTextLine("Sending.."); }
+
+    uint8_t addressValue = (uint8_t)strtoul(address.substring(0, 2).c_str(), nullptr, 16);
+    uint8_t commandValue = (uint8_t)strtoul(command.substring(0, 2).c_str(), nullptr, 16);
+
+    // RCA protocol (Flipper Zero): 24 bits, MSB first, pulse distance.
+    // Layout: [cmd_inverse:8][address_inverse:4][command:8][address:4]
+    uint32_t data = ((uint32_t)(~commandValue & 0xFF) << 16) | ((uint32_t)(~addressValue & 0xF) << 12) |
+                    ((uint32_t)commandValue << 4) | (addressValue & 0xF);
+
+    // Preamble 4000/4000, bit mark 500, zero space 1000, one space 2000, 38kHz.
+    irsend.sendGeneric(4000, 4000, 500, 2000, 500, 1000, 0, 0, data, 24, 38000, true, 0, 50);
+
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) {
+            irsend.sendGeneric(4000, 4000, 500, 2000, 500, 1000, 0, 0, data, 24, 38000, true, 0, 50);
+        }
+    }
+
+    Serial.println(
+        "Sent RCA Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
     );
     digitalWrite(bruceConfigPins.irTx, LED_OFF);
 }

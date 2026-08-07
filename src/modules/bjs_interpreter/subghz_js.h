@@ -12,6 +12,7 @@ JSValue native_subghzTransmitFile(JSContext *ctx, JSValue *this_val, int argc, J
 JSValue native_subghzTransmit(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_subghzReadDual(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
 // Raw pulse TX API for bruteforce and custom protocol transmission

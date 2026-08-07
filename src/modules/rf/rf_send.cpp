@@ -11,6 +11,13 @@
 #define CLOSE_MENU 3
 #define MAIN_MENU 4
 
+// Bruteforce-style RAW `.sub` files (1-2 MB "chaos"/recording files) carry
+// HUNDREDS of RAW_Data / Key lines. Buffering every line into the global
+// rawDataList/keyList vectors exhausts the heap and crashes the device, so cap
+// the collection: the first signals are enough to reproduce a remote.
+#define RF_SUB_MAX_SIGNALS 24
+#define RF_SUB_MAX_RAW_BYTES (64 * 1024)
+
 std::vector<int> bitList;
 std::vector<int> bitRawList;
 std::vector<uint64_t> keyList;
@@ -256,6 +263,15 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
     selected_code.filepath = filepath.substring(1 + filepath.lastIndexOf("/"));
 
     if (!databaseFile) Serial.println("Fail opening file");
+    // Start from a clean slate: the vectors are consumed by txSubFile /
+    // loopEmulate, but a caller that returns early (e.g. no valid Protocol)
+    // would otherwise leak the lines of every file it ever opened into the
+    // shared global vectors, growing the heap until the device crashes.
+    bitList.clear();
+    bitRawList.clear();
+    keyList.clear();
+    rawDataList.clear();
+    size_t rawBytes = 0;
     // Store the code(s) in the signal
     while (databaseFile.available()) {
         line = databaseFile.readStringUntil('\n');
@@ -280,9 +296,13 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
             bitRawList.push_back(txt.toInt()); // selected_code.BitRAW = txt.toInt();
         // Keys can exceed 32 bits (Holtek 40, Mastercode 36, PhoenixV2 52,
         // KeeLoq 64), so parse the full 64-bit value, not a truncated uint32.
-        if (line.startsWith("Key:")) keyList.push_back(hexStringToU64(txt.c_str()));
-        if (line.startsWith("RAW_Data:") || line.startsWith("Data_RAW:"))
+        if (line.startsWith("Key:") && keyList.size() < RF_SUB_MAX_SIGNALS)
+            keyList.push_back(hexStringToU64(txt.c_str()));
+        if ((line.startsWith("RAW_Data:") || line.startsWith("Data_RAW:")) &&
+            rawDataList.size() < RF_SUB_MAX_SIGNALS && rawBytes < RF_SUB_MAX_RAW_BYTES) {
             rawDataList.push_back(txt); // selected_code.data = txt;
+            rawBytes += txt.length();
+        }
 
         if (check(EscPress)) break;
     }

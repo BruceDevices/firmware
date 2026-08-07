@@ -448,14 +448,22 @@ void IrRead::save_device() {
 }
 
 String IrRead::loop_headless(int max_loops) {
+    return loop_headless(max_loops, nullptr);
+}
 
+String IrRead::loop_headless(int max_loops, volatile bool *abort) {
+
+    // max_loops is a timeout in seconds. Poll at 10ms instead of sleeping 1s per
+    // iteration so a captured frame (collected by the GPIO ISR) is noticed almost
+    // immediately instead of up to ~1s later.
+    uint32_t deadline = millis() + (uint32_t)max_loops * 1000UL;
     while (!irrecv.decode(&results)) {
-        max_loops -= 1;
-        if (max_loops <= 0) {
+        if (abort != nullptr && *abort) return "";
+        if (millis() >= deadline) {
             Serial.println("timeout");
             return "";
         }
-        delay(1000);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     irrecv.disableIRIn();

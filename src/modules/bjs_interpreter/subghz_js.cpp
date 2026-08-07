@@ -3,8 +3,13 @@
 
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_utils.h"
+#include "modules/ir/ir_read.h"
 
 #include "helpers_js.h"
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 // Tracks whether txSetup() has been called (raw pulse TX session is active)
 static bool _txSessionActive = false;
@@ -102,6 +107,88 @@ JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, J
         bruceConfigPins.rfFreq = v; // float global var
     }
     return JS_UNDEFINED;
+}
+
+// ============================================================================
+// Dual-band listen: RF + IR at the same time.
+//
+//   subghz.readDual(timeout, raw)
+//
+// Runs the RF receiver and the IR receiver CONCURRENTLY in two FreeRTOS tasks
+// (RF = RMT/CC1101 GDO0, IR = GPIO interrupt), so the interpreter — which is
+// single-threaded — can hear both bands at once.
+// Returns an object { rf: string, ir: string } with the captured sub/ir file
+// content; "" when nothing was received on that band.
+// ============================================================================
+
+typedef struct {
+    int timeout;
+    bool raw;
+    String rf;
+    String ir;
+    SemaphoreHandle_t sem; // counting semaphore, given once per finished task
+} DualRxCtx;
+
+static void _dualRfTask(void *arg) {
+    DualRxCtx *ctx = (DualRxCtx *)arg;
+    ctx->rf = rfReceiveSignal(bruceConfigPins.rfFreq, ctx->timeout, ctx->raw, true); // headless for JS
+    xSemaphoreGive(ctx->sem);
+    vTaskDelete(NULL); // ESP-IDF aborts a task that returns instead of self-deleting
+}
+
+static void _dualIrTask(void *arg) {
+    DualRxCtx *ctx = (DualRxCtx *)arg;
+    {
+        IrRead irRead(true, ctx->raw);
+        ctx->ir = irRead.loop_headless(ctx->timeout);
+    } // ~IrRead() runs disableIRIn() before the self-delete
+    xSemaphoreGive(ctx->sem);
+    vTaskDelete(NULL);
+}
+
+JSValue native_subghzReadDual(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    // usage: subghz.readDual(timeout_in_seconds : number, raw : boolean);
+    int timeout = 10;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &timeout, argv[0]);
+    bool raw = false;
+    if (argc > 1 && JS_IsBool(argv[1])) raw = JS_ToBool(ctx, argv[1]);
+
+    DualRxCtx dctx;
+    dctx.timeout = timeout;
+    dctx.raw = raw;
+    dctx.rf = "";
+    dctx.ir = "";
+
+    SemaphoreHandle_t sem = xSemaphoreCreateCounting(2, 0);
+    TaskHandle_t rfTask = NULL, irTask = NULL;
+    bool ok = false;
+    if (sem != NULL) {
+        dctx.sem = sem;
+        ok = (xTaskCreate(_dualRfTask, "dualRf", 8192, &dctx, 2, &rfTask) == pdPASS) &&
+             (xTaskCreate(_dualIrTask, "dualIr", 8192, &dctx, 2, &irTask) == pdPASS);
+    }
+
+    if (!ok) {
+        // Couldn't spawn the concurrent listeners (out of RAM): fall back to
+        // sequential listening so the API still works on constrained boards.
+        if (sem != NULL) vSemaphoreDelete(sem);
+        if (rfTask != NULL) vTaskDelete(rfTask);
+        if (irTask != NULL) vTaskDelete(irTask);
+        dctx.rf = rfReceiveSignal(bruceConfigPins.rfFreq, timeout, raw, true);
+        IrRead irRead(true, raw);
+        dctx.ir = irRead.loop_headless(timeout);
+    } else {
+        // Wait for both listeners to finish (each gives the semaphore once).
+        // The tasks self-deleted via vTaskDelete(NULL) after their destructors
+        // ran, so the handles are dangling and must NOT be deleted again here.
+        for (int i = 0; i < 2; i++) { xSemaphoreTake(sem, pdMS_TO_TICKS((timeout * 1000) + 10000)); }
+        vSemaphoreDelete(sem);
+    }
+
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "rf", JS_NewString(ctx, dctx.rf.c_str()));
+    JS_SetPropertyStr(ctx, obj, "ir", JS_NewString(ctx, dctx.ir.c_str()));
+    return obj;
 }
 
 // ============================================================================

@@ -12,6 +12,9 @@ public:
     void quickLoop();
 
     String loop_headless(int max_loops);
+    // loop_headless variant that aborts early (returns "") when *abort is set;
+    // used by the dual RF+IR detector so an ESC/NEXT press is honoured promptly.
+    String loop_headless(int max_loops, volatile bool *abort);
 
 private:
     bool _read_signal = false;

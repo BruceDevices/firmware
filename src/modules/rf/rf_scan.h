@@ -88,6 +88,11 @@ void display_info(
 );
 void display_signal_data(RfCodes received, bool headless = false);
 
+// Try to decode a KeeLoq frame and resolve its manufacturer (via the keystore).
+// Fills the keeloq fields (key/fix/encrypted/serial/btn + mf_name/cnt) and
+// returns true on success. Shared by the scan UI and the CLI receive paths.
+bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received);
+
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);

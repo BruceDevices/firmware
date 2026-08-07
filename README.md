@@ -20,6 +20,16 @@ Every major feature works natively, right out of the box. Sub-GHz, NFC/RFID, IR,
 
 More custom devkit boards coming soon! Stay across our communities!
 
+## :tv: Universal IR & RF modules
+
+This fork adds three IR / Sub-GHz features on top of the standard Bruce feature set:
+
+- **Universal IR Remote** (`IR` → `Univ. IR Remote`): browse a brand/device database and send IR commands (grid UI, configurable orientation, brands flow, wrapper-folder DB discovery).
+- **Universal RF Remote** (`RF` → `Univ. RF Remote`): browse Flipper `.sub` files (RAW + BinRAW Key) and transmit them through the standard RF pipeline, plus built-in generic test signals.
+- **RF + IR Dual Detector** (`IR` → `RF + IR Dual`): listens on RF and IR **at the same time** and reports which band fired, with replay / save / discard. External RF (CC1101 / M5 RF433) and IR modules are selectable.
+
+The **Lite** database (7 IR + 103 RF files) is bundled in this repo for LittleFS / no-SD boards. The **Full** database (829 IR + 13,275 RF files, for SD cards) is distributed separately from the fork's [Releases](https://github.com/bollgio/BruceIRF/releases) to keep this repository lean.
+
 ## :building_construction: How to install
 
 ### The easiest way to install Bruce is using our official Web Flasher!

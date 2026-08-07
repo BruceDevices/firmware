@@ -11,6 +11,7 @@
 #include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_waterfall.h"
+#include "modules/rf/universal_rf.h"
 
 void RFMenu::optionsMenu() {
     options = {
@@ -20,6 +21,7 @@ void RFMenu::optionsMenu() {
         {"Custom SubGhz",   sendCustomRF              },
 #endif
         {"Spectrum",        rf_spectrum               },
+        {"Univ. RF Remote", universalRFcodes          },
 #if !defined(LITE_VERSION)
         {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
         {"SquareWave Spec", rf_SquareWave             }, // @Pirata

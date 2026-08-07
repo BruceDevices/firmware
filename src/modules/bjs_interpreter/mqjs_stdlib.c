@@ -424,6 +424,7 @@ const JSPropDef js_subghz[] = {
     JS_CFUNC_DEF("transmit", 4, native_subghzTransmit),
     JS_CFUNC_DEF("read", 1, native_subghzRead),
     JS_CFUNC_DEF("readRaw", 1, native_subghzReadRaw),
+    JS_CFUNC_DEF("readDual", 2, native_subghzReadDual),
     JS_CFUNC_DEF("setFrequency", 1, native_subghzSetFrequency),
     JS_CFUNC_DEF("txSetup", 1, native_subghzTxSetup),
     JS_CFUNC_DEF("txPulses", 1, native_subghzTxPulses),

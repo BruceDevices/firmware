@@ -16,6 +16,7 @@ MainMenu::MainMenu() {
         &fmMenu,
 #endif
         &irMenu,
+        &rfIrMenu,
 #if !defined(LITE_VERSION)
         &ethernetMenu,
 #endif

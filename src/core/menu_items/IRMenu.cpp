@@ -6,6 +6,7 @@
 #include "modules/ir/custom_ir.h"
 #include "modules/ir/ir_jammer.h"
 #include "modules/ir/ir_read.h"
+#include "modules/ir/universal_ir.h"
 
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
@@ -19,6 +20,7 @@ void IRMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
 #endif
+        {"Univ. Remote",  universalIRcodes      },
         {"Config",    [this]() { configMenu(); }},
     };
     addOptionToMainMenu();

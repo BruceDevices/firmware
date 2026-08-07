@@ -169,6 +169,7 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #endif
 
 #include "core/bus_HAL.h"
+#include "core/crash_diag.h"
 #include "core/display.h"
 #include "core/led_control.h"
 #include "core/mykeyboard.h"
@@ -546,6 +547,7 @@ void setup() {
     );
 #endif
     // #endif
+    crashDiagShow(); // show last panic/watchdog reason (returns instantly if none)
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
