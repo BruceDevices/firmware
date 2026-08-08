@@ -1143,14 +1143,21 @@ void wifi_recover_menu() {
         return;
     }
 
-    const String PCAP_DIR = "/BrucePCAP";
+    const String PCAP_ROOT = "/BrucePCAP";
+    const String PCAP_DIR = "/BrucePCAP/handshakes";
+
+    if (!(*fs).exists(PCAP_ROOT)) {
+        if ((*fs).mkdir(PCAP_ROOT)) padprintf("Created: %s\n", PCAP_ROOT.c_str());
+        else padprintf("Warning: failed to create %s\n", PCAP_ROOT.c_str());
+    }
+
     if (!(*fs).exists(PCAP_DIR)) {
         if ((*fs).mkdir(PCAP_DIR)) padprintf("Created: %s\n", PCAP_DIR.c_str());
         else padprintf("Warning: failed to create %s\n", PCAP_DIR.c_str());
     }
 
     resetTftDisplay();
-    String pcap = loopSD(*fs, true, "pcap|cap|*", PCAP_DIR);
+    String pcap = loopSD(*fs, true, "pcap|cap", PCAP_DIR);
     if (pcap.length() == 0) {
         displayInfo("Cancelled", true);
         return;
