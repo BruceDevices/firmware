@@ -117,7 +117,7 @@ static const uint8_t LP_TX = 11;
 
 // InfraRed
 #define RXLED 26
-#define TXLED 15
+#define TXLED 7
 #define LED_ON HIGH
 #define LED_OFF LOW
 
@@ -128,7 +128,7 @@ static const uint8_t LP_TX = 11;
 #define SDCARD_MOSI SPI_MOSI_PIN
 
 // CC1101
-#define CC1101_GDO2_PIN 7
+//#define CC1101_GDO2_PIN 7 // not necessary
 #define CC1101_GDO0_PIN 2
 #define CC1101_SS_PIN 3
 #define CC1101_MOSI_PIN SPI_MOSI_PIN
