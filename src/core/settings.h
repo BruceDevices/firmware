@@ -70,6 +70,8 @@ int gsetIrTxPin(bool set = false);
 
 void setIrTxRepeats();
 
+void setRfTxRepeats();
+
 int gsetIrRxPin(bool set = false);
 
 int gsetRfTxPin(bool set = false);

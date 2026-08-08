@@ -1114,6 +1114,36 @@ void setIrTxRepeats() {
 
     bruceConfigPins.setIrTxRepeats(chRpts);
 }
+
+/*********************************************************************
+**  Function: setRfTxRepeats
+**  get or set how many times an RF signal is transmitted
+**  0 = default (4), >0 = explicit count
+**********************************************************************/
+void setRfTxRepeats() {
+    uint8_t chRpts = 0; // Chosen Repeats
+
+    options = {
+        {"Default (4)",  [&]() { chRpts = 0; } },
+        {"1",            [&]() { chRpts = 1; } },
+        {"2",            [&]() { chRpts = 2; } },
+        {"3",            [&]() { chRpts = 3; } },
+        {"5",            [&]() { chRpts = 5; } },
+        {"10",           [&]() { chRpts = 10; }},
+        {"Custom",       [&]() {
+             // up to 99 repeats
+             String rpt = num_keyboard(String(bruceConfigPins.rfTxRepeats), 2, "Nbr of Repeats");
+             chRpts = static_cast<uint8_t>(rpt.toInt());
+         }                     },
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options);
+
+    if (returnToMenu) return;
+
+    bruceConfigPins.setRfTxRepeats(chRpts);
+}
 /*********************************************************************
 **  Function: gsetIrRxPin
 **  get or set IR Rx Pin

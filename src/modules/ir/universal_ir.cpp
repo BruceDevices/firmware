@@ -437,7 +437,7 @@ static GridMetrics compute_grid_metrics() {
     GridMetrics m;
     const int HEADER = 46;
     int availW = tftWidth - 8;
-    int availH = tftHeight - HEADER - 12;
+    int availH = tftHeight - HEADER - 26;
     m.pad = 5;
     m.cols = (tftWidth > tftHeight) ? 4 : 2;
     int targetH = (tftWidth > tftHeight) ? 34 : 48;
@@ -489,6 +489,12 @@ static void render_page(const GridMetrics &m, const std::vector<ButtonDef> &btns
         tft.drawString(label, x + m.cellW / 2, y + m.cellH / 2);
     }
 
+    tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+    tft.setTextFont(FP);
+    tft.setTextSize(1);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("OK=select  ESC=back", tftWidth / 2, tftHeight - 13);
+
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextFont(FP);
     tft.setTextSize(1);
@@ -505,6 +511,33 @@ static void render_page(const GridMetrics &m, const std::vector<ButtonDef> &btns
 static void show_brands_flow(
     FS &fs, String cat_path, const std::vector<ButtonDef> &buttons, int orientation, String title
 );
+
+// Vertical navigation across pages: Up/Down move by column and stay on the
+// same page unless at an edge, where they flow to the adjacent page. Wrap to
+// the other end only at the very first/last cell, like the rest of Bruce.
+static int grid_move_up(int sel, int total, const GridMetrics &m) {
+    int col = sel % m.cols;
+    int row = sel / m.cols;
+    if (row > 0) return sel - m.cols;
+    int page = sel / m.perPage;
+    if (page > 0) {
+        int prevLast = page * m.perPage - 1;
+        int t = prevLast - (prevLast % m.cols) + col;
+        return (t < total) ? t : total - 1;
+    }
+    if (col == 0) return total - 1;
+    int lastRowFirst = (total - 1) - ((total - 1) % m.cols);
+    int t = lastRowFirst + col;
+    return (t < total) ? t : total - 1;
+}
+
+static int grid_move_down(int sel, int total, const GridMetrics &m) {
+    int row = sel / m.cols;
+    int nsel = sel + m.cols;
+    if (row < m.rows - 1) return (nsel < total) ? nsel : total - 1;
+    if (sel == total - 1) return 0;
+    return (nsel < total) ? nsel : total - 1;
+}
 
 static bool remote_grid(
     FS &fs, const SigIndex &idx, const std::vector<ButtonDef> &buttons, const String &title,
@@ -555,11 +588,21 @@ static bool remote_grid(
                 moved = true;
             }
             if (check(UpPress)) {
-                sel = (sel - m.cols + total) % total;
+                sel = grid_move_up(sel, total, m);
                 moved = true;
             }
             if (check(DownPress)) {
-                sel = (sel + m.cols) % total;
+                sel = grid_move_down(sel, total, m);
+                moved = true;
+            }
+            if (check(NextPagePress)) {
+                sel = (sel + m.perPage) % total;
+                moved = true;
+            }
+            if (check(PrevPagePress)) {
+                int np = (sel - m.perPage) % total;
+                if (np < 0) np += total;
+                sel = np;
                 moved = true;
             }
             vTaskDelay(10 / portTICK_PERIOD_MS);

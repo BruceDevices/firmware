@@ -6,6 +6,9 @@ from SCons.Script import Import
 Import("env")
 senv = env  # avoid shadowing with the action's 'env' parameter
 
+# Release version used in the merged deliverable name (BruceIRF<VER>-<board>.bin)
+FIRMWARE_VERSION = "3.5"
+
 # Optional: keep your extra flag
 senv.Append(CXXFLAGS=["-Wno-conversion-null"])
 
@@ -33,7 +36,7 @@ boot_bin = build_dir / "bootloader.bin"
 part_bin = build_dir / "partitions.bin"
 app_bin  = build_dir / "firmware.bin"
 
-out_bin  = proj_dir / f"Bruce-{pioenv}.bin"
+out_bin  = proj_dir / f"BruceIRF{FIRMWARE_VERSION}-{pioenv}.bin"
 
 # Esptool from PlatformIO + Python executable
 esptool_pkg = senv.PioPlatform().get_package_dir("tool-esptoolpy")

@@ -55,7 +55,7 @@ void sendCustomRF() {
 
     while (!returnToMenu) {
         num_steps_keeloq = 1;
-        num_signal_repeat = 4;
+        num_signal_repeat = (bruceConfigPins.rfTxRepeats > 0) ? bruceConfigPins.rfTxRepeats : 4;
         delay(200);
         filepath = loopSD(*filesystem, true, "SUB", startPath);
         if (filepath == "" || check(EscPress)) return; //  cancelled
@@ -377,6 +377,9 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
     String preset = rfcode.preset;
     String data = rfcode.data;
     uint64_t key = rfcode.key;
+    // User-configurable repeats (mirrors IR TX repeats). 0 = default (4);
+    // the interactive REPEAT menu value applies only when no config is set.
+    uint8_t repeats = (bruceConfigPins.rfTxRepeats > 0) ? bruceConfigPins.rfTxRepeats : num_signal_repeat;
     byte modulation = 2; // possible values for CC1101: 0 = 2-FSK, 1 =GFSK, 2=ASK, 3 = 4-FSK, 4 = MSK
     float deviation = 1.58;
     float rxBW = 270.83; // Receive bandwidth
@@ -498,7 +501,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         // KeeLoq has dedicated framing (see rf_keeloq_durations). `rfcode.key` is
         // the 64-bit rolling code already assembled by keeloq_step.
         if (!hideDefaultUI) { displayTextLine("Sending.."); }
-        rf_tx_keeloq(rfcode.key, num_signal_repeat);
+        rf_tx_keeloq(rfcode.key, repeats);
     }
 
     else {
@@ -514,7 +517,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
 #endif
 
         if (def != nullptr) {
-            rf_tx_protocol(rfcode.key, rfcode.Bit, rfcode.te, def, num_signal_repeat);
+            rf_tx_protocol(rfcode.key, rfcode.Bit, rfcode.te, def, repeats);
         } else {
             Serial.print("unsupported protocol: ");
             Serial.println(protocol);

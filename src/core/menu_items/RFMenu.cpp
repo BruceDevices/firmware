@@ -50,6 +50,7 @@ void RFMenu::configMenu() {
         {"RF RX Pin", lambdaHelper(gsetRfRxPin, true)},
         {"RF Module", setRFModuleMenu},
         {"RF Frequency", setRFFreqMenu},
+        {"RF TX Repeats", setRfTxRepeats},
         {"Back", [this]() { optionsMenu(); }},
     };
 

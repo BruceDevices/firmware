@@ -38,6 +38,8 @@ uint32_t settingsCallback(cmd *c) {
         else if (setting_name == "rfFreq") bruceConfigPins.setRfFreq(setting_value.toFloat());
         else if (setting_name == "rfFxdFreq") bruceConfigPins.setRfFxdFreq(setting_value.toInt());
         else if (setting_name == "rfScanRange") bruceConfigPins.setRfScanRange(setting_value.toInt());
+        else if (setting_name == "rfTxRepeats")
+            bruceConfigPins.setRfTxRepeats(static_cast<uint8_t>(setting_value.toInt()));
         else if (setting_name == "rfidModule")
             bruceConfigPins.setRfidModule(static_cast<RFIDModules>(setting_value.toInt()));
         else isPinField = false;

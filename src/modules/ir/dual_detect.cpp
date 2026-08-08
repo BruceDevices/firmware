@@ -53,6 +53,18 @@ int _irHits = 0;
 int _cycles = 0;
 int _specX = 0, _specY = 0, _specW = 0, _specH = 0;
 
+// --- Signal queue (optional) ---------------------------------------------------
+// When enabled, every capture is kept in a bounded history so a signal that
+// arrives right after another one is not lost: the newest shows the result menu
+// while the previous ones stay available (replay/save) from the queue browser.
+struct QueuedSignal {
+    String kind; // "RF" or "IR"
+    String content;
+};
+const int MAX_QUEUE = 10;
+bool _queueMode = false;
+std::vector<QueuedSignal> _queue;
+
 uint16_t _rfColor() {
     return bruceConfig.priColor;
 }
@@ -76,8 +88,19 @@ String _irRxName() {
     return "GPIO" + String(bruceConfigPins.irRx);
 }
 
+// True when a single-pin RF module would listen on the SAME pin as the IR
+// receiver (e.g. Cardputer defaults: rfRx = GROVE_SCL = RXLED = GPIO1). In that
+// case the RMT RF receiver grabs the same demodulated IR burst and captures it
+// as "RF RAW", so the user has to press the remote twice. A CC1101 receives on
+// GDO0 (not rfRx) and is never affected.
+bool _rfIrConflict() {
+    return (bruceConfigPins.rfModule != CC1101_SPI_MODULE) && (bruceConfigPins.rfRx == bruceConfigPins.irRx);
+}
+
 // Forward declaration (drawSpectrumFrame is defined after the listener tasks).
 void drawSpectrumFrame(int frame);
+// Forward declaration (queue browser is defined after the capture helpers).
+bool _queueMenu();
 
 // --- RF capture (decode, else RAW fallback, in the same window) -------------
 String _hex64(uint64_t v) {
@@ -192,6 +215,8 @@ static void _irTask(void *arg) {
 // Listens to both bands for one window. Returns the key press (PRESS_*), or
 // PRESS_NONE. Fills res.rf / res.ir with the captured file contents ("" = none).
 int _dualListen(DualCtx &res, bool bothRaw) {
+    bool conflict = _rfIrConflict();
+    int nTasks = conflict ? 1 : 2; // conflicted boards listen IR-only (see _rfIrConflict)
     DualCtx ctx;
     ctx.window = _win;
     ctx.raw = bothRaw;
@@ -200,13 +225,21 @@ int _dualListen(DualCtx &res, bool bothRaw) {
     TaskHandle_t rfTask = NULL, irTask = NULL;
     if (ctx.sem == NULL) return PRESS_NONE;
 
-    bool ok = (xTaskCreate(_rfTask, "dualRF", 16384, &ctx, 2, &rfTask) == pdPASS) &&
-              (xTaskCreate(_irTask, "dualIR", 16384, &ctx, 2, &irTask) == pdPASS);
+    bool ok;
+    if (conflict) {
+        // IR and RF would both listen on the same pin: the RMT RF receiver grabs
+        // the same demodulated IR burst and captures it as "RF RAW" first. Skip
+        // the RF task so the first press is always caught.
+        ok = xTaskCreate(_irTask, "dualIR", 16384, &ctx, 2, &irTask) == pdPASS;
+    } else {
+        ok = (xTaskCreate(_rfTask, "dualRF", 16384, &ctx, 2, &rfTask) == pdPASS) &&
+             (xTaskCreate(_irTask, "dualIR", 16384, &ctx, 2, &irTask) == pdPASS);
+    }
     if (!ok) {
         // Out of task RAM: listen sequentially so the feature still works.
         if (rfTask != NULL) vTaskDelete(rfTask);
         if (irTask != NULL) vTaskDelete(irTask);
-        ctx.rf = _rfCapture(ctx.window, bothRaw, nullptr);
+        if (!conflict) ctx.rf = _rfCapture(ctx.window, bothRaw, nullptr);
         IrRead ir(true, bothRaw);
         ctx.ir = ir.loop_headless(ctx.window);
         vSemaphoreDelete(ctx.sem);
@@ -218,18 +251,18 @@ int _dualListen(DualCtx &res, bool bothRaw) {
     int press = PRESS_NONE;
     unsigned long lastAnim = 0;
     int frame = 0;
-    // Wait until BOTH bands finished OR one of them captured something. The first
-    // band that fires stops the detector (see header comment): the other band's
-    // task is aborted below so the result shows immediately instead of only after
-    // the full listen window (e.g. RF still listening for its 8s while IR already
-    // caught the remote press).
-    while (uxSemaphoreGetCount(ctx.sem) < 2 && ctx.rf == "" && ctx.ir == "") {
+    // Wait until the listening task(s) finished OR one of them captured
+    // something. The first band that fires stops the detector (see header
+    // comment): the other band's task is aborted below so the result shows
+    // immediately instead of only after the full listen window (e.g. RF still
+    // listening for its 8s while IR already caught the remote press).
+    while (uxSemaphoreGetCount(ctx.sem) < nTasks && ctx.rf == "" && ctx.ir == "") {
         if (check(EscPress)) press = PRESS_ESC;
         else if (check(NextPress)) press = PRESS_NEXT;
         if (press != PRESS_NONE) {
             ctx.abort = true;
             uint32_t w = millis() + 3000; // give the tasks up to 3s to wind down
-            while (uxSemaphoreGetCount(ctx.sem) < 2 && millis() < w) vTaskDelay(10 / portTICK_PERIOD_MS);
+            while (uxSemaphoreGetCount(ctx.sem) < nTasks && millis() < w) vTaskDelay(10 / portTICK_PERIOD_MS);
             break;
         }
         if (millis() - lastAnim > 80) {
@@ -244,13 +277,13 @@ int _dualListen(DualCtx &res, bool bothRaw) {
     if (ctx.rf != "" || ctx.ir != "") {
         ctx.abort = true;
         uint32_t w = millis() + 3000;
-        while (uxSemaphoreGetCount(ctx.sem) < 2 && millis() < w) vTaskDelay(10 / portTICK_PERIOD_MS);
+        while (uxSemaphoreGetCount(ctx.sem) < nTasks && millis() < w) vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
-    // Both listeners finished (or we gave up waiting): the tasks self-deleted
+    // The listener(s) finished (or we gave up waiting): the tasks self-deleted
     // via vTaskDelete(NULL) after their destructors ran, so there are no task
     // handles left to reclaim (they are dangling once deleted).
-    for (int i = 0; i < 2; i++) xSemaphoreTake(ctx.sem, pdMS_TO_TICKS(2000));
+    for (int i = 0; i < nTasks; i++) xSemaphoreTake(ctx.sem, pdMS_TO_TICKS(2000));
     vSemaphoreDelete(ctx.sem);
 
     res.rf = ctx.rf;
@@ -282,7 +315,10 @@ void drawListenScreen() {
     String rfMod = (bruceConfigPins.rfModule == CC1101_SPI_MODULE) ? "CC1101" : "M5RF";
     tft.drawString("RF " + String(bruceConfigPins.rfFreq, 2) + "MHz [" + rfMod + "]", 10, rfY + 1, 1);
     tft.setTextSize(1);
-    tft.drawString("LISTENING " + String(_rfRaw ? "RAW" : "AUTO"), 10, rfY + ph - 11, 1);
+    if (_rfIrConflict())
+        tft.drawString("RF DISABLED (same pin as IR)", 10, rfY + ph - 11, 1);
+    else
+        tft.drawString("LISTENING " + String(_rfRaw ? "RAW" : "AUTO"), 10, rfY + ph - 11, 1);
 
     tft.fillRoundRect(4, irY, pw, ph, 4, ir);
     tft.setTextColor(bg, ir);
@@ -300,7 +336,9 @@ void drawListenScreen() {
     tft.setTextColor(_dimColor(), bg);
     tft.setTextSize(1);
     tft.drawString(
-        "RF:" + String(_rfHits) + "  IR:" + String(_irHits) + "  cycle:" + String(_cycles), 4, H - 20, 1
+        "RF:" + String(_rfHits) + " IR:" + String(_irHits) + " Q:" + String(_queue.size()) +
+            (_queueMode ? "*" : "") + " c:" + String(_cycles),
+        4, H - 20, 1
     );
     tft.drawString("[NEXT] options   [ESC] quit", 4, H - 10, 1);
 }
@@ -504,6 +542,10 @@ bool _handleCapture(const String &kind, const String &content) {
         std::vector<Option> options;
         options.emplace_back("Replay", [&]() { _replayCapture(kind, content); });
         if (sdcardMounted) options.emplace_back("Save Signal", [&]() { _saveCapture(kind, content); });
+        if (_queueMode && !_queue.empty())
+            options.emplace_back(
+                "View Queue (" + String(_queue.size()) + ")", [&]() { _queueMenu(); }
+            );
         options.emplace_back("Discard", [&]() { discard = true; });
         options.emplace_back("Exit to Main Menu", [&]() { exit = true; });
         int idx = loopOptions(options, MENU_TYPE_SUBMENU, (kind + " Signal").c_str());
@@ -511,6 +553,66 @@ bool _handleCapture(const String &kind, const String &content) {
         if (discard) return false;
         if (exit) return true;
         // Replay or Save ran: loop back to the menu to redo the replay or pick another action
+    }
+}
+
+// --- Signal queue browser -------------------------------------------------------
+// Short label for a queued capture (band + first descriptor line).
+String _queueLabel(const QueuedSignal &q) {
+    std::vector<String> d = (q.kind == "RF") ? _describeRF(q.content) : _describeIR(q.content);
+    String label = q.kind + " " + (d.size() > 0 ? d[0] : "?");
+    if (label.length() > 34) label = label.substring(0, 33) + "~";
+    return label;
+}
+
+// Per-item action menu (same Replay/Save as a fresh capture, plus Remove).
+// Returns true when the item was removed from the queue.
+bool _queueItemMenu(size_t idx) {
+    while (true) {
+        bool remove = false, back = false;
+        std::vector<Option> options;
+        options.emplace_back("Replay", [&]() { _replayCapture(_queue[idx].kind, _queue[idx].content); });
+        if (sdcardMounted)
+            options.emplace_back("Save Signal", [&]() { _saveCapture(_queue[idx].kind, _queue[idx].content); });
+        options.emplace_back("Remove", [&]() { remove = true; });
+        options.emplace_back("Back", [&]() { back = true; });
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, (_queue[idx].kind + " Signal").c_str());
+        if (sel == -1 || back) return false; // ESC/Back -> back to the queue browser
+        if (remove) {
+            _queue.erase(_queue.begin() + idx);
+            return true;
+        }
+        // Replay/Save ran: loop back to this item's actions
+    }
+}
+
+// Browsed the captured-history. Returns true when the user chose to leave the
+// detector ("Exit to Main Menu"), false to resume listening.
+bool _queueMenu() {
+    while (true) {
+        if (_queue.empty()) {
+            displayInfo("Queue is empty", true);
+            return false;
+        }
+        bool exitMain = false, close = false;
+        std::vector<Option> options;
+        for (size_t i = 0; i < _queue.size(); i++) {
+            options.emplace_back(String(i + 1) + ". " + _queueLabel(_queue[i]), [&]() {
+                // selection is handled after loopOptions via `sel`
+            });
+        }
+        options.emplace_back("Discard All", [&]() {
+            _queue.clear();
+            close = true;
+        });
+        options.emplace_back("Close", [&]() { close = true; });
+        options.emplace_back("Exit to Main Menu", [&]() { exitMain = true; });
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ("Queue (" + String(_queue.size()) + ")").c_str());
+        if (sel == -1) return false; // ESC -> resume listening
+        if (exitMain) return true;
+        if (close) return false;
+        if (sel >= 0 && sel < (int)_queue.size()) _queueItemMenu((size_t)sel);
+        // loop: rebuild the list (a queue item may have been removed)
     }
 }
 
@@ -550,9 +652,20 @@ bool _optionsMenu() {
             {"IR module: " + _irRxName(), [&]() { gsetIrRxPin(true); }}, // external IR module (e.g. M5 IR Mod on Grove)
             {"RF module: " + String(bruceConfigPins.rfModule == CC1101_SPI_MODULE ? "CC1101" : "M5 RF433"),
              [&]() { setRFModuleMenu(); }}, // external CC1101 on boards without an internal one
+            {"RF pin: GPIO" + String(bruceConfigPins.rfRx),
+             [&]() { gsetRfRxPin(true); }}, // resolves the same-pin-as-IR conflict on-board
+            {"Signal queue: " + String(_queueMode ? "ON" : "OFF"), [&]() {
+                 _queueMode = !_queueMode;
+                 if (!_queueMode) _queue.clear(); // history is only kept while the feature is on
+             }},
             {"Close Menu", [&]() { start = true; }},
             {"Exit to Main Menu", [&]() { exit = true; }},
         };
+        if (_queueMode)
+            options.insert(
+                options.end() - 2,
+                Option("Queue: " + String(_queue.size()) + " signals", [&]() { _queueMenu(); })
+            );
         int idx = loopOptions(options, MENU_TYPE_SUBMENU, "RF+IR Detect");
         if (idx == -1) return false; // ESC -> back to listening
         if (exit) return true;
@@ -593,6 +706,13 @@ void dualDetect() {
         }
 
         // Show captures first — that is the point of the detector.
+        // Queue mode keeps every capture in a bounded history: the newest shows
+        // the result menu while the previous ones stay available from the queue.
+        if (_queueMode) {
+            if (res.rf != "") _queue.push_back({"RF", res.rf});
+            if (res.ir != "") _queue.push_back({"IR", res.ir});
+            while ((int)_queue.size() > MAX_QUEUE) _queue.erase(_queue.begin());
+        }
         if (res.rf != "") {
             _rfHits++;
             if (_handleCapture("RF", res.rf)) return;
