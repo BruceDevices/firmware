@@ -38,12 +38,12 @@
 </script>
 
 <!-- Hero Section -->
-<section class="relative flex h-128 w-full flex-col overflow-hidden pr-4 pl-4 md:flex-row">
+<section class="relative flex h-dvh w-full flex-col overflow-hidden pr-4 pl-4 md:h-128 md:flex-row">
 	<SectionBackground />
 	<div class="relative z-10 flex flex-col justify-center p-8 text-white">
 		<h1 class="mb-5 text-6xl font-bold max-sm:mt-20">Bruce Firmware</h1>
 		<p class="mb-7 text-xl">The powerful open-source ESP32 firmware designed for offensive security and Red Team operations.</p>
-		<div class="flex gap-4">
+		<div class="grid w-fit grid-cols-2 gap-4">
 			<a
 				href="https://github.com/BruceDevices/Firmware"
 				target="_blank"
@@ -54,9 +54,16 @@
 			</a>
 			<a
 				href={resolve('/flasher')}
-				class="ml-4 inline-flex items-center justify-center rounded-lg border-2 border-[#9B51E0] bg-black px-6 py-2 text-lg text-[#9B51E0] transition hover:border-[#7A2FA0] hover:bg-[#7A2FA0] hover:!text-white"
+				class="inline-flex items-center justify-center rounded-lg border-2 border-[#9B51E0] bg-black px-6 py-2 text-lg text-[#9B51E0] transition hover:border-[#7A2FA0] hover:bg-[#7A2FA0] hover:!text-white"
 			>
 				<b>Install Now</b>
+			</a>
+			<a
+				href="https://shop.bruce.computer"
+				target="_blank"
+				class="col-span-2 inline-flex items-center justify-center rounded-lg border-2 border-[#9B51E0] bg-black px-6 py-2 text-lg text-[#9B51E0] transition hover:border-[#7A2FA0] hover:bg-[#7A2FA0] hover:!text-white"
+			>
+				<b>Buy our Board HERE</b>
 			</a>
 		</div>
 	</div>
@@ -79,7 +86,7 @@
 	<div class="container">
 		<h1 class="mb-5 text-3xl font-bold">Why Bruce?</h1>
 		<div class="flex justify-center">
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+			<div class="grid grid-cols-1 justify-items-center gap-4 md:grid-cols-2 lg:grid-cols-3">
 				<Card size="xs">
 					<h3 class="mb-3 text-lg font-bold">True Open-Source</h3>
 					<p>
@@ -151,8 +158,10 @@
 		<p>
 			Check out our <a href="https://wiki.bruce.computer/faq/" target="_blank" rel="noopener noreferrer"><b>FAQ</b></a>!
 		</p>
-		<Btn className="mt-5 mr-2" href="https://discord.gg/WJ9XF9czVT">Join us on Discord!</Btn>
-		<Btn className="mt-5 ml-2" href="https://forum.bruce.computer">Join our forum!</Btn>
+		<div class="mt-5 flex flex-wrap justify-center gap-4">
+			<Btn href="https://discord.gg/WJ9XF9czVT">Join us on Discord!</Btn>
+			<Btn href="https://forum.bruce.computer">Join our forum!</Btn>
+		</div>
 	</div>
 </div>
 
