@@ -30,7 +30,7 @@ Pinouts for buttons
 | ---     | :---: | :---: | :---: |
 | GPS     | 4     | 5     | ---   |
 | IR RX   |  ---  | ---   | 26    |
-| IR TX   |  ---  | ---   | 15    |
+| IR TX   |  ---  | ---   | 7    |
 | LED     |  ---  | ---   | 27    |
 
 ESP32-C5 doesn't support USB-OTG, for BadUSB you need to use a CH9329 module
