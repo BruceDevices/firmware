@@ -76,7 +76,7 @@
 
 	function getBuildPath(releaseTag, selectedDevice) {
 		return (
-			'https://bruce.iceis.co.uk/service/github/' +
+			'https://dl.bruce.computer/' +
 			releaseTag +
 			'/Bruce-' +
 			encodeURIComponent(selectedDevice) +
