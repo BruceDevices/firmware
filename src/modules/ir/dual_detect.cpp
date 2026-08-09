@@ -25,6 +25,15 @@
 //   - IR  : GPIO ISR via IrRead::loop_headless.
 // The first band that fires stops; you then Replay / Save / Discard each
 // capture from the result menu. ESC always exits back to the IR menu.
+//
+// Optional AUTO-SAVE mode (toggle in [NEXT] -> "Auto-save"):
+// every capture is stored automatically under /BruceIR or /BruceRF with an
+// auto-generated name - no filename keyboard, no menu interaction. A signal is
+// only written once the NEXT, DIFFERENT one arrives (repeats of the same
+// signal are skipped - one file per distinct button); the last capture is
+// flushed on the next capture or when leaving the detector. A short result
+// flash confirms each capture. The Replay/Save/Discard menu is skipped while
+// this is on.
 // ============================================================================
 
 namespace {
@@ -64,6 +73,16 @@ struct QueuedSignal {
 const int MAX_QUEUE = 10;
 bool _queueMode = false;
 std::vector<QueuedSignal> _queue;
+
+// --- Auto-save (optional) ------------------------------------------------------
+// When enabled every capture is saved automatically under /BruceIR or /BruceRF
+// with an auto-generated name. A capture is only written once a NEW one arrives
+// (the previous signal is flushed then) or when the detector is left, so the
+// just-captured signal stays "in hand" briefly without any menu interaction.
+bool _autoSave = false;
+String _pendingKind = "";
+String _pendingContent = "";
+String _lastFp = ""; // fingerprint of the pending capture (repeat detection)
 
 uint16_t _rfColor() {
     return bruceConfig.priColor;
@@ -337,7 +356,7 @@ void drawListenScreen() {
     tft.setTextSize(1);
     tft.drawString(
         "RF:" + String(_rfHits) + " IR:" + String(_irHits) + " Q:" + String(_queue.size()) +
-            (_queueMode ? "*" : "") + " c:" + String(_cycles),
+            (_queueMode ? "*" : "") + " AS:" + String(_autoSave ? "ON" : "OFF") + " c:" + String(_cycles),
         4, H - 20, 1
     );
     tft.drawString("[NEXT] options   [ESC] quit", 4, H - 10, 1);
@@ -389,6 +408,25 @@ int _countTokens(const String &s) {
         }
     }
     return n;
+}
+
+// Stable identity of a capture, used by auto-save to skip repeats: two presses
+// of the same button produce the same fingerprint, a different button produces
+// a different one. Decoded signals are identified by their protocol fields,
+// raw captures by the raw pulse data itself.
+String _fingerprint(const String &kind, const String &content) {
+    String fp = kind + "|";
+    if (kind == "RF") {
+        fp += _field(content, "Frequency") + "|" + _field(content, "Protocol") + "|" +
+              _field(content, "Bit") + "|" + _field(content, "Key") + "|" +
+              _field(content, "TE") + "|" + _field(content, "RAW_Data");
+    } else {
+        fp += _field(content, "type") + "|" + _field(content, "protocol") + "|" +
+              _field(content, "address") + "|" + _field(content, "command") + "|" +
+              _field(content, "bits") + "|" + _field(content, "value") + "|" +
+              _field(content, "data");
+    }
+    return fp;
 }
 
 std::vector<String> _describeRF(const String &content) {
@@ -448,7 +486,9 @@ void drawResultScreen(const String &kind, const String &content) {
         y += 11;
     }
     tft.setTextColor(_dimColor(), bg);
-    tft.drawString("choose action...", 4, tftHeight - 10, 1);
+    tft.drawString(
+        _autoSave ? "AUTO-SAVE: next signal saves this" : "choose action...", 4, tftHeight - 10, 1
+    );
 }
 
 // --- Save / Replay / Result menu ------------------------------------------------
@@ -497,6 +537,64 @@ void _saveCapture(const String &kind, const String &content) {
     if (!body.endsWith("\n")) f.println();
     f.close();
     displaySuccess("Saved " + folder + "/" + target + ext, true);
+}
+
+// Saves a capture to /BruceRF or /BruceIR with an auto-generated name
+// (ir_capture, ir_capture_2, ...). SD-gated like _saveCapture. Non-blocking
+// feedback (waitKeyPress=false) so the listen loop is not interrupted.
+void _autoSaveCapture(const String &kind, const String &content) {
+    if (!sdcardMounted) {
+        displayWarning("Auto-save: no SD card", false);
+        return;
+    }
+    FS *fs = nullptr;
+    if (!getFsStorage(fs)) {
+        displayWarning("Auto-save: no storage", false);
+        return;
+    }
+    String folder = (kind == "RF") ? "/BruceRF" : "/BruceIR";
+    String ext = (kind == "RF") ? ".sub" : ".ir";
+    if (!fs->exists(folder)) fs->mkdir(folder);
+
+    String base = (kind == "RF") ? "rf_capture" : "ir_capture";
+    String target = base;
+    int i = 1;
+    while (fs->exists(folder + "/" + target + ext)) target = base + "_" + String(i++);
+
+    String body = (kind == "IR") ? _normalizeIR(content) : content;
+    File f = fs->open(folder + "/" + target + ext, FILE_WRITE);
+    if (!f) {
+        displayWarning("Auto-save failed", false);
+        return;
+    }
+    f.print(body);
+    if (!body.endsWith("\n")) f.println();
+    f.close();
+    displaySuccess("Auto-saved " + target + ext, false);
+}
+
+// Flushes (saves) the pending capture, if any. Clears it either way.
+void _autoSavePending() {
+    if (_pendingKind == "") return;
+    String kind = _pendingKind;
+    String content = _pendingContent;
+    _pendingKind = "";
+    _pendingContent = "";
+    _autoSaveCapture(kind, content);
+}
+
+// Auto-save flow for a fresh capture: a DIFFERENT signal saves the previous
+// pending one first; a repeat of the same signal only replaces the pending one
+// (nothing new is written - one file per distinct button). Either way the new
+// capture becomes the pending one and gets a short result flash.
+void _autoSaveFlow(const String &kind, const String &content) {
+    String fp = _fingerprint(kind, content);
+    if (_pendingKind != "" && fp != _lastFp) _autoSavePending();
+    _lastFp = fp;
+    _pendingKind = kind;
+    _pendingContent = content;
+    drawResultScreen(kind, content);
+    vTaskDelay(pdMS_TO_TICKS(900));
 }
 
 void _replayCapture(const String &kind, const String &content) {
@@ -622,6 +720,18 @@ void _freqMenu() {
     for (float f : DUAL_FREQS) {
         options.emplace_back(String(f, 3) + " MHz", [f]() { bruceConfigPins.rfFreq = f; });
     }
+    // Full list of common sub-GHz frequencies (same as Settings -> RF freq).
+    options.emplace_back("All frequencies...", [&]() {
+        std::vector<Option> sub;
+        int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
+        for (int i = 0; i < arraySize; i++) {
+            sub.emplace_back(
+                String(subghz_frequency_list[i], 3) + " MHz",
+                [i]() { bruceConfigPins.rfFreq = subghz_frequency_list[i]; }
+            );
+        }
+        loopOptions(sub, MENU_TYPE_SUBMENU, "All frequencies");
+    });
     options.emplace_back("Manual", [&]() {
         String v = num_keyboard(String(bruceConfigPins.rfFreq, 2), 8, "Frequency (MHz)");
         float f = v.toFloat();
@@ -658,6 +768,14 @@ bool _optionsMenu() {
                  _queueMode = !_queueMode;
                  if (!_queueMode) _queue.clear(); // history is only kept while the feature is on
              }},
+            {"Auto-save: " + String(_autoSave ? "ON" : "OFF"), [&]() {
+                 _autoSave = !_autoSave;
+                 if (!_autoSave) { // forget the unsaved capture when switching off
+                     _pendingKind = "";
+                     _pendingContent = "";
+                     _lastFp = "";
+                 }
+             }},
             {"Close Menu", [&]() { start = true; }},
             {"Exit to Main Menu", [&]() { exit = true; }},
         };
@@ -680,6 +798,9 @@ void dualDetect() {
     _rfHits = 0;
     _irHits = 0;
     _cycles = 0;
+    _pendingKind = "";
+    _pendingContent = "";
+    _lastFp = "";
 
     while (true) {
         _cycles++;
@@ -688,7 +809,11 @@ void dualDetect() {
         bool bothRaw = _rfRaw && _irRaw;
         DualCtx res;
         int press = _dualListen(res, bothRaw);
-        if (press == PRESS_ESC) return;
+        if (press == PRESS_ESC) {
+            // Auto-save: don't lose the last capture when leaving the detector.
+            if (_autoSave) _autoSavePending();
+            return;
+        }
 
         // When a band was in AUTO mode and got nothing decodable, give one more
         // window in RAW mode (captures unknown protocols too).
@@ -698,14 +823,16 @@ void dualDetect() {
             if (rfNeed || irNeed) {
                 DualCtx res2;
                 int press2 = _dualListen(res2, true);
-                if (press2 == PRESS_ESC) return;
+                if (press2 == PRESS_ESC) {
+                    if (_autoSave) _autoSavePending();
+                    return;
+                }
                 if (res.rf == "") res.rf = res2.rf;
                 if (res.ir == "") res.ir = res2.ir;
                 if (press2 != PRESS_NONE) press = press2;
             }
         }
 
-        // Show captures first — that is the point of the detector.
         // Queue mode keeps every capture in a bounded history: the newest shows
         // the result menu while the previous ones stay available from the queue.
         if (_queueMode) {
@@ -713,6 +840,28 @@ void dualDetect() {
             if (res.ir != "") _queue.push_back({"IR", res.ir});
             while ((int)_queue.size() > MAX_QUEUE) _queue.erase(_queue.begin());
         }
+
+        // Auto-save mode: no blocking menu - each new signal saves the previous
+        // one automatically and flashes the result, then keeps listening.
+        if (_autoSave) {
+            if (res.rf != "") {
+                _rfHits++;
+                _autoSaveFlow("RF", res.rf);
+            }
+            if (res.ir != "") {
+                _irHits++;
+                _autoSaveFlow("IR", res.ir);
+            }
+            if (press == PRESS_NEXT) {
+                if (_optionsMenu()) {
+                    if (_autoSave) _autoSavePending();
+                    return;
+                }
+                continue;
+            }
+            continue;
+        }
+
         if (res.rf != "") {
             _rfHits++;
             if (_handleCapture("RF", res.rf)) return;
