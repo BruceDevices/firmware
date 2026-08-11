@@ -468,9 +468,12 @@ String IrRead::loop_headless(int max_loops, volatile bool *abort) {
 
     irrecv.disableIRIn();
 
+    // Non-decodable frame in auto mode: keep it as RAW instead of dropping the
+    // press. The frame is already captured and replays 1:1, so the very first
+    // button press always counts (no "press twice" / wait for a raw pass).
     if (!raw && results.decode_type == decode_type_t::UNKNOWN) {
-        Serial.println("# decoding failed, try raw mode");
-        return "";
+        Serial.println("# decoding failed, fallback to raw");
+        raw = true;
     }
 
     if (results.overflow) displayWarning("buffer overflow, data may be truncated", true);

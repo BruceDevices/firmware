@@ -1,0 +1,13 @@
+{
+  "priColor": "07FF",
+  "secColor": "F81F",
+  "bgColor": "0010",
+  "border": 1,
+  "label": 1,
+  "gifDuration": 0,
+  "ledBright": 50,
+  "ledColor": "FF00FF",
+  "ledEffect": 0,
+  "ledEffectSpeed": 5,
+  "ledEffectDirection": 1
+}

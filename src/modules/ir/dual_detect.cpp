@@ -28,12 +28,10 @@
 //
 // Optional AUTO-SAVE mode (toggle in [NEXT] -> "Auto-save"):
 // every capture is stored automatically under /BruceIR or /BruceRF with an
-// auto-generated name - no filename keyboard, no menu interaction. A signal is
-// only written once the NEXT, DIFFERENT one arrives (repeats of the same
-// signal are skipped - one file per distinct button); the last capture is
-// flushed on the next capture or when leaving the detector. A short result
-// flash confirms each capture. The Replay/Save/Discard menu is skipped while
-// this is on.
+// auto-generated name - no filename keyboard, no menu interaction. Each signal
+// is saved IMMEDIATELY as soon as it arrives, whatever the type (RF or IR).
+// A short result flash confirms each capture; the Replay/Save/Discard menu is
+// skipped while this is on.
 // ============================================================================
 
 namespace {
@@ -75,14 +73,10 @@ bool _queueMode = false;
 std::vector<QueuedSignal> _queue;
 
 // --- Auto-save (optional) ------------------------------------------------------
-// When enabled every capture is saved automatically under /BruceIR or /BruceRF
-// with an auto-generated name. A capture is only written once a NEW one arrives
-// (the previous signal is flushed then) or when the detector is left, so the
-// just-captured signal stays "in hand" briefly without any menu interaction.
+// When enabled every capture is saved immediately under /BruceIR or /BruceRF
+// with an auto-generated name. No pending state, no dedup: whatever arrives is
+// written on the spot.
 bool _autoSave = false;
-String _pendingKind = "";
-String _pendingContent = "";
-String _lastFp = ""; // fingerprint of the pending capture (repeat detection)
 
 uint16_t _rfColor() {
     return bruceConfig.priColor;
@@ -157,6 +151,25 @@ String _formatRf(const RfCodes &codes, float frequency) {
     return out;
 }
 
+// Total duration (µs) of the space-separated pulse list ("9000 4500 560 ...").
+// Durations may be signed (RF: positive mark / negative space), so the ABSOLUTE
+// values are summed - the real on-the-air length of the burst. 0 when empty.
+// Used to reject noise bursts that are too short to be a signal.
+long _spanOf(const String &raw) {
+    if (raw == "") return 0;
+    long total = 0;
+    int pos = 0;
+    int len = (int)raw.length();
+    while (pos >= 0 && pos < len) {
+        total += abs(raw.substring(pos).toInt());
+        int sp = raw.indexOf(' ', pos);
+        if (sp < 0) break;
+        pos = sp;
+        while (pos < len && raw.charAt(pos) == ' ') pos++;
+    }
+    return total;
+}
+
 String _rfCapture(int window, bool forceRaw, volatile bool *abort) {
     float frequency = bruceConfigPins.rfFreq;
     if (!initRfModule("rx", frequency)) return "";
@@ -182,12 +195,16 @@ String _rfCapture(int window, bool forceRaw, volatile bool *abort) {
             int transitions = rf_build_raw(durations, _data, hasCrc, crc, indexed, rawBits, rawTe);
 
             if (decoded) {
-                received.frequency = long(frequency * 1000000);
-                received.data = _data;
-                rx.end();
-                deinitRfModule();
-                return _formatRf(received, frequency);
-            } else if (transitions > 20) {
+                // Reject false decodes: RCSwitch-style decoders can turn a short
+                // interference burst (no remote) into a plausible-looking code.
+                if (_spanOf(_data) >= 2000) {
+                    received.frequency = long(frequency * 1000000);
+                    received.data = _data;
+                    rx.end();
+                    deinitRfModule();
+                    return _formatRf(received, frequency);
+                }
+            } else if (transitions > 20 && _spanOf(_data) >= 2000) {
                 // Undecodable signal: keep it as RAW so it can still be replayed.
                 RfCodes raw;
                 raw.frequency = long(frequency * 1000000);
@@ -199,7 +216,7 @@ String _rfCapture(int window, bool forceRaw, volatile bool *abort) {
                 deinitRfModule();
                 return _formatRf(raw, frequency);
             }
-            // else: noise / too few transitions, keep listening
+            // else: noise / too few transitions / too short, keep listening
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -214,19 +231,27 @@ String _rfCapture(int window, bool forceRaw, volatile bool *abort) {
 // not return, Aborting now!") a task function that returns normally. The RAII
 // destructors (RfRxSession end, IrRead/IRrecv disableIRIn + timerEnd) run inside
 // their scopes BEFORE the self-delete, so nothing is left armed on a freed stack.
+//
+// Noise (floating pins) is rejected HERE so it never counts as a capture: the
+// wait loop in _dualListen keeps waiting for a real signal instead of having a
+// noise "capture" end the window early and restart it constantly.
+bool _plausibleSignal(const String &kind, const String &content);
 static void _rfTask(void *arg) {
     DualCtx *ctx = (DualCtx *)arg;
-    ctx->rf = _rfCapture(ctx->window, ctx->raw, &ctx->abort); // cleans up internally
+    String rf = _rfCapture(ctx->window, ctx->raw, &ctx->abort); // cleans up internally
+    ctx->rf = _plausibleSignal("RF", rf) ? rf : "";
     xSemaphoreGive(ctx->sem);
     vTaskDelete(NULL);
 }
 
 static void _irTask(void *arg) {
     DualCtx *ctx = (DualCtx *)arg;
+    String ir;
     {
-        IrRead ir(true, ctx->raw);
-        ctx->ir = ir.loop_headless(ctx->window, &ctx->abort);
+        IrRead irr(true, ctx->raw);
+        ir = irr.loop_headless(ctx->window, &ctx->abort);
     } // ~IrRead() runs disableIRIn() + frees the IRrecv timer here
+    ctx->ir = _plausibleSignal("IR", ir) ? ir : "";
     xSemaphoreGive(ctx->sem);
     vTaskDelete(NULL);
 }
@@ -410,23 +435,34 @@ int _countTokens(const String &s) {
     return n;
 }
 
-// Stable identity of a capture, used by auto-save to skip repeats: two presses
-// of the same button produce the same fingerprint, a different button produces
-// a different one. Decoded signals are identified by their protocol fields,
-// raw captures by the raw pulse data itself.
-String _fingerprint(const String &kind, const String &content) {
-    String fp = kind + "|";
-    if (kind == "RF") {
-        fp += _field(content, "Frequency") + "|" + _field(content, "Protocol") + "|" +
-              _field(content, "Bit") + "|" + _field(content, "Key") + "|" +
-              _field(content, "TE") + "|" + _field(content, "RAW_Data");
-    } else {
-        fp += _field(content, "type") + "|" + _field(content, "protocol") + "|" +
-              _field(content, "address") + "|" + _field(content, "command") + "|" +
-              _field(content, "bits") + "|" + _field(content, "value") + "|" +
-              _field(content, "data");
+// Total duration (µs) of the space-separated pulse list in a "RAW_Data"/"data"
+// field. Returns -1 when the field is missing.
+long _pulseSpan(const String &content, const String &key) {
+    String raw = _field(content, key);
+    if (raw == "") return -1;
+    return _spanOf(raw);
+}
+
+// Rejects noise "captures": a floating/undriven input pin (e.g. sticks3 without
+// an external IR module, or an unplugged RF receiver) makes the RMT receiver
+// report electrical noise as a signal, so the Replay menu appears with no remote
+// anywhere near. Real IR frames always carry a header plus data bits (dozens of
+// pulses spanning several ms); real RF keyfob bursts span at least ~2ms. Decoded
+// signals (parsed IR / decoded RF with a Key) are always accepted.
+bool _plausibleSignal(const String &kind, const String &content) {
+    if (content == "") return false;
+    if (kind == "IR") {
+        String data = _field(content, "data");
+        if (data == "") return true; // parsed signal (protocol/address/command)
+        // RAW: a real frame - even a short NEC repeat (~3 pulses, ~14ms) or a
+        // partial capture - always lasts several ms on the air; electrical noise
+        // is sub-ms. No token-count gate, so short-but-real frames are accepted.
+        return _pulseSpan(content, "data") >= 3000;
     }
-    return fp;
+    // RF: a decoded signal (Protocol+Key) is trusted; RAW needs a real burst.
+    if (_field(content, "Key") != "") return true;
+    long span = _pulseSpan(content, "RAW_Data");
+    return span >= 2000;
 }
 
 std::vector<String> _describeRF(const String &content) {
@@ -470,7 +506,7 @@ std::vector<String> _describeIR(const String &content) {
     return out;
 }
 
-void drawResultScreen(const String &kind, const String &content) {
+void drawResultScreen(const String &kind, const String &content, const String &status = "") {
     uint16_t bg = bruceConfig.bgColor;
     uint16_t band = (kind == "RF") ? _rfColor() : _irColor();
     tft.fillScreen(bg);
@@ -486,9 +522,8 @@ void drawResultScreen(const String &kind, const String &content) {
         y += 11;
     }
     tft.setTextColor(_dimColor(), bg);
-    tft.drawString(
-        _autoSave ? "AUTO-SAVE: next signal saves this" : "choose action...", 4, tftHeight - 10, 1
-    );
+    String foot = (status != "") ? status : (_autoSave ? "AUTO-SAVE: saved" : "choose action...");
+    tft.drawString(foot, 4, tftHeight - 10, 1);
 }
 
 // --- Save / Replay / Result menu ------------------------------------------------
@@ -540,17 +575,15 @@ void _saveCapture(const String &kind, const String &content) {
 }
 
 // Saves a capture to /BruceRF or /BruceIR with an auto-generated name
-// (ir_capture, ir_capture_2, ...). SD-gated like _saveCapture. Non-blocking
-// feedback (waitKeyPress=false) so the listen loop is not interrupted.
-void _autoSaveCapture(const String &kind, const String &content) {
-    if (!sdcardMounted) {
-        displayWarning("Auto-save: no SD card", false);
-        return;
-    }
+// (ir_capture, ir_capture_2, ...). SD first, else LittleFS (so boards without
+// an SD slot still get their captures). Non-blocking feedback (waitKeyPress=false)
+// so the listen loop is not interrupted. Returns the saved file name, or "" on
+// failure.
+String _autoSaveCapture(const String &kind, const String &content) {
     FS *fs = nullptr;
     if (!getFsStorage(fs)) {
         displayWarning("Auto-save: no storage", false);
-        return;
+        return "";
     }
     String folder = (kind == "RF") ? "/BruceRF" : "/BruceIR";
     String ext = (kind == "RF") ? ".sub" : ".ir";
@@ -565,36 +598,22 @@ void _autoSaveCapture(const String &kind, const String &content) {
     File f = fs->open(folder + "/" + target + ext, FILE_WRITE);
     if (!f) {
         displayWarning("Auto-save failed", false);
-        return;
+        return "";
     }
     f.print(body);
     if (!body.endsWith("\n")) f.println();
     f.close();
     displaySuccess("Auto-saved " + target + ext, false);
+    return target + ext;
 }
 
-// Flushes (saves) the pending capture, if any. Clears it either way.
-void _autoSavePending() {
-    if (_pendingKind == "") return;
-    String kind = _pendingKind;
-    String content = _pendingContent;
-    _pendingKind = "";
-    _pendingContent = "";
-    _autoSaveCapture(kind, content);
-}
-
-// Auto-save flow for a fresh capture: a DIFFERENT signal saves the previous
-// pending one first; a repeat of the same signal only replaces the pending one
-// (nothing new is written - one file per distinct button). Either way the new
-// capture becomes the pending one and gets a short result flash.
+// Auto-save flow for a fresh capture: the file is written immediately (whatever
+// the signal type), then the result flashes briefly with the saved name and
+// listening resumes. No pending state, no second-signal wait.
 void _autoSaveFlow(const String &kind, const String &content) {
-    String fp = _fingerprint(kind, content);
-    if (_pendingKind != "" && fp != _lastFp) _autoSavePending();
-    _lastFp = fp;
-    _pendingKind = kind;
-    _pendingContent = content;
-    drawResultScreen(kind, content);
-    vTaskDelay(pdMS_TO_TICKS(900));
+    String name = _autoSaveCapture(kind, content);
+    drawResultScreen(kind, content, name != "" ? "AUTO-SAVE: saved " + name : "AUTO-SAVE: FAILED");
+    vTaskDelay(pdMS_TO_TICKS(700));
 }
 
 void _replayCapture(const String &kind, const String &content) {
@@ -770,11 +789,6 @@ bool _optionsMenu() {
              }},
             {"Auto-save: " + String(_autoSave ? "ON" : "OFF"), [&]() {
                  _autoSave = !_autoSave;
-                 if (!_autoSave) { // forget the unsaved capture when switching off
-                     _pendingKind = "";
-                     _pendingContent = "";
-                     _lastFp = "";
-                 }
              }},
             {"Close Menu", [&]() { start = true; }},
             {"Exit to Main Menu", [&]() { exit = true; }},
@@ -798,9 +812,6 @@ void dualDetect() {
     _rfHits = 0;
     _irHits = 0;
     _cycles = 0;
-    _pendingKind = "";
-    _pendingContent = "";
-    _lastFp = "";
 
     while (true) {
         _cycles++;
@@ -810,10 +821,13 @@ void dualDetect() {
         DualCtx res;
         int press = _dualListen(res, bothRaw);
         if (press == PRESS_ESC) {
-            // Auto-save: don't lose the last capture when leaving the detector.
-            if (_autoSave) _autoSavePending();
             return;
         }
+        // Floating/undriven pins capture noise as garbage "signals" - drop them
+        // so the Replay menu doesn't appear on its own (sticks3 without an
+        // external IR module, unplugged RF receiver, etc.).
+        if (!_plausibleSignal("RF", res.rf)) res.rf = "";
+        if (!_plausibleSignal("IR", res.ir)) res.ir = "";
 
         // When a band was in AUTO mode and got nothing decodable, give one more
         // window in RAW mode (captures unknown protocols too).
@@ -824,9 +838,10 @@ void dualDetect() {
                 DualCtx res2;
                 int press2 = _dualListen(res2, true);
                 if (press2 == PRESS_ESC) {
-                    if (_autoSave) _autoSavePending();
                     return;
                 }
+                if (!_plausibleSignal("RF", res2.rf)) res2.rf = "";
+                if (!_plausibleSignal("IR", res2.ir)) res2.ir = "";
                 if (res.rf == "") res.rf = res2.rf;
                 if (res.ir == "") res.ir = res2.ir;
                 if (press2 != PRESS_NONE) press = press2;
@@ -841,8 +856,8 @@ void dualDetect() {
             while ((int)_queue.size() > MAX_QUEUE) _queue.erase(_queue.begin());
         }
 
-        // Auto-save mode: no blocking menu - each new signal saves the previous
-        // one automatically and flashes the result, then keeps listening.
+        // Auto-save mode: no blocking menu - every capture is saved on the spot
+        // and flashed briefly, then listening resumes.
         if (_autoSave) {
             if (res.rf != "") {
                 _rfHits++;
@@ -854,7 +869,6 @@ void dualDetect() {
             }
             if (press == PRESS_NEXT) {
                 if (_optionsMenu()) {
-                    if (_autoSave) _autoSavePending();
                     return;
                 }
                 continue;
