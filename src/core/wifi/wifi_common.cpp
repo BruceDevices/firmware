@@ -12,6 +12,7 @@
 #include <esp_event.h>
 #include <esp_netif.h>
 #include <globals.h>
+#include <array>
 
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
@@ -51,11 +52,11 @@ void ensureWifiPlatform() {
     }
 }
 
-bool _wifiConnect(const String &ssid, int encryption) {
+bool _wifiConnect(const String &ssid, int encryption, int32_t channel, const uint8_t* bssid) {
     String password = bruceConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
     if (password == "\x1B") return false;
-    bool connected = _connectToWifiNetwork(ssid, password);
+    bool connected = _connectToWifiNetwork(ssid, password, channel, bssid);
     bool retry = false;
 
     while (!connected) {
@@ -77,7 +78,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
             wifiDisconnect();
             return false;
         }
-        connected = _connectToWifiNetwork(ssid, password);
+        connected = _connectToWifiNetwork(ssid, password, channel, bssid);
     }
 
     if (connected) {
@@ -95,7 +96,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
     return connected;
 }
 
-bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
+bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channel, const uint8_t* bssid) {
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         if (BLEConnected) {
             displayWarning("Board with no PSRAM, closing BLE Stack");
@@ -112,7 +113,7 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     WiFi.mode(WIFI_MODE_STA);
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.begin(ssid, pwd);
+    WiFi.begin(ssid.c_str(), pwd.length() > 0 ? pwd.c_str() : NULL, channel, bssid);
 
     int i = 1;
     while (!WiFi.isConnected()) {
@@ -209,6 +210,8 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 
                 String selSsid = "";
                 int selEnc = 0;
+                int32_t selCh = 0;
+                uint8_t selBssid[6] = {0};
                 bool selHidden = false;
 
                 options = {};
@@ -218,6 +221,10 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                         int encryptionType = WiFi.encryptionType(i);
                         int32_t rssi = WiFi.RSSI(i);
                         int32_t ch = WiFi.channel(i);
+                        uint8_t* bssidPtr = WiFi.BSSID(i);
+                        std::array<uint8_t, 6> bssidArr;
+                        if (bssidPtr) memcpy(bssidArr.data(), bssidPtr, 6);
+
                         // Check if the network is secured
                         String encryptionPrefix = (encryptionType == WIFI_AUTH_OPEN) ? "" : "#";
                         String encryptionTypeStr;
@@ -236,9 +243,11 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                         String optionText = encryptionPrefix + ssid + "(" + String(rssi) + "|" +
                                             encryptionTypeStr + "|ch." + String(ch) + ")";
 
-                        options.push_back({optionText.c_str(), [&selSsid, &selEnc, ssid, encryptionType]() {
+                        options.push_back({optionText.c_str(), [&selSsid, &selEnc, &selCh, &selBssid, ssid, encryptionType, ch, bssidArr]() {
                                                selSsid = ssid;
                                                selEnc = encryptionType;
+                                               selCh = ch;
+                                               memcpy(selBssid, bssidArr.data(), 6);
                                            }});
                     }
                 }
@@ -256,7 +265,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                     if (__ssid != "\x1B") _wifiConnect(__ssid.c_str(), 8);
                     refresh_scan = false;
                 } else if (selSsid != "") {
-                    _wifiConnect(selSsid, selEnc);
+                    _wifiConnect(selSsid, selEnc, selCh, selBssid);
                     refresh_scan = false;
                 } else if (check(EscPress)) {
                     refresh_scan = true;
@@ -314,7 +323,9 @@ void wifiConnectTask(void *pvParameters) {
         pwd = bruceConfig.getWifiPassword(ssid);
         if (pwd == "") continue;
 
-        WiFi.begin(ssid, pwd);
+        int32_t ch = WiFi.channel(i);
+        uint8_t* bssid = WiFi.BSSID(i);
+        WiFi.begin(ssid.c_str(), pwd.length() > 0 ? pwd.c_str() : NULL, ch, bssid);
         for (int i = 0; i < 50; i++) {
             if (WiFi.isConnected()) {
                 wifiConnected = true;
