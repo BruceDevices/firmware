@@ -7809,6 +7809,554 @@ const struct IrCode code_eu140Code = {
     code_eu140Codes
 };
 
+// ============================================================
+// UNIVERSAL POWER CODES - PARSED PROTOCOLS
+// ============================================================
+
+// Samsung universal power code
+const uint16_t code_universal_samsungTimes[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_universal_samsungCodes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_universal_samsungCode = {
+    freq_to_timerval(57143), 52, 2, code_universal_samsungTimes, code_universal_samsungCodes
+};
+
+// Grundig universal power code
+const uint16_t code_universal_grundigTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_grundigCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_grundigCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_grundigTimes, code_universal_grundigCodes
+};
+
+// LG universal power code
+const uint16_t code_universal_lgTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_lgCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_lgCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_lgTimes, code_universal_lgCodes
+};
+
+// Sony universal power code
+const uint16_t code_universal_sonyTimes[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_universal_sonyCodes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_universal_sonyCode = {
+    freq_to_timerval(35714), 24, 3, code_universal_sonyTimes, code_universal_sonyCodes
+};
+
+// Telefunken universal power code
+const uint16_t code_universal_telefunkenTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_telefunkenCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_telefunkenCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_telefunkenTimes, code_universal_telefunkenCodes
+};
+
+// Vizio universal power code
+const uint16_t code_universal_vizioTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_vizioCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_vizioCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_vizioTimes, code_universal_vizioCodes
+};
+
+// Phillips universal power code
+const uint16_t code_universal_phillipsTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_phillipsCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_phillipsCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_phillipsTimes, code_universal_phillipsCodes
+};
+
+// Medion universal power code
+const uint16_t code_universal_medionTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_medionCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_medionCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_medionTimes, code_universal_medionCodes
+};
+
+// Oppo universal power code
+const uint16_t code_universal_oppoTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_oppoCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_oppoCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_oppoTimes, code_universal_oppoCodes
+};
+
+// Fetch universal power code
+const uint16_t code_universal_fetchTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_fetchCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_fetchCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_fetchTimes, code_universal_fetchCodes
+};
+
+// Denver universal power code
+const uint16_t code_universal_denverTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_denverCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_denverCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_denverTimes, code_universal_denverCodes
+};
+
+// Xbox universal power code
+const uint16_t code_universal_xboxTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_xboxCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_xboxCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_xboxTimes, code_universal_xboxCodes
+};
+
+// Platinum universal power code
+const uint16_t code_universal_platinumTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_platinumCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_platinumCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_platinumTimes, code_universal_platinumCodes
+};
+
+// Hisense universal power code
+const uint16_t code_universal_hisenseTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_hisenseCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_hisenseCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_hisenseTimes, code_universal_hisenseCodes
+};
+
+// Elitelux universal power code
+const uint16_t code_universal_eliteluxTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_eliteluxCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_eliteluxCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_eliteluxTimes, code_universal_eliteluxCodes
+};
+
+// Android TV universal power code
+const uint16_t code_universal_androidTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_androidCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_androidCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_androidTimes, code_universal_androidCodes
+};
+
+// Sanyo universal power code
+const uint16_t code_universal_sanyoTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_sanyoCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_sanyoCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_sanyoTimes, code_universal_sanyoCodes
+};
+
+// Smart Board MX universal power code
+const uint16_t code_universal_smartboardTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_smartboardCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_smartboardCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_smartboardTimes, code_universal_smartboardCodes
+};
+
+// Remotes Replaced universal power code
+const uint16_t code_universal_remotesTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_remotesCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_remotesCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_remotesTimes, code_universal_remotesCodes
+};
+
+// Bush universal power code
+const uint16_t code_universal_bushTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_bushCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_bushCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_bushTimes, code_universal_bushCodes
+};
+
+// TCL Roku universal power code
+const uint16_t code_universal_tlc_rokuTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_tlc_rokuCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_tlc_rokuCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_tlc_rokuTimes, code_universal_tlc_rokuCodes
+};
+
+// LG Projector universal power code
+const uint16_t code_universal_lg_projectorTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_lg_projectorCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_lg_projectorCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_lg_projectorTimes, code_universal_lg_projectorCodes
+};
+
+// POWER_On universal power code
+const uint16_t code_universal_power_onTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_power_onCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_power_onCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_power_onTimes, code_universal_power_onCodes
+};
+
+// POWER_Off universal power code
+const uint16_t code_universal_power_offTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_power_offCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_power_offCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_power_offTimes, code_universal_power_offCodes
+};
+
+// Szxlcom universal power code
+const uint16_t code_universal_szxlcomTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_szxlcomCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_szxlcomCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_szxlcomTimes, code_universal_szxlcomCodes
+};
+
+// Digi Days universal power code
+const uint16_t code_universal_digi_daysTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_digi_daysCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_digi_daysCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_digi_daysTimes, code_universal_digi_daysCodes
+};
+
+// Amazon TV universal power code
+const uint16_t code_universal_amazonTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_amazonCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_amazonCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_amazonTimes, code_universal_amazonCodes
+};
+
+// NECext 01 72 00 00 / 1E E1 00 00
+const uint16_t code_universal_nec01Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec01Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec01Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec01Times, code_universal_nec01Codes
+};
+
+// NECext 01 3E 00 00 / 0A F5 00 00
+const uint16_t code_universal_nec013eTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec013eCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec013eCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec013eTimes, code_universal_nec013eCodes
+};
+
+// NECext 04 F4 00 00 / 08 F7 00 00
+const uint16_t code_universal_nec04f4Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec04f4Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec04f4Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec04f4Times, code_universal_nec04f4Codes
+};
+
+// NECext 85 7C 00 00 / 80 7F 00 00
+const uint16_t code_universal_nec857cTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec857cCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec857cCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec857cTimes, code_universal_nec857cCodes
+};
+
+// NECext 83 7A 00 00 / 08 00 00 00
+const uint16_t code_universal_nec837aTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec837aCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec837aCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec837aTimes, code_universal_nec837aCodes
+};
+
+// NECext 00 F7 00 00 / 0C F3 00 00
+const uint16_t code_universal_nec00f7Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec00f7Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec00f7Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec00f7Times, code_universal_nec00f7Codes
+};
+
+// NECext 72 DD 00 00 / 0E F1 00 00
+const uint16_t code_universal_nec72ddTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec72ddCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec72ddCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec72ddTimes, code_universal_nec72ddCodes
+};
+
+// NECext 72 DD 00 00 / 10 EF 00 00
+const uint16_t code_universal_nec72dd2Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec72dd2Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec72dd2Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec72dd2Times, code_universal_nec72dd2Codes
+};
+
+// NECext 04 B9 00 00 / 00 FF 00 00
+const uint16_t code_universal_nec04b9Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec04b9Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec04b9Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec04b9Times, code_universal_nec04b9Codes
+};
+
+// NECext 00 DF 00 00 / 1C E3 00 00
+const uint16_t code_universal_nec00dfTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec00dfCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec00dfCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec00dfTimes, code_universal_nec00dfCodes
+};
+
+// NECext 00 BF 00 00 / 03 FC 00 00
+const uint16_t code_universal_nec00bfTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec00bfCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec00bfCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec00bfTimes, code_universal_nec00bfCodes
+};
+
+// NECext A0 B7 00 00 / E9 16 00 00
+const uint16_t code_universal_necA0b7Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_necA0b7Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_necA0b7Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_necA0b7Times, code_universal_necA0b7Codes
+};
+
+// NECext 00 BF 00 00 / 00 FF 00 00
+const uint16_t code_universal_nec00bf00Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec00bf00Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec00bf00Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec00bf00Times, code_universal_nec00bf00Codes
+};
+
+// NECext 00 FB 00 00 / 0A F5 00 00
+const uint16_t code_universal_nec00fbTimes[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec00fbCodes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec00fbCode = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec00fbTimes, code_universal_nec00fbCodes
+};
+
+// NECext 84 E0 00 00 / 20 DF 00 00
+const uint16_t code_universal_nec84e0Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec84e0Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec84e0Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec84e0Times, code_universal_nec84e0Codes
+};
+
+// NECext 86 05 00 00 / 0F F0 00 00
+const uint16_t code_universal_nec8605Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec8605Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec8605Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec8605Times, code_universal_nec8605Codes
+};
+
+// NECext 40 40 00 00 / 0A F5 00 00
+const uint16_t code_universal_nec4040Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_universal_nec4040Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_universal_nec4040Code = {
+    freq_to_timerval(35714), 40, 3, code_universal_nec4040Times, code_universal_nec4040Codes
+};
+
+// Samsung32 3E 00 00 00 / 0C 00 00 00
+const uint16_t code_universal_samsung3eTimes[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_universal_samsung3eCodes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_universal_samsung3eCode = {
+    freq_to_timerval(57143), 52, 2, code_universal_samsung3eTimes, code_universal_samsung3eCodes
+};
+
+// Samsung32 0E 00 00 00 / 0C 00 00 00
+const uint16_t code_universal_samsung0eTimes[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_universal_samsung0eCodes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_universal_samsung0eCode = {
+    freq_to_timerval(57143), 52, 2, code_universal_samsung0eTimes, code_universal_samsung0eCodes
+};
+
+// Pioneer
+const uint16_t code_universal_pioneerTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_pioneerCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_pioneerCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_pioneerTimes, code_universal_pioneerCodes
+};
+
+// RCA
+const uint16_t code_universal_rcaTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_rcaCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_rcaCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_rcaTimes, code_universal_rcaCodes
+};
+
+// RCA alt (0F 00 00 00 / 54 00 00 00)
+const uint16_t code_universal_rca_altTimes[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_universal_rca_altCodes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_universal_rca_altCode = {
+    freq_to_timerval(34483), 24, 2, code_universal_rca_altTimes, code_universal_rca_altCodes
+};
+
+// ============================================================
+// UNIVERSAL POWER CODES - RAW CODES (32-bit)
+// ============================================================
+
+// MOST TV'S - raw universal power code
 const uint32_t code_universal_most_tvsTimes[] = {
     2762, 793, 534, 358, 530, 358, 530, 794, 534, 794, 981, 379, 533, 354, 532, 356,
     530, 357, 505, 383, 505, 382, 506, 382, 506, 383, 505, 383, 505, 384, 503, 385,
@@ -7826,6 +8374,7 @@ const struct RawIrCode code_universal_most_tvsCode = {
     freq_to_timerval(38000), 20, 3, code_universal_most_tvsTimes, code_universal_most_tvsCodes
 };
 
+// Panasonic raw
 const uint32_t code_universal_panasonicTimes[] = {
     3481, 1715, 457, 442, 428, 1284, 457, 442, 428, 443, 427, 443, 427, 443, 427, 442,
     428, 442, 428, 442, 453, 417, 453, 417, 453, 417, 452, 418, 451, 1289, 451, 422,
@@ -7856,6 +8405,7 @@ const struct RawIrCode code_universal_panasonicCode = {
     freq_to_timerval(38000), 38, 3, code_universal_panasonicTimes, code_universal_panasonicCodes
 };
 
+// EHP raw
 const uint32_t code_universal_ehpTimes[] = {
     528, 1870, 433, 380, 432, 386, 426, 392, 431, 780, 428, 390, 433, 386, 426, 392,
     431, 387, 425, 392, 431, 95569, 536, 1862, 430, 382, 431, 389, 423, 421, 402,
@@ -7874,6 +8424,7 @@ const struct RawIrCode code_universal_ehpCode = {
     freq_to_timerval(38000), 10, 3, code_universal_ehpTimes, code_universal_ehpCodes
 };
 
+// Generic fan raw
 const uint32_t code_universal_generic_fanTimes[] = {
     1370, 314, 1375, 320, 519, 1167, 1370, 322, 1339, 350, 465, 1221, 467, 1222, 467,
     1222, 466, 1221, 467, 1221, 467, 1221, 1317, 7067, 1317, 372, 1341, 349, 491,
@@ -7897,6 +8448,7 @@ const struct RawIrCode code_universal_generic_fanCode = {
     freq_to_timerval(38000), 10, 3, code_universal_generic_fanTimes, code_universal_generic_fanCodes
 };
 
+// Projector Freeze raw
 const uint32_t code_universal_projector_freeTimes[] = {
     151, 56105, 9037, 4437, 585, 525, 564, 519, 616, 498, 594, 1673, 586, 1619, 613,
     459, 652, 524, 587, 529, 587, 1645, 586, 525, 587, 528, 587, 1646, 586, 529, 587,
@@ -7913,6 +8465,7 @@ const struct RawIrCode code_universal_projector_freeCode = {
     freq_to_timerval(38000), 10, 3, code_universal_projector_freeTimes, code_universal_projector_freeCodes
 };
 
+// Projector On raw
 const uint32_t code_universal_projector_onTimes[] = {
     9096, 4436, 620, 505, 647, 478, 648, 501, 623, 1599, 647, 1624, 623, 502, 623,
     503, 621, 504, 619, 1628, 618, 507, 617, 507, 617, 1630, 617, 508, 616, 1630,
@@ -7929,6 +8482,7 @@ const struct RawIrCode code_universal_projector_onCode = {
     freq_to_timerval(38000), 10, 3, code_universal_projector_onTimes, code_universal_projector_onCodes
 };
 
+// Projector Off raw
 const uint32_t code_universal_projector_offTimes[] = {
     9075, 4307, 677, 433, 675, 456, 651, 461, 651, 1579, 650, 1576, 649, 459, 649,
     460, 648, 465, 648, 1578, 647, 461, 622, 491, 622, 1604, 647, 465, 647, 1583,
@@ -7945,6 +8499,7 @@ const struct RawIrCode code_universal_projector_offCode = {
     freq_to_timerval(38000), 10, 3, code_universal_projector_offTimes, code_universal_projector_offCodes
 };
 
+// Projector Menu raw
 const uint32_t code_universal_projector_menuTimes[] = {
     9036, 4477, 598, 557, 565, 565, 567, 562, 570, 1690, 564, 1668, 597, 559, 563,
     567, 565, 564, 568, 1692, 562, 541, 591, 565, 567, 1666, 588, 541, 591, 1695,
@@ -7962,6 +8517,7 @@ const struct RawIrCode code_universal_projector_menuCode = {
     freq_to_timerval(38000), 10, 3, code_universal_projector_menuTimes, code_universal_projector_menuCodes
 };
 
+// Roku raw
 const uint32_t code_universal_rokuTimes[] = {
     8885, 4455, 573, 573, 573, 1641, 573, 573, 573, 1641, 573, 573, 573, 1641, 573,
     1641, 573, 1641, 573, 573, 573, 1641, 573, 573, 573, 573, 573, 573, 573, 573,
@@ -7980,6 +8536,7 @@ const struct RawIrCode code_universal_rokuCode = {
     freq_to_timerval(38381), 10, 3, code_universal_rokuTimes, code_universal_rokuCodes
 };
 
+// Xiaomi raw
 const uint32_t code_universal_xiomiTimes[] = {
     985, 605, 587, 589, 587, 1470, 587, 1472, 586, 589, 587, 1471, 586, 589, 586,
     1470, 587, 589, 586, 1472, 586, 1472, 585, 10765, 987, 610, 585, 589, 587, 1472,
@@ -8018,6 +8575,7 @@ const struct RawIrCode code_universal_xiomiCode = {
     freq_to_timerval(38000), 10, 3, code_universal_xiomiTimes, code_universal_xiomiCodes
 };
 
+// Power raw
 const uint32_t code_universal_power_rawTimes[] = {
     3523, 1701, 472, 426, 444, 1269, 472, 426, 444, 426, 442, 429, 443, 427, 443,
     426, 444, 426, 444, 426, 443, 427, 442, 429, 440, 430, 439, 432, 438, 1304, 437,
@@ -8050,6 +8608,7 @@ const struct RawIrCode code_universal_power_rawCode = {
     freq_to_timerval(38000), 10, 3, code_universal_power_rawTimes, code_universal_power_rawCodes
 };
 
+// Off raw
 const uint32_t code_universal_off_rawTimes[] = {
     3523, 1701, 472, 426, 444, 1269, 472, 426, 444, 426, 442, 429, 443, 427, 443,
     426, 444, 426, 444, 426, 443, 427, 442, 429, 440, 430, 439, 432, 438, 1304, 437,
@@ -8082,6 +8641,7 @@ const struct RawIrCode code_universal_off_rawCode = {
     freq_to_timerval(38000), 10, 3, code_universal_off_rawTimes, code_universal_off_rawCodes
 };
 
+// Power raw 2
 const uint32_t code_universal_power_raw2Times[] = {
     1221, 1171, 433, 566, 433, 881, 433, 2381, 433, 1486, 434, 565, 434, 1486, 433,
     1776, 433, 2380, 433, 565, 434, 2381, 433, 1170, 434, 87358, 1220, 1171, 433,
