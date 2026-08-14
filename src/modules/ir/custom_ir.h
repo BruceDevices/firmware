@@ -57,18 +57,3 @@ bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);
 bool chooseCmdIrFile(FS *fs, const String &filepath);
 bool parseIrFile(FS *fs, const String &filepath, std::vector<IRCode *> &out, int maxCodes = 100);
 void spamAllIR();
-
-// Custom IR
-void sendIRCommand(IRCode *code, bool hideDefaultUI = false);
-void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI = false);
-void sendNECCommand(String address, String command, bool hideDefaultUI = false);
-void sendNECextCommand(String address, String command, bool hideDefaultUI = false);
-void sendRC5Command(String address, String command, bool hideDefaultUI = false);
-void sendRC6Command(String address, String command, bool hideDefaultUI = false);
-void sendSamsungCommand(String address, String command, bool hideDefaultUI = false);
-void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDefaultUI = false);
-void sendKaseikyoCommand(String address, String command, bool hideDefaultUI = false);
-bool sendDecodedCommand(String protocol, String value, uint8_t bits = 32, bool hideDefaultUI = false);
-void otherIRcodes();
-bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);
-bool chooseCmdIrFile(FS *fs, const String &filepath);
