@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 
 /***************************************************************************************
@@ -30,11 +31,12 @@ void _setup_gpio() {
 
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.irRx = RXLED;
-    Wire.setPins(GROVE_SDA, GROVE_SCL);
+    setSysI2CBus(&Wire); // PMU lives on the default Wire object
+    Wire.setPins(SYS_I2C_SDA, SYS_I2C_SCL);
     // Wire.begin();
     bool pmu_ret = false;
-    Wire.begin(GROVE_SDA, GROVE_SCL);
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
         PPM.setSysPowerDownVoltage(3300);
         PPM.setInputCurrentLimit(3250);

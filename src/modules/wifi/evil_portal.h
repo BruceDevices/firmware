@@ -21,7 +21,7 @@ class EvilPortal {
 public:
     EvilPortal(
         String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false,
-        bool autoMode = false, bool backgroundMode = false
+        bool autoMode = false, bool backgroundMode = false, String templateFile = ""
     );
     ~EvilPortal();
 
@@ -57,6 +57,7 @@ private:
     bool _verifyPwd;
     bool _autoMode;
     bool _backgroundMode;
+    String _autoTemplateFile;
 
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
@@ -78,6 +79,7 @@ private:
     int previousTotalCapturedCredentials = -1;
     String capturedCredentialsHtml = "";
     bool verifyPass = false;
+    bool _pendingWifiRestart = false;
 
     CaptiveRequestHandler *_captiveHandler = nullptr;
 
@@ -97,13 +99,14 @@ private:
     void printDeauthStatus(void);
     void printLastCapturedCredential(void);
     void loadCustomHtml(void);
+    bool loadCustomHtmlFromPath(const String &path);
     void loadDefaultHtml(void);
     void loadDefaultHtml_one(void);
     String wifiLoadPage(void);
     void saveToCSV(const String &csvLine, bool IsAPname = false);
     void drawScreen(void);
 
-    String getHtmlTemplate(String body);
+    String getHtmlTemplate(const String &body);
     String creds_GET(void);
     String ssid_GET(void);
     String ssid_POST(void);

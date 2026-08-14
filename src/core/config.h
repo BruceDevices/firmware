@@ -106,6 +106,11 @@ public:
     BruceConfig() {};
     // ~BruceConfig();
 
+private:
+    bool _mifareKeysLoaded = false;
+
+public:
+
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
     /////////////////////////////////////////////////////////////////////////////////////
@@ -174,6 +179,7 @@ public:
     void validateEvilGatewayIp();
 
     // RFID
+    void ensureMifareKeysLoaded();
     void addMifareKey(String value);
     void validateMifareKeysItems();
 
@@ -192,7 +198,7 @@ public:
     void validateBadUSBBLEKeyDelay();
     void setBadUSBBLEShowOutput(bool value);
     void addDisabledMenu(String value);
-    // TODO: removeDisabledMenu(String value);
+    void removeDisabledMenu(String value);
 
     void addWebUISession(const String &token);
     void removeWebUISession(const String &token);

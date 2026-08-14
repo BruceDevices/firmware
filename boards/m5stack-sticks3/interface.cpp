@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
@@ -57,6 +58,7 @@ void IRAM_ATTR isr_dw_btn() {
 void _setup_gpio() {
     M5.begin();
     Wire1.begin(47, 48);
+    setSysI2CBus(&Wire1);
 
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
@@ -86,8 +88,6 @@ void _setup_gpio() {
     pinMode(46, OUTPUT);
     digitalWrite(46, LOW); // Infrared LED Off
 
-    pinMode(SEL_BTN, INPUT_PULLUP);
-    pinMode(DW_BTN, INPUT_PULLUP);
     attachInterrupt(DW_BTN, isr_dw_btn, CHANGE);
     pinMode(TFT_BL, OUTPUT);
     bruceConfig.colorInverted = 0;
@@ -147,8 +147,6 @@ void InputHandler(void) {
     static bool dwLongFired = false;
     unsigned long now = millis();
     if (now - tm < 200 && !LongPress) return;
-    if (!wakeUpScreen()) AnyKeyPress = true;
-    else return;
 
     bool selPressed = (digitalRead(SEL_BTN) == BTN_ACT);
     bool dwPressed = dw_is_down;
@@ -157,7 +155,12 @@ void InputHandler(void) {
     unsigned long dwPressStart = dw_press_ms;
     unsigned long dwFirstRelease = dw_first_release_ms;
 
-    AnyKeyPress = selPressed || dwPressed || dwWaiting || dwDoubleReady;
+    bool dwNextReady = dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs;
+
+    if (!(selPressed || dwPressed || dwDoubleReady || dwNextReady)) return;
+
+    if (!wakeUpScreen()) AnyKeyPress = true;
+    else return;
 
     if (selPressed) {
         SelPress = true;
@@ -181,7 +184,7 @@ void InputHandler(void) {
         dw_double_ready = false;
         dw_waiting = false;
         tm = now;
-    } else if (dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs) {
+    } else if (dwNextReady) {
         NextPress = true;
         dw_waiting = false;
         tm = now;
@@ -227,7 +230,7 @@ static void speaker_off_timer_cb(TimerHandle_t xTimer) {
     if (!speaker_off_timer) return;
     static constexpr const uint8_t disabled_bulk_data[] = {0};
     i2c_bulk_write(&Wire1, ES8311_ADDR, disabled_bulk_data); // Shutdown ES8311
-    M5.In_I2C.bitOff(0x6E, 0x11, 1 << 3, 100000); // Set gpio3 output low (turn off PA)
+    M5.In_I2C.bitOff(0x6E, 0x11, 1 << 3, 100000);            // Set gpio3 output low (turn off PA)
 }
 
 void _setup_codec_speaker(bool enable) {
@@ -245,7 +248,8 @@ void _setup_codec_speaker(bool enable) {
     };
 
     if (speaker_off_timer == NULL) {
-        speaker_off_timer = xTimerCreate("SpkOffTimer", pdMS_TO_TICKS(100), pdFALSE, (void *)0, speaker_off_timer_cb);
+        speaker_off_timer =
+            xTimerCreate("SpkOffTimer", pdMS_TO_TICKS(100), pdFALSE, (void *)0, speaker_off_timer_cb);
     }
 
     if (enable) {

@@ -1,8 +1,12 @@
 #include "rf_send.h"
 #include "core/led_control.h"
 #include "core/type_convertion.h"
+#include "protocols/rf_config.h"
+#include "protocols/rf_encoder.h"
+#include "protocols/rf_legacy_migrate.h"
+#include "protocols/rf_presets.h"
+#include "protocols/rf_registry.h"
 #include "rf_utils.h"
-#include <RCSwitch.h>
 
 #define CLOSE_MENU 3
 #define MAIN_MENU 4
@@ -40,12 +44,17 @@ void sendCustomRF() {
     returnToMenu = false;
     filepath = "";
 
+    String startPath = "/BruceRF";
+
     while (!returnToMenu) {
         num_steps_keeloq = 1;
         num_signal_repeat = 4;
         delay(200);
-        filepath = loopSD(*filesystem, true, "SUB", "/BruceRF");
+        filepath = loopSD(*filesystem, true, "SUB", startPath);
         if (filepath == "" || check(EscPress)) return; //  cancelled
+
+        startPath = filepath.substring(0, filepath.lastIndexOf("/"));
+        if (startPath == "") startPath = "/";
 
         RfCodes data{};
 
@@ -112,15 +121,24 @@ void select_menu_option(bool keeloq) {
 void keeloq_save(RfCodes data) {
     String subfile_out = "Filetype: Bruce SubGhz File\nVersion 1\n";
     subfile_out += "Frequency: " + String(data.frequency) + "\n";
-    subfile_out += "Preset: " + String(data.preset) + "\n";
-    subfile_out += "Protocol: RcSwitch\n";
+    subfile_out += "Preset: " + String(data.preset == "" ? String("Ook650Async") : data.preset) + "\n";
+    subfile_out += "Protocol: KeeLoq\n";
     subfile_out += "Bit: " + String(data.Bit) + "\n";
 
-    subfile_out += "Manufacturer: " + String(data.mf_name) + "\n";
     char hexString[64] = {0};
+    // The 64-bit Key is what gets replayed (sendRfCommand routes KeeLoq to the
+    // dedicated encoder); the rolling-code fields below are informative.
+    decimalToHexString(data.key, hexString);
+    subfile_out += "Key: " + String(hexString) + "\n";
+
+    if (data.seed != 0) {
+        char seedHex[32] = {0};
+        decimalToHexString(data.seed, seedHex);
+        subfile_out += "Seed: " + String(seedHex) + "\n";
+    }
+    subfile_out += "Manufacture: " + String(data.mf_name) + "\n";
 
     decimalToHexString(data.serial, hexString);
-
     subfile_out += "Serial: " + String(hexString) + "\n";
     subfile_out += "Button: " + String(data.btn) + "\n";
     subfile_out += "Counter: " + String(data.cnt) + "\n";
@@ -180,6 +198,7 @@ void loopEmulate(RfCodes &data) {
                 display_info(data);
             }
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -192,7 +211,7 @@ void display_info(RfCodes &data) {
 
     if (data.serial != 0) {
         padprintln("Protocol: KeeLoq");
-        padprintln("Manufacturer: " + data.mf_name);
+        padprintln("Manufacture: " + data.mf_name);
 
         decimalToHexString(data.serial, hexString);
         padprintln("Serial: " + String(hexString));
@@ -218,7 +237,7 @@ void display_info(RfCodes &data) {
     padprintln("Press [Mid] to send or [Next] for options");
 }
 
-bool readSubFile(FS *fs, String filepath, RfCodes &data) {
+bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
     struct RfCodes selected_code;
     File databaseFile;
     String line;
@@ -249,17 +268,19 @@ bool readSubFile(FS *fs, String filepath, RfCodes &data) {
         if (line.startsWith("TE:")) selected_code.te = txt.toInt();
         if (line.startsWith("Bit:")) bitList.push_back(txt.toInt()); // selected_code.Bit = txt.toInt();
 
-        if (line.startsWith("Manufacturer:")) selected_code.mf_name = txt;
+        // KeeLoq rolling-code fields. Flipper writes "Manufacture" (no trailing
+        // r); accept both spellings. "Seed" is the secure-learning seed.
+        if (line.startsWith("Manufacturer:") || line.startsWith("Manufacture:")) selected_code.mf_name = txt;
         if (line.startsWith("Serial:")) selected_code.serial = hexStringToDecimal(txt.c_str());
         if (line.startsWith("Button:")) selected_code.btn = txt.toInt();
         if (line.startsWith("Counter:")) selected_code.cnt = txt.toInt();
+        if (line.startsWith("Seed:")) selected_code.seed = (uint32_t)hexStringToU64(txt.c_str());
 
         if (line.startsWith("Bit_RAW:"))
             bitRawList.push_back(txt.toInt()); // selected_code.BitRAW = txt.toInt();
-        if (line.startsWith("Key:"))
-            keyList.push_back(
-                hexStringToDecimal(txt.c_str())
-            ); // selected_code.key = hexStringToDecimal(txt.c_str());
+        // Keys can exceed 32 bits (Holtek 40, Mastercode 36, PhoenixV2 52,
+        // KeeLoq 64), so parse the full 64-bit value, not a truncated uint32.
+        if (line.startsWith("Key:")) keyList.push_back(hexStringToU64(txt.c_str()));
         if (line.startsWith("RAW_Data:") || line.startsWith("Data_RAW:"))
             rawDataList.push_back(txt); // selected_code.data = txt;
 
@@ -270,37 +291,32 @@ bool readSubFile(FS *fs, String filepath, RfCodes &data) {
 
     data = selected_code;
 
+#if RF_SUB_LEGACY_MIGRATION
+    // One-shot migration of old-format `.sub` files (Protocol: RcSwitch +
+    // numeric Preset) into the registry-based format: backs the original up to
+    // `<file>.bak` and rewrites the `.sub` once. `data` is migrated in memory
+    // regardless, so replay always uses the resolved protocol name.
+    if (rf_sub_is_legacy(data)) rf_sub_migrate(fs, filepath, data);
+#endif
+
     return true;
 }
 
 bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
     int sent = 0;
 
-    int total = bitList.size() + bitRawList.size() + keyList.size() + rawDataList.size() > 0 ? 1 : 0;
+    int total = keyList.size() + rawDataList.size();
     Serial.printf("Total signals found: %d\n", total);
     // If the signal is complete, send all of the code(s) that were found in it.
     // TODO: try to minimize the overhead between codes.
     if (selected_code.protocol != "" && selected_code.preset != "" && selected_code.frequency > 0) {
-        for (int bit : bitList) {
-            selected_code.Bit = bit;
-            sendRfCommand(selected_code, hideDefaultUI);
-            sent++;
-            if (!hideDefaultUI) {
-                if (check(EscPress)) break;
-                displayTextLine("Sent " + String(sent) + "/" + String(total));
-            }
-        }
-        for (int bitRaw : bitRawList) {
-            selected_code.Bit = bitRaw;
-            sendRfCommand(selected_code, hideDefaultUI);
-            sent++;
-            if (!hideDefaultUI) {
-                if (check(EscPress)) break;
-                displayTextLine("Sent " + String(sent) + "/" + String(total));
-            }
-        }
-        for (uint64_t key : keyList) {
-            selected_code.key = key;
+        // A `.sub` carries a code as a Key (paired with its Bit length) or as a
+        // RAW/BinRAW data stream (paired with Bit_RAW). Each code is sent ONCE:
+        // earlier this looped Bit and Key separately, transmitting every code
+        // twice — the first time with key=0 (a bogus frame). Pair them instead.
+        for (size_t i = 0; i < keyList.size(); i++) {
+            selected_code.key = keyList[i];
+            if (i < bitList.size()) selected_code.Bit = bitList[i];
             sendRfCommand(selected_code, hideDefaultUI);
             sent++;
             if (!hideDefaultUI) {
@@ -309,20 +325,20 @@ bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
             }
         }
 
-        // RAS_Data is considered one long signal, doesn't matter the number of lines it has
-        if (rawDataList.size() > 0) sent++;
-        for (String rawData : rawDataList) {
-            selected_code.data = rawData;
+        // RAW_Data / Data_RAW: one (long) signal per data line, BinRAW pairs it
+        // with Bit_RAW. RAW protocol ignores Bit.
+        for (size_t i = 0; i < rawDataList.size(); i++) {
+            selected_code.data = rawDataList[i];
+            if (i < bitRawList.size()) selected_code.Bit = bitRawList[i];
             sendRfCommand(selected_code, hideDefaultUI);
-            // sent++;
+            sent++;
             if (check(EscPress)) break;
-            // displayTextLine("Sent " + String(sent) + "/" + String(total));
         }
         addToRecentCodes(selected_code);
     }
 
     Serial.printf("\nSent %d of %d signals\n", sent, total);
-    if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), true); }
+    if (!hideDefaultUI) { displayTextLine("Sent " + String(sent) + "/" + String(total), false); }
 
     // Reset vectors
     bitList.clear();
@@ -364,40 +380,21 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         FuriHalSubGhzPresetGFSK9_99KbAsync, //< GFSK, deviation 19.042969 kHz, 9.996Kb/s, asynchronous
         FuriHalSubGhzPresetCustom, //Custom Preset
     */
-    // struct Protocol rcswitch_protocol;
-    int rcswitch_protocol_no = 1;
-    if (preset == "FuriHalSubGhzPresetOok270Async") {
-        rcswitch_protocol_no = 1;
-        //  pulseLength , syncFactor , zero , one, invertedSignal
-        // rcswitch_protocol = { 350, {  1, 31 }, {  1,  3 }, {  3,  1 }, false };
-        modulation = 2;
-        rxBW = 270;
-    } else if (preset == "FuriHalSubGhzPresetOok650Async") {
-        rcswitch_protocol_no = 2;
-        // rcswitch_protocol = { 650, {  1, 10 }, {  1,  2 }, {  2,  1 }, false };
-        modulation = 2;
-        rxBW = 650;
-    } else if (preset == "FuriHalSubGhzPreset2FSKDev238Async") {
-        modulation = 0;
-        deviation = 2.380371;
-        rxBW = 238;
-    } else if (preset == "FuriHalSubGhzPreset2FSKDev476Async") {
-        modulation = 0;
-        deviation = 47.60742;
-        rxBW = 476;
-    } else if (preset == "FuriHalSubGhzPresetMSK99_97KbAsync") {
-        modulation = 4;
-        deviation = 47.60742;
-        dataRate = 99.97;
-    } else if (preset == "FuriHalSubGhzPresetGFSK9_99KbAsync") {
-        modulation = 1;
-        deviation = 19.042969;
-        dataRate = 9.996;
+    // Radio preset parameters come from the central registry (protocols/).
+    // A preset field at 0 means "keep the module default" (set above).
+    int legacy_protocol_no = 1;
+    const RfPreset *rp = rf_find_preset(preset);
+    if (rp) {
+        modulation = rp->modulation;
+        if (rp->deviation) deviation = rp->deviation;
+        if (rp->rxBW) rxBW = rp->rxBW;
+        if (rp->dataRate) dataRate = rp->dataRate;
+        legacy_protocol_no = rp->legacyProto;
     } else {
         bool found = false;
         for (int p = 0; p < 30; p++) {
             if (preset == String(p)) {
-                rcswitch_protocol_no = preset.toInt();
+                legacy_protocol_no = preset.toInt();
                 found = true;
             }
         }
@@ -467,147 +464,67 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
 
         // send rf command
         if (!hideDefaultUI) { displayTextLine("Sending.."); }
-        RCSwitch_RAW_send(transmittimings);
+        rfTransmitRawTimings(transmittimings);
         free(transmittimings);
     } else if (protocol == "BinRAW") {
         // transform from "00 01 02 ... FF" into "00000000 00000001 00000010 .... 11111111"
         rfcode.data = hexStrToBinStr(rfcode.data);
         // Serial.println(rfcode.data);
         rfcode.data.trim();
-        RCSwitch_RAW_Bit_send(rfcode);
+        rfTransmitRawBits(rfcode);
     }
 
-    else if (protocol == "RcSwitch") {
-        data.replace(" ", ""); // remove spaces
-        // uint64_t data_val = strtoul(data.c_str(), nullptr, 16);
-        uint64_t data_val = rfcode.key;
-        int bits = rfcode.Bit;
-        int pulse = rfcode.te; // not sure about this...
-        int repeat = num_signal_repeat;
-        /*
-        Serial.print("RcSwitch: ");
-        Serial.println(data_val,16);
-        Serial.println(bits);
-        Serial.println(pulse);
-        Serial.println(rcswitch_protocol_no);
-        */
-        // if (!hideDefaultUI) { displayTextLine("Sending.."); }
-        RCSwitch_send(data_val, bits, pulse, rcswitch_protocol_no, repeat);
-    } else if (protocol.startsWith("Princeton")) {
-        RCSwitch_send(rfcode.key, rfcode.Bit, 350, 1, 10);
-    } else {
-        Serial.print("unsupported protocol: ");
-        Serial.println(protocol);
-        Serial.println("Sending RcSwitch 11 protocol");
-        // if(protocol.startsWith("CAME") || protocol.startsWith("HOLTEC" || NICE)) {
-        RCSwitch_send(rfcode.key, rfcode.Bit, 270, 11, 10);
-        //}
+    else if (protocol == "KeeLoq") {
+        // KeeLoq has dedicated framing (see rf_keeloq_durations). `rfcode.key` is
+        // the 64-bit rolling code already assembled by keeloq_step.
+        if (!hideDefaultUI) { displayTextLine("Sending.."); }
+        rf_tx_keeloq(rfcode.key, num_signal_repeat);
+    }
 
-        return;
+    else {
+        // Dispatch by protocol NAME (the decoder + migration now write
+        // `Protocol: <name>`). The named definition comes straight from the
+        // central registry.
+        const RfProtocolDef *def = rf_find_protocol(protocol);
+
+#if RF_SUB_LEGACY_MIGRATION
+        // Safety net for non-migrated legacy sources (PSRamFS / read-only FS):
+        // a `.sub` still carrying `Protocol: RcSwitch` + numeric `Preset`.
+        if (def == nullptr && protocol == "RcSwitch") def = rf_find_legacy(legacy_protocol_no);
+#endif
+
+        if (def != nullptr) {
+            rf_tx_protocol(rfcode.key, rfcode.Bit, rfcode.te, def, num_signal_repeat);
+        } else {
+            Serial.print("unsupported protocol: ");
+            Serial.println(protocol);
+            Serial.println("Falling back to generic RcSwitch_11");
+            rfTransmitCode(rfcode.key, rfcode.Bit, 270, 11, 10);
+        }
     }
 
     // digitalWrite(bruceConfigPins.rfTx, LED_OFF);
     deinitRfModule();
 }
 
-void RCSwitch_send(uint64_t data, unsigned int bits, int pulse, int protocol, int repeat) {
-    // derived from
-    // https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/blob/master/examples/Rc-Switch%20examples%20cc1101/SendDemo_cc1101/SendDemo_cc1101.ino
-
-    RCSwitch mySwitch = RCSwitch();
-
-    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
-        mySwitch.enableTransmit(bruceConfigPins.CC1101_bus.io0);
-    } else {
-        mySwitch.enableTransmit(bruceConfigPins.rfTx);
-    }
-
-    mySwitch.setProtocol(protocol); // override
-    if (pulse) { mySwitch.setPulseLength(pulse); }
-    mySwitch.setRepeatTransmit(repeat);
-    mySwitch.send(data, bits);
-
-    /*
-    Serial.println(data,HEX);
-    Serial.println(bits);
-    Serial.println(pulse);
-    Serial.println(protocol);
-    Serial.println(repeat);
-    */
-
-    mySwitch.disableTransmit();
-
+// Transmit `data` (`bits` long) using a classic OOK protocol NUMBER. Thin
+// wrapper over the RMT encoder; the number is resolved to a registry definition
+// (keeps the external CLI/JSON numeric contract). Signature unchanged.
+void rfTransmitCode(uint64_t data, unsigned int bits, int pulse, int protocol, int repeat) {
+    const RfProtocolDef *def = rf_protocol_for_number(protocol);
+    rf_tx_protocol(data, bits, pulse, def, repeat);
     deinitRfModule();
 }
 
-// ported from https://github.com/sui77/rc-switch/blob/3a536a172ab752f3c7a58d831c5075ca24fd920b/RCSwitch.cpp
-void RCSwitch_RAW_Bit_send(RfCodes data) {
-    int nTransmitterPin = bruceConfigPins.rfTx;
-    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
-
+// Transmit a bit string (each bit held for `te` µs) via RMT. Signature unchanged.
+void rfTransmitRawBits(RfCodes data) {
     if (data.data == "") return;
-    bool currentlogiclevel = false;
-    int nRepeatTransmit = 1;
-    for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
-        int currentBit = data.data.length();
-        while (currentBit >= 0) { // Starts from the end of the string until the max number of bits to send
-            char c = data.data[currentBit];
-            if (c == '1') {
-                currentlogiclevel = true;
-            } else if (c == '0') {
-                currentlogiclevel = false;
-            } else {
-                Serial.println("Invalid data");
-                currentBit--;
-                continue;
-                // return;
-            }
-
-            digitalWrite(nTransmitterPin, currentlogiclevel ? HIGH : LOW);
-            delayMicroseconds(data.te);
-
-            // Serial.print(currentBit);
-            // Serial.print("=");
-            // Serial.println(currentlogiclevel);
-
-            currentBit--;
-        }
-        digitalWrite(nTransmitterPin, LOW);
-    }
+    rf_tx_raw_bits(data.data, data.te);
 }
 
-void RCSwitch_RAW_send(int *ptrtransmittimings) {
-    int nTransmitterPin = bruceConfigPins.rfTx;
-    if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { nTransmitterPin = bruceConfigPins.CC1101_bus.io0; }
-
+// Transmit a 0-terminated RAW timings array (signed µs) via RMT. Signature
+// unchanged (1 repetition, as before).
+void rfTransmitRawTimings(int *ptrtransmittimings) {
     if (!ptrtransmittimings) return;
-
-    bool currentlogiclevel = true;
-    int nRepeatTransmit = 1; // repeats RAW signal twice!
-    // HighLow pulses ;
-
-    for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
-        unsigned int currenttiming = 0;
-        while (ptrtransmittimings[currenttiming]) { // && currenttiming < RCSWITCH_MAX_CHANGES
-            if (ptrtransmittimings[currenttiming] >= 0) {
-                currentlogiclevel = true;
-            } else {
-                // negative value
-                currentlogiclevel = false;
-                ptrtransmittimings[currenttiming] = (-1) * ptrtransmittimings[currenttiming]; // invert sign
-            }
-
-            digitalWrite(nTransmitterPin, currentlogiclevel ? HIGH : LOW);
-            delayMicroseconds(ptrtransmittimings[currenttiming]);
-
-            /*
-            Serial.print(ptrtransmittimings[currenttiming]);
-            Serial.print("=");
-            Serial.println(currentlogiclevel);
-            */
-
-            currenttiming++;
-        }
-        digitalWrite(nTransmitterPin, LOW);
-    } // end for
+    rf_tx_raw_timings(ptrtransmittimings);
 }

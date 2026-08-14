@@ -12,11 +12,12 @@ extern TaskHandle_t interpreterTaskHandler;
 void interpreterHandler(void *pvParameters);
 void run_bjs_script();
 bool run_bjs_script_headless(char *code);
-bool run_bjs_script_headless(FS &fs, String filename);
+bool run_bjs_script_headless(FS &fs, const String &filename);
 
 String getScriptsFolder(FS *&fs);
-std::vector<Option>
-getScriptsOptionsList(String currentPath = "", bool saveStartupScript = false, int rememberedIndex = 0);
+std::vector<Option> getScriptsOptionsList(
+    const String &currentPath = "", bool saveStartupScript = false, int rememberedIndex = 0
+);
 
 #endif
 #endif

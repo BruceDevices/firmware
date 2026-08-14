@@ -1,10 +1,13 @@
 #include "core/wifi/wifi_common.h"
-#include "core/display.h"    // using displayRedStripe  and loop options
-#include "core/mykeyboard.h" // usinf keyboard when calling rename
+#include "core/display.h"
+#include "core/mykeyboard.h"
 #include "core/powerSave.h"
+#include "core/radio_mem.h"
+#include "core/ram_profile.h"
 #include "core/settings.h"
 #include "core/utils.h"
-#include "core/wifi/wifi_mac.h" // Set Mac Address - @IncursioHack
+#include "core/wifi/wifi_mac.h"
+#include "esp_wifi.h"
 #include "modules/ble/ble_common.h"
 #include <esp_event.h>
 #include <esp_netif.h>
@@ -12,6 +15,15 @@
 
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
+
+esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
+    esp_err_t err = esp_wifi_80211_tx(ifx, frame, len, false);
+    for (uint8_t i = 0; err == ESP_ERR_NO_MEM && i < retries; i++) {
+        vTaskDelay(1); // let the driver drain TX buffers and retry
+        err = esp_wifi_80211_tx(ifx, frame, len, false);
+    }
+    return err;
+}
 
 void ensureWifiPlatform() {
     static bool netifInitialized = false;
@@ -93,15 +105,17 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
         vTaskDelay(300 / portTICK_PERIOD_MS);
     }
 
+    RAM_LOG("wifi pre-mode"); // Wi-Fi is already up from the menu scan by this point
     drawMainBorderWithTitle("WiFi Connect");
     padprintln("");
     padprint("Connecting to: " + ssid + ".");
     WiFi.mode(WIFI_MODE_STA);
+    RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.begin(ssid, pwd);
 
     int i = 1;
-    while (WiFi.status() != WL_CONNECTED) {
+    while (!WiFi.isConnected()) {
         if (tft.getCursorX() >= tftWidth - 12) {
             padprintln("");
             padprint("");
@@ -122,7 +136,7 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
         i++;
     }
 
-    return WiFi.status() == WL_CONNECTED;
+    return WiFi.isConnected();
 }
 
 bool _setupAP() {
@@ -138,12 +152,19 @@ bool _setupAP() {
 void wifiDisconnect() {
     wifiTransitioning = true;
 
-    WiFi.softAPdisconnect(true); // turn off AP mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.disconnect(true, true); // turn off STA mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    WiFi.mode(WIFI_OFF); // enforces WIFI_OFF mode
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    wifi_mode_t mode = WiFi.getMode();
+    if (mode & WIFI_MODE_AP) {
+        WiFi.softAPdisconnect();
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    if (mode & WIFI_MODE_STA) {
+        WiFi.disconnect(false, true);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    if (mode != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
 
     wifiConnected = false;
     wifiTransitioning = false;
@@ -172,6 +193,10 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 
         case WIFI_STA: { // station mode
             int nets;
+            if (!radioHasMemForWifi()) {
+                displayError("Low RAM: free BLE/SD first", true);
+                return false;
+            }
             WiFi.mode(WIFI_MODE_STA);
 
             // wifiMACMenu();
@@ -181,6 +206,11 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             do {
                 displayTextLine("Scanning..");
                 nets = WiFi.scanNetworks();
+
+                String selSsid = "";
+                int selEnc = 0;
+                bool selHidden = false;
+
                 options = {};
                 for (int i = 0; i < nets; i++) {
                     if (options.size() < 250) {
@@ -198,27 +228,37 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                             case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
                             case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
                             case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
+                            case WIFI_AUTH_WPA3_PSK: encryptionTypeStr = "WPA3/PSK"; break;
+                            case WIFI_AUTH_WPA2_WPA3_PSK: encryptionTypeStr = "WPA2/WPA3/PSK"; break;
                             default: encryptionTypeStr = "Unknown"; break;
                         }
 
                         String optionText = encryptionPrefix + ssid + "(" + String(rssi) + "|" +
                                             encryptionTypeStr + "|ch." + String(ch) + ")";
 
-                        options.push_back({optionText.c_str(), [=]() {
-                                               _wifiConnect(ssid, encryptionType);
+                        options.push_back({optionText.c_str(), [&selSsid, &selEnc, ssid, encryptionType]() {
+                                               selSsid = ssid;
+                                               selEnc = encryptionType;
                                            }});
                     }
                 }
-                options.push_back({"Hidden SSID", [=]() {
-                                       String __ssid = keyboard("", 32, "Your SSID");
-                                       if (__ssid != "\x1B") _wifiConnect(__ssid.c_str(), 8);
-                                   }});
+                WiFi.scanDelete();
+                options.push_back({"Hidden SSID", [&selHidden]() { selHidden = true; }});
                 addOptionToMainMenu();
 
                 loopOptions(options);
                 options.clear();
 
-                if (check(EscPress)) {
+                if (returnToMenu) {
+                    refresh_scan = false;
+                } else if (selHidden) {
+                    String __ssid = keyboard("", 32, "Your SSID");
+                    if (__ssid != "\x1B") _wifiConnect(__ssid.c_str(), 8);
+                    refresh_scan = false;
+                } else if (selSsid != "") {
+                    _wifiConnect(selSsid, selEnc);
+                    refresh_scan = false;
+                } else if (check(EscPress)) {
                     refresh_scan = true;
                 } else {
                     refresh_scan = false;
@@ -243,7 +283,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 }
 
 void wifiConnectTask(void *pvParameters) {
-    if (WiFi.status() == WL_CONNECTED) return;
+    if (WiFi.isConnected()) return;
 
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         stopBLEStack();
@@ -252,6 +292,14 @@ void wifiConnectTask(void *pvParameters) {
 
     // Check if WiFi is in transition
     if (wifiTransitioning) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // No-PSRAM guard: don't bring Wi-Fi up if the contiguous DMA block is too
+    // small (e.g. BLE already active) — the scan would half-init the driver and
+    // crash on teardown. Silent bail: this is a background auto-connect task.
+    if (!radioHasMemForWifi()) {
         vTaskDelete(NULL);
         return;
     }
@@ -268,7 +316,7 @@ void wifiConnectTask(void *pvParameters) {
 
         WiFi.begin(ssid, pwd);
         for (int i = 0; i < 50; i++) {
-            if (WiFi.status() == WL_CONNECTED) {
+            if (WiFi.isConnected()) {
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
 
@@ -305,6 +353,12 @@ bool wifiConnecttoKnownNet(void) {
         return false;
     }
 
+    // No-PSRAM guard: refuse before the scan brings Wi-Fi up in low memory.
+    if (!radioHasMemForWifi()) {
+        displayError("Low RAM: free BLE/SD first", true);
+        return false;
+    }
+
     bool result = false;
     int nets;
     // WiFi.mode(WIFI_MODE_STA);
@@ -327,7 +381,7 @@ bool wifiConnecttoKnownNet(void) {
             break;
         }
     }
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.isConnected()) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
 

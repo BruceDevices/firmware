@@ -47,12 +47,19 @@ ARPSpoofer::ARPSpoofer(
 ARPSpoofer::~ARPSpoofer() {}
 
 bool ARPSpoofer::arpPCAPfile() {
-    static int nf = 0;
+    uint16_t nf = 0;
     FS *fs;
     if (setupSdCard()) fs = &SD;
     else { fs = &LittleFS; }
     if (!fs->exists("/BrucePCAP")) fs->mkdir("/BrucePCAP");
-    while (fs->exists(String("/BrucePCAP/ARP_session_" + String(nf++) + ".pcap").c_str())) yield();
+    while (true) {
+        String filename = "/BrucePCAP/ARP_session_" + String(nf) + ".pcap";
+        if (fs->exists(filename.c_str())) {
+            // Serial.println(filename);
+            delay(1);
+            nf++;
+        } else break;
+    }
     pcapFile = fs->open(String("/BrucePCAP/ARP_session_" + String(nf) + ".pcap").c_str(), FILE_WRITE);
     if (pcapFile) return true;
     else return false;
@@ -101,6 +108,7 @@ void ARPSpoofer::loop() {
             count++;
             tft.drawRightString("Spoofed " + String(count) + " times", tftWidth - 12, tftHeight - 16, 1);
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     if (mitm) {
@@ -163,7 +171,7 @@ void ARPSpoofer::sendARPPacket(
     // Enviar o pacote
     netif->linkoutput(netif, p);
     pbuf_free(p);
-    Serial.println("Pacote ARP enviado!");
+    Serial.println("ARP Packet sent!");
 
     // Capturar o pacote no arquivo PCAP
     if (pcapFile) {

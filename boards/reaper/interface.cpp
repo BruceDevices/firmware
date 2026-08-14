@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <bq27220.h>
 #include <globals.h>
@@ -21,8 +22,12 @@ XPowersPPM PPM;
 #define BATTERY_DESIGN_CAPACITY 1000
 #include <bq27220.h>
 BQ27220 bq;
+bool gaugeOn = false;
 
 void _setup_gpio() {
+    setSysI2CBus(&Wire); // PMU/battery gauge live on the default Wire object
+    Wire.setPins(SYS_I2C_SDA, SYS_I2C_SCL);
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
     pinMode(SEL_BTN, INPUT);
@@ -45,16 +50,13 @@ void _setup_gpio() {
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
 
-    Wire.setPins(GROVE_SDA, GROVE_SCL);
-    // Wire.begin();
-    // bruceConfig.rfModule = CC1101_SPI_MODULE;
-    // bruceConfig.irRx = RXLED;
-    // bruceConfig.irTx = LED;
-    Wire.begin(GROVE_SDA, GROVE_SCL);
-
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.irRx = RXLED;
+    bruceConfigPins.irTx = TXLED;
+    bruceConfigPins.rfidModule = ST25R3916_SPI_MODULE;
 
     bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
 
         PPM.setSysPowerDownVoltage(3300);
@@ -72,7 +74,11 @@ void _setup_gpio() {
         // PPM.enableInputDetection();
         PPM.enableCharge();
     }
-    if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
+    Wire.beginTransmission(BQ27220_I2C_ADDRESS);
+    if (Wire.endTransmission() == 0) {
+        if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
+        gaugeOn = true;
+    }
 }
 
 /***************************************************************************************
@@ -84,7 +90,7 @@ void _setup_gpio() {
 int getBattery() {
     int percent = 0;
 #if defined(USE_BQ27220_VIA_I2C)
-    percent = bq.getChargePcnt();
+    if (gaugeOn) percent = bq.getChargePcnt();
 #endif
 
     return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
@@ -92,7 +98,7 @@ int getBattery() {
 
 #ifdef USE_BQ27220_VIA_I2C
 bool isCharging() {
-    return bq.getIsCharging(); // Return the charging status from BQ27220
+    return gaugeOn ? bq.getIsCharging() : false; // Return the charging status from BQ27220
 }
 #else
 bool isCharging() { return false; }

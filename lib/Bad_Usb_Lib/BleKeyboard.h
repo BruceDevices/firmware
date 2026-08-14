@@ -6,15 +6,10 @@
 #include "sdkconfig.h"
 #if defined(CONFIG_BT_ENABLED)
 #define USE_NIMBLE
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
 #include "NimBLECharacteristic.h"
 #include "NimBLEHIDDevice.h"
-#ifdef NIMBLE_V2_PLUS
 #include "NimBLEAdvertising.h"
 #include "NimBLEServer.h"
-#endif
 #define BLEDevice NimBLEDevice
 #define BLEServerCallbacks NimBLEServerCallbacks
 #define BLECharacteristicCallbacks NimBLECharacteristicCallbacks
@@ -80,7 +75,7 @@ public:
     void releaseAll(void) override;
     bool isConnected(void);
     void setBatteryLevel(uint8_t level);
-    void setName(String deviceName);
+    void setName(const String &deviceName);
     void setDelay(uint32_t ms);
     void setAppearence(uint16_t v) { appearance = v; }
     void setRandomUUID(void) { _randUUID = !_randUUID; };
@@ -93,14 +88,6 @@ public:
 
 protected:
     bool _randUUID = false;
-#ifndef NIMBLE_V2_PLUS
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc);
-    virtual void onConnect(BLEServer *pServer) override;
-    virtual void onDisconnect(BLEServer *pServer) override;
-    virtual void onWrite(BLECharacteristic *me) override;
-    virtual void
-    onSubscribe(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc, uint16_t subValue) override;
-#else
 
     class ServerCallbacks : public NimBLEServerCallbacks {
     private:
@@ -127,7 +114,6 @@ protected:
 
 private:
     uint8_t m_subCount{0};
-#endif
 };
 
 #endif // CONFIG_BT_ENABLED

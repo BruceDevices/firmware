@@ -85,8 +85,8 @@ void fillInfo(ScrollableTextArea &area) {
         area.addLine(err);
         area.show();
 
-        while (check(SelPress)) yield();
-        while (!check(SelPress)) yield();
+        while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+        while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
     }
 
     const auto mac = MAC(ap_info.bssid);
@@ -102,6 +102,7 @@ void fillInfo(ScrollableTextArea &area) {
     area.addLine("Signal strength: " + String(ap_info.rssi) + "db");
     // AP might not have assigned IP and gateway ip might differ from an ap ip
     area.addLine("Gateway: " + WiFi.gatewayIP().toString());
+    area.addLine("My IP:" + WiFi.localIP().toString());
     area.addLine("Channel: " + String(ap_info.primary) + " " + getChannelWidth(ap_info.second));
     area.addLine("BSSID: " + mac); // sometimes MAC != BSSID (but we ignore that case)
     area.addLine("Manufacturer: " + getManufacturer(mac));

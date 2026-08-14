@@ -5,9 +5,9 @@
 CYD28_TouchR touch(320, 240);
 
 #ifdef WAVESENTRY
-#include <RotaryEncoder.h>
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() { encoder->tick(); }
+#include <rotary_decoder.h>
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 #endif
 
 /***************************************************************************************
@@ -21,9 +21,10 @@ void _setup_gpio() {
     pinMode(TFT_BL, OUTPUT);
 #ifdef WAVESENTRY
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::TWO03);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
 #endif
 }
 
@@ -103,6 +104,11 @@ void InputHandler(void) {
     int newPos = encoder->getPosition();
     if (newPos != lastPos) {
         posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
         lastPos = newPos;
         lastEncoderMoveMs = millis();
     } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {

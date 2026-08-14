@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
@@ -10,6 +11,10 @@
 ***************************************************************************************/
 void _setup_gpio() {
     M5.begin(); // Need to test if SDCard inits with the new setup
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     pinMode(GPIO_NUM_0, OUTPUT);
 }
 
@@ -38,7 +43,9 @@ void _setBrightness(uint8_t brightval) { M5.Display.setBrightness(brightval); }
 void InputHandler(void) {
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
     auto t = M5.Touch.getDetail();
     if (t.isPressed() || t.isHolding()) {
         tm = millis();

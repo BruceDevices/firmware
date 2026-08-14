@@ -61,8 +61,8 @@ LayoutConfig::LayoutConfig() {
  * WARNING: This can corrupt stack variables, use static/global storage only.
  */
 void initClickerUSB() {
-    USB.begin();
     if (Mouse == nullptr) Mouse = new USBHIDMouse();
+    USB.begin();
     if (Mouse != nullptr) Mouse->begin();
     // Serial.println("[USB] Clicker initialized");
 }

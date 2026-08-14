@@ -37,12 +37,6 @@ void _setup_gpio() {
     digitalWrite(SDCARD_CS, HIGH);
     digitalWrite(W5500_SS_PIN, HIGH);
     digitalWrite(TFT_CS, HIGH);
-#ifdef ST7789_DRIVER
-    bruceConfig.colorInverted = 0;
-#endif
-#ifdef ILI9341_DRIVER
-    bruceConfig.colorInverted = 0;
-#endif
 }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
@@ -60,6 +54,24 @@ void _post_setup_gpio() {
     bruceConfigPins.gpsBaudrate = 9600;
     bruceConfigPins.rfTx = 8;
     bruceConfigPins.rfRx = 9;
+
+    // Force disable color inversion for ST7789/ILI9341 on nm-cyd-c5.
+    // Must be done here because begin_storage() loads bruceConf.json which may
+    // override the value set in _setup_gpio().
+#ifdef ST7789_DRIVER
+    bruceConfig.colorInverted = 0;
+    tft.invertDisplay(0);
+#endif
+#ifdef ILI9341_DRIVER
+    bruceConfig.colorInverted = 0;
+    tft.invertDisplay(0);
+#endif
+
+    // Force set I2C bus pins for nm-cyd-c5.
+    // brucePins.conf may have stale/wrong i2c_bus values, so override them
+    // to ensure PN532 and other I2C devices use the correct GPIO9(SDA)/GPIO8(SCL).
+    bruceConfigPins.i2c_bus.sda = (gpio_num_t)GROVE_SDA;
+    bruceConfigPins.i2c_bus.scl = (gpio_num_t)GROVE_SCL;
 }
 
 /***************************************************************************************

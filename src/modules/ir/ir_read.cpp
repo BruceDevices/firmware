@@ -56,6 +56,10 @@ IrRead::IrRead(bool headless_mode, bool raw_mode) {
 }
 bool quickloop = false;
 
+static uint32_t necCommandWithInverse(uint32_t command) {
+    return (command & 0xFF) | (((~command) & 0xFF) << 8);
+}
+
 static String getParsedProtocolName(const decode_results &r) {
     switch (r.decode_type) {
         case decode_type_t::RC5: return (r.command > 0x3F) ? "RC5X" : "RC5";
@@ -66,10 +70,7 @@ static String getParsedProtocolName(const decode_results &r) {
             if (r.address > 0x1F) return "SIRC15";
             return "SIRC";
         case decode_type_t::NEC:
-            if (r.address > 0xFFFF) return "NEC42ext";
-            if (r.address > 0xFF1F) return "NECext";
-            if (r.address > 0xFF) return "NEC42";
-            return "NEC";
+            return (r.address > 0xFF) ? "NECext" : "NEC";
         case decode_type_t::UNKNOWN: return "";
         default: return typeToString(r.decode_type, r.repeat);
     }
@@ -88,7 +89,7 @@ void IrRead::setup() {
     }
     if (count == 0) gsetIrRxPin(true);
 
-    setup_ir_pin(bruceConfigPins.irRx, INPUT_PULLUP);
+    setup_ir_pin(bruceConfigPins.irRx, INPUT);
     if (headless) return;
     returnToMenu = true;
     std::vector<Option> quickRemoteOptions = {
@@ -139,7 +140,9 @@ void IrRead::setup() {
 }
 
 void IrRead::loop() {
+    returnToMenu = false;
     while (1) {
+        if (returnToMenu) break;
         if (check(EscPress)) {
             returnToMenu = true;
             button_pos = 0;
@@ -161,7 +164,14 @@ void IrRead::loop() {
                 save_signal();
             }
         } else {
-            if (check(NextPress)) save_signal();
+            if (check(NextPress)) {
+                if (quickloop && !_read_signal) {
+                    button_pos++;
+                    if (button_pos < quickButtons.size()) begin();
+                } else {
+                    save_signal();
+                }
+            }
             if (quickloop && button_pos == quickButtons.size()) save_device();
             if (check(SelPress)) {
                 if (_read_signal) emulate_signal();
@@ -170,6 +180,7 @@ void IrRead::loop() {
             if (check(PrevPress)) discard_signal();
             read_signal();
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -179,6 +190,7 @@ void IrRead::begin() {
     display_banner();
     if (quickloop) {
         padprintln("Waiting for signal of button: " + String(quickButtons[button_pos]));
+        padprintln("Button " + String(button_pos + 1) + " of " + String(quickButtons.size()));
     } else {
         padprintln("Waiting for signal...");
     }
@@ -218,6 +230,7 @@ void IrRead::display_btn_options() {
         padprintln("Press [NEXT] to save signal");
         padprintln("Press [PREV] to discard");
     } else {
+        if (quickloop) padprintln("Press [NEXT] to skip button");
         if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
     }
     padprintln("Press [ESC]  to exit");
@@ -265,7 +278,9 @@ void IrRead::emulate_signal() {
         code.type = "parsed";
         code.protocol = getParsedProtocolName(results);
         code.address = uint32ToString(results.address);
-        code.command = uint32ToString(results.command);
+        code.command = (results.decode_type == decode_type_t::NEC)
+            ? uint32ToString(necCommandWithInverse(results.command))
+            : uint32ToString(results.command);
         code.bits = results.bits;
         code.data = resultToHexidecimal(&results);
         if (code.protocol == "") {
@@ -329,7 +344,7 @@ String IrRead::parse_raw_signal() {
     return signal_code;
 }
 
-void IrRead::append_to_file_str(String btn_name) {
+void IrRead::append_to_file_str(const String &btn_name) {
     strDeviceContent += "name: " + btn_name + "\n";
 
     if (raw) {
@@ -360,10 +375,7 @@ void IrRead::append_to_file_str(String btn_name) {
                 break;
             }
             case decode_type_t::NEC: {
-                if (results.address > 0xFFFF) strDeviceContent += "protocol: NEC42ext\n";
-                else if (results.address > 0xFF1F) strDeviceContent += "protocol: NECext\n";
-                else if (results.address > 0xFF) strDeviceContent += "protocol: NEC42\n";
-                else strDeviceContent += "protocol: NEC\n";
+                strDeviceContent += (results.address > 0xFF) ? "protocol: NECext\n" : "protocol: NEC\n";
                 break;
             }
             case decode_type_t::UNKNOWN: {
@@ -377,7 +389,9 @@ void IrRead::append_to_file_str(String btn_name) {
         }
 
         strDeviceContent += "address: " + uint32ToString(results.address) + "\n";
-        strDeviceContent += "command: " + uint32ToString(results.command) + "\n";
+        strDeviceContent += "command: " + uint32ToString(
+            (results.decode_type == decode_type_t::NEC) ? necCommandWithInverse(results.command) : results.command
+        ) + "\n";
 
         strDeviceContent += "bits: " + String(results.bits) + "\n";
         if (hasACState(results.decode_type)) strDeviceContent += "state: " + parse_state_signal() + "\n";
@@ -419,6 +433,12 @@ void IrRead::save_device() {
         displaySuccess("File saved to " + String((fs == &SD) ? "SD Card" : "LittleFS") + ".", true);
         signals_read = 0;
         strDeviceContent = "";
+        if (quickloop) {
+            button_pos = 0;
+            quickloop = false;
+            returnToMenu = true;
+            return;
+        }
     } else displayError(fs ? "Error writing file." : "No storage available.", true);
 
     delay(1000);

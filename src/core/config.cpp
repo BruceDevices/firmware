@@ -1,6 +1,7 @@
 #include "config.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
+#include <algorithm>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -432,9 +433,6 @@ void BruceConfig::fromFile(bool checkFS) {
     validateConfig();
     if (count > 0) saveFile();
 
-    // Load MIFARE keys (loading via manager)
-    MifareKeysManager::ensureLoaded(mifareKeys);
-
     log_i("Using config from file");
 }
 
@@ -810,13 +808,32 @@ void BruceConfig::setBadUSBBLEShowOutput(bool value) {
     badUSBBLEShowOutput = value;
     saveFile();
 }
-void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
+void BruceConfig::ensureMifareKeysLoaded() {
+    if (!_mifareKeysLoaded) {
+        MifareKeysManager::ensureLoaded(mifareKeys);
+        _mifareKeysLoaded = true;
+    }
+}
 
-void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }
+void BruceConfig::addMifareKey(String value) {
+    ensureMifareKeysLoaded();
+    MifareKeysManager::addKey(mifareKeys, value);
+}
+
+void BruceConfig::validateMifareKeysItems() {
+    if (_mifareKeysLoaded) MifareKeysManager::validateKeys(mifareKeys);
+}
 
 void BruceConfig::addDisabledMenu(String value) {
-    // TODO: check if duplicate
+    if (std::find(disabledMenus.begin(), disabledMenus.end(), value) != disabledMenus.end()) return;
     disabledMenus.push_back(value);
+    saveFile();
+}
+
+void BruceConfig::removeDisabledMenu(String value) {
+    auto it = std::find(disabledMenus.begin(), disabledMenus.end(), value);
+    if (it == disabledMenus.end()) return;
+    disabledMenus.erase(it);
     saveFile();
 }
 

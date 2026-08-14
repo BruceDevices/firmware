@@ -46,6 +46,7 @@ DEFAULT_ENVS=(
   elecrow-28B
   elecrow-35B
   elecrow-35Bv2_2
+  elecrow-advance-35-s3
   LAUNCHER_elecrow-24B
   LAUNCHER_elecrow-28B
   LAUNCHER_elecrow-35B

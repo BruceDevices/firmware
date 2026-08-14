@@ -82,7 +82,9 @@ void Wigle::dump_wigle_info() {
     padprintln("");
 }
 
-void Wigle::send_upload_headers(WiFiClientSecure &client, String filename, int filesize, String boundary) {
+void Wigle::send_upload_headers(
+    WiFiClientSecure &client, const String &filename, int filesize, const String &boundary
+) {
     // Content-Disposition header size.
     int cd_header_len = 147 - 45 - 8 + filename.length() + 2 * (boundary.length() + 2);
 
@@ -108,7 +110,7 @@ void Wigle::send_upload_headers(WiFiClientSecure &client, String filename, int f
     client.println();
 }
 
-bool Wigle::upload(FS *fs, String filepath, bool auto_delete) {
+bool Wigle::upload(FS *fs, const String &filepath, bool auto_delete) {
     display_banner();
 
     if (!fs || !get_user()) return false;
@@ -134,7 +136,7 @@ bool Wigle::upload(FS *fs, String filepath, bool auto_delete) {
     return true;
 }
 
-bool Wigle::upload_all(FS *fs, String folder, bool auto_delete) {
+bool Wigle::upload_all(FS *fs, const String &folder, bool auto_delete) {
     Serial.println("Wigle upload all path: " + folder);
 
     display_banner();
@@ -188,7 +190,7 @@ bool Wigle::upload_all(FS *fs, String folder, bool auto_delete) {
     return true;
 }
 
-bool Wigle::_upload_file(File file, String upload_message) {
+bool Wigle::_upload_file(File file, const String &upload_message) {
     WiFiClientSecure client;
     client.setInsecure();
     if (!client.connect(host, 443)) {

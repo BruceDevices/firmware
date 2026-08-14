@@ -307,9 +307,11 @@ void sendBeaconFrames();
 void checkForAssociations();
 void saveNetworkHistory(FS &fs);
 void sendBeaconFrameHelper(const String &ssid, uint8_t channel);
-void saveCredentialsToFile(String ssid, String password);
+void saveCredentialsToFile(const String &ssid, const String &password);
 void saveProbesToPCAP(FS &fs);
-void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName);
+void launchBackgroundPortal(
+    const String &ssid, uint8_t channel, const String &templateName, const String &templateFile = ""
+);
 void checkPortals();
 String generatePortalId(const String &templateName);
 void savePortalCredentials(

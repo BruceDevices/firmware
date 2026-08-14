@@ -19,6 +19,8 @@
 
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
+#include "modules/wifi/channel_analyzer.h"
+#include "modules/wifi/jam_detect.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
 
@@ -44,7 +46,7 @@ void WifiMenu::optionsMenu() {
     options.clear();
     // Note: WiFi features will cleanly stop WebUI automatically when they start
     // User can navigate menu normally even with WebUI active
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected() && !WiFi.AP.started()) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
             {"Start WiFi AP", [=]() {
@@ -54,7 +56,7 @@ void WifiMenu::optionsMenu() {
         };
     }
     if (WiFi.getMode() != WIFI_MODE_NULL) { options.push_back({"Turn Off WiFi", wifiDisconnect}); }
-    if (WiFi.getMode() == WIFI_MODE_STA || WiFi.getMode() == WIFI_MODE_APSTA) {
+    if (WiFi.getMode() & WIFI_MODE_STA && WiFi.isConnected()) {
         options.push_back({"AP info", displayAPInfo});
     }
     options.push_back({"Wifi Atks", wifi_atk_menu});
@@ -71,9 +73,11 @@ void WifiMenu::optionsMenu() {
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
+    options.push_back({"Channel Analyzer", channel_analyzer_setup});
+    options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
-                           if (!wifiConnected) doScan = wifiConnectMenu();
+                           if (!WiFi.isConnected()) doScan = wifiConnectMenu();
 
                            if (doScan) {
                                esp_netif_t *esp_netinterface =

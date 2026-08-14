@@ -70,6 +70,7 @@ void Pn532ble::loop() {
             if (checkLetterShortcutPress() == 'i') { setMode(HF_ISO15693_READ_MODE); }
         }
 #endif
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -538,11 +539,11 @@ void Pn532ble::hf14aMfReadDumpMode() {
 
         while (check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         while (!check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
     } else {
         area.addLine("Not Mifare Ultralight");
@@ -633,11 +634,11 @@ void Pn532ble::hf14aMfuReadDumpMode() {
 
         while (check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         while (!check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
     } else {
         area.addLine("Not Mifare Ultralight");
@@ -698,11 +699,11 @@ void Pn532ble::hf14aMfuWriteDumpMode() {
         pn532_ble.wakeup();
         while (check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
         while (!check(SelPress)) {
             updateArea(area);
-            yield();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
     } else {
         area.addLine("Not Mifare Ultralight");
@@ -847,11 +848,11 @@ void Pn532ble::hf14aMfWriteDumpMode() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -950,11 +951,11 @@ void Pn532ble::hf15ReadDumpMode() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1009,11 +1010,11 @@ void Pn532ble::hf15WriteDumpMode() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1071,11 +1072,11 @@ void Pn532ble::loadMifareClassicDumpFile() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1128,11 +1129,11 @@ void Pn532ble::loadMifareUltralightDumpFile() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -1185,11 +1186,11 @@ void Pn532ble::loadIso15693DumpFile() {
 
     while (check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     while (!check(SelPress)) {
         updateArea(area);
-        yield();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
