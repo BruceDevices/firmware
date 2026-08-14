@@ -11,3 +11,4 @@ void brucegotchi_start();
 void brucegotchi_setup();
 void brucegotchi_update();
 #endif
+

@@ -57,3 +57,4 @@ bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);
 bool chooseCmdIrFile(FS *fs, const String &filepath);
 bool parseIrFile(FS *fs, const String &filepath, std::vector<IRCode *> &out, int maxCodes = 100);
 void spamAllIR();
+

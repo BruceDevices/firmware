@@ -1,3 +1,4 @@
+
 #pragma once
 #if !defined(LITE_VERSION)
 #include <Arduino.h>
@@ -52,7 +53,8 @@ extern int num_HS;
 extern int num_EAPOL;
 extern bool isLittleFS;
 extern uint8_t ch;
-extern uint64_t gotchiLastHandshakeKey; // BSSID key of the most recent captured handshake (Brucegotchi logging)
+extern uint64_t
+    gotchiLastHandshakeKey; // BSSID key of the most recent captured handshake (Brucegotchi logging)
 
 void setHandshakeSniffer();
 void sniffer_set_mode(SnifferMode mode);

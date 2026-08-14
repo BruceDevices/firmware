@@ -96,3 +96,4 @@ void IRMenu::drawIcon(float scale) {
         bruceConfig.bgColor
     );
 }
+

@@ -456,3 +456,4 @@ void brucegotchi_start() {
     gotchiLogClose();
 }
 #endif
+

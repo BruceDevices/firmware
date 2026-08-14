@@ -4,6 +4,7 @@
               github.com/spacehuhn
   ===========================================
 */
+
 #if !defined(LITE_VERSION)
 #include "sniffer.h"
 /* include all necessary libraries */
