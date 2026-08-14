@@ -13,6 +13,18 @@ uint32_t swap32(uint32_t value) {
            ((value & 0xFF000000) >> 24);
 }
 
+std::vector<uint16_t> parseRawDataString(const String &rawData) {
+    std::vector<uint16_t> buffer;
+    int idx = 0;
+    while (idx < (int)rawData.length()) {
+        while (idx < (int)rawData.length() && rawData[idx] == ' ') idx++;
+        int start = idx;
+        while (idx < (int)rawData.length() && rawData[idx] != ' ') idx++;
+        if (idx > start) { buffer.push_back((uint16_t)rawData.substring(start, idx).toInt()); }
+    }
+    return buffer;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Custom IR
 
@@ -21,6 +33,60 @@ static std::vector<IRCode *> codes;
 void resetCodesArray() {
     for (auto code : codes) { delete code; }
     codes.clear();
+}
+
+// Parse an .ir file into IRCode objects held in RAM (no repeated LittleFS reads)
+// Returns false if the file can't be opened. Codes without a "name:" get skipped.
+bool parseIrFile(FS *fs, const String &filepath, std::vector<IRCode *> &out, int maxCodes) {
+    File databaseFile = fs->open(filepath, FILE_READ);
+    if (!databaseFile) return false;
+    if (maxCodes < 1) maxCodes = 1;
+
+    String line;
+    String txt;
+    int total_codes = 0;
+
+    out.push_back(new IRCode());
+
+    while (databaseFile.available() && total_codes < maxCodes) {
+        line = databaseFile.readStringUntil('\n');
+        txt = line.substring(line.indexOf(":") + 1);
+        txt.trim();
+
+        if (line.startsWith("name:")) {
+            if (out[total_codes]->name != "") {
+                total_codes++;
+                out.push_back(new IRCode());
+            }
+            if (total_codes >= maxCodes) break; // cap reached, stop parsing
+            out[total_codes]->name = txt;
+            out[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
+        }
+
+        if (line.startsWith("type:")) out[total_codes]->type = txt;
+        if (line.startsWith("protocol:")) out[total_codes]->protocol = txt;
+        if (line.startsWith("address:")) out[total_codes]->address = txt;
+        if (line.startsWith("frequency:")) out[total_codes]->frequency = txt.toInt();
+        if (line.startsWith("bits:")) out[total_codes]->bits = txt.toInt();
+        if (line.startsWith("command:")) out[total_codes]->command = txt;
+        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
+            out[total_codes]->data = txt;
+        }
+
+        if (line.startsWith("#") && out[total_codes]->name != "") {
+            total_codes++;
+            if (total_codes < maxCodes) out.push_back(new IRCode());
+        }
+    }
+    databaseFile.close();
+
+    // Pre-parse raw data once so spamming never re-parses the string or reads the FS
+    for (auto code : out) {
+        if (code->type.equalsIgnoreCase("raw") && code->data.length() > 0) {
+            code->rawData = parseRawDataString(code->data);
+        }
+    }
+    return !out.empty();
 }
 
 static std::vector<IRCode *> recent_ircodes;
@@ -72,148 +138,48 @@ void selectRecentIrMenu() {
 }
 
 bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI) {
-    // SPAM all codes of the file
-
-    int total_codes = 0;
-    String line;
-
-    File databaseFile = fs->open(filepath, FILE_READ);
+    // Load the whole file into RAM once, then spam all codes forever until ESC
 
     setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
-    // digitalWrite(bruceConfigPins.irTx, LED_ON);
 
-    if (!databaseFile) {
-        Serial.println("Failed to open database file.");
-        displayError("Fail to open file");
-        delay(2000);
+    std::vector<IRCode *> fileCodes;
+    if (!parseIrFile(fs, filepath, fileCodes, 100)) {
+        if (!hideDefaultUI) {
+            displayError("Fail to open file");
+            delay(2000);
+        }
         return false;
     }
-    Serial.println("Opened database file.");
 
-    bool endingEarly = false;
-    int codes_sent = 0;
-    uint16_t frequency = 0;
-    String rawData = "";
-    String protocol = "";
-    String address = "";
-    String command = "";
-    String value = "";
-    uint8_t bits = 32;
-
-    databaseFile.seek(0); // comes back to first position
-
-    // count the number of codes to replay
-    while (databaseFile.available()) {
-        line = databaseFile.readStringUntil('\n');
-        if (line.startsWith("type:")) total_codes++;
+    int total_codes = 0;
+    for (auto code : fileCodes) {
+        if (code->name != "") total_codes++;
     }
 
-    Serial.printf("\nStarted SPAM all codes with: %d codes", total_codes);
-    // comes back to first position, beggining of the file
-    databaseFile.seek(0);
-    while (databaseFile.available()) {
-        if (!hideDefaultUI) { progressHandler(codes_sent, total_codes); }
-        line = databaseFile.readStringUntil('\n');
-        if (line.endsWith("\r")) line.remove(line.length() - 1);
+    if (total_codes == 0) {
+        for (auto code : fileCodes) { delete code; }
+        fileCodes.clear();
+        digitalWrite(bruceConfigPins.irTx, LED_OFF);
+        return false;
+    }
 
-        if (line.startsWith("type:")) {
-            codes_sent++;
-            String type = line.substring(5);
-            type.trim();
-            Serial.println("Type: " + type);
-            if (type == "raw") {
-                Serial.println("RAW code");
-                while (databaseFile.available()) {
-                    line = databaseFile.readStringUntil('\n');
-                    if (line.endsWith("\r")) line.remove(line.length() - 1);
+    Serial.printf("Loaded %d codes into RAM, spamming until ESC\n", total_codes);
+    if (!hideDefaultUI) { displayTextLine("Spamming " + String(total_codes) + " codes - ESC to stop"); }
 
-                    if (line.startsWith("frequency:")) {
-                        line = line.substring(10);
-                        line.trim();
-                        frequency = line.toInt();
-                        Serial.printf("Frequency: %d\n", frequency);
-                    } else if (line.startsWith("data:")) {
-                        rawData = line.substring(5);
-                        rawData.trim();
-                        Serial.println("RawData: " + rawData);
-                    } else if ((frequency != 0 && rawData != "") || line.startsWith("#")) {
-                        IRCode code;
-                        code.type = "raw";
-                        code.data = rawData;
-                        code.frequency = frequency;
-                        sendIRCommand(&code, hideDefaultUI);
-
-                        rawData = "";
-                        frequency = 0;
-                        type = "";
-                        line = "";
-                        break;
-                    }
-                }
-            } else if (type == "parsed") {
-                Serial.println("PARSED");
-                while (databaseFile.available()) {
-                    line = databaseFile.readStringUntil('\n');
-                    if (line.endsWith("\r")) line.remove(line.length() - 1);
-
-                    if (line.startsWith("protocol:")) {
-                        protocol = line.substring(9);
-                        protocol.trim();
-                        Serial.println("Protocol: " + protocol);
-                    } else if (line.startsWith("address:")) {
-                        address = line.substring(8);
-                        address.trim();
-                        Serial.println("Address: " + address);
-                    } else if (line.startsWith("command:")) {
-                        command = line.substring(8);
-                        command.trim();
-                        Serial.println("Command: " + command);
-                    } else if (line.startsWith("value:") || line.startsWith("state:")) {
-                        value = line.substring(6);
-                        value.trim();
-                        Serial.println("Value: " + value);
-                    } else if (line.startsWith("bits:")) {
-                        bits = line.substring(strlen("bits:")).toInt();
-                        Serial.println("bits: " + bits);
-                    } else if (line.indexOf("#") != -1) { // TODO: also detect EOF
-                        IRCode code(protocol, address, command, value, bits);
-                        sendIRCommand(&code, hideDefaultUI);
-
-                        protocol = "";
-                        address = "";
-                        command = "";
-                        value = "";
-                        bits = 32;
-                        type = "";
-                        line = "";
-                        break;
-                    }
-                }
-            }
+    bool exit = false;
+    uint32_t sent = 0;
+    while (!check(EscPress) && !exit) {
+        for (auto code : fileCodes) {
+            if (code->name == "") continue;
+            if (check(EscPress)) { exit = true; break; }
+            sendIRCommand(code, true);
+            sent++;
         }
-        // if user is pushing (holding down) TRIGGER button, stop transmission early
-        if (check(SelPress)) // Pause TV-B-Gone
-        {
-            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
-            if (!hideDefaultUI) { displayTextLine("Paused"); }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 
-            while (!check(SelPress)) { // If Presses Select again, continues
-                if (check(EscPress)) {
-                    endingEarly = true;
-                    break;
-                }
-                vTaskDelay(pdMS_TO_TICKS(1));
-            }
-            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
-            if (endingEarly) break; // Cancels  custom IR Spam
-            if (!hideDefaultUI) { displayTextLine("Running, Wait"); }
-        }
-    } // end while file has lines to process
-    databaseFile.close();
-    Serial.println("closed");
-    Serial.println("EXTRA finished");
-
-    resetCodesArray();
+    for (auto code : fileCodes) { delete code; }
+    fileCodes.clear();
     digitalWrite(bruceConfigPins.irTx, LED_OFF);
     return true;
 }
@@ -283,12 +249,101 @@ void otherIRcodes() {
     }
 } // end of otherIRcodes
 
+// Recursively collect all .ir file paths under dir (littlefs read once, paths only)
+static void collectIrFiles(FS &fs, const String &dir, std::vector<String> &files, uint8_t depth) {
+    if (depth > 8) return; // safety against cyclic/deep trees
+    File root = fs.open(dir);
+    if (!root || !root.isDirectory()) return;
+
+    std::vector<String> subdirs;
+    File entry = root.openNextFile();
+    while (entry) {
+        if (entry.isDirectory()) subdirs.push_back(entry.path());
+        else if (String(entry.name()).endsWith(".ir")) files.push_back(entry.path());
+        entry = root.openNextFile();
+    }
+    root.close();
+
+    for (auto &sub : subdirs) collectIrFiles(fs, sub, files, depth + 1);
+}
+
+void spamAllIR() {
+    checkIrTxPin();
+
+    if (!setupLittleFS()) {
+        displayError("LittleFS not mounted");
+        delay(1000);
+        return;
+    }
+
+    // 1) collect every .ir file on LittleFS (paths only, no parsing yet)
+    std::vector<String> irFiles;
+    collectIrFiles(LittleFS, "/BruceIR", irFiles, 0);
+    if (irFiles.empty()) collectIrFiles(LittleFS, "/", irFiles, 0);
+    if (irFiles.empty()) {
+        displayError("No .ir files found");
+        delay(1000);
+        return;
+    }
+
+    // 2) load ALL codes from ALL files into RAM (single LittleFS pass)
+    std::vector<IRCode *> allCodes;
+    const int MAX_CODES = 200; // RAM safety cap (parsed codes are ~0.5KB each)
+    for (size_t i = 0; i < irFiles.size() && (int)allCodes.size() < MAX_CODES; i++) {
+        progressHandler(i, irFiles.size(), "Loading IR files...");
+        std::vector<IRCode *> fileCodes;
+        if (parseIrFile(&LittleFS, irFiles[i], fileCodes, MAX_CODES - (int)allCodes.size())) {
+            for (auto code : fileCodes) {
+                if (code->name == "") {
+                    delete code;
+                    continue;
+                }
+                allCodes.push_back(code);
+            }
+        }
+        fileCodes.clear();
+    }
+    irFiles.clear();
+
+    bool capped = (int)allCodes.size() >= MAX_CODES;
+    if (allCodes.empty()) {
+        displayError("No valid IR codes found");
+        delay(1000);
+        return;
+    }
+
+    String msg = "Loaded " + String((int)allCodes.size()) + " codes";
+    if (capped) msg += " (RAM cap)";
+    displayTextLine(msg);
+    delay(500);
+
+    // 3) spam everything from RAM, forever, until ESC
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
+    bool exit = false;
+    uint32_t sent = 0;
+    while (!check(EscPress) && !exit) {
+        for (auto code : allCodes) {
+            if (check(EscPress)) { exit = true; break; }
+            sendIRCommand(code, true);
+            sent++;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    for (auto code : allCodes) { delete code; }
+    allCodes.clear();
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+}
+
 // IR commands
 
 void sendIRCommand(IRCode *code, bool hideDefaultUI) {
     setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
     // https://developer.flipper.net/flipperzero/doxygen/infrared_file_format.html
-    if (code->type.equalsIgnoreCase("raw")) sendRawCommand(code->frequency, code->data, hideDefaultUI);
+    if (code->type.equalsIgnoreCase("raw")) {
+        if (!code->rawData.empty()) sendRawBuffer(code->rawData, code->frequency, hideDefaultUI);
+        else sendRawCommand(code->frequency, code->data, hideDefaultUI);
+    }
     else if (code->protocol.equalsIgnoreCase("NEC"))
         sendNECCommand(code->address, code->command, hideDefaultUI);
     else if (code->protocol.equalsIgnoreCase("NECext"))
@@ -603,6 +658,31 @@ bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDe
 #endif
 }
 
+void sendRawBuffer(const std::vector<uint16_t> &buffer, uint16_t frequency, bool hideDefaultUI) {
+#ifdef USE_BOOST /// ENABLE 5V OUTPUT
+    PPM.enableOTG();
+#endif
+
+    IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
+    irsend.begin();
+    if (!hideDefaultUI) { displayTextLine("Sending.."); }
+
+    irsend.sendRaw(buffer.data(), buffer.size(), frequency);
+
+    if (bruceConfigPins.irTxRepeats > 0) {
+        for (uint8_t i = 1; i <= bruceConfigPins.irTxRepeats; i++) {
+            irsend.sendRaw(buffer.data(), buffer.size(), frequency);
+        }
+    }
+
+    Serial.println(
+        "Sent Raw Command" + (bruceConfigPins.irTxRepeats > 0
+                                  ? " (1 initial + " + String(bruceConfigPins.irTxRepeats) + " repeats)"
+                                  : "")
+    );
+    digitalWrite(bruceConfigPins.irTx, LED_OFF);
+}
+
 void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
     PPM.enableOTG();
@@ -672,40 +752,17 @@ bool chooseCmdIrFile(FS *fs, const String &filepath) {
     setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
 
     // Mode to choose and send command by command (limitted to 100 commands)
-    String line;
-    String txt;
-    codes.push_back(new IRCode());
-
-    while (databaseFile.available() && total_codes < 100) {
-        line = databaseFile.readStringUntil('\n');
-        txt = line.substring(line.indexOf(":") + 1);
-        txt.trim();
-
-        if (line.startsWith("name:")) {
-            if (codes[total_codes]->name != "") {
-                total_codes++;
-                codes.push_back(new IRCode());
-            }
-            // save signal name
-            codes[total_codes]->name = txt;
-            codes[total_codes]->filepath = txt + " " + filepath.substring(1 + filepath.lastIndexOf("/"));
-        }
-
-        if (line.startsWith("type:")) codes[total_codes]->type = txt;
-        if (line.startsWith("protocol:")) codes[total_codes]->protocol = txt;
-        if (line.startsWith("address:")) codes[total_codes]->address = txt;
-        if (line.startsWith("frequency:")) codes[total_codes]->frequency = txt.toInt();
-        if (line.startsWith("bits:")) codes[total_codes]->bits = txt.toInt();
-        if (line.startsWith("command:")) codes[total_codes]->command = txt;
-        if (line.startsWith("data:") || line.startsWith("value:") || line.startsWith("state:")) {
-            codes[total_codes]->data = txt;
-        }
-
-        if (line.startsWith("#") && total_codes < codes.size() && codes[total_codes]->name != "") {
-            total_codes++;
-            codes.push_back(new IRCode());
-        }
+    if (!parseIrFile(fs, filepath, codes, 100)) {
+        databaseFile.close();
+        return false;
     }
+    databaseFile.close();
+
+    int validCodes = 0;
+    for (auto code : codes) {
+        if (code->name != "") validCodes++;
+    }
+    total_codes = validCodes;
 
     options = {};
     bool exit = false;
