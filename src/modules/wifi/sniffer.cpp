@@ -62,6 +62,7 @@ bool littleFsWasFull = false; // true when we exit because LittleFS ran out
 volatile bool littleFsSpaceAvailable = true;
 int num_EAPOL = 0;
 int num_HS = 0;
+uint64_t gotchiLastHandshakeKey = 0;
 uint32_t packet_counter = 0;
 uint32_t deauth_counter = 0;
 uint32_t beacon_frames = 0;
@@ -434,6 +435,7 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         eapol4WayBuffer.erase(apKey);
 
         if (handshakeReadyBssids.find(apKey) == handshakeReadyBssids.end()) { num_HS++; }
+        gotchiLastHandshakeKey = apKey; // Brucegotchi logging: remember which AP just yielded a handshake
         markHandshakeReady(apKey);
         return;
     }

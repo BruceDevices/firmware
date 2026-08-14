@@ -4,6 +4,7 @@
 #include "core/mykeyboard.h"
 #include "core/wifi/wifi_common.h"
 #include "esp_err.h"
+#include "gotchi_log.h"
 #include "spam.h"
 #include "ui.h"
 #include <Arduino.h>
@@ -204,6 +205,7 @@ static void reconPhase(BruceState &s) {
         char buf[48];
         snprintf(buf, sizeof(buf), "Found %d APs on %d channels", totalAPs, (int)s.sortedChannels.size());
         setMood(8, "(-@_@)", buf);
+        gotchiLog("PHASE: RECON -> INTERACT (%d APs on %d channels)", totalAPs, (int)s.sortedChannels.size());
         updateUi(true);
         vTaskDelay(600 / portTICK_PERIOD_MS);
         s.phaseStart = millis();
@@ -258,6 +260,7 @@ static void interactPhase(BruceState &s) {
                 int attempted = apCount - skipped;
                 snprintf(buf, sizeof(buf), "Deauthing ch%d (%d/%d APs)", currentChan, attempted, apCount);
                 setMood(8, "(-@_@)", buf);
+                gotchiLog("DEAUTH: ch%d (%d/%d APs)", currentChan, attempted, apCount);
                 updateUi(true);
             }
         }
@@ -285,6 +288,7 @@ static void interactPhase(BruceState &s) {
         s.phaseStart = millis();
         s.lastAdvertise = 0;
         setMood(10, "(^__^)", "Making friends!");
+        gotchiLog("PHASE: INTERACT -> ADVERTISE (%d handshakes so far)", num_HS);
         updateUi(true);
     }
 }
@@ -305,6 +309,11 @@ static void advertisePhase(BruceState &s) {
         s.didDeauth = false;
         s.sortedChannels.clear();
         s.apDeauthCount.clear();
+        gotchiLog(
+            "PHASE: ADVERTISE -> RECON (cycle done, %d handshakes, %d friends)",
+            num_HS,
+            (int)getPwngridTotalPeers()
+        );
 
         ch = active_channels[0];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
@@ -344,6 +353,9 @@ void brucegotchi_start() {
         sniffer_set_mode(SnifferMode::HandshakesOnly);
         sniffer_reset_handshake_cache();
     }
+
+    gotchiLogSetFs(handshakeFs);
+    gotchiLogInit();
 
     brucegotchi_setup();
     drawTopCanvas();
@@ -399,6 +411,19 @@ void brucegotchi_start() {
         if (num_HS > s.prevHS) {
             s.prevHS = num_HS;
             setMood(0, "(0__0)", "Got handshake!");
+            char mac[18];
+            snprintf(
+                mac,
+                sizeof(mac),
+                "%02x:%02x:%02x:%02x:%02x:%02x",
+                (uint8_t)(gotchiLastHandshakeKey >> 40),
+                (uint8_t)(gotchiLastHandshakeKey >> 32),
+                (uint8_t)(gotchiLastHandshakeKey >> 24),
+                (uint8_t)(gotchiLastHandshakeKey >> 16),
+                (uint8_t)(gotchiLastHandshakeKey >> 8),
+                (uint8_t)gotchiLastHandshakeKey
+            );
+            gotchiLog("HANDSHAKE: %s (#%d total)", mac, num_HS);
             updateUi(true);
             vTaskDelay(800 / portTICK_PERIOD_MS);
         }
@@ -428,5 +453,6 @@ void brucegotchi_start() {
     registeredBeacons.clear();               // clear AP beacon list
     clearPwngridPeers();                     // clear pwngrid peer list
     sniffer_reset_handshake_cache();         // clear handshake tracking state
+    gotchiLogClose();
 }
 #endif

@@ -12,6 +12,7 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
 #include "core/wifi/wifi_common.h"
+#include "gotchi_log.h"
 #include <algorithm>
 
 uint8_t pwngrid_friends_tot = 0;
@@ -57,6 +58,13 @@ void add_new_peer(JsonDocument &json, signed int rssi) {
         // Update last friend and increment counter
         pwngrid_last_friend_name = json["name"].as<String>();
         pwngrid_friends_tot = pwngrid_peers.size();
+        gotchiLog(
+            "FRIEND: \"%s\" rssi=%d pwnd_tot=%d (friend #%d)",
+            json["name"].as<String>().c_str(),
+            rssi,
+            json["pwnd_tot"].as<int>(),
+            (int)pwngrid_peers.size()
+        );
     }
 }
 
