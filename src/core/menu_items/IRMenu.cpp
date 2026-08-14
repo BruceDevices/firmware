@@ -13,14 +13,14 @@ void IRMenu::optionsMenu() {
     M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT
 #endif
     options = {
-        {"TV-B-Gone", StartTvBGone              },
-        {"Custom IR", otherIRcodes              },
-        {"Spam All IR", spamAllIR               },
-        {"IR Read",   [=]() { IrRead(); }       },
+        {"TV-B-Gone",   StartTvBGone              },
+        {"Custom IR",   otherIRcodes              },
+        {"Spam All IR", spamAllIR                 },
+        {"IR Read",     [=]() { IrRead(); }       },
 #if !defined(LITE_VERSION)
-        {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
+        {"IR Jammer",   startIrJammer             }, // Simple frequency-adjustable jammer
 #endif
-        {"Config",    [this]() { configMenu(); }},
+        {"Config",      [this]() { configMenu(); }},
     };
     addOptionToMainMenu();
 

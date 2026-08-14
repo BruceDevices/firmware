@@ -171,7 +171,10 @@ bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI) {
     while (!check(EscPress) && !exit) {
         for (auto code : fileCodes) {
             if (code->name == "") continue;
-            if (check(EscPress)) { exit = true; break; }
+            if (check(EscPress)) {
+                exit = true;
+                break;
+            }
             sendIRCommand(code, true);
             sent++;
         }
@@ -323,7 +326,10 @@ void spamAllIR() {
     uint32_t sent = 0;
     while (!check(EscPress) && !exit) {
         for (auto code : allCodes) {
-            if (check(EscPress)) { exit = true; break; }
+            if (check(EscPress)) {
+                exit = true;
+                break;
+            }
             sendIRCommand(code, true);
             sent++;
         }
@@ -343,8 +349,7 @@ void sendIRCommand(IRCode *code, bool hideDefaultUI) {
     if (code->type.equalsIgnoreCase("raw")) {
         if (!code->rawData.empty()) sendRawBuffer(code->rawData, code->frequency, hideDefaultUI);
         else sendRawCommand(code->frequency, code->data, hideDefaultUI);
-    }
-    else if (code->protocol.equalsIgnoreCase("NEC"))
+    } else if (code->protocol.equalsIgnoreCase("NEC"))
         sendNECCommand(code->address, code->command, hideDefaultUI);
     else if (code->protocol.equalsIgnoreCase("NECext"))
         sendNECextCommand(code->address, code->command, hideDefaultUI);
@@ -432,7 +437,7 @@ void sendNECextCommand(String address, String command, bool hideDefaultUI) {
 }
 
 void sendRC5Command(String address, String command, bool hideDefaultUI) {
-    IRsend irsend(bruceConfigPins.irTx, true); // Set the GPIO to be used to sending the message.
+    IRsend irsend(bruceConfigPins.irTx, true); // Set the GPIO to be used to sending the message
     irsend.begin();
     if (!hideDefaultUI) { displayTextLine("Sending.."); }
     uint8_t addressValue = strtoul(address.substring(0, 2).c_str(), nullptr, 16);

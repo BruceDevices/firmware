@@ -40,7 +40,7 @@ struct IRCode {
     std::vector<uint16_t> rawData; // pre-parsed raw buffer for fast spam (type == "raw")
 };
 
-// Custom IR
+// Custom IR.
 void sendIRCommand(IRCode *code, bool hideDefaultUI = false);
 void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI = false);
 void sendRawBuffer(const std::vector<uint16_t> &buffer, uint16_t frequency, bool hideDefaultUI = false);
