@@ -108,6 +108,10 @@ void WifiMenu::configMenu() {
     std::vector<Option> wifiOptions;
 
     wifiOptions.push_back({"Change MAC", wifiMACMenu});
+    wifiOptions.push_back({bruceConfig.useRandomMac ? "Global Random MAC: ON" : "Global Random MAC: OFF", [this]() {
+                                bruceConfig.setUseRandomMac(!bruceConfig.useRandomMac);
+                                configMenu();
+                            }});
     wifiOptions.push_back({"Add Evil Wifi", addEvilWifiMenu});
     wifiOptions.push_back({"Remove Evil Wifi", removeEvilWifiMenu});
     wifiOptions.push_back({bruceConfig.TerminalLog ? "SSH/Telnet Log OFF" : "SSH/Telnet Log ON", [this]() {

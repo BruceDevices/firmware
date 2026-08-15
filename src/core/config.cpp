@@ -44,6 +44,7 @@ JsonDocument BruceConfig::toJson() const {
     _wifiAp["ssid"] = wifiAp.ssid;
     _wifiAp["pwd"] = wifiAp.pwd;
     setting["wifiMAC"] = wifiMAC; //@IncursioHack
+    setting["useRandomMac"] = useRandomMac;
     setting["TerminalLog"] = TerminalLog;
 
     JsonArray _evilWifiNames = setting["evilWifiNames"].to<JsonArray>();
@@ -292,6 +293,11 @@ void BruceConfig::fromFile(bool checkFS) {
         wifiMAC = "";
         count++;
         log_e("wifiMAC not found, using default");
+    }
+    if (!setting["useRandomMac"].isNull()) {
+        useRandomMac = setting["useRandomMac"].as<bool>();
+    } else {
+        useRandomMac = false;
     }
     if (!setting["TerminalLog"].isNull()) {
         TerminalLog = setting["TerminalLog"].as<bool>();
@@ -652,6 +658,11 @@ void BruceConfig::setWifiApCreds(const String &ssid, const String &pwd) {
 
 void BruceConfig::setTerminalLog(bool value) {
     TerminalLog = value;
+    saveFile();
+}
+
+void BruceConfig::setUseRandomMac(bool value) {
+    useRandomMac = value;
     saveFile();
 }
 

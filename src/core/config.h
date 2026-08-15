@@ -65,6 +65,7 @@ public:
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
+    bool useRandomMac = false; // Global random MAC for modules that opt-in
     bool TerminalLog = true;
 
     // EvilPortal
@@ -160,6 +161,7 @@ public:
     void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
     void setTerminalLog(bool value);
+    void setUseRandomMac(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);
     void removeQrCodeEntry(const String &menuName);

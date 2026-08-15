@@ -16,4 +16,6 @@ bool setCustomMAC(const String &mac);
 
 String generateRandomMAC();
 
+String generateGlobalRandomMAC();
+
 #endif

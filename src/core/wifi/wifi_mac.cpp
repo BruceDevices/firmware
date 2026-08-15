@@ -6,6 +6,7 @@
 #include <esp_wifi.h>
 
 void applyConfiguredMAC() {
+    // Apply custom MAC if set
     if (bruceConfig.wifiMAC.length() == 17 && validateMACFormat(bruceConfig.wifiMAC)) {
         uint8_t newMAC[6];
         sscanf(
@@ -23,6 +24,27 @@ void applyConfiguredMAC() {
             Serial.println("[WiFi] Custom MAC applied: " + bruceConfig.wifiMAC);
         } else {
             Serial.println("[WiFi] Failed to apply custom MAC, using default");
+        }
+    }
+    // Apply global random MAC if enabled and no custom MAC
+    else if (bruceConfig.useRandomMac) {
+        String randMAC = generateGlobalRandomMAC();
+        uint8_t newMAC[6];
+        sscanf(
+            randMAC.c_str(),
+            "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+            &newMAC[0],
+            &newMAC[1],
+            &newMAC[2],
+            &newMAC[3],
+            &newMAC[4],
+            &newMAC[5]
+        );
+
+        if (esp_wifi_set_mac(WIFI_IF_STA, newMAC) == ESP_OK) {
+            Serial.println("[WiFi] Global Random MAC applied: " + randMAC);
+        } else {
+            Serial.println("[WiFi] Failed to apply global random MAC, using default");
         }
     }
 }
@@ -59,6 +81,10 @@ String generateRandomMAC() {
         buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
     );
     return String(buf);
+}
+
+String generateGlobalRandomMAC() {
+    return generateRandomMAC();
 }
 
 void wifiMACMenu() {

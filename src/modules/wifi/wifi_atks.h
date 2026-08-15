@@ -60,4 +60,6 @@ void enhancedDeauthMenu();
 void showTargetSelection();
 std::vector<Host> buildTargetListFromScan();
 
+void wifi_bruteforce_menu();
+
 #endif
