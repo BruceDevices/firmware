@@ -205,3 +205,179 @@ void nrf_jammer() {
         displayError("NRF24 not found", true);
     }
 }
+
+// Configurable channel hopper (based on version 1.14, issue #2795) wearing the
+// standard Bruce interface. A Start/Stop/Step config list then sweeps the
+// carrier across that range. Next/Prev navigate or edit fields, Sel selects /
+// toggles edit, Esc exits. The frame is painted once and only the rows repaint
+// on change, so moving the cursor no longer flashes the whole screen.
+void nrf_channel_hopper() {
+    NRF24_MODE mode = nrf_setMode();
+    uint8_t NRFOnline = 0;
+    uint8_t NRFSPI = 0;
+
+    if (!nrf_start(mode)) {
+        displayError("NRF24 not found", true);
+        return;
+    }
+
+    if (CHECK_NRF_SPI(mode)) {
+        NRFradio.setPALevel(RF24_PA_MAX);
+        NRFradio.startConstCarrier(RF24_PA_MAX, 50);
+        if (!NRFradio.setDataRate(RF24_2MBPS)) {
+            // Optionally log error or handle failure
+        }
+        NRFSPI = 1;
+    }
+
+    int startChannel = 0;
+    int stopChannel = 80;
+    int stepSize = 2;
+
+    const int ROW_COUNT = 5;
+    int menuIndex = 0;
+    bool editMode = false;
+    bool runJammer = false;
+    bool hopmenu = true;
+
+    // Standard Bruce list geometry (mirrors the BLE Suite frame): rows sit right
+    // below the title and fit the available height on any panel.
+    const int listL = 8;
+    const int listW = tftWidth - 16;
+    const int top = BORDER_PAD_Y + 8 * FM + 3;
+    const int footY = tftHeight - 8 * FP - 6;
+    int rowH = (footY - top - 2) / ROW_COUNT;
+    if (rowH > 8 * FP + 8) rowH = 8 * FP + 8;
+    if (rowH < 8 * FP + 2) rowH = 8 * FP + 2;
+
+    bool frameDirty = true; // repaint frame + title
+    bool rowsDirty = true;  // repaint the rows
+    int lastSel = -1;
+    bool lastEdit = false;
+
+    auto rowLabel = [&](int i, bool editing) -> String {
+        switch (i) {
+            case 0: return editing ? "Start   CH [" + String(startChannel) + "]" : "Start   CH " + String(startChannel);
+            case 1: return editing ? "Stop    CH [" + String(stopChannel) + "]" : "Stop    CH " + String(stopChannel);
+            case 2: return editing ? "Step    [" + String(stepSize) + "] MHz" : "Step    " + String(stepSize) + " MHz";
+            case 3: return "Start Jammer";
+            default: return "Exit";
+        }
+    };
+
+    vTaskDelay(350 / portTICK_PERIOD_MS);
+    NRFSerial.println("RADIOS");
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    while (hopmenu) {
+        if (CHECK_NRF_UART(mode) || CHECK_NRF_BOTH(mode)) {
+            if (NRFSerial.available()) {
+                String incomingNRFs = NRFSerial.readStringUntil('\n');
+                incomingNRFs.trim();
+                if (incomingNRFs.length() == 1 && isDigit(incomingNRFs.charAt(0))) {
+                    NRFOnline = (incomingNRFs.toInt());
+                    if (CHECK_NRF_BOTH(mode)) { NRFOnline = (incomingNRFs.toInt()) + NRFSPI; }
+                    rowsDirty = true;
+                }
+            }
+        }
+
+        if (frameDirty) {
+            drawMainBorderWithTitle("NRF CH HOPPER");
+            frameDirty = false;
+            rowsDirty = true;
+            lastSel = -1;
+        }
+
+        if (rowsDirty || menuIndex != lastSel || editMode != lastEdit) {
+            tft.setTextSize(FP);
+            for (int i = 0; i < ROW_COUNT; i++) {
+                int y = top + i * rowH;
+                bool selected = (i == menuIndex);
+                bool editing = selected && editMode && i < 3;
+                uint16_t bg = editing      ? getColorVariation(bruceConfig.priColor, 8, 1)
+                              : selected   ? bruceConfig.priColor
+                                           : bruceConfig.bgColor;
+                uint16_t fg = (selected || editing) ? bruceConfig.bgColor : bruceConfig.priColor;
+                tft.fillRect(listL, y - 2, listW, rowH, bg);
+                tft.setTextColor(fg, bg);
+                tft.setCursor(listL + 6, y + (rowH - 8 * FP) / 2 - 1);
+                tft.print(rowLabel(i, editing));
+            }
+
+            // Footer hint, dimmed like the other Bruce lists.
+            tft.fillRect(listL, footY, listW, 8 * FP + 2, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, -1), bruceConfig.bgColor);
+            tft.setCursor(listL, footY);
+            tft.print(editMode ? "NEXT/PREV +/-  SEL ok" : "SEL edit/run  ESC exit");
+
+            if (CHECK_NRF_UART(mode) || CHECK_NRF_BOTH(mode)) {
+                NRFSerial.println(
+                    "HOPPER_" + String(startChannel) + "_" + String(stopChannel) + "_" + String(stepSize)
+                );
+            }
+            lastSel = menuIndex;
+            lastEdit = editMode;
+            rowsDirty = false;
+        }
+
+        if (check(EscPress)) {
+            if (editMode) editMode = false; // Esc backs out of edit first
+            else hopmenu = false;
+            rowsDirty = true;
+        } else if (check(NextPress)) {
+            if (editMode) {
+                if (menuIndex == 0) startChannel = (startChannel % 125) + 1;
+                if (menuIndex == 1) stopChannel = (stopChannel % 125) + 1;
+                if (menuIndex == 2) stepSize = (stepSize % 10) + 1;
+            } else {
+                menuIndex = (menuIndex + 1) % ROW_COUNT;
+            }
+            rowsDirty = true;
+        } else if (check(PrevPress)) {
+            if (editMode) {
+                if (menuIndex == 0) startChannel = (startChannel - 2 + 125) % 125 + 1;
+                if (menuIndex == 1) stopChannel = (stopChannel - 2 + 125) % 125 + 1;
+                if (menuIndex == 2) stepSize = (stepSize - 2 + 10) % 10 + 1;
+            } else {
+                menuIndex = (menuIndex - 1 + ROW_COUNT) % ROW_COUNT;
+            }
+            rowsDirty = true;
+        } else if (check(SelPress)) {
+            if (menuIndex == 3 && !editMode) {
+                runJammer = true;
+                hopmenu = false;
+            } else if (menuIndex == 4 && !editMode) {
+                hopmenu = false;
+            } else if (menuIndex < 3) {
+                editMode = !editMode;
+            }
+            rowsDirty = true;
+        }
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+
+    if (runJammer) {
+        int channel = startChannel;
+        drawMainBorderWithTitle("NRF CH HOPPER");
+        printSubtitle("Channel Hopper");
+        padprintln("");
+        padprintln("STATUS : " + String(NRFOnline) + " ACTIVE");
+        padprintln("RANGE  : CH " + String(startChannel) + " - " + String(stopChannel));
+        padprintln("STEP   : " + String(stepSize) + " MHz");
+        padprintln("");
+        padprintln("> Exit: Esc");
+
+        while (!check(EscPress)) {
+            channel += stepSize;
+            if (channel > stopChannel) channel = startChannel;
+            if (CHECK_NRF_SPI(mode)) NRFradio.setChannel(channel);
+        }
+    }
+
+    // Always release the carrier on the way out (the config screen keeps it live
+    // on ch50, so exiting without running the jammer must stop it too).
+    if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+    if (CHECK_NRF_UART(mode) || CHECK_NRF_BOTH(mode)) NRFSerial.println("OFF");
+}
