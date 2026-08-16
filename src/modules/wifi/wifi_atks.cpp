@@ -22,8 +22,9 @@
 // Format MAC address from byte array
 static String macToStr(const uint8_t *mac) {
     char buf[18];
-    snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(
+        buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
     return String(buf);
 }
 
@@ -278,14 +279,14 @@ void wifi_atk_menu() {
 
     bool scanAtks = false;
     options = {
-        {"Target Atks",        [&]() { scanAtks = true; }       },
+        {"Target Atks",           [&]() { scanAtks = true; }       },
         {"WiFi Pass Brute Force", [=]() { wifi_bruteforce_menu(); }},
 #ifndef LITE_VERSION
-        {"Karma Attack",       [=]() { karma_setup(); }         },
+        {"Karma Attack",          [=]() { karma_setup(); }         },
 #endif
-        {"Beacon SPAM",        [=]() { beaconAttack(); }        },
-        {"Deauth Flood",       [=]() { deauthFloodAttack(); }   },
-        {"Enhanced Deauth",    [=]() { enhancedDeauthMenu(); }  },
+        {"Beacon SPAM",           [=]() { beaconAttack(); }        },
+        {"Deauth Flood",          [=]() { deauthFloodAttack(); }   },
+        {"Enhanced Deauth",       [=]() { enhancedDeauthMenu(); }  },
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -730,6 +731,30 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "Martin Router King\n"
                                 "John Wilkes Bluetooth\n"
                                 "Pretty Fly for a Wi-Fi\n"
+                                "EDP445 Wifi\n"
+                                "BigBalls69\n"
+                                "millimeterdefeater05\n"
+                                "GubbyThisGubbyThatGubbyServerGubbyWiFiGubbyRAM\n"
+                                "LeQuietOnLeCreek\n"
+                                "wifi hacks = true\n"
+                                "someones wifi = off\n"
+                                "ddos = true\n"
+                                "nullsec = skid\n"
+                                "DADA TURN ON DAT MISERY~~!!\n"
+                                "nya~~\n"
+                                "yess senpai~~\n"
+                                "whos mommys GOOD BOY~~ meow uwu~~\n"
+                                "oniii-chan!~~\n"
+                                "corny on the bob, off the bob\n"
+                                "liver with engines\n"
+                                "le BEANIE WENIES are DELISH!!!\n"
+                                "DanTDM Minecon 2015\n"
+                                "Dan would you like to kiss my house\n"
+                                "Dan whats your favorite block in Minecraft\n"
+                                "Free Minecrft Jenny Mod\n"
+                                "FuckIsrael6969\n"
+                                "yellow font slop = im a idiot\n"
+
 #ifndef LITE_VERSION
                                 "Bill Wi the Science Fi\n"
                                 "I Believe Wi Can Fi\n"
@@ -999,9 +1024,7 @@ void wifi_bruteforce_menu() {
         int ch = ap_records[i].primary;
         int32_t rssi = WiFi.RSSI(i);
         String optText = ssid + " (" + String(rssi) + "dBm|ch." + String(ch) + "|" + bssid + ")";
-        options.push_back({optText.c_str(), [=]() {
-            ap_record = ap_records[i];
-        }});
+        options.push_back({optText.c_str(), [=]() { ap_record = ap_records[i]; }});
     }
     addOptionToMainMenu();
     loopOptions(options);
@@ -1051,14 +1074,12 @@ void wifi_bruteforce_menu() {
 
     if (sourceChoice == 1) {
         useBuiltin = true;
-        passwords = {
-            "12345678", "123456789", "password", "admin", "admin123", "1234567890",
-            "qwerty", "abc123", "letmein", "welcome", "admin1234", "password1",
-            "password123", "123456789", "12345678", "11111111", "00000000",
-            "88888888", "12341234", "abcd1234", "adminadmin", "root", "root123",
-            "toor", "changeme", "secret", "test123", "wifi", "wifi123",
-            "wireless", "internet", "router", "router123"
-        };
+        passwords = {"12345678",    "123456789", "password",   "admin",    "admin123",  "1234567890",
+                     "qwerty",      "abc123",    "letmein",    "welcome",  "admin1234", "password1",
+                     "password123", "123456789", "12345678",   "11111111", "00000000",  "88888888",
+                     "12341234",    "abcd1234",  "adminadmin", "root",     "root123",   "toor",
+                     "changeme",    "secret",    "test123",    "wifi",     "wifi123",   "wireless",
+                     "internet",    "router",    "router123"};
     } else {
         FS *fs = nullptr;
         if (setupSdCard()) fs = &SD;
@@ -1153,9 +1174,7 @@ void wifi_bruteforce_menu() {
         }
 
         // Apply backoff if needed
-        if (backoffMs > 0) {
-            delay(backoffMs);
-        }
+        if (backoffMs > 0) { delay(backoffMs); }
 
         // Try connection
         WiFi.disconnect(true);
@@ -1227,7 +1246,9 @@ void wifi_bruteforce_menu() {
     summary += "Time: " + String(totalTime) + "s\n";
     summary += "Attempts: " + String(attempts) + "\n";
     summary += "Success: " + String(successes) + "\n";
-    summary += "Avg Rate: " + String(passwords.size() > 0 ? (float)attempts / (totalTime > 0 ? totalTime : 1) : 0) + "/s";
+    summary +=
+        "Avg Rate: " + String(passwords.size() > 0 ? (float)attempts / (totalTime > 0 ? totalTime : 1) : 0) +
+        "/s";
     displayInfo(summary, true);
 
     wifi_atk_unsetWifi();
