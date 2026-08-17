@@ -754,6 +754,13 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "Free Minecrft Jenny Mod\n"
                                 "FuckIsrael6969\n"
                                 "yellow font slop = im a idiot\n"
+                                "Wi-Fi Is Hot Baby\n"
+                                "Wi-Fight the Feeling\n"
+                                "Wi-Fight When You Can Wi-Fly\n"
+                                "Wi-Fight the Power\n"
+                                "Wi-Fight for Your Right to Party\n"
+                                "Wi-Fight the System\n"
+                                "python lowk sucks\n"
 
 #ifndef LITE_VERSION
                                 "Bill Wi the Science Fi\n"
@@ -802,14 +809,14 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "The Creep Next Door\n"
                                 "Ye Olde Internet\n"};
 
-const char rickrollssids[] PROGMEM = {"01 Never gonna give you up\n"
-                                      "02 Never gonna let you down\n"
-                                      "03 Never gonna run around\n"
-                                      "04 and desert you\n"
-                                      "05 Never gonna make you cry\n"
-                                      "06 Never gonna say goodbye\n"
-                                      "07 Never gonna tell a lie\n"
-                                      "08 and hurt you\n"};
+const char rickrollssids[] PROGMEM = {"Never gonna give you up\n"
+                                      "Never gonna let you down\n"
+                                      "Never gonna run around\n"
+                                      "and desert you\n"
+                                      "Never gonna make you cry\n"
+                                      "Never gonna say goodbye\n"
+                                      "Never gonna tell a lie\n"
+                                      "and hurt you\n"};
 
 void beaconSpamList(const char list[]) {
     uint8_t beaconPacket[BEACON_PKT_LEN];

@@ -273,6 +273,30 @@ void boot_screen() {
         "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1
     ); // will draw outside the screen on non touch devices
 }
+/*********************************************************************
+ **  Function: boot_sound_or_tone
+ **  Play boot sound/tone
+ *********************************************************************/
+
+void boot_sound_or_tone() {
+#if defined(BUZZ_PIN)
+    if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
+    // Bip M5 just because it can. Does not bip if splashscreen is bypassed
+    _tone(5000, 50);
+    delay(200);
+    _tone(5000, 50);
+#elif defined(HAS_NS4168_SPKR)
+    // play a boot sound
+    if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
+    if (bruceConfig.theme.boot_sound) {
+        playAudioFile(bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_sound));
+    } else if (SD.exists("/boot.wav")) {
+        playAudioFile(&SD, "/boot.wav");
+    } else if (LittleFS.exists("/boot.wav")) {
+        playAudioFile(&LittleFS, "/boot.wav");
+    }
+#endif
+}
 
 /*********************************************************************
  **  Function: boot_screen_anim

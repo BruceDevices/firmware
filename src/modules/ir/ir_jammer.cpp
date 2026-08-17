@@ -7,17 +7,16 @@
  */
 
 #include "ir_jammer.h"
-#include "core/display.h"
 #include "TV-B-Gone.h"
-#include "ir_utils.h"
+#include "core/display.h"
 #include "core/mykeyboard.h"
+#include "ir_utils.h"
 #include <globals.h>
 #include <interface.h>
 
 // Common IR frequencies in Hz
 const uint16_t IR_FREQUENCIES[] = {30000, 33000, 36000, 38000, 40000, 42000, 56000};
 const int NUM_FREQS = sizeof(IR_FREQUENCIES) / sizeof(IR_FREQUENCIES[0]);
-
 
 void initJammerState(JammerState &state) {
     state.jamCount = 0;
@@ -48,7 +47,7 @@ void renderJammerUI(JammerState &state) {
     tft.setCursor(10, 40);
     tft.setTextSize(FM);
     tft.setTextColor(TFT_MAGENTA, bruceConfig.bgColor);
-    padprint("IR AGGRESSIVE JAMMER");
+    padprint("IR JAMMER");
 
     // Status
     int curY = 70;
@@ -140,7 +139,7 @@ void handleJammerInput(JammerState &state) {
 
 void performJamming(JammerState &state, IRsend &irsend) {
     uint32_t now = millis();
-    uint16_t period38 = 1000000 / 38000 / 2;  // 13us half-period
+    uint16_t period38 = 1000000 / 38000 / 2; // 13us half-period
 
     // Calculate ON/OFF times based on strength (duty cycle)
     uint16_t onTime = period38 * state.strength / 100;
@@ -159,9 +158,7 @@ void performJamming(JammerState &state, IRsend &irsend) {
         delayMicroseconds(offTime);
 
         // Allow input handling during long jam sessions
-        if (i % 500 == 0) {
-            handleJammerInput(state);
-        }
+        if (i % 500 == 0) { handleJammerInput(state); }
     }
     state.jamCount += 2000;
 
@@ -184,9 +181,7 @@ void performJamming(JammerState &state, IRsend &irsend) {
     }
 
     // Update UI periodically
-    if (now - state.lastUIUpdate > 500) {
-        state.redraw = true;
-    }
+    if (now - state.lastUIUpdate > 500) { state.redraw = true; }
 }
 
 void updateStats(JammerState &state) {

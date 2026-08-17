@@ -28,5 +28,10 @@ NRF24_MODE nrf_setMode();
 
 bool nrf_start(NRF24_MODE mode);
 
+// Cleanly stops an active SPI session: stops the constant carrier (if any),
+// powers the radio down and marks the radio as stopped. Safe to call even if
+// the radio was never started.
+void nrf_stop();
+
 void nrf_info();
 #endif
