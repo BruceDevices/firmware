@@ -20,6 +20,9 @@
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/channel_analyzer.h"
+#if defined(NM_CYD_ESP32C5)
+#include "modules/wifi/dual_band_analyzer.h"
+#endif
 #include "modules/wifi/jam_detect.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
@@ -74,6 +77,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Channel Analyzer", channel_analyzer_setup});
+#if defined(NM_CYD_ESP32C5)
+    options.push_back({"Dual Band Analyzer", dual_band_analyzer_setup});
+#endif
     options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
