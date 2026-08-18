@@ -1,16 +1,25 @@
 #include "universal_ir.h"
 #include "TV-B-Gone.h"
-#include "custom_ir.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/settings.h"
+#include "custom_ir.h"
+#include "ir_read.h"
+#include "universal_history.h"
 
+#include <functional>
 #include <map>
 
 #define UNIVERSAL_IR_ROOT "/UniversalIR"
 #define UNIVERSAL_IR_ASSETS "/UniversalIR/assets"
 #define ORIENT_FILE "/UniversalIR/orient.txt"
+
+#define HIST_RECENT_CAP 24
+#define HIST_FAV_CAP 64
+
+// Long-press (hold SEL) threshold for the Preferiti toggle.
+#define LONG_PRESS_MS 750
 
 // Resolved DB root for the running FS (see find_db_root). Some zip extractors
 // wrap the archive content in a folder named after the .zip (e.g.
@@ -106,6 +115,18 @@ struct CategoryConfig {
     int orientation = ORIENT_AUTO;
     std::vector<ButtonDef> buttons;
 };
+
+// Describes where a SigIndex came from, so a signal can be replayed later from
+// the Preferiti/Recenti lists (path is a folder -> index recursively, or a
+// single .ir file).
+struct IrSource {
+    String path;
+    bool isDir = false;
+};
+
+static String starless(const String &s) {
+    return s.startsWith("★ ") ? s.substring(2) : s;
+}
 
 static std::vector<ButtonDef> default_tv_layout() {
     std::vector<ButtonDef> b;
@@ -539,11 +560,140 @@ static int grid_move_down(int sel, int total, const GridMetrics &m) {
     return (nsel < total) ? nsel : total - 1;
 }
 
+// Generic paged grid over plain labels (mirrors the RF module's grid_navigate).
+// Short SEL -> on_select(sel) (return true to exit), HOLD SEL (~750ms) ->
+// on_long(sel). Used by the Preferiti/Recenti lists.
+static void ir_grid_navigate(
+    const std::vector<String> &labels, const String &title,
+    const std::function<bool(int)> &on_select, const std::function<void(int)> &on_long = nullptr
+) {
+    if (labels.empty()) return;
+    std::vector<ButtonDef> btns;
+    btns.reserve(labels.size());
+    for (const auto &l : labels) {
+        ButtonDef b;
+        b.label = l;
+        btns.push_back(b);
+    }
+
+    int total = btns.size();
+    GridMetrics m = compute_grid_metrics();
+    int sel = 0;
+    int page = 0;
+    unsigned long openTs = millis();
+
+    drawMainBorderWithTitle(title);
+    render_page(m, btns, total, page, sel);
+
+    while (true) {
+#ifdef HAS_3_BUTTONS
+        if (EscPress && PrevPress) EscPress = false;
+#endif
+        if (check(EscPress)) break;
+
+        bool moved = false;
+#ifdef HAS_ENCODER
+        int32_t rot = drainRotarySteps();
+        if (rot != 0) {
+            check(PrevPress);
+            check(NextPress);
+            check(UpPress);
+            check(DownPress);
+            int dir = (rot > 0) ? -1 : 1;
+            int steps = (rot > 0) ? (int)rot : (int)-rot;
+            for (int i = 0; i < steps; i++) sel = (sel + dir + total) % total;
+            moved = true;
+            vTaskDelay(4 / portTICK_PERIOD_MS);
+        } else
+#endif
+        {
+            if (check(PrevPress)) {
+                sel = (sel - 1 + total) % total;
+                moved = true;
+            }
+            if (check(NextPress)) {
+                sel = (sel + 1) % total;
+                moved = true;
+            }
+            if (check(UpPress)) {
+                sel = grid_move_up(sel, total, m);
+                moved = true;
+            }
+            if (check(DownPress)) {
+                sel = grid_move_down(sel, total, m);
+                moved = true;
+            }
+            if (check(NextPagePress)) {
+                sel = (sel + m.perPage) % total;
+                moved = true;
+            }
+            if (check(PrevPagePress)) {
+                int np = (sel - m.perPage) % total;
+                if (np < 0) np += total;
+                sel = np;
+                moved = true;
+            }
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+
+        int newPage = sel / m.perPage;
+        if (newPage != page) {
+            page = newPage;
+            moved = true;
+        }
+        if (moved) render_page(m, btns, total, page, sel);
+
+        // Short tap = select, hold ~750ms = long press (on_long). Some boards
+        // re-set SelPress every ~200ms while the button is held, so the press is
+        // considered released once SelPress stays clear for 60ms.
+        if (millis() - openTs > 600 && SelPress) {
+            unsigned long firstSeen = millis();
+            unsigned long lastSeen = firstSeen;
+            bool escaped = false;
+            while (millis() - lastSeen < 60) {
+                if (SelPress) {
+                    lastSeen = millis();
+                    SelPress = false;
+                    AnyKeyPress = false;
+                    SerialCmdPress = false;
+                }
+                if (EscPress) {
+                    escaped = true;
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            if (escaped) {
+                EscPress = false;
+                break;
+            }
+            bool isLong = (lastSeen - firstSeen >= LONG_PRESS_MS);
+            if (isLong) {
+                if (on_long != nullptr) on_long(sel);
+                drawMainBorderWithTitle(title);
+                render_page(m, btns, total, page, sel);
+                openTs = millis();
+            } else {
+                if (on_select(sel)) break;
+                drawMainBorderWithTitle(title);
+                render_page(m, btns, total, page, sel);
+                openTs = millis();
+            }
+        }
+    }
+}
+
 static bool remote_grid(
     FS &fs, const SigIndex &idx, const std::vector<ButtonDef> &buttons, const String &title,
-    const String &spam_brand, const String &brands_path, int orientation
+    const String &spam_brand, const String &brands_path, int orientation, IrSource src = IrSource()
 ) {
     std::vector<ButtonDef> btns = buttons;
+    std::vector<HistEntry> favs = (src.path.length() > 0)
+        ? hist_load(fs, g_ir_root + "/favorites.txt")
+        : std::vector<HistEntry>();
+    for (auto &b : btns) {
+        if (src.path.length() > 0 && hist_has(favs, src.path, b.label)) b.label = "★ " + b.label;
+    }
     if (brands_path.length() > 0) btns.push_back({"Brands", {}});
     btns.push_back({"Orient", {}});
     btns.push_back({"Back", {}});
@@ -615,35 +765,83 @@ static bool remote_grid(
         }
         if (moved) render_page(m, btns, total, page, sel);
 
-        if (millis() - openTs > 600 && check(SelPress)) {
+        // Short tap = select, hold ~750ms = toggle Preferiti. Some boards
+        // re-set SelPress every ~200ms while the button is held, so the press is
+        // considered released once SelPress stays clear for 60ms.
+        if (millis() - openTs > 600 && SelPress) {
+            unsigned long firstSeen = millis();
+            unsigned long lastSeen = firstSeen;
+            bool escaped = false;
+            while (millis() - lastSeen < 60) {
+                if (SelPress) {
+                    lastSeen = millis();
+                    SelPress = false;
+                    AnyKeyPress = false;
+                    SerialCmdPress = false;
+                }
+                if (EscPress) {
+                    escaped = true;
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            if (escaped) {
+                EscPress = false;
+                break;
+            }
+            bool isLong = (lastSeen - firstSeen >= LONG_PRESS_MS);
             ButtonDef &btn = btns[sel];
-            if (btn.label == "Back") break;
-            if (btn.label == "Orient") {
+            if (isLong) {
+                if (sel < (int)buttons.size() && src.path.length() > 0) {
+                    String clean = starless(btn.label);
+                    std::vector<HistEntry> favs = hist_load(fs, g_ir_root + "/favorites.txt");
+                    if (hist_has(favs, src.path, clean)) {
+                        hist_remove(favs, src.path, clean);
+                        displayWarning("Removed from Preferiti");
+                    } else {
+                        hist_add(favs, src.path, clean, src.isDir, HIST_FAV_CAP);
+                        displaySuccess("Added to Preferiti");
+                    }
+                    hist_save(fs, g_ir_root + "/favorites.txt", favs);
+                    btn.label = (hist_has(favs, src.path, clean) ? "★ " : "") + clean;
+                    delay(600);
+                }
+                drawMainBorderWithTitle(title);
+                render_page(m, btns, total, page, sel);
+                openTs = millis();
+            } else if (btn.label == "Back") {
+                break;
+            } else if (btn.label == "Orient") {
                 gsetRotation(true);
                 returnToMenu = false;
                 return true;
-            }
-            if (btn.label == "Brands") {
+            } else if (btn.label == "Brands") {
                 show_brands_flow(fs, brands_path, buttons, orientation, title);
                 drawMainBorderWithTitle(title);
                 render_page(m, btns, total, page, sel);
                 openTs = millis();
                 continue;
-            }
-            int sent = spam_index(fs, idx, btn.search, spam_brand, btn.label);
-            if (sent < 0) {
-                displayWarning("Stopped");
-                delay(1000);
-            } else if (sent > 0) {
-                displaySuccess(String(sent) + " sent");
-                delay(1000);
             } else {
-                displayError("No signals sent");
-                delay(1000);
+                int sent = spam_index(fs, idx, btn.search, spam_brand, btn.label);
+                if (sent > 0 && src.path.length() > 0) {
+                    std::vector<HistEntry> rec = hist_load(fs, g_ir_root + "/recent.txt");
+                    hist_add(rec, src.path, starless(btn.label), src.isDir, HIST_RECENT_CAP);
+                    hist_save(fs, g_ir_root + "/recent.txt", rec);
+                }
+                if (sent < 0) {
+                    displayWarning("Stopped");
+                    delay(1000);
+                } else if (sent > 0) {
+                    displaySuccess(String(sent) + " sent");
+                    delay(1000);
+                } else {
+                    displayError("No signals sent");
+                    delay(1000);
+                }
+                drawMainBorderWithTitle(title);
+                render_page(m, btns, total, page, sel);
+                openTs = millis();
             }
-            drawMainBorderWithTitle(title);
-            render_page(m, btns, total, page, sel);
-            openTs = millis();
         }
     }
     return false;
@@ -651,17 +849,18 @@ static bool remote_grid(
 
 static void show_remote(
     FS &fs, const SigIndex &idx, const std::vector<ButtonDef> &buttons, String title, String spam_brand,
-    String brands_path, int orientation
+    String brands_path, int orientation, IrSource src = IrSource()
 ) {
     (void)orientation;
     while (true) {
-        bool rotated = remote_grid(fs, idx, buttons, title, spam_brand, brands_path, ORIENT_GRID);
+        bool rotated = remote_grid(fs, idx, buttons, title, spam_brand, brands_path, ORIENT_GRID, src);
         if (!rotated) break;
     }
 }
 
 static void generic_signal_list(
-    FS &fs, const SigIndex &idx, String brand, String title, String brands_path, int orientation
+    FS &fs, const SigIndex &idx, String brand, String title, String brands_path, int orientation,
+    IrSource src = IrSource()
 ) {
     std::map<String, int> name_counts;
     for (auto &file : idx) {
@@ -684,10 +883,15 @@ static void generic_signal_list(
             String label = entry.first;
             if (entry.second > 1) label += " (" + String(entry.second) + ")";
             String sig_name = entry.first;
-            options.push_back({label.c_str(), [&fs, &idx, brand, sig_name]() {
+            options.push_back({label.c_str(), [&fs, &idx, brand, sig_name, src]() {
                 std::vector<String> search;
                 search.push_back(sig_name);
                 int sent = spam_index(fs, idx, search, brand, sig_name);
+                if (sent > 0 && src.path.length() > 0) {
+                    std::vector<HistEntry> rec = hist_load(fs, g_ir_root + "/recent.txt");
+                    hist_add(rec, src.path, sig_name, src.isDir, HIST_RECENT_CAP);
+                    hist_save(fs, g_ir_root + "/recent.txt", rec);
+                }
                 if (sent < 0) {
                     displayWarning("Stopped");
                     delay(1000);
@@ -749,10 +953,13 @@ static void show_brands_flow(
                     delay(1500);
                     return;
                 }
+                IrSource src;
+                src.path = brand_path;
+                src.isDir = true;
                 if (buttons.empty()) {
-                    generic_signal_list(fs, idx, brand, brand, "", orientation);
+                    generic_signal_list(fs, idx, brand, brand, "", orientation, src);
                 } else {
-                    show_remote(fs, idx, buttons, brand, brand, "", orientation);
+                    show_remote(fs, idx, buttons, brand, brand, "", orientation, src);
                 }
             }});
         }
@@ -936,10 +1143,13 @@ static void open_category(FS &fs, const Category &cat, const CategoryConfig &cfg
     if (flat_path.length() > 0) {
         SigIndex idx = build_flat_index(fs, flat_path);
         if (!idx.empty()) {
+            IrSource src;
+            src.path = flat_path;
+            src.isDir = false;
             if (buttons.empty()) {
-                generic_signal_list(fs, idx, cat.name, cat.name, brands_path, cfg.orientation);
+                generic_signal_list(fs, idx, cat.name, cat.name, brands_path, cfg.orientation, src);
             } else {
-                show_remote(fs, idx, buttons, cat.name, cat.name, brands_path, cfg.orientation);
+                show_remote(fs, idx, buttons, cat.name, cat.name, brands_path, cfg.orientation, src);
             }
             return;
         }
@@ -953,7 +1163,10 @@ static void open_category(FS &fs, const Category &cat, const CategoryConfig &cfg
     if (!buttons.empty()) {
         SigIndex idx = build_dir_index(fs, cat.dir_path);
         if (!idx.empty()) {
-            show_remote(fs, idx, buttons, cat.name, cat.name, "", cfg.orientation);
+            IrSource src;
+            src.path = cat.dir_path;
+            src.isDir = true;
+            show_remote(fs, idx, buttons, cat.name, cat.name, "", cfg.orientation, src);
         } else {
             displayError("No .ir files found");
             delay(1500);
@@ -962,6 +1175,189 @@ static void open_category(FS &fs, const Category &cat, const CategoryConfig &cfg
     }
 
     displayError("No IR content found");
+    delay(1500);
+}
+
+// Grid over a persisted history list (Preferiti/Recenti). Short SEL replays the
+// signal (rebuilding its index from the stored path); HOLDING SEL removes it.
+static void ir_history_grid(FS &fs, const String &file, const String &title, bool favMode) {
+    std::vector<HistEntry> list = hist_load(fs, file);
+    if (list.empty()) {
+        displayError("List is empty");
+        delay(1200);
+        return;
+    }
+
+    std::vector<String> labels;
+    for (const auto &e : list) labels.push_back((favMode ? "★ " : "") + e.name);
+    labels.push_back("Back");
+
+    ir_grid_navigate(
+        labels,
+        title,
+        [&fs, &list, &labels](int sel) {
+            if (sel >= (int)list.size()) return true;
+            SigIndex idx = list[sel].isDir ? build_dir_index(fs, list[sel].path)
+                                           : build_flat_index(fs, list[sel].path);
+            if (idx.empty()) {
+                displayError("Signal not found");
+                delay(1200);
+                return false;
+            }
+            std::vector<String> search;
+            search.push_back(list[sel].name);
+            String clean = starless(labels[sel]);
+            int sent = spam_index(fs, idx, search, clean, clean);
+            if (sent < 0) {
+                displayWarning("Stopped");
+                delay(1000);
+            } else if (sent > 0) {
+                displaySuccess(String(sent) + " sent");
+                delay(1000);
+            } else {
+                displayError("No signals sent");
+                delay(1000);
+            }
+            return false;
+        },
+        [&fs, &list, &file](int sel) {
+            if (sel >= (int)list.size()) return;
+            std::vector<HistEntry> cur = hist_load(fs, file);
+            hist_remove(cur, list[sel].path, list[sel].name);
+            hist_save(fs, file, cur);
+            displayWarning("Entry removed");
+            delay(600);
+        }
+    );
+}
+
+// ---- IR Clone into the DB --------------------------------------------------
+// Captures a remote button (headless IR read) and saves it as a normal .ir file
+// inside a DB category, so the cloned button shows up in the browser and can be
+// replayed with the standard pipeline.
+
+struct CloneArgs {
+    String *out;
+    volatile bool *abort;
+    volatile bool *done;
+};
+
+static void ir_clone_task(void *p) {
+    CloneArgs *a = (CloneArgs *)p;
+    String captured;
+    {
+        // RAII: ~IrRead() runs disableIRIn() + frees the IRrecv timer before the
+        // task self-deletes (same pattern as the dual RF+IR detector).
+        IrRead reader(true, true);
+        captured = reader.loop_headless(30, a->abort);
+    }
+    *a->out = captured;
+    *a->done = true;
+    vTaskDelete(NULL);
+}
+
+static void ir_clone_flow(FS &fs) {
+    // 1) Destination: existing folder categories or a brand-new folder.
+    std::vector<Category> cats = discover_categories(fs);
+    String target = "";
+    {
+        options.clear();
+        for (auto &c : cats) {
+            if (c.dir_path.length() == 0) continue; // virtual (flat-file) categories
+            String n = c.name;
+            options.push_back({n.c_str(), [&target, path = c.dir_path]() { target = path; }});
+        }
+        options.push_back({"New folder", [&]() { target = "__new__"; }});
+        options.push_back({"Back", [&]() { target = ""; }});
+        loopOptions(options, MENU_TYPE_SUBMENU, "Clone to category");
+    }
+    if (target == "") return;
+
+    if (target == "__new__") {
+        String folder = keyboard("NewFolder", 30, "Folder name:");
+        if (folder == "\x1B" || folder.length() == 0) return;
+        String clean;
+        for (unsigned int i = 0; i < folder.length(); i++) {
+            char ch = folder[i];
+            if (isalnum(ch) || ch == '_' || ch == '-' || ch == ' ' || ch == '/') clean += ch;
+        }
+        clean.trim();
+        if (clean.length() == 0) {
+            displayError("Invalid name");
+            delay(1500);
+            return;
+        }
+        target = g_ir_root + "/" + clean;
+        if (!fs.exists(target)) fs.mkdir(target);
+    }
+
+    // 2) Signal (button) name.
+    String sig = keyboard("Signal", 30, "Signal name:");
+    if (sig == "\x1B" || sig.length() == 0) return;
+    sig.trim();
+    if (sig.length() == 0) {
+        displayError("Invalid name");
+        delay(1500);
+        return;
+    }
+
+    // 3) Unique file path.
+    String path = target + "/" + sig + ".ir";
+    int n = 1;
+    while (fs.exists(path)) {
+        path = target + "/" + sig + "_" + String(n) + ".ir";
+        n++;
+    }
+
+    // 4) Capture (ESC aborts).
+    tft.fillRect(0, 0, tftWidth, tftHeight, bruceConfig.bgColor);
+    drawMainBorderWithTitle("Clone");
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setTextFont(FM);
+    tft.setTextSize(1);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("Point the remote at the IR receiver", tftWidth / 2, tftHeight / 2 - 30);
+    tft.drawString("and press the button to clone.", tftWidth / 2, tftHeight / 2 - 12);
+    tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+    tft.setTextFont(FP);
+    tft.setTextSize(1);
+    tft.drawString("ESC to cancel", tftWidth / 2, tftHeight / 2 + 10);
+
+    volatile bool abort = false;
+    volatile bool done = false;
+    String captured;
+    CloneArgs args{&captured, &abort, &done};
+    TaskHandle_t task = NULL;
+    if (xTaskCreate(ir_clone_task, "irclone", 16384, &args, 2, &task) != pdPASS) {
+        displayError("Failed to start capture");
+        delay(1500);
+        return;
+    }
+    while (!done) {
+        if (check(EscPress)) abort = true;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    if (task != NULL) vTaskDelete(task); // task already self-deleted; stale handle is harmless
+
+    if (captured.length() == 0) {
+        displayError("No signal captured");
+        delay(1500);
+        return;
+    }
+
+    // 5) Store the capture with the chosen button name (loop_headless labels it
+    //    "Unknown"), then refresh the category list so it shows up immediately.
+    String content = captured;
+    content.replace("name: Unknown", "name: " + sig);
+    File f = fs.open(path, FILE_WRITE);
+    if (!f) {
+        displayError("Error writing file");
+        delay(1500);
+        return;
+    }
+    f.print(content);
+    f.close();
+    displaySuccess("Cloned to " + path.substring(g_ir_root.length() + 1));
     delay(1500);
 }
 
@@ -1002,14 +1398,6 @@ static void show_categories() {
     std::map<String, CategoryConfig> configs;
     load_layouts(fs, configs);
 
-    std::vector<Category> cats = discover_categories(fs);
-
-    if (cats.empty()) {
-        displayError("No category folders found");
-        delay(2000);
-        return;
-    }
-
     int globalRot = bruceConfigPins.rotation;
     int irRot = load_ir_orient(fs, globalRot);
     if (irRot != globalRot) apply_display_orientation(irRot);
@@ -1017,6 +1405,23 @@ static void show_categories() {
     returnToMenu = false;
     while (!returnToMenu) {
         options.clear();
+
+        // Quick access lists + clone into DB (persisted on same FS as DB)
+        String favFile = g_ir_root + "/favorites.txt";
+        String recFile = g_ir_root + "/recent.txt";
+        std::vector<HistEntry> favs = hist_load(fs, favFile);
+        std::vector<HistEntry> recs = hist_load(fs, recFile);
+        options.push_back({"★ Preferiti (" + String(favs.size()) + ")", [&fs, favFile]() {
+            ir_history_grid(fs, favFile, "Preferiti", true);
+        }});
+        options.push_back({"Recenti (" + String(recs.size()) + ")", [&fs, recFile]() {
+            ir_history_grid(fs, recFile, "Recenti", false);
+        }});
+        options.push_back({"Clone IR -> DB", [&fs]() {
+            ir_clone_flow(fs);
+        }});
+
+        std::vector<Category> cats = discover_categories(fs);
         for (auto &cat : cats) {
             String name = cat.name;
             options.push_back({name.c_str(), [&fs, &configs, cat]() {

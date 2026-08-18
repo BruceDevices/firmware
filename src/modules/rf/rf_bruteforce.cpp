@@ -4,6 +4,7 @@
 static float brute_frequency = 433.92;
 static int brute_protocol_idx = 1; // Default: Nice
 static int brute_repeats = 1;
+static bool brute_loop = false; // infinite loop mode
 
 static void rf_brute_frequency() {
     options = {};
@@ -60,38 +61,46 @@ static bool rf_brute_start() {
     pinMode(txpin, OUTPUT);
     setMHZ(brute_frequency);
 
-    for (int code = 0; code < total; ++code) {
-        for (int r = 0; r < brute_repeats; ++r) {
-            // Pilot/sync period
-            if (proto.pilot[0] || proto.pilot[1]) {
-                sendPulse(txpin, proto.pilot[0]);
-                sendPulse(txpin, proto.pilot[1]);
+    bool stop = false;
+    int sweepCount = 0;
+    do {
+        sweepCount++;
+        for (int code = 0; code < total; ++code) {
+            for (int r = 0; r < brute_repeats; ++r) {
+                // Pilot/sync period
+                if (proto.pilot[0] || proto.pilot[1]) {
+                    sendPulse(txpin, proto.pilot[0]);
+                    sendPulse(txpin, proto.pilot[1]);
+                }
+
+                // Data bits (MSB first)
+                for (int j = proto.bits - 1; j >= 0; --j) {
+                    const int *timings = ((code >> j) & 1) ? proto.one : proto.zero;
+                    sendPulse(txpin, timings[0]);
+                    sendPulse(txpin, timings[1]);
+                }
+
+                // Stop bit
+                if (proto.stop[0] || proto.stop[1]) {
+                    sendPulse(txpin, proto.stop[0]);
+                    sendPulse(txpin, proto.stop[1]);
+                }
             }
 
-            // Data bits (MSB first)
-            for (int j = proto.bits - 1; j >= 0; --j) {
-                const int *timings = ((code >> j) & 1) ? proto.one : proto.zero;
-                sendPulse(txpin, timings[0]);
-                sendPulse(txpin, timings[1]);
-            }
+            if (check(EscPress)) { stop = true; break; }
 
-            // Stop bit
-            if (proto.stop[0] || proto.stop[1]) {
-                sendPulse(txpin, proto.stop[0]);
-                sendPulse(txpin, proto.stop[1]);
+            if (code % 10 == 0) {
+                String sweepLabel = brute_loop
+                    ? " #" + String(sweepCount) + " "
+                    : " ";
+                displayRedStripe(
+                    String(code) + "/" + String(total) + sweepLabel + proto.name,
+                    getComplementaryColor2(bruceConfig.priColor),
+                    bruceConfig.priColor
+                );
             }
         }
-
-        if (check(EscPress)) break;
-
-        if (code % 10 == 0) {
-            displayRedStripe(
-                String(code) + "/" + String(total) + " " + proto.name,
-                getComplementaryColor2(bruceConfig.priColor),
-                bruceConfig.priColor
-            );
-        }
-    }
+    } while (brute_loop && !stop);
 
     digitalWrite(txpin, LOW);
     deinitRfModule();
@@ -107,6 +116,7 @@ void rf_bruteforce() {
             {"Frequency: " + String(brute_frequency, 2), [&]() { option = 1; }},
             {String("Protocol: ") + proto.name, [&]() { option = 2; }},
             {"Repeats: " + String(brute_repeats), [&]() { option = 3; }},
+            {"Loop: " + String(brute_loop ? "ON" : "OFF"), [&]() { option = 6; }},
             {"Main Menu", [&]() { option = 5; }},
         };
         loopOptions(options);
@@ -117,6 +127,7 @@ void rf_bruteforce() {
             case 3: rf_brute_repeats(); break;
             case 4: rf_brute_start(); break;
             case 5: return;
+            case 6: brute_loop = !brute_loop; break;
             default: return; // EscPress
         }
         vTaskDelay(pdMS_TO_TICKS(1));

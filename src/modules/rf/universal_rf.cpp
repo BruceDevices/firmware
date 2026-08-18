@@ -3,6 +3,9 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "modules/rf/rf_send.h"
+#include "modules/rf/rf_utils.h"
+#include "modules/rf/rf_bruteforce.h"
+#include "universal_history.h"
 
 #include <algorithm>
 #include <functional>
@@ -14,6 +17,14 @@
 // readSubFile itself caps the collected RAW bytes, so this only skips the
 // multi-MB "chaos"/recording files that are useless from a browser.
 #define MAX_SUB_FILE_BYTES (256 * 1024)
+#define LONG_PRESS_MS 750
+
+#define HIST_RECENT_CAP 24
+#define HIST_FAV_CAP 64
+
+// Resolved DB root for the running FS (see find_db_root). Mirrors the IR
+// module: some zip extractors wrap the DB in a folder named after the .zip.
+static String g_rf_root = UNIVERSAL_RF_ROOT;
 
 // Collect every .sub file path under `dir` (recursive), sorted.
 static void collect_sub_files(FS &fs, const String &dir, std::vector<String> &files) {
@@ -249,11 +260,13 @@ static int grid_move_down(int sel, int total, const GridMetrics &m) {
     return (nsel < total) ? nsel : total - 1;
 }
 
-// Render + navigate a paged grid of labels. `on_select(sel)` runs on a long SEL
-// press; return true from it to exit the grid (ESC also exits).
+// Render + navigate a paged grid of labels. `on_select(sel)` runs on a short SEL
+// press; return true from it to exit the grid (ESC also exits). When `on_long`
+// is provided, HOLDING SEL (~750ms) runs it instead (used to toggle favorites /
+// remove history entries).
 static void grid_navigate(
     const std::vector<String> &labels, const String &title,
-    const std::function<bool(int)> &on_select
+    const std::function<bool(int)> &on_select, const std::function<void(int)> &on_long = nullptr
 ) {
     if (labels.empty()) return;
     int total = labels.size();
@@ -323,16 +336,48 @@ static void grid_navigate(
         }
         if (moved) render_page(m, labels, total, page, sel);
 
-        if (millis() - openTs > 600 && check(SelPress)) {
-            if (on_select(sel)) break;
-            drawMainBorderWithTitle(title);
-            render_page(m, labels, total, page, sel);
-            openTs = millis();
+        // Short tap = select, hold ~750ms = long press (on_long). Some boards
+        // re-set SelPress every ~200ms while the button is held, so the press is
+        // considered released once SelPress stays clear for 60ms.
+        if (millis() - openTs > 600 && SelPress) {
+            unsigned long firstSeen = millis();
+            unsigned long lastSeen = firstSeen;
+            bool escaped = false;
+            while (millis() - lastSeen < 60) {
+                if (SelPress) {
+                    lastSeen = millis();
+                    SelPress = false;
+                    AnyKeyPress = false;
+                    SerialCmdPress = false;
+                }
+                if (EscPress) {
+                    escaped = true;
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            if (escaped) {
+                EscPress = false;
+                break;
+            }
+            bool isLong = (lastSeen - firstSeen >= LONG_PRESS_MS);
+            if (isLong) {
+                if (on_long != nullptr) on_long(sel);
+                drawMainBorderWithTitle(title);
+                render_page(m, labels, total, page, sel);
+                openTs = millis();
+            } else {
+                if (on_select(sel)) break;
+                drawMainBorderWithTitle(title);
+                render_page(m, labels, total, page, sel);
+                openTs = millis();
+            }
         }
     }
 }
 
-// Grid screen for the .sub files inside one device folder.
+// Grid screen for the .sub files inside one device folder. Short SEL sends the
+// signal (and records it in Recenti); HOLDING SEL toggles Preferiti.
 static void sub_grid(FS &fs, const std::vector<String> &files, const String &title) {
     if (files.empty()) {
         displayError("No .sub files found");
@@ -340,23 +385,98 @@ static void sub_grid(FS &fs, const std::vector<String> &files, const String &tit
         return;
     }
 
+    String favFile = g_rf_root + "/favorites.txt";
+    String recFile = g_rf_root + "/recent.txt";
+
     std::vector<String> labels = labels_for(files);
+    std::vector<HistEntry> favs = hist_load(fs, favFile);
+    for (size_t i = 0; i < labels.size(); i++) {
+        if (hist_has(favs, files[i], labels[i])) labels[i] = "★ " + labels[i];
+    }
     labels.push_back("Back");
-    grid_navigate(labels, title, [&fs, &labels, &files](int sel) {
-        if (sel >= (int)files.size()) return true;
-        int status = 0;
-        if (send_sub_file(fs, files[sel], status)) {
-            displaySuccess("Sent " + labels[sel]);
-            delay(600);
-        } else if (status == -1) {
-            displayError("File too big to send");
-            delay(900);
-        } else {
-            displayError("Failed to send");
+
+    grid_navigate(
+        labels,
+        title,
+        [&fs, &files, &labels, &recFile](int sel) {
+            if (sel >= (int)files.size()) return true;
+            String clean = labels[sel];
+            if (clean.startsWith("★ ")) clean.remove(0, 2);
+            int status = 0;
+            if (send_sub_file(fs, files[sel], status)) {
+                displaySuccess("Sent " + clean);
+                delay(600);
+                std::vector<HistEntry> rec = hist_load(fs, recFile);
+                hist_add(rec, files[sel], clean, false, HIST_RECENT_CAP);
+                hist_save(fs, recFile, rec);
+            } else if (status == -1) {
+                displayError("File too big to send");
+                delay(900);
+            } else {
+                displayError("Failed to send");
+                delay(600);
+            }
+            return false;
+        },
+        [&fs, &files, &labels, &favFile](int sel) {
+            if (sel >= (int)files.size()) return;
+            String clean = labels[sel];
+            if (clean.startsWith("★ ")) clean.remove(0, 2);
+            std::vector<HistEntry> favs = hist_load(fs, favFile);
+            if (hist_has(favs, files[sel], clean)) {
+                hist_remove(favs, files[sel], clean);
+                displayWarning("Removed from Preferiti");
+            } else {
+                hist_add(favs, files[sel], clean, false, HIST_FAV_CAP);
+                displaySuccess("Added to Preferiti");
+            }
+            hist_save(fs, favFile, favs);
             delay(600);
         }
-        return false;
-    });
+    );
+}
+
+// Grid over a persisted history list (Preferiti/Recenti). Short SEL replays the
+// signal; HOLDING SEL removes the entry.
+static void rf_history_grid(FS &fs, const String &file, const String &title, bool favMode) {
+    std::vector<HistEntry> list = hist_load(fs, file);
+    if (list.empty()) {
+        displayError("List is empty");
+        delay(1200);
+        return;
+    }
+
+    std::vector<String> labels;
+    for (const auto &e : list) labels.push_back((favMode ? "★ " : "") + e.name);
+    labels.push_back("Back");
+
+    grid_navigate(
+        labels,
+        title,
+        [&fs, &list, &labels](int sel) {
+            if (sel >= (int)list.size()) return true;
+            int status = 0;
+            if (send_sub_file(fs, list[sel].path, status)) {
+                displaySuccess("Sent " + labels[sel]);
+                delay(600);
+            } else if (status == -1) {
+                displayError("File too big to send");
+                delay(900);
+            } else {
+                displayError("Failed to send");
+                delay(600);
+            }
+            return false;
+        },
+        [&fs, &list, &file](int sel) {
+            if (sel >= (int)list.size()) return;
+            std::vector<HistEntry> cur = hist_load(fs, file);
+            hist_remove(cur, list[sel].path, list[sel].name);
+            hist_save(fs, file, cur);
+            displayWarning("Entry removed");
+            delay(600);
+        }
+    );
 }
 
 // ---- Built-in generic test signals ---------------------------------------
@@ -505,6 +625,77 @@ static void browse_devices(FS &fs, String cat_path, String title) {
     options.clear();
 }
 
+// Sweep the configured CC1101 band, aggregate the best RSSI per known
+// frequency, and show the strong ones as a selectable list. Sets rfFreq on pick.
+static void rf_freq_scanner() {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {
+        displayError("Scanner needs CC1101");
+        delay(1500);
+        return;
+    }
+    if (!initRfModule("rx")) {
+        displayError("RF init failed");
+        delay(1500);
+        return;
+    }
+    int arraySize = sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
+    int lo = range_limits[bruceConfigPins.rfScanRange][0];
+    int hi = range_limits[bruceConfigPins.rfScanRange][1];
+    if (lo < 0) lo = 0;
+    if (hi >= arraySize) hi = arraySize - 1;
+
+    std::vector<float> bestRssi(arraySize, -100);
+    const int passes = 3;
+
+    drawMainBorderWithTitle("Freq Scanner");
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setTextFont(FP);
+    tft.setTextSize(1);
+
+    for (int p = 0; p < passes; p++) {
+        for (int i = lo; i <= hi; i++) {
+            if (check(EscPress)) {
+                deinitRfModule();
+                return;
+            }
+            setMHZ(subghz_frequency_list[i]);
+            vTaskDelay(5 / portTICK_PERIOD_MS);
+            int rssi = ELECHOUSE_cc1101.getRssi();
+            if (rssi > (int)bestRssi[i]) bestRssi[i] = rssi;
+        }
+        // Progress bar.
+        int totalSteps = (hi - lo + 1) * passes;
+        int done = (p + 1) * (hi - lo + 1);
+        tft.fillRect(18, tftHeight - 34, tftWidth - 36, 10, bruceConfig.bgColor);
+        tft.fillRect(18, tftHeight - 34, (int)((long)(tftWidth - 36) * done / totalSteps), 10, bruceConfig.priColor);
+        tft.drawString("Scanning " + String(p + 1) + "/" + String(passes), 4, tftHeight - 22);
+    }
+    deinitRfModule();
+
+    std::vector<String> labels;
+    std::vector<float> freqs;
+    for (int i = lo; i <= hi; i++) {
+        if (bestRssi[i] > -75) {
+            freqs.push_back(subghz_frequency_list[i]);
+            labels.push_back(String(subghz_frequency_list[i], 2) + " MHz (" + String((int)bestRssi[i]) + "dBm)");
+        }
+    }
+    if (freqs.empty()) {
+        displayError("No signal found");
+        delay(1500);
+        return;
+    }
+    labels.push_back("Back");
+    grid_navigate(labels, "Frequencies found", [freqs](int sel) {
+        if (sel >= (int)freqs.size()) return true;
+        bruceConfigPins.rfFreq = freqs[sel];
+        bruceConfigPins.saveFile();
+        displaySuccess("RX set to " + String(freqs[sel], 2) + " MHz");
+        delay(900);
+        return false;
+    });
+}
+
 static void show_categories() {
     FS *fsPtr = nullptr;
 #if defined(UNIVERSAL_RF_LITTLEFS_ONLY)
@@ -526,8 +717,9 @@ static void show_categories() {
 
     FS &fs = *fsPtr;
 
-    String dbRoot = find_db_root(fs, "UniversalRF");
-    String assetsRoot = dbRoot + "/assets";
+    g_rf_root = find_db_root(fs, "UniversalRF");
+    String dbRoot = g_rf_root;
+    String assetsRoot = g_rf_root + "/assets";
 
     if (!fs.exists(dbRoot)) {
         fs.mkdir(dbRoot);
@@ -573,6 +765,17 @@ static void show_categories() {
     returnToMenu = false;
     while (!returnToMenu) {
         options.clear();
+        // Quick access lists (persisted on the same FS as the DB).
+        String favFile = g_rf_root + "/favorites.txt";
+        String recFile = g_rf_root + "/recent.txt";
+        std::vector<HistEntry> favs = hist_load(fs, favFile);
+        std::vector<HistEntry> recs = hist_load(fs, recFile);
+        options.push_back({"★ Preferiti (" + String(favs.size()) + ")", [&fs, favFile]() {
+            rf_history_grid(fs, favFile, "Preferiti", true);
+        }});
+        options.push_back({"Recenti (" + String(recs.size()) + ")", [&fs, recFile]() {
+            rf_history_grid(fs, recFile, "Recenti", false);
+        }});
         // Built-in test category: always present as the first option, no DB
         // files required. A DB folder with the same name is skipped below.
         options.push_back({"Generic", [&]() { generic_menu(); }});
@@ -581,8 +784,10 @@ static void show_categories() {
             if (name.equalsIgnoreCase("Generic")) continue;
             options.push_back({pretty_name(name).c_str(), [&fs, cat, name]() {
                 browse_devices(fs, cat, pretty_name(name));
-            }});
+            }            });
         }
+        options.push_back({"Bruteforce", [&]() { rf_bruteforce(); }});
+        options.push_back({"Freq Scanner", [&]() { rf_freq_scanner(); }});
         options.push_back({"Main Menu", [&]() { returnToMenu = true; }});
         loopOptions(options);
     }

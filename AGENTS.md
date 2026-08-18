@@ -1,7 +1,7 @@
 # Project Handoff & Developer Notes
 
 Bruce (Universal IR / firmware) fork. Working repo: `C:\Users\Utente\Documents\Default Project`.
-Base is Bruce firmware (ESP32), stable at tag `1.16`. **Release version is now `3.5`** (user request 2026-08-08): on-device `BRUCE_VERSION` = `"3.5"`, deliverable bins `BruceIRF3.5-<board>.bin`.
+Base is Bruce firmware (ESP32), stable at tag `1.16.1`. **Release version is now `3.6`** (user request 2026-08-18): on-device `BRUCE_VERSION` = `"3.6"`, deliverable bins `BruceIRF3.6-<board>.bin`.
 
 ## Build commands (Windows / PowerShell)
 
@@ -21,25 +21,24 @@ pio run -e <env> -j 2 *> build_log.txt 2>&1
 
 ## Versioning rules (very important)
 
-- `platformio.ini` (`env` `build_flags`): `-DBRUCE_VERSION='"3.5"'` → on-device displayed version. **It had regressed to `"dev"` via cherry-pick `92d24dcd` (upstream value) — set back to `"3.5"` for release (2026-08-08).**
-- `build.py`: `FIRMWARE_VERSION = "3.5"` → output bin filename (`BruceIRF3.5-<board>.bin`). For a **test build** set `"3.5-test"` (and `platformio.ini` `BRUCE_VERSION` to `"3.5-test"`) → outputs `BruceIRF3.5-test-<board>.bin` (boot shows `3.5-test`). Remember to revert both to `3.5` for release.
-- The "dev" bug root cause was `platformio.ini` hardcoding `-DBRUCE_VERSION='"dev"'`; a later upstream cherry-pick re-introduced it — always verify the line reads the release version before building.
-- Verify after build: binary should contain `"3.5"` (or `"3.5-test"` for test builds). `"2.5"` / `"dev"` hits are unrelated library strings — don't chase them.
+- `platformio.ini` (`env` `build_flags`): `-DBRUCE_VERSION='"3.6"'` → on-device displayed version.
+- `build.py`: `FIRMWARE_VERSION = "3.6"` → output bin filename (`BruceIRF3.6-<board>.bin`). For a **test build** set `"3.6-test"` (and `platformio.ini` `BRUCE_VERSION` to `"3.6-test"`) → outputs `BruceIRF3.6-test-<board>.bin` (boot shows `3.6-test`). Remember to revert both to `3.6` for release.
+- Verify after build: binary should contain `"3.6"` (or `"3.6-test"` for test builds).
 - Built deliverable bins live in project root; merged via `esptool.py --chip esp32s3 merge-bin` (bootloader @0x0, partitions @0x8000, firmware @0x10000).
 
 ## Deliverables (project root)
 
-- `BruceIRF3.5-lilygo-t-embed-cc1101.bin` — **current T-Embed deliverable** (RCA fix + crash fix + spam pause + shared-SPI `_spi_started` fix (deadlock-free) + coredump CRASH DIAG + dual-detector speed fix + external RF/IR module selectors + SD-gated Save + replay loops back to menu + **UniversalRF browser dangling-reference fix** + **UniversalRF Generic/Brands flow + readable labels** + **wrapper-folder DB discovery** + **grid key UX (legend, page-flow Up/Down, page keys)** + **auto-save immediate-save rewrite + noise rejection + IR RAW fallback**). Rebuilt 2026-08-11 (release 3.5, user-tested on T-Embed).
-- `BruceIRF3.5-m5stack-sticks3.bin` — **current sticks3 deliverable** (same fixes, effective `-O2`, now also with CRASH DIAG). Rebuilt 2026-08-11 (release 3.5).
-- `BruceIRF3.5-m5stack-cardputer.bin` — **Cardputer deliverable (v1 + ADV)** (same fixes; one env `m5stack-cardputer` covers both variants — ADV keyboard controller detected at runtime: TCA8418 on ADV, legacy on v1; `-DARDUINO_LOOP_STACK_SIZE=16384` added for Universal menu nesting). Rebuilt 2026-08-11 (release 3.5).
-- **ESP32-C5 + ILI9341:** 3.5 build was SKIPPED for the v3.5 release (user request 2026-08-08 — "c5 puoi saltarlo"). Only `BruceIRF3.0-esp32-c5-tft.bin` (2026-08-06) exists; rebuild on request. RISC-V port — CRASH DIAG auto-detects the RISC-V coredump layout; touch zones drive Prev/Next/Up/Down/SEL/ESC via `touchHeatMap`; `-DARDUINO_LOOP_STACK_SIZE=16384` added; first build auto-downloads `toolchain-riscv32-esp` (~500 MB) + `tool-riscv32-esp-elf-gdb`.
-- Old 3.0 bins/zips were removed 2026-08-08 after the v3.5 release — only the release artifacts are kept. For a future test build, `platformio.ini` `BRUCE_VERSION` = `"3.5-test"` + `build.py` `FIRMWARE_VERSION` = `"3.5-test"` produce `BruceIRF3.5-test-<board>.bin` (boot shows `3.5-test`); remember to revert both for release.
+- `BruceIRF3.6-lilygo-t-embed-cc1101.bin` — **current T-Embed deliverable** (all v3.5 fixes + **RF Bruteforce infinite loop** + **RF Frequency Scanner** + **IR Clone into DB** + **Preferiti/Recenti for IR & RF**). Built 2026-08-18 (release 3.6, migrated to Bruce stable 1.16.1).
+- `BruceIRF3.6-m5stack-sticks3.bin` — **current sticks3 deliverable** (same features). Built 2026-08-18 (release 3.6).
+- `BruceIRF3.6-m5stack-cardputer.bin` — **Cardputer deliverable (v1 + ADV)** (same features; one env covers both variants; `-DARDUINO_LOOP_STACK_SIZE=16384`). Built 2026-08-18 (release 3.6).
+- **ESP32-C5 + ILI9341:** 3.6 build SKIPPED (intentional, same as 3.5). Only `BruceIRF3.0-esp32-c5-tft.bin` (2026-08-06) exists; rebuild on request.
+- Old 3.0/3.5 bins/zips were removed after their respective releases — only the release artifacts are kept. For a future test build, `platformio.ini` `BRUCE_VERSION` = `"3.6-test"` + `build.py` `FIRMWARE_VERSION` = `"3.6-test"` produce `BruceIRF3.6-test-<board>.bin` (boot shows `3.6-test`); remember to revert both for release.
 - `build_wrapper.bat` / `build_release.bat` — detached background build wrappers (Start-Process pattern; see Build commands). `build_release.bat` builds all 4 envs with `-t build-firmware` sequentially.
 - `BruceIR-Cyberpunk.json` — user theme (cyan/pink). priColor `07FF`, secColor `F81F`, bgColor `0010`, border 1, label 1, ledColor `FF00FF`, ledBright 50.
 - IR DB content is bundled ONLY in the combined packages below (the standalone `BruceIR2.0-UniversalIR-*.zip` were removed 2026-08-05 as superseded; IR Lite ~0.16 MB / 7 files fits in the 3 MB LittleFS partition).
 - RF DB content is bundled ONLY in the combined packages below (the standalone `BruceIR3.0-UniversalRF-*.zip` were removed 2026-08-05, same content merged into the combined zips).
-- `BruceIR3.5-UniversalIR-RF-Lite.zip` (0.62 MB) — **combined IR+Lite + RF+Lite in one zip** (`UniversalIR/` 7 files + `UniversalRF/` 103 files). Extracts to both roots; fits in the 3 MB LittleFS partition (~1.6 MB total). Use for sticks3/Cardputer/C5 (LittleFS).
-- `BruceIR3.5-UniversalIR-RF-Full.zip` (9.0 MiB) — **combined IR+Full + RF-Full** (`UniversalIR/` 829 files + `UniversalRF/` 2052 files = `Garages/` + `Gates/` + `Vehicles/` only). For SD users (T-Embed). **REBUILT 2026-08-11:** the ~11k-file junk categories (TPMS, bracelets, WeVibe, RobotDog, dog collars, etc.) were DROPPED from the package by user request ("gli unici folder davvero utili sono garage, gates e quelli di bruteforce") — the bruteforce families already live inside `Garages/`/`Gates/` (CAME/NICE/Chamberlain/Linear/OOK/deBruijn). Old 16 MiB zip backed up at `%TEMP%\opencode\old_full_16MiB.zip`.
+- `BruceIR3.6-UniversalIR-RF-Lite.zip` (0.62 MB) — **combined IR+Lite + RF+Lite in one zip** (`UniversalIR/` 7 files + `UniversalRF/` 103 files). Extracts to both roots; fits in the 3 MB LittleFS partition (~1.6 MB total). Use for sticks3/Cardputer/C5 (LittleFS).
+- `BruceIR3.6-UniversalIR-RF-Full.zip` (9.0 MiB) — **combined IR+Full + RF-Full** (`UniversalIR/` 829 files + `UniversalRF/` 2052 files = `Garages/` + `Gates/` + `Vehicles/` only). For SD users (T-Embed). The ~11k-file junk categories (TPMS, bracelets, WeVibe, RobotDog, dog collars, etc.) were DROPPED from the package by user request — the bruteforce families already live inside `Garages/`/`Gates/` (CAME/NICE/Chamberlain/Linear/OOK/deBruijn). Old 16 MiB zip backed up at `%TEMP%\opencode\old_full_16MiB.zip`.
 - `sd_card_data/` — extracted DB contents.
 
 ## README (2026-08-08)
@@ -126,6 +125,39 @@ Shipped ONLY merged into the two combined zips (see Deliverables). Extraction so
 - **2026-08-11 PACKAGE SCOPE CUT (user request):** the shipped Full ZIP (`BruceIR3.5-UniversalIR-RF-Full.zip`, 9.0 MiB) now contains ONLY `UniversalRF/Garages` (753) + `UniversalRF/Gates` (1179) + `UniversalRF/Vehicles` (120) + the unchanged `UniversalIR/` (829). The ~11k-file junk categories (TPMS, bracelets, WeVibe, RobotDog, dog collars, smoke alarms, touch tunes, etc.) are EXCLUDED from the zip — "gli unici folder davvero utili sono garage, gates e quelli di bruteforce". The full 13275-file source tree is UNTOUCHED in `sd_card_data/UniversalRF-Full/` (rebuild/extend any time); the 16 MiB zip is backed up at `%TEMP%\opencode\old_full_16MiB.zip`. Zip built with bsdtar (forward-slash entries), verified 0 entries outside scope.
 - Curation facts: repo total = 19,128 blobs / ~1.4 GB (`git clone` sparse → `%TEMP%\opencode\brucerf_src\BruceRF`); the raw DB is dominated by bruteforce noise. Builder script: `%TEMP%\opencode\build_full_db.ps1`; verifier: `%TEMP%\opencode\verify_db.ps1`.
 - `sd_card_data/UniversalRF/` = extracted Lite contents; `sd_card_data/UniversalRF-Full/` = extracted **new** Full contents (built 2026-08-05).
+
+## v3.6 new features (2026-08-18)
+
+Built on `release-316` branch (branched from tag `1.16.1`, `ba519c93`). All 4 features compile in a single commit.
+
+### RF Bruteforce infinite loop (src/modules/rf/rf_bruteforce.cpp)
+
+- **Before:** sequential sweep through all protocol codes, single pass, ESC stops.
+- **After:** new "Loop: ON/OFF" toggle in the Bruteforce menu. When ON, the full sweep repeats indefinitely (ESC always aborts). Progress bar shows sweep count (`#3` etc.). `brute_loop` is a `static bool`, defaults OFF.
+- Default protocol is still Nice 12bit. Same 6 protocols as before (CAME 12bit, Nice 12bit, Ansonic 12bit, Holtek 12bit, Linear 10bit, Chamberlain 9bit).
+
+### RF Frequency Scanner (src/modules/rf/universal_rf.cpp `rf_freq_scanner()`)
+
+- Sweeps `subghz_frequency_list[]` (57 entries) over the configured `rfScanRange`, 3 passes, aggregates max RSSI per frequency.
+- CC1101-only guard: shows "Scanner needs CC1101" if `rfModule != CC1101_SPI_MODULE`.
+- Uses existing `initRfModule("rx")` / `setMHZ()` / `ELECHOUSE_cc1101.getRssi()` / `deinitRfModule()`.
+- After scan: shows frequencies with RSSI > -75 dBm in a grid. SEL picks → sets `bruceConfigPins.rfFreq` + saves. ESC cancels mid-scan.
+- Accessible from RF → Univ. RF Remote → **Freq Scanner** (injected before "Main Menu").
+
+### IR Clone into DB (src/modules/ir/universal_ir.cpp `ir_clone_flow()`)
+
+- Captures a remote button via `IrRead(true, true)` in a FreeRTOS task (`ir_clone_task`, stack 16384). Uses `loop_headless(30, &abort)` — ESC aborts.
+- Saves to `/UniversalIR/<category>/<name>.ir` (standard Flipper .ir format). Auto-generates unique filename if duplicate. Replaces "Unknown" label in the captured content with the user-supplied name.
+- UI flow: pick destination category (existing folders + "New folder") → type signal name → capture screen ("Point the remote…") → save + success toast.
+- Accessible from IR → Univ. IR Remote → **Clone IR -> DB** (injected before category list).
+
+### Preferiti/Recenti for IR & RF (src/modules/ir/universal_ir.cpp + src/modules/rf/universal_rf.cpp)
+
+- **Shared module** (`include/universal_history.h`, `src/core/universal_history.cpp`): `HistEntry{path, name, isDir}`, `hist_load`/`hist_save`/`hist_add`/`hist_remove`/`hist_has`. File format: `D|path|name` or `F|path|name` (tab-separated). Cap: Recent=24, Favorites=64.
+- **Grid long-press (SEL hold ~750ms):** `grid_navigate` (RF) and `ir_grid_navigate` (IR) now accept an `on_long` callback. Short tap = select/send; hold = toggle favorite. Starred entries show `★` prefix and appear first in the grid.
+- **RF:** `sub_grid()` records every sent signal to `/UniversalRF/recent.txt`; SEL-hold toggles `/UniversalRF/favorites.txt`. Main menu shows `★ Preferiti (N)` + `Recenti (N)` at top, each opens a history grid (SEL replays, SEL-hold removes entry).
+- **IR:** same pattern with `/UniversalIR/recent.txt` and `/UniversalIR/favorites.txt`. `remote_grid()` records on send, SEL-hold toggles favorite. Main menu shows `★ Preferiti (N)` + `Recenti (N)` at top.
+- `HIST_RECENT_CAP=24`, `HIST_FAV_CAP=64` defined at file scope in both modules.
 
 ## RCA IR protocol fix (2026-08-02)
 
@@ -231,15 +263,8 @@ Applied to `src/modules/ir/dual_detect.cpp` + `src/modules/ir/ir_read.cpp` (work
 
 ## Open items / next steps
 
-1. User to flash `BruceIRF3.5-m5stack-sticks3.bin` and test on real hardware (friend will test).
-2. Upload Lite DB contents to `/UniversalIR` on LittleFS (3 MB partition) on the sticks3.
-3. T-Embed remains the primary target; verify no regression after the guarded `#if` change (T-Embed path is identical `#else`).
-4. **Hardware validation (2026-08-03):** T-Embed own test PASSED — RF+IR Dual fully working (crash gone, near-instant capture, Replay loops/Save). User asked a friend to test RF on their own T-Embed — result pending. sticks3 (friend) — NO response yet; still needs UI lag check with effective `-O2`; external CC1101 (`RF module: CC1101`) + external IR (`IR module: M5 IR Mod`) capture.
-5. **RCA fix shipped (2026-08-02).** Friend must re-flash T-Embed and re-test the TCL Power signal on his TV. If it still fails, his model uses non-DB codes → capture raw via T-Embed IR Tools → Receive → Save and build a custom TCL file.
-6. **Shared-SPI mutex fix shipped (2026-08-03, flag-based `_spi_started`).** User confirmed the freeze/crash is GONE on T-Embed. If it ever recurs, re-capture the CRASH DIAG backtrace numbers (`0: 0x...`…`9: 0x...`) and resolve with `xtensa-esp32s3-elf-addr2line.exe` against `.pio\build\lilygo-t-embed-cc1101\firmware.elf`.
-7. **Dual-detector speed + external RF/IR module shipped (2026-08-03); SD-gated Save + replay loop (16:22/16:27 bins).** User confirmed on own T-Embed: RF+IR Dual fully working, Save/Replay loop OK. Re-test pending from friend on their T-Embed (RF). On sticks3, enable `RF module: CC1101` (external module) and/or pick `IR module: M5 IR Mod` — external CC1101 + external IR receiver on boards without internal modules.
-8. **UniversalRF browser dangling-reference fix shipped (2026-08-04).** Fixed by passing `title`/`cat_path`/`brand`/`brands_path` BY VALUE into the flow functions. User to re-flash T-Embed and confirm the browser no longer crashes while navigating the Full RF DB on SD.
-9. **UniversalRF Generic/Brands + readable labels + rebuilt Full DB shipped (2026-08-05).** Firmware now has a built-in `Generic` test category, a Brands flow mirroring UniversalIR, and readable labels. **Wrapper-folder DB discovery shipped**: the two folders are found even when the extractor nests them inside a wrapper folder. User to flash and test on T-Embed.
-10. **Cardputer (v1+ADV) + ESP32-C5 ILI9341 ports shipped (2026-08-06).** Both need real-hardware validation (friend with ESP32-C5 + ILI9341, and a Cardputer owner). CRASH DIAG RISC-V guard added in `crash_diag.cpp`.
-11. **v3.5 release PUBLISHED 2026-08-08** (GitHub release `v3.5` on bollgio/BruceIRF — isDraft=false, latest): on-device version `3.5`, `BruceIRF3.5-<board>.bin` for **T-Embed, StickS3, Cardputer** + `BruceIR3.5-UniversalIR-RF-{Full,Lite}.zip`; tutorial README restored; source pushed to fork/main (`698791c7`). **C5 intentionally NOT built for 3.5** (user request) — the 3.0 C5 bin remains in project root. Old 3.0 bins/zips removed from root (superseded). User to flash the 3.5 bins (grid key UX fix included) and test on T-Embed / friends' devices.
-12. **3.5 bins REBUILT 2026-08-11 with auto-save/noise fixes** (T-Embed `3.5-test` bin user-validated on real hardware — "ok funziona"; the "must press twice" artifact accepted, not a regression). Official `3.5` bins rebuilt for all 3 envs (`lilygo-t-embed-cc1101`, `m5stack-sticks3`, `m5stack-cardputer`), version strings verified in-binary. Changes to `dual_detect.cpp`/`ir_read.cpp` still UNCOMMITTED in the working tree (auto-save immediate-save rewrite + `_plausibleSignal` noise rejection + RF false-decode guard + IR RAW fallback). C5 still intentionally skipped.
+1. User to flash `BruceIRF3.6-lilygo-t-embed-cc1101.bin` and test on real hardware — all 4 new features (Bruteforce infinite loop, Freq Scanner, IR Clone, Preferiti/Recenti).
+2. User to test sticks3/Cardputer builds (friend).
+3. T-Embed remains the primary target; verify no regression after the 1.16.1 migration (trivial delta, cherry-picked cleanly).
+4. **v3.6 release BUILT 2026-08-18** on `release-316` branch (branched from `1.16.1` tag). All 3 envs compiled clean (`EXITCODE=0`). Bin names verified `BruceIRF3.6-<board>.bin`, binary contains `3.6`. Pending: commit, push, create GitHub release.
+5. Old items (RCA, SPI mutex, dual-detector, RF browser, etc.) remain resolved; no regression expected from the 1.16.1 base migration.
