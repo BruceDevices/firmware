@@ -62,6 +62,7 @@ public:
     Credential webUI = {"admin", "bruce"};
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
     WiFiCredential wifiAp = {"BruceNet", "brucenet"};
+    String wifiHostname = "Bruce";
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
@@ -159,6 +160,7 @@ public:
     // Wifi
     void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
+    void setWifiHostname(const String &hostname);
     void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);
