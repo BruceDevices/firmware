@@ -43,6 +43,7 @@ JsonDocument BruceConfig::toJson() const {
     JsonObject _wifiAp = setting["wifiAp"].to<JsonObject>();
     _wifiAp["ssid"] = wifiAp.ssid;
     _wifiAp["pwd"] = wifiAp.pwd;
+    setting["wifiHostname"] = wifiHostname;
     setting["wifiMAC"] = wifiMAC; //@IncursioHack
     setting["TerminalLog"] = TerminalLog;
 
@@ -283,6 +284,10 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+
+    if (!setting["wifiHostname"].isNull()) {
+        wifiHostname = setting["wifiHostname"].as<String>();
     }
 
     //@IncursioHack
@@ -647,6 +652,11 @@ void BruceConfig::setWebUICreds(const String &usr, const String &pwd) {
 void BruceConfig::setWifiApCreds(const String &ssid, const String &pwd) {
     wifiAp.ssid = ssid;
     wifiAp.pwd = pwd;
+    saveFile();
+}
+
+void BruceConfig::setWifiHostname(const String &hostname) {
+    wifiHostname = hostname;
     saveFile();
 }
 
