@@ -109,8 +109,8 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     drawMainBorderWithTitle("WiFi Connect");
     padprintln("");
     padprint("Connecting to: " + ssid + ".");
-    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     WiFi.mode(WIFI_MODE_STA);
+    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.begin(ssid, pwd);
