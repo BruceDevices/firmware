@@ -62,7 +62,7 @@ public:
     Credential webUI = {"admin", "bruce"};
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
     WiFiCredential wifiAp = {"BruceNet", "brucenet"};
-    String wifiHostname = "Bruce";
+    String wifiHostname = "Bruce Firmware";
     bool wifiHostnameEnabled = true;
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
