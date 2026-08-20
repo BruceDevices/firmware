@@ -204,7 +204,7 @@ void ConfigMenu::advancedMenu() {
                  if (name.length() > 0 && name != "\x1B") bruceConfigPins.setBleName(name);
              }                                                     },
             {"Network Creds",   [this]() { setNetworkCredsMenu(); }},
-            {String("Device hosts name: ") + (bruceConfig.wifiHostnameEnabled ? "ON" : "OFF"),
+            {String("Hostname: ") + (bruceConfig.wifiHostnameEnabled ? "ON" : "OFF"),
              [this]() {
                  bruceConfig.wifiHostnameEnabled = !bruceConfig.wifiHostnameEnabled;
                  bruceConfig.saveFile();
