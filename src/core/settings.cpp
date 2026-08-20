@@ -1360,22 +1360,6 @@ void setWifiHostnameMenu() {
         return;
     }
 
-    for (size_t i = 0; i < hostname.length(); i++) {
-        char character = hostname[i];
-        if (character == ' ') {
-            hostname.setCharAt(i, '-');
-        } else if (!isalnum(static_cast<unsigned char>(character)) && character != '-') {
-            hostname.setCharAt(i, '-');
-        }
-    }
-
-    while (hostname.startsWith("-")) hostname.remove(0, 1);
-    while (hostname.endsWith("-")) hostname.remove(hostname.length() - 1);
-    if (hostname.isEmpty()) {
-        displayError("Use letters or numbers", true);
-        return;
-    }
-
     bruceConfig.setWifiHostname(hostname);
     displayInfo("Device name: " + hostname, true);
 }
