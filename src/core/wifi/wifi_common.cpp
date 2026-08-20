@@ -307,6 +307,7 @@ void wifiConnectTask(void *pvParameters) {
     }
 
     WiFi.mode(WIFI_MODE_STA);
+    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     int nets = WiFi.scanNetworks();
     String ssid;
     String pwd;
