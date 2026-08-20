@@ -110,9 +110,9 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     padprintln("");
     padprint("Connecting to: " + ssid + ".");
     WiFi.mode(WIFI_MODE_STA);
-    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
+    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     WiFi.begin(ssid, pwd);
 
     int i = 1;
@@ -317,6 +317,7 @@ void wifiConnectTask(void *pvParameters) {
         pwd = bruceConfig.getWifiPassword(ssid);
         if (pwd == "") continue;
 
+        WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
         WiFi.begin(ssid, pwd);
         for (int i = 0; i < 50; i++) {
             if (WiFi.isConnected()) {
