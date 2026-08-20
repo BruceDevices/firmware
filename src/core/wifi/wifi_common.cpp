@@ -109,8 +109,8 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     drawMainBorderWithTitle("WiFi Connect");
     padprintln("");
     padprint("Connecting to: " + ssid + ".");
+    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     WiFi.mode(WIFI_MODE_STA);
-    WiFi.setHostname(bruceConfig.wifiHostname.c_str());
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.begin(ssid, pwd);
@@ -143,7 +143,7 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
 bool _setupAP() {
     IPAddress AP_GATEWAY(172, 0, 0, 1);
     WiFi.softAPConfig(AP_GATEWAY, AP_GATEWAY, IPAddress(255, 255, 255, 0));
-    WiFi.setHostname(bruceConfig.wifiHostname.c_str());
+    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
     WiFi.softAP(bruceConfig.wifiAp.ssid, bruceConfig.wifiAp.pwd, 6, 0, 4, false);
     wifiIP = WiFi.softAPIP().toString(); // update global var
     Serial.println("IP: " + wifiIP);
