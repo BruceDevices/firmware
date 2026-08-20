@@ -63,6 +63,7 @@ public:
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
     WiFiCredential wifiAp = {"BruceNet", "brucenet"};
     String wifiHostname = "Bruce";
+    bool wifiHostnameEnabled = true;
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack

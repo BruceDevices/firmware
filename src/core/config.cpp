@@ -44,6 +44,7 @@ JsonDocument BruceConfig::toJson() const {
     _wifiAp["ssid"] = wifiAp.ssid;
     _wifiAp["pwd"] = wifiAp.pwd;
     setting["wifiHostname"] = wifiHostname;
+    setting["wifiHostnameEnabled"] = wifiHostnameEnabled;
     setting["wifiMAC"] = wifiMAC; //@IncursioHack
     setting["TerminalLog"] = TerminalLog;
 
@@ -288,6 +289,9 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["wifiHostname"].isNull()) {
         wifiHostname = setting["wifiHostname"].as<String>();
+    }
+    if (!setting["wifiHostnameEnabled"].isNull()) {
+        wifiHostnameEnabled = setting["wifiHostnameEnabled"].as<bool>();
     }
 
     //@IncursioHack
