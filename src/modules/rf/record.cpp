@@ -37,7 +37,7 @@ void sinewave_animation() {
 }
 
 void rf_raw_record_draw(RawRecordingStatus status) {
-    tft.setCursor(20, 38);
+    tft.setCursor(20, 46);
     tft.setTextSize(FP);
     if (status.frequency <= 0) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -132,7 +132,7 @@ static void rf_raw_record_accept_capture(
         status.firstSignalTime = receivedTime;
         status.recordingStarted = true;
         tft.drawPixel(0, 0, 0);
-        tft.fillRect(10, 30, tftWidth - 20, tftHeight - 40, bruceConfig.bgColor);
+        tft.fillRect(10, 45, tftWidth - 20, tftHeight - 55, bruceConfig.bgColor);
     }
     status.lastSignalTime = receivedTime;
 }
@@ -214,13 +214,11 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
     bool rssiFeature = false;
     rssiFeature = bruceConfigPins.rfModule == CC1101_SPI_MODULE;
 
-    tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorder();
+    drawMainBorderWithTitle("RF RECORD");
 
     if (rssiFeature) rf_range_selection(bruceConfigPins.rfFreq);
 
-    tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorder();
+    drawMainBorderWithTitle("RF RECORD");
     rf_raw_record_draw(status);
 
     // Initialize RF module and update display
@@ -242,7 +240,7 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
 
     // Erase sinewave animation
     tft.drawPixel(0, 0, 0);
-    tft.fillRect(10, 30, tftWidth - 20, tftHeight - 40, bruceConfig.bgColor);
+    tft.fillRect(10, 45, tftWidth - 20, tftHeight - 55, bruceConfig.bgColor);
     rf_raw_record_draw(status);
 
     // Start recording

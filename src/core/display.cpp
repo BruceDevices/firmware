@@ -825,12 +825,18 @@ Opt_Coord drawOptions(
             else tft.setTextColor(fgcolor, bgcolor);
             if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
 
+            // Reserve room on the right for any opt-in trailing icons
+            int iconReserve = 0;
+            if (options[i].iconRssi != 0) iconReserve += 14;
+            if (options[i].iconLock != 0) iconReserve += 11;
+            int maxChars = (tftWidth * 0.8 - 10 - iconReserve) / (LW * FM) - 1;
+
             String text = "";
             if (i == index) {
                 text += ">";
                 coord.x = tftWidth * 0.10 + 5 + FM * LW;
                 coord.y = tft.getCursorY() + 4;
-                coord.size = (tftWidth * 0.8 - 10) / (LW * FM) - 1;
+                coord.size = maxChars;
                 coord.fgcolor = fgcolor;
                 coord.bgcolor = bgcolor;
             } else text += " ";
@@ -839,10 +845,26 @@ Opt_Coord drawOptions(
 
             // Draw text with appropriate colors for selection
             if (i == index) { tft.setTextColor(bgcolor, bruceConfig.priColor); }
-            tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
+            tft.println(text.substring(0, maxChars));
 
             // Reset text color for next item
             tft.setTextColor(fgcolor, bgcolor);
+
+            // Optional trailing icons (signal strength / lock), right-aligned
+            if (options[i].iconRssi != 0 || options[i].iconLock != 0) {
+                uint16_t iconCol = (i == index) ? bgcolor : fgcolor;
+                int iconY = cursorY + 4 + (FM * LH - 8) / 2;
+                int ix = tftWidth * 0.10 + tftWidth * 0.8 - 6;
+                if (options[i].iconRssi != 0) {
+                    ix -= 11;
+                    drawSignalBars(ix, iconY, options[i].iconRssi, iconCol);
+                    ix -= 3;
+                }
+                if (options[i].iconLock != 0) {
+                    ix -= 9;
+                    drawLockIcon(ix, iconY, options[i].iconLock == 1, iconCol);
+                }
+            }
 
             cont++;
         }
@@ -1735,6 +1757,33 @@ uint16_t getColorVariation(uint16_t color, int delta, int direction) {
     uint16_t compl_color = r << 11 | g << 5 | b;
 
     return compl_color;
+}
+
+void drawSignalBars(int x, int y, int rssi, uint16_t color) {
+    int bars = 0;
+    if (rssi > -55) bars = 4;
+    else if (rssi > -68) bars = 3;
+    else if (rssi > -80) bars = 2;
+    else if (rssi > -92) bars = 1;
+    for (int i = 0; i < 4; i++) {
+        int h = 2 + i * 2;
+        if (i < bars) tft.fillRect(x + i * 3, y + 8 - h, 2, h, color);
+        else tft.drawFastHLine(x + i * 3, y + 7, 2, color);
+    }
+}
+
+void drawLockIcon(int x, int y, bool locked, uint16_t color) {
+    // Solid body (drawn in `color` so it reads on any row background)
+    tft.fillRect(x, y + 4, 9, 6, color);
+    if (locked) {
+        // Closed shackle centered over the body
+        tft.drawRoundRect(x + 2, y, 5, 6, 2, color);
+    } else {
+        // Open shackle: an unlatched hook to the right
+        tft.drawFastHLine(x + 3, y, 4, color);
+        tft.drawFastVLine(x + 6, y, 5, color);
+        tft.drawPixel(x + 2, y + 1, color);
+    }
 }
 
 // Draw BITMAP files

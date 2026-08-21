@@ -217,7 +217,9 @@ void ble_scan() {
             if (bt_title.isEmpty()) bt_title = bt_address;
 
             if (options.size() < MAX_DISPLAY_DEVICES) {
-                options.emplace_back(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
+                Option opt(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
+                opt.iconRssi = advertisedDevice->getRSSI();
+                options.push_back(opt);
                 processedCount++;
             }
         }

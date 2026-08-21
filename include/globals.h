@@ -109,6 +109,13 @@ struct Option {
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
 
+    // Optional trailing icons drawn by loopOptions (opt-in; both default to
+    // "off" so existing menus are unchanged):
+    //   iconRssi != 0 -> four-bar signal meter for that dBm value
+    //   iconLock: 0 none, 1 locked/secured, 2 open
+    int iconRssi = 0;
+    uint8_t iconLock = 0;
+
     Option(
         const char *lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,

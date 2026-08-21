@@ -128,49 +128,19 @@ void RFID125::set_state(RFID125_State state) {
 }
 
 void RFID125::cls() {
-    drawMainBorder();
-    tft.setCursor(10, 28);
+    drawMainBorderWithTitle("RFID 125KHZ");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 }
 
 void RFID125::display_banner() {
     cls();
-    tft.setTextSize(FM);
-    padprintln("RFID 125kHz");
     tft.setTextSize(FP);
 
     switch (_current_state) {
-        case READ_MODE:
-            padprintln("             READ MODE");
-            padprintln("             ---------");
-            break;
-        // case LOAD_MODE:
-        //     padprintln("             LOAD MODE");
-        //     padprintln("             ---------");
-        //     break;
-        // case CLONE_MODE:
-        //     padprintln("            CLONE MODE");
-        //     padprintln("            ----------");
-        //     break;
-        // case ERASE_MODE:
-        //     padprintln("            ERASE MODE");
-        //     padprintln("            ----------");
-        //     break;
-        // case WRITE_MODE:
-        //     padprintln("       WRITE DATA MODE");
-        //     padprintln("       ---------------");
-        //     break;
-        // case WRITE_NDEF_MODE:
-        //     padprintln("       WRITE NDEF MODE");
-        //     padprintln("       ---------------");
-        //     break;
-        case SAVE_MODE:
-            padprintln("             SAVE MODE");
-            padprintln("             ---------");
-            break;
+        case READ_MODE: printSubtitle("READ MODE"); break;
+        case SAVE_MODE: printSubtitle("SAVE MODE"); break;
     }
 
-    tft.setTextSize(FP);
     padprintln("");
     padprintln("Press [OK] to change mode.");
     padprintln("");

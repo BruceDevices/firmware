@@ -186,7 +186,7 @@ void Timer::loop() {
                     }
                 }
 
-                drawMainBorder(false);
+                drawMainBorderWithTitle("TIMER", false);
                 tft.setTextSize(f_size);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 tft.drawCentreString(timeString, timerX, timerY, 1);

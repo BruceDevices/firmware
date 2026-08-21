@@ -202,18 +202,13 @@ void IrRead::begin() {
 }
 
 void IrRead::cls() {
-    drawMainBorder();
-    tft.setCursor(10, 28);
+    drawMainBorderWithTitle("IR READ");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 }
 
 void IrRead::display_banner() {
     cls();
-    tft.setTextSize(FM);
-    padprintln("IR Read");
-
     tft.setTextSize(FP);
-    padprintln("--------------");
     padprintln("Signals captured: " + String(signals_read));
     tft.println("");
 }

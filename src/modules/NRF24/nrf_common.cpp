@@ -7,17 +7,13 @@ HardwareSerial NRFSerial = HardwareSerial(2); // Uses UART2 for External NRF's
 SPIClass *NRFSPI;
 
 void nrf_info() {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.drawCentreString("_Disclaimer_", tftWidth / 2, 10, 1);
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    drawMainBorderWithTitle("NRF24 INFO");
+    printSubtitle("Disclaimer");
     tft.setTextSize(FP);
-    tft.setCursor(15, 33);
+    padprintln("");
     padprintln("These functions were made to be used in a controlled environment for STUDY only.");
     padprintln("");
     padprintln("DO NOT use these functions to harm people or companies, you can go to jail!");
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     padprintln("");
     padprintln(
         "This device is VERY sensible to noise, so long wires or passing near VCC line can make "

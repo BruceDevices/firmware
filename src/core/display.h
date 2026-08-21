@@ -108,6 +108,16 @@ uint16_t getComplementaryColor(uint16_t color);
 uint16_t getComplementaryColor2(uint16_t color);
 uint16_t getColorVariation(uint16_t color, int delta = 10, int direction = 0);
 
+// Small four-bar signal-strength meter icon (RSSI, in dBm). Draws in an
+// ~11x8 px box with its top-left at (x, y); stronger signal fills more bars.
+// Shared by the WiFi/BLE scan lists so signal reads at a glance per entry.
+void drawSignalBars(int x, int y, int rssi, uint16_t color);
+
+// Small padlock icon (~9x10 px, top-left at x,y). `locked` draws a closed
+// shackle, otherwise an open one — flags secured vs open networks. Drawn in
+// `color`, so it stays visible on any row background.
+void drawLockIcon(int x, int y, bool locked, uint16_t color);
+
 void resetTftDisplay(
     int x = 0, int y = 0, uint16_t fc = bruceConfig.priColor, int size = FM,
     uint16_t bg = bruceConfig.bgColor, uint16_t screen = bruceConfig.bgColor

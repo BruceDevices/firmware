@@ -15,16 +15,13 @@ TaskHandle_t rf_raw_emit_draw_handle = NULL;
 
 // FreeRTOS task to handle periodic updates
 void rf_raw_emit_draw(void *parameter) {
-    tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorder();
-    tft.setCursor(20, 38);
+    drawMainBorderWithTitle("RF EMIT");
+    printSubtitle("Replaying signal");
     tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.print("Emitting: ");
-    tft.print(frequency);
-    tft.print(" MHz");
+    padprintln("");
+    padprintln("Emitting: " + String(frequency, 2) + " MHz");
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.println("   Press [OK] to stop ");
+    padprintln("Press [OK] to stop");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     while (1) {

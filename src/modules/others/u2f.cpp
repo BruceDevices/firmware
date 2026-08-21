@@ -1668,27 +1668,24 @@ U2fHidDevice &u2fDevice() {
 }
 
 void drawU2fStatusScreen() {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(6, 8);
-    tft.print("USB U2F");
-
-    tft.setTextSize(1);
-    tft.setCursor(6, 36);
-    tft.print("Ready for registration/login");
-    tft.setCursor(6, 50);
-    tft.print("Press center when prompted");
-    tft.setCursor(6, 64);
-    tft.print("ESC: Back");
+    drawMainBorderWithTitle("USB U2F");
+    printSubtitle("FIDO / U2F Authenticator");
+    tft.setTextSize(FP);
+    padprintln("");
+    padprintln("Ready for registration/login");
+    padprintln("Press center when prompted");
+    padprintln("");
+    padprintln("ESC: Back");
 }
 
 void updateU2fRuntimeInfo(const U2fHidDevice &device) {
-    tft.fillRect(0, 84, tftWidth, tftHeight - 84, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor(6, 94);
+    int y = tftHeight - 34;
+    tft.fillRect(BORDER_PAD_X, y - 2, tftWidth - 2 * BORDER_PAD_X, 20, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setCursor(BORDER_PAD_X, y);
     tft.print(device.waitingForPresence() ? "Confirm now" : "Waiting...");
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
 }
 
 } // namespace

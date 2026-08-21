@@ -218,8 +218,6 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                         int encryptionType = WiFi.encryptionType(i);
                         int32_t rssi = WiFi.RSSI(i);
                         int32_t ch = WiFi.channel(i);
-                        // Check if the network is secured
-                        String encryptionPrefix = (encryptionType == WIFI_AUTH_OPEN) ? "" : "#";
                         String encryptionTypeStr;
                         switch (encryptionType) {
                             case WIFI_AUTH_OPEN: encryptionTypeStr = "Open"; break;
@@ -233,13 +231,15 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                             default: encryptionTypeStr = "Unknown"; break;
                         }
 
-                        String optionText = encryptionPrefix + ssid + "(" + String(rssi) + "|" +
-                                            encryptionTypeStr + "|ch." + String(ch) + ")";
+                        String optionText = ssid + " (" + encryptionTypeStr + "|ch." + String(ch) + ")";
 
-                        options.push_back({optionText.c_str(), [&selSsid, &selEnc, ssid, encryptionType]() {
-                                               selSsid = ssid;
-                                               selEnc = encryptionType;
-                                           }});
+                        Option opt(optionText.c_str(), [&selSsid, &selEnc, ssid, encryptionType]() {
+                            selSsid = ssid;
+                            selEnc = encryptionType;
+                        });
+                        opt.iconRssi = rssi;
+                        opt.iconLock = (encryptionType == WIFI_AUTH_OPEN) ? 2 : 1;
+                        options.push_back(opt);
                     }
                 }
                 WiFi.scanDelete();
