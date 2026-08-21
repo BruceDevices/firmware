@@ -1361,6 +1361,7 @@ void setWifiHostnameMenu() {
     }
 
     bruceConfig.setWifiHostname(hostname);
+    if (WiFi.getMode() != WIFI_MODE_NULL) wifiDisconnect();
     displayInfo("Device name: " + hostname, true);
 }
 
