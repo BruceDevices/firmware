@@ -17,7 +17,7 @@ static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
 static void setConfiguredWifiHostname() {
-    const char *hostname = bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "";
+    const char *hostname = bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "esp32 bruce";
     WiFi.setHostname(hostname);
 
     esp_netif_t *staNetif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
