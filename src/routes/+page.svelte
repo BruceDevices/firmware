@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	const VERSION = '1.16';
 
 	import News from '$lib/components/News.svelte';
@@ -7,34 +6,12 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import CompatibilityTable from '$lib/components/CompatibilityTable.svelte';
 	import SectionBackground from '$lib/components/SectionBackground.svelte';
+	import DeviceScreen from '$lib/components/DeviceScreen.svelte';
+	import { reveal } from '$lib/actions/reveal';
 	import { base } from '$app/paths';
 	import { current_page, Page } from '$lib/store';
 
 	$current_page = Page.Home;
-
-	let activeIndex = $state(0);
-	let slides = [
-		{ src: `${base}/img/bruce-pcb.png`, name: 'Bruce PCB V2' },
-		{ src: `${base}/img/reaper-pcb2.png`, name: 'Bruce RF Reaper' },
-		{ src: `${base}/img/cardputer.png`, name: 'M5Stack Cardputer' },
-		{ src: `${base}/img/core2.png`, name: 'M5Stack Core2' },
-		{ src: `${base}/img/cyd.png`, name: 'Cheap Yellow Display' },
-		{ src: `${base}/img/lilygo.png`, name: 'LilyGo T-Display' },
-		{ src: `${base}/img/t-embed.png`, name: 'LilyGo T-Embed' },
-		{ src: `${base}/img/m5stick.png`, name: 'M5Stack StickC' }
-	];
-
-	let interval: number;
-	onMount(() => {
-		interval = setInterval(() => {
-			activeIndex = (activeIndex + 1) % slides.length;
-		}, 3000);
-		return () => clearInterval(interval);
-	});
-
-	function setSlide(idx: number) {
-		activeIndex = idx;
-	}
 </script>
 
 <!-- Hero -->
@@ -45,9 +22,9 @@
 	<div class="absolute inset-0 bg-gradient-to-r from-[var(--color-ink)] via-[var(--color-ink)]/85 to-transparent"></div>
 
 	<div class="shell relative z-10 grid items-center gap-10 py-20 md:grid-cols-[1fr_1fr] md:py-28">
-		<div>
+		<div class="enter">
 			<span class="eyebrow">Open-source ESP32 firmware</span>
-			<h1 class="mt-4 text-5xl leading-[1.05] font-semibold md:text-6xl">Bruce Firmware</h1>
+			<h1 class="cursor mt-4 text-5xl leading-[1.05] font-semibold md:text-6xl">Bruce Firmware</h1>
 			<p class="lede mt-5 max-w-lg">The powerful open-source ESP32 firmware designed for offensive security and Red Team operations.</p>
 			<div class="mt-8 flex flex-wrap gap-3">
 				<a href="{base}/flasher" class="btn btn-primary" style="color:#fff">
@@ -56,49 +33,29 @@
 				<a href="https://github.com/BruceDevices/Firmware" target="_blank" rel="noopener" class="btn btn-outline" style="color:#fff">
 					<Icon name="github" size={15} /> Explore GitHub
 				</a>
+				<a href="https://shop.bruce.computer" target="_blank" rel="noopener" class="btn btn-outline" style="color:#fff">
+					<Icon name="cart" size={15} /> Buy our Board HERE
+				</a>
 			</div>
 		</div>
 
-		<div class="relative hidden md:block">
-			<!-- Fixed frame + object-contain: the artwork ranges from 1:1 (device
-			     photos) to 2.79:1 (reaper PCB), so sizing by `w-auto` let every
-			     aspect ratio settle at a different scale. Each slide now fits the
-			     same box. -->
-			<div class="relative h-[21rem] w-full">
-				{#each slides as slide, i}
-					<img
-						src={slide.src}
-						alt={slide.name}
-						class="absolute inset-0 h-full w-full object-contain transition-opacity duration-700"
-						style="opacity: {i === activeIndex ? 1 : 0}"
-					/>
-				{/each}
-			</div>
-			<div class="mt-3 flex items-center justify-center gap-4">
-				<span class="meta w-40 text-right">{slides[activeIndex].name}</span>
-				<div class="flex gap-1.5">
-					{#each slides as slide, i}
-						<button
-							onclick={() => setSlide(i)}
-							aria-label={slide.name}
-							aria-current={i === activeIndex}
-							class="h-[3px] w-6 transition-colors {i === activeIndex ? 'bg-[var(--color-brand)]' : 'bg-white/20 hover:bg-white/40'}"
-						></button>
-					{/each}
-				</div>
-			</div>
+		<div class="relative hidden md:block" use:reveal={{ delay: 120 }}>
+			<DeviceScreen />
 		</div>
 	</div>
 </section>
 
 <!-- Features -->
 <section class="shell py-20">
-	<div class="mb-10 max-w-2xl">
+	<div class="mb-10 max-w-2xl" use:reveal>
 		<span class="eyebrow">Why Bruce</span>
 		<h2 class="mt-3 text-3xl font-semibold md:text-4xl">Built in the open, for real hardware</h2>
 	</div>
 
-	<div class="grid gap-px overflow-hidden border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-3">
+	<div
+		class="feature-grid grid gap-px overflow-hidden border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-3"
+		use:reveal={{ delay: 80 }}
+	>
 		<div class="bg-[var(--color-ink)] p-7">
 			<h3 class="mb-3 text-lg font-semibold">True Open-Source</h3>
 			<p class="text-sm leading-relaxed text-[var(--text-dim)]">
@@ -145,7 +102,7 @@
 		</div>
 	</div>
 
-	<div class="grid gap-4 md:grid-cols-2">
+	<div class="grid gap-4 md:grid-cols-2" use:reveal>
 		<News title="Release v{VERSION}" eyebrow="Firmware">
 			<p class="text-sm leading-relaxed text-[var(--text-dim)]">
 				Our new Release is out now! Update your device
@@ -170,7 +127,7 @@
 
 <!-- Help -->
 <section class="shell py-20">
-	<div class="panel flex flex-col items-start gap-6 p-8 md:flex-row md:items-center md:justify-between">
+	<div class="panel hover-glow flex flex-col items-start gap-6 p-8 md:flex-row md:items-center md:justify-between" use:reveal>
 		<div>
 			<h2 class="text-2xl font-semibold">Need more help?</h2>
 			<p class="mt-2 text-sm text-[var(--text-dim)]">
