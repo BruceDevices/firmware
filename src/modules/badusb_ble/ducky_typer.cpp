@@ -8,6 +8,7 @@
 #include "esp_mac.h"
 #include "modules/ble/ble_common.h"
 #include <NimBLEDevice.h>
+#include <map>
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
@@ -576,6 +577,49 @@ DuckyCombination *findDuckyCombination(const char *cmd) {
 }
 
 // ============================================================================
+// DUCKYSCRIPT 3.0 DEFINE - Constant substitution
+// ============================================================================
+
+// '#' is a token char because DEFINE names are conventionally '#'-prefixed.
+static bool isDuckyDefineTokenChar(char c) { return isAlphaNumeric(c) || c == '_' || c == '#'; }
+
+static bool parseDuckyDefine(const String &line, std::map<String, String> &defines) {
+    if (!line.startsWith("DEFINE ")) return false;
+
+    int nameStart = 7; // strlen("DEFINE ")
+    while (nameStart < (int)line.length() && line.charAt(nameStart) == ' ') nameStart++;
+
+    int nameEnd = line.indexOf(' ', nameStart);
+    String name = (nameEnd < 0) ? line.substring(nameStart) : line.substring(nameStart, nameEnd);
+    if (name.length() == 0) return true;
+
+    defines[name] = (nameEnd < 0) ? String("") : line.substring(nameEnd + 1);
+    return true;
+}
+
+// Replaces whole-token matches only, so a name never matches inside a larger token.
+static void applyDuckyDefines(String &line, const std::map<String, String> &defines) {
+    for (const auto &entry : defines) {
+        const String &name = entry.first;
+        const String &value = entry.second;
+        int from = 0;
+        while (true) {
+            int pos = line.indexOf(name, from);
+            if (pos < 0) break;
+            int after = pos + name.length();
+            bool leftOk = (pos == 0) || !isDuckyDefineTokenChar(line.charAt(pos - 1));
+            bool rightOk = (after >= (int)line.length()) || !isDuckyDefineTokenChar(line.charAt(after));
+            if (leftOk && rightOk) {
+                line = line.substring(0, pos) + value + line.substring(after);
+                from = pos + value.length();
+            } else {
+                from = pos + 1;
+            }
+        }
+    }
+}
+
+// ============================================================================
 // START KEYBOARD - Creates fresh BLE instance with new stack
 // ============================================================================
 
@@ -814,6 +858,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     char Cmd[25];
     String Argument = "";
     String RepeatTmp = "";
+    std::map<String, String> duckyDefines;
 
     static int nextStringDelay = -1;
     static int defaultStringDelay = bruceConfig.badUSBBLEKeyDelay;
@@ -855,6 +900,10 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
         if (lineContent.endsWith("\r")) lineContent.remove(lineContent.length() - 1);
 
         if (lineContent.length() == 0) continue;
+
+        // DEFINE stores a constant; every other line has its constants expanded first.
+        if (parseDuckyDefine(lineContent, duckyDefines)) continue;
+        if (!duckyDefines.empty()) applyDuckyDefines(lineContent, duckyDefines);
 
         int spaceIndex = lineContent.indexOf(' ');
 
