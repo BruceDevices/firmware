@@ -2,6 +2,7 @@
 	import { current_page, Page } from '$lib/store';
 	import manifests from '$lib/data/manifests.json';
 	import SectionBackground from '$lib/components/SectionBackground.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	$current_page = Page.Flasher;
 	let selectedVersion = $state('Last');
@@ -76,10 +77,10 @@
 
 	function getBuildPath(releaseTag, selectedDevice) {
 		// using alternative Launcher CORS proxy until Bruce's proxy doesn't get fixed
-		// Change "activated" to False to get back to original code, 
+		// Change "activated" to False to get back to original code,
 		// keep the alternative proxy in the code, DO NOT remove!!
-		const activated = true; 
-		
+		const activated = true;
+
 		if (activated && releaseTag === 'betaRelease') {
 			return (
 				'https://launcher-cors-proxy-99894582617.europe-west1.run.app/?url=https://github.com/BruceDevices/firmware/releases/download/' +
@@ -90,13 +91,7 @@
 			);
 		}
 
-		return (
-			'https://bruce.iceis.co.uk/service/github/' +
-			releaseTag +
-			'/Bruce-' +
-			encodeURIComponent(selectedDevice) +
-			'.bin'
-		);
+		return 'https://bruce.iceis.co.uk/service/github/' + releaseTag + '/Bruce-' + encodeURIComponent(selectedDevice) + '.bin';
 	}
 
 	function updateManifest() {
@@ -137,7 +132,7 @@
 		}
 	}
 
-	const active_el = (first: string, cmp: string) => (first == cmp ? 'bg-[#9B51E0] text-white' : '');
+	const is_active = (first: string, cmp: string) => String(first == cmp);
 
 	// Get GitHub release tags
 	let latestVersionTag: string = $state('');
@@ -183,167 +178,162 @@
 	<script type="module" src="/vendor/bruce-esp-web-tools/web/install-button.js?module"></script>
 </svelte:head>
 
-<section class="relative flex h-[500px] w-full flex-col overflow-hidden pr-4 pl-4 md:flex-row">
+<!-- Hero -->
+<section class="relative overflow-hidden border-b border-[var(--rule)]">
 	<SectionBackground />
-	<div class="relative z-10 flex flex-col justify-center p-8 text-white">
-		<h1 data-i18n="hero_title" class="mb-5 text-4xl font-bold md:text-6xl">Bruce Web Flasher</h1>
-		<p data-i18n="hero_description" class="mb-7 text-xl">Flash your device easily with our online installer!</p>
+	<div class="absolute inset-0 bg-gradient-to-r from-[var(--color-ink)] via-[var(--color-ink)]/85 to-transparent"></div>
+	<div class="shell relative z-10 py-20 md:py-24">
+		<span class="eyebrow">Web installer</span>
+		<h1 data-i18n="hero_title" class="mt-4 text-4xl font-semibold md:text-6xl">Bruce Web Flasher</h1>
+		<p data-i18n="hero_description" class="lede mt-5 max-w-xl">Flash your device easily with our online installer!</p>
 	</div>
 </section>
 
-<div
-	class="mx-auto mt-[30px] max-w-[800px] rounded-xl border-2 border-[#9B51E0] bg-[#9B51E0]/10 p-5 text-white shadow-[0px_0px_10px_rgba(155,81,224,0.3)]"
->
-	<h2 class="text-center text-[1.8rem]" data-i18n="flashing_instructions_title">Flashing Instructions</h2>
-	<p data-i18n="flashing_instruction_1"><strong>Connect your device, then select "Flash" and click connect.</strong></p>
-	<p data-i18n="flashing_instruction_2">If asked to put your device into <strong>download mode</strong>, do the following:</p>
-	<ul class="ml-[30px] list-disc pl-[10px]">
-		<li data-i18n="flashing_instruction_cardputer">
-			<strong>Cardputer:</strong> Turn off and unplug from USB, hold the btn G0 (upper right corner), then connect via USB.
-		</li>
-		<li data-i18n="flashing_instruction_stickcs">
-			<strong>StickCs:</strong> Turn off, connect one side of a jumper cable into GND and the other side in G0, plug in USB, then remove the jumper cable.
-		</li>
-		<li data-i18n="flashing_instruction_stickcs">
-			<strong>T-Embed:</strong> Keep encoder center button pressed and press RST button (CC1101 this btn is on the board, beside ESP32-S3 chip).
-		</li>
-		<li data-i18n="flashing_instruction_stickcs"><strong>T-Deck:</strong> Keep the trackpad button pressed and press RST (in the left side).</li>
-		<li>
-			<p>If you are in linux, you may need to run <code>sudo setfacl -m u::rw /dev/ttyACM0</code> to be able to flash.</p>
-		</li>
-	</ul>
-</div>
+<div class="shell py-16">
+	<!-- Instructions -->
+	<section class="panel p-8">
+		<h2 class="text-xl font-semibold" data-i18n="flashing_instructions_title">Flashing Instructions</h2>
+		<p class="mt-4 text-sm text-white" data-i18n="flashing_instruction_1">
+			<strong>Connect your device, then select "Flash" and click connect.</strong>
+		</p>
+		<p class="mt-2 text-sm text-[var(--text-dim)]" data-i18n="flashing_instruction_2">
+			If asked to put your device into <strong class="text-white">download mode</strong>, do the following:
+		</p>
 
-<div class="container">
-	<h2 class="mt-5 flex items-center justify-center p-2 text-2xl font-bold" data-i18n="version_select_title">Select Release</h2>
-	<div class="max-xs:flex-col mb-5 flex flex-wrap items-start justify-center gap-4">
-		<button
-			id="latest"
-			class="{active_el(
-				selectedVersion,
-				'Last'
-			)} flex min-h-[2.5rem] w-32 min-w-[10rem] cursor-pointer items-center justify-center rounded-lg border-2 border-purple-500 px-5 py-2.5 text-purple-500 transition-all duration-300 ease-in-out peer-checked:bg-[#9B51E0] peer-checked:text-white hover:bg-[#9B51E0] hover:text-white"
-			onclick={() => toggleRelease('Last')}>Latest {latestVersionTag}</button
-		>
-		<button
-			id="beta"
-			class="{active_el(
-				selectedVersion,
-				'Beta'
-			)} flex min-h-[2.5rem] w-32 min-w-[10rem] cursor-pointer items-center justify-center rounded-lg border-2 border-purple-500 px-5 py-2.5 text-purple-500 transition-all duration-300 ease-in-out peer-checked:bg-[#9B51E0] peer-checked:text-white hover:bg-[#9B51E0] hover:text-white"
-			onclick={() => toggleRelease('Beta')}>Beta</button
-		>
-		<div class="flex flex-col items-center">
-			<button
-				id="other"
-				class="{active_el(
-					selectedVersion,
-					'Other'
-				)}  min-h-[2.5rem] w-32 min-w-[10rem] cursor-pointer rounded-lg border-2 border-purple-500 px-5 py-2.5 text-purple-500 transition-all duration-300 ease-in-out peer-checked:bg-[#9B51E0] peer-checked:text-white hover:bg-[#9B51E0] hover:text-white"
-				onclick={() => toggleRelease('Other')}>Other</button
-			>
-			<div id="otherReleaseContainer" style="display: none;">
-				{#if loading}
-					<p>Loading tags...</p>
-				{:else if error}
-					<p>Error: {error}</p>
-				{:else}
-					<select
-						id="otherReleaseDropdown"
-						class="mt-2 min-h-[2.5rem] w-32 min-w-[10rem] rounded-lg border-2 border-purple-500 bg-black p-2 px-5 py-2.5 text-purple-500 transition-all duration-300 ease-in-out"
-						onchange={() => updateReleaseDate()}
-					>
-						{#each versionTags.filter( (release: { tag_name: string }) => /^v?\d+\.\d+(\.\d+)?$/.test(release.tag_name) ) as versionTag, i (versionTag.tag_name)}
-							<option value={versionTag.tag_name} data-release-date={versionTag.updated_at}>{versionTag.tag_name}{i === 0 ? ' (Latest)' : ''}</option>
-						{/each}
-					</select>
-				{/if}
+		<dl class="mt-6 grid gap-px overflow-hidden border border-[var(--rule)] bg-[var(--rule)] md:grid-cols-2">
+			<div class="bg-[var(--color-ink)] p-4" data-i18n="flashing_instruction_cardputer">
+				<dt class="meta">Cardputer</dt>
+				<dd class="mt-1.5 text-sm leading-relaxed text-[var(--text-dim)]">
+					Turn off and unplug from USB, hold the btn G0 (upper right corner), then connect via USB.
+				</dd>
+			</div>
+			<div class="bg-[var(--color-ink)] p-4" data-i18n="flashing_instruction_stickcs">
+				<dt class="meta">StickCs</dt>
+				<dd class="mt-1.5 text-sm leading-relaxed text-[var(--text-dim)]">
+					Turn off, connect one side of a jumper cable into GND and the other side in G0, plug in USB, then remove the jumper cable.
+				</dd>
+			</div>
+			<div class="bg-[var(--color-ink)] p-4">
+				<dt class="meta">T-Embed</dt>
+				<dd class="mt-1.5 text-sm leading-relaxed text-[var(--text-dim)]">
+					Keep encoder center button pressed and press RST button (CC1101 this btn is on the board, beside ESP32-S3 chip).
+				</dd>
+			</div>
+			<div class="bg-[var(--color-ink)] p-4">
+				<dt class="meta">T-Deck</dt>
+				<dd class="mt-1.5 text-sm leading-relaxed text-[var(--text-dim)]">Keep the trackpad button pressed and press RST (in the left side).</dd>
+			</div>
+		</dl>
+
+		<p class="mt-4 text-sm text-[var(--text-dim)]">
+			If you are in linux, you may need to run
+			<code class="rounded-[2px] border border-[var(--rule)] bg-black/50 px-1.5 py-0.5 font-mono text-xs text-white"
+				>sudo setfacl -m u::rw /dev/ttyACM0</code
+			> to be able to flash.
+		</p>
+	</section>
+
+	<!-- Step 1: release -->
+	<section class="panel mt-6 p-8">
+		<div class="flex items-baseline gap-3">
+			<span class="meta tabular-nums">01</span>
+			<h2 class="text-xl font-semibold" data-i18n="version_select_title">Select Release</h2>
+		</div>
+
+		<div class="mt-5 flex flex-wrap items-start gap-2">
+			<button id="latest" class="chip min-w-[9rem]" data-active={is_active(selectedVersion, 'Last')} onclick={() => toggleRelease('Last')}>
+				Latest {latestVersionTag}
+			</button>
+			<button id="beta" class="chip min-w-[9rem]" data-active={is_active(selectedVersion, 'Beta')} onclick={() => toggleRelease('Beta')}>
+				Beta
+			</button>
+			<div class="flex flex-col gap-2">
+				<button id="other" class="chip min-w-[9rem]" data-active={is_active(selectedVersion, 'Other')} onclick={() => toggleRelease('Other')}>
+					Other
+				</button>
+				<div id="otherReleaseContainer" style="display: none;">
+					{#if loading}
+						<p class="meta">Loading tags...</p>
+					{:else if error}
+						<p class="meta text-red-400">Error: {error}</p>
+					{:else}
+						<select id="otherReleaseDropdown" class="field min-w-[9rem] bg-[var(--color-ink)]" onchange={() => updateReleaseDate()}>
+							{#each versionTags.filter( (release: { tag_name: string }) => /^v?\d+\.\d+(\.\d+)?$/.test(release.tag_name) ) as versionTag, i (versionTag.tag_name)}
+								<option value={versionTag.tag_name} data-release-date={versionTag.updated_at}
+									>{versionTag.tag_name}{i === 0 ? ' (Latest)' : ''}</option
+								>
+							{/each}
+						</select>
+					{/if}
+				</div>
 			</div>
 		</div>
-	</div>
-	<div id="releaseDate" class="invisible mt-2 text-center text-sm font-bold text-gray-400" data-i18n="release_date">
-		Released: <span id="releaseDateValue" class="font-normal">{formatDateTime(selectedReleaseDate)}</span>
-	</div>
-</div>
 
-<div class="container">
-	<h2 class="mt-5 p-2 text-center text-2xl font-bold" data-i18n="select_device_manufacturer_category_title">Select Device Manufacturer/Category</h2>
-	<div class="mb-5 flex flex-wrap items-center justify-center gap-4 max-sm:flex-col">
-		{#each Object.keys(manifests) as category}
-			<button
-				class="{active_el(
-					selectedCategory,
-					category
-				)} flex min-h-[2.5rem] w-32 min-w-[10rem] cursor-pointer items-center justify-center rounded-lg border-2 border-purple-500 px-5 py-2.5 text-purple-500 transition-all duration-300 ease-in-out peer-checked:bg-[#9B51E0] peer-checked:text-white hover:bg-[#9B51E0] hover:text-white"
-				onclick={() => toggleDeviceCategory(category)}>{category}</button
-			>
-		{/each}
-	</div>
+		<div id="releaseDate" class="invisible mt-4" data-i18n="release_date">
+			<span class="meta">Released: {formatDateTime(selectedReleaseDate)}</span>
+		</div>
+	</section>
 
-	{#if selectedCategory}
-		<h2 class="p-2 text-center text-2xl font-bold" data-i18n="select_device_title">Select Device</h2>
-		<ul class="mb-5 flex flex-wrap items-center justify-center gap-4 text-center max-sm:flex-col">
-			{#each manifests[selectedCategory] as device}
-				<li class="flex-shrink-0">
-					<input
-						type="radio"
-						name="type"
-						value={device.id}
-						id={device.id}
-						class="hidden"
-						bind:group={selectedDevice}
-						onchange={() => {
-							if (selectedCategory === 'launcher') {
-								downloadFile(device.id);
-							}
-						}}
-					/>
-					<label
-						class="{active_el(
-							selectedDevice,
-							device.id
-						)} font-inter flex inline-block min-h-[3rem] w-48 min-w-[12rem] cursor-pointer items-center justify-center rounded-lg border-2 border-[#9B51E0] px-[15px] py-[10px] text-center text-base text-purple-500 transition-all duration-300 ease-in-out hover:bg-[#9B51E0] hover:text-white"
-						for={device.id}>{device.name}</label
-					>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</div>
+	<!-- Step 2: device -->
+	<section class="panel mt-6 p-8">
+		<div class="flex items-baseline gap-3">
+			<span class="meta tabular-nums">02</span>
+			<h2 class="text-xl font-semibold" data-i18n="select_device_manufacturer_category_title">Select Device Manufacturer/Category</h2>
+		</div>
 
-<div class="container">
-	{#if selectedDevice}
-		<h2 class="mt-5 flex items-center justify-center p-2 text-2xl font-bold" data-i18n="select_how_to_install_firmware_title">
-			Choose How to Install Firmware
-		</h2>
-		<p class="mb-5 text-center">
-			<esp-web-install-button style={selectedDevice ? 'display:block' : 'display:none'}>
-				<button
-					slot="activate"
-					class="font-inter inline-block cursor-pointer rounded-lg border-2 border-purple-500 bg-purple-500 px-[15px] py-[10px] text-base font-semibold text-white transition-all duration-300 ease-in-out hover:scale-105 hover:border-purple-600 hover:bg-purple-600"
-				>
-					CONNECT TO DEVICE
+		<div class="mt-5 flex flex-wrap gap-2">
+			{#each Object.keys(manifests) as category}
+				<button class="chip min-w-[9rem]" data-active={is_active(selectedCategory, category)} onclick={() => toggleDeviceCategory(category)}>
+					{category}
 				</button>
-			</esp-web-install-button>
-		</p>
+			{/each}
+		</div>
 
-		<p class="mt-3 mb-5 text-center">
-			<button
-				class="font-inter inline-block cursor-pointer rounded-lg border-2 border-[#9B51E0] px-[15px] py-[10px] text-center text-base text-[#9B51E0] transition-all duration-300 ease-in-out hover:scale-105 hover:bg-[#9B51E0] hover:font-semibold hover:text-white"
-				onclick={() => downloadFile(selectedDevice)}
-			>
-				DOWNLOAD FIRMWARE .BIN
-			</button>
-		</p>
+		{#if selectedCategory}
+			<hr class="rule my-7" />
+			<h3 class="eyebrow" data-i18n="select_device_title">Select Device</h3>
+			<ul class="mt-4 flex flex-wrap gap-2">
+				{#each manifests[selectedCategory] as device}
+					<li>
+						<input
+							type="radio"
+							name="type"
+							value={device.id}
+							id={device.id}
+							class="peer sr-only"
+							bind:group={selectedDevice}
+							onchange={() => {
+								if (selectedCategory === 'launcher') {
+									downloadFile(device.id);
+								}
+							}}
+						/>
+						<label class="chip min-w-[11rem]" data-active={is_active(selectedDevice, device.id)} for={device.id}>{device.name}</label>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+
+	<!-- Step 3: install -->
+	{#if selectedDevice}
+		<section class="panel mt-6 p-8">
+			<div class="flex items-baseline gap-3">
+				<span class="meta tabular-nums">03</span>
+				<h2 class="text-xl font-semibold" data-i18n="select_how_to_install_firmware_title">Choose How to Install Firmware</h2>
+			</div>
+
+			<div class="mt-6 flex flex-wrap items-center gap-3">
+				<esp-web-install-button style={selectedDevice ? 'display:block' : 'display:none'}>
+					<button slot="activate" class="btn btn-primary">
+						<Icon name="plug" size={15} /> Connect to device
+					</button>
+				</esp-web-install-button>
+
+				<button class="btn btn-outline" onclick={() => downloadFile(selectedDevice)}>
+					<Icon name="download" size={15} /> Download firmware .bin
+				</button>
+			</div>
+		</section>
 	{/if}
 </div>
-
-<div class="container">&nbsp;</div>
-
-<style>
-	.container {
-		width: 90%;
-		max-width: 100%;
-		margin: 0 auto;
-	}
-</style>

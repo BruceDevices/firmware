@@ -1,10 +1,12 @@
-<div
-	class="flex w-xs items-center justify-center rounded-lg border-none bg-[#222] text-center transition-transform duration-300 ease-in-out hover:scale-105 hover:shadow-2xl"
-	style="transform-style: preserve-3d;"
->
-	<div class="p-1">
-		<div class="p-4">
-			<slot />
-		</div>
-	</div>
-</div>
+<script lang="ts">
+	// `index` prints a monospaced ordinal in the corner — a structural marker
+	// that gives the grid rhythm without resorting to decorative icon badges.
+	export let index: string | number | undefined = undefined;
+</script>
+
+<article class="panel panel-interactive relative flex h-full flex-col p-6 text-left">
+	{#if index !== undefined}
+		<span class="meta absolute top-5 right-5 tabular-nums">{index}</span>
+	{/if}
+	<slot />
+</article>

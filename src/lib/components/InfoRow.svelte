@@ -2,7 +2,9 @@
 	let props = $props();
 </script>
 
-<div class="flex">
-	<span class="w-32 font-mono font-bold text-white">{props.label}:</span>
-	<span class="font-mono text-purple-500">{props.value}</span>
+<!-- Definition row: label left, value right, hairline between. Reads like a
+     spec sheet, which is what the device readout is. -->
+<div class="flex items-baseline justify-between gap-4 border-b border-[var(--rule)] py-2 last:border-b-0">
+	<span class="meta shrink-0 tracking-wide">{props.label}</span>
+	<span class="truncate text-right font-mono text-sm text-white">{props.value}</span>
 </div>

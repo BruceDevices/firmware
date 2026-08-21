@@ -2,6 +2,7 @@
 	import { base } from '$app/paths';
 	import Btn from '$lib/components/Btn.svelte';
 	import InfoRow from '$lib/components/InfoRow.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { current_page, Page } from '$lib/store';
 	import { bytesToKB, bytesToMegabytes, capitalize } from '$lib/helper';
 	import { readSerialPort, requestSerialPort, writeToPort } from '$lib/serial_helper';
@@ -52,23 +53,31 @@
 	function parseDeviceInfo(response: string) {
 		const lines = response.split('\n');
 		console.log(lines);
-		if(lines[0].includes('COMMAND')) {
+		if (lines[0].includes('COMMAND')) {
 			version = `${lines[1]} - ${lines[2]}`;
 		} else {
 			version = `${lines[0]} - ${lines[1]}`;
 		}
-		for(const line of lines){
-			if(line.includes('SDK')) { sdk = line.replace('SDK: ', ''); }
-			if(line.includes('MAC addr')) { mac_address = line.replace('MAC addr:', ''); }
-			if(line.includes('Wifi')) { wifi = capitalize(line.replace('Wifi: ', '')); }
-			if(line.includes('Device')) { device = line.replace('Device: ', ''); }
+		for (const line of lines) {
+			if (line.includes('SDK')) {
+				sdk = line.replace('SDK: ', '');
+			}
+			if (line.includes('MAC addr')) {
+				mac_address = line.replace('MAC addr:', '');
+			}
+			if (line.includes('Wifi')) {
+				wifi = capitalize(line.replace('Wifi: ', ''));
+			}
+			if (line.includes('Device')) {
+				device = line.replace('Device: ', '');
+			}
 		}
 	}
 
 	function parseUptime(response: string) {
 		const lines = response.split('\n');
-		for(const line of lines) {
-			if(line.includes('Uptime')){
+		for (const line of lines) {
+			if (line.includes('Uptime')) {
 				uptime = line.replace('Uptime: ', '');
 			}
 		}
@@ -82,17 +91,17 @@
 			let free_heap = 0;
 			let total_psram = 0;
 			let free_psram = 0;
-			for(const line of lines) {
-				if(line.includes('Total heap')) {
+			for (const line of lines) {
+				if (line.includes('Total heap')) {
 					total_heap = +line.replace(/\D/g, '');
 				}
-				if(line.includes('Free heap')) {
+				if (line.includes('Free heap')) {
 					free_heap = +line.replace(/\D/g, '');
 				}
-				if(line.includes('Total PSRAM')) {
+				if (line.includes('Total PSRAM')) {
 					total_psram = +line.replace(/\D/g, '');
 				}
-				if(line.includes('Free PSRAM')) {
+				if (line.includes('Free PSRAM')) {
 					free_psram = +line.replace(/\D/g, '');
 				}
 			}
@@ -111,15 +120,14 @@
 		const lines = response.split('\n');
 		let total = 0;
 		let free = 0;
-		for(const line of lines) {
-			if(line.includes('Total')) {
+		for (const line of lines) {
+			if (line.includes('Total')) {
 				total = +line.replace(/\D/g, '');
 			}
-			if(line.includes('Free')) {
+			if (line.includes('Free')) {
 				free = +line.replace(/\D/g, '');
 			}
 		}
-
 
 		if (response.includes('[E][sd_diskio.cpp')) {
 			sdCard = 'Not Installed';
@@ -342,11 +350,7 @@
 			return `rgb(${r},${g},${b})`;
 		};
 
-		const drawRoundRect = (
-			ctx: CanvasRenderingContext2D,
-			input: { x: number; y: number; w: number; h: number; r: number },
-			fill: boolean
-		) => {
+		const drawRoundRect = (ctx: CanvasRenderingContext2D, input: { x: number; y: number; w: number; h: number; r: number }, fill: boolean) => {
 			const { x, y, w, h, r } = input;
 			ctx.beginPath();
 			ctx.moveTo(x + r, y);
@@ -441,27 +445,12 @@
 					break;
 				case 1:
 					ctx.strokeStyle = color565toCss(input.fg as number);
-					ctx.strokeRect(
-						input.x as number,
-						input.y as number,
-						input.w as number,
-						input.h as number
-					);
+					ctx.strokeRect(input.x as number, input.y as number, input.w as number, input.h as number);
 					break;
 				case 2:
 					ctx.fillStyle = color565toCss(input.fg as number);
-					ctx.clearRect(
-						input.x as number,
-						input.y as number,
-						input.w as number,
-						input.h as number
-					);
-					ctx.fillRect(
-						input.x as number,
-						input.y as number,
-						input.w as number,
-						input.h as number
-					);
+					ctx.clearRect(input.x as number, input.y as number, input.w as number, input.h as number);
+					ctx.fillRect(input.x as number, input.y as number, input.w as number, input.h as number);
 					break;
 				case 3:
 					ctx.strokeStyle = color565toCss(input.fg as number);
@@ -502,29 +491,13 @@
 				case 9:
 					ctx.strokeStyle = color565toCss(input.fg as number);
 					ctx.beginPath();
-					ctx.ellipse(
-						input.x as number,
-						input.y as number,
-						input.rx as number,
-						input.ry as number,
-						0,
-						0,
-						Math.PI * 2
-					);
+					ctx.ellipse(input.x as number, input.y as number, input.rx as number, input.ry as number, 0, 0, Math.PI * 2);
 					ctx.stroke();
 					break;
 				case 10:
 					ctx.fillStyle = color565toCss(input.fg as number);
 					ctx.beginPath();
-					ctx.ellipse(
-						input.x as number,
-						input.y as number,
-						input.rx as number,
-						input.ry as number,
-						0,
-						0,
-						Math.PI * 2
-					);
+					ctx.ellipse(input.x as number, input.y as number, input.rx as number, input.ry as number, 0, 0, Math.PI * 2);
 					ctx.fill();
 					break;
 				case 11:
@@ -537,8 +510,8 @@
 					ctx.strokeStyle = color565toCss(input.fg as number);
 					const radius = ((input.r as number) + (input.ir as number)) / 2;
 					ctx.lineWidth = (input.r as number) - (input.ir as number) || 1;
-					const sa = (((input.startAngle as number) + 90) || 0) * (Math.PI / 180);
-					const ea = (((input.endAngle as number) + 90) || 0) * (Math.PI / 180);
+					const sa = ((input.startAngle as number) + 90 || 0) * (Math.PI / 180);
+					const ea = ((input.endAngle as number) + 90 || 0) * (Math.PI / 180);
 					ctx.beginPath();
 					ctx.arc(input.x as number, input.y as number, radius, sa, ea);
 					ctx.stroke();
@@ -562,18 +535,8 @@
 					let offsetX = 0;
 					if (fn === 15) offsetX = text.length * fontWidth;
 					if (fn === 14) offsetX = (text.length * fontWidth) / 2;
-					ctx.clearRect(
-						(input.x as number) - offsetX,
-						input.y as number,
-						text.length * fontWidth,
-						(input.size as number) * 8
-					);
-					ctx.fillRect(
-						(input.x as number) - offsetX,
-						input.y as number,
-						text.length * fontWidth,
-						(input.size as number) * 8
-					);
+					ctx.clearRect((input.x as number) - offsetX, input.y as number, text.length * fontWidth, (input.size as number) * 8);
+					ctx.fillRect((input.x as number) - offsetX, input.y as number, text.length * fontWidth, (input.size as number) * 8);
 					ctx.fillStyle = color565toCss(input.fg as number);
 					ctx.font = `${(input.size as number) * 8}px monospace`;
 					ctx.textBaseline = 'top';
@@ -669,192 +632,203 @@
 	}
 </script>
 
-{#if !supported}
-	<h1 class="mt-32 text-center text-3xl font-bold">Unsupported browser</h1>
-	<h1 class="mt-5 mb-10 text-center text-3xl font-bold">Please use a Chromium based browser</h1>
-{:else if !connected}
-	<div class="flex items-center justify-center text-center">
-		<Btn className="mt-32 mb-10" onclick={connect_device}>Connect</Btn>
-	</div>
-{:else if loading}
-	<div class="mt-32 flex flex-col items-center justify-center">
-		<div class="h-16 w-16 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" role="status"></div>
+<div class="shell py-12">
+	<header class="mb-8 max-w-2xl">
+		<span class="eyebrow">Device console</span>
+		<h1 class="mt-3 text-3xl font-semibold md:text-4xl">Bruce Lab</h1>
+	</header>
 
-		<p class="mt-5 mb-5 text-center text-white" style="color:white;">Loading... This may take a few seconds</p>
-	</div>
-{:else}
-	<div class="mx-auto mt-32 max-w-5xl rounded-lg">
-		<div class="flex items-stretch justify-between gap-6">
-			<div class="flex-1 min-w-0">
-				<div class="space-y-3">
-					<InfoRow label="Firmware" value={version} />
-					<InfoRow label="SD card" value={sdCard} />
-					<InfoRow label="LittleFS" value={littleFS_Storage} />
-					<InfoRow label="Hardware" value={device} />
-					<InfoRow label="MAC Address" value={mac_address} />
-					<InfoRow label="WiFi" value={wifi} />
-					<InfoRow label="Heap usage" value={heap_usage} />
-					<InfoRow label="PSRAM usage" value={psram_usage} />
-					<!-- <InfoRow label="Total heap" value={total_heap} />
-					<InfoRow label="Free heap" value={free_heap} />
-					<InfoRow label="Total PSRAM" value={total_psram} />
-					<InfoRow label="Free PSRAM" value={free_psram} /> -->
-					<InfoRow label="Uptime" value={uptime} />
-					<InfoRow label="SDK" value={sdk} />
+	{#if !supported}
+		<div class="panel p-10 text-center">
+			<h2 class="text-xl font-semibold">Unsupported browser</h2>
+			<p class="mt-2 text-sm text-[var(--text-dim)]">Please use a Chromium based browser</p>
+		</div>
+	{:else if !connected}
+		<div class="panel flex flex-col items-start gap-6 p-10 md:flex-row md:items-center md:justify-between">
+			<div>
+				<h2 class="text-xl font-semibold">Connect your device</h2>
+				<p class="mt-2 text-sm text-[var(--text-dim)]">Bruce Lab reads the device state over Web Serial. Nothing leaves your browser.</p>
+			</div>
+			<Btn onclick={connect_device}>
+				<Icon name="plug" size={15} /> Connect
+			</Btn>
+		</div>
+	{:else if loading}
+		<div class="panel flex flex-col items-center justify-center gap-4 p-16">
+			<span class="lab-spinner"></span>
+			<p class="text-sm text-[var(--text-dim)]">Loading... This may take a few seconds</p>
+		</div>
+	{:else}
+		<div class="panel overflow-hidden">
+			<div class="grid gap-px bg-[var(--rule)] lg:grid-cols-[1fr_0.9fr]">
+				<!-- Readout -->
+				<div class="bg-[var(--color-ink)] p-7">
+					<h2 class="eyebrow mb-4">Device</h2>
+					<dl>
+						<InfoRow label="Firmware" value={version} />
+						<InfoRow label="SD card" value={sdCard} />
+						<InfoRow label="LittleFS" value={littleFS_Storage} />
+						<InfoRow label="Hardware" value={device} />
+						<InfoRow label="MAC Address" value={mac_address} />
+						<InfoRow label="WiFi" value={wifi} />
+						<InfoRow label="Heap usage" value={heap_usage} />
+						<InfoRow label="PSRAM usage" value={psram_usage} />
+						<InfoRow label="Uptime" value={uptime} />
+						<InfoRow label="SDK" value={sdk} />
+					</dl>
+				</div>
+
+				<!-- Portrait -->
+				<div class="flex items-center justify-center bg-[var(--color-ink)] p-7">
+					<img src="{base}/img/{img}" alt="Bruce device" class="max-h-80 w-auto max-w-full object-contain" />
 				</div>
 			</div>
 
-			<div class="flex w-1/2 flex-shrink-0 items-center justify-center">
-				<img
-					src="{base}/img/{img}"
-					alt="Bruce device"
-					class="h-auto w-auto max-h-full max-w-full object-contain"
-				/>
-			</div>
-		</div>
-		<div class="mt-10 mb-10">
-			<Btn href="{base}/flasher">Update</Btn>
-			<Btn onclick={factory_reset}>Factory Reset</Btn>
-			<Btn onclick={reboot_bruce}>Reboot</Btn>
-			<Btn onclick={startNavigator}>Navigator</Btn>
-		</div>
-	</div>
-
-	{#if navigatorOpen}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="navigator-title"
-			tabindex="0"
-			onclick={(event) => {
-				if (event.currentTarget === event.target) {
-					void stopNavigator();
-				}
-			}}
-			onkeydown={(event) => {
-				if (event.currentTarget === event.target && (event.key === 'Enter' || event.key === ' ')) {
-					event.preventDefault();
-					void stopNavigator();
-				}
-			}}
-		>
-			<div class="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0f0f14] shadow-2xl">
-				<div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-					<div class="flex items-center gap-3">
-						<h2 id="navigator-title" class="text-lg font-semibold text-white">Device Navigator</h2>
-						<span class="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70"
-							>Serial</span
-						>
-					</div>
-					<div class="flex flex-wrap items-center gap-2">
-						<button
-							class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#9B51E0]"
-							onclick={stopNavigator}
-						>
-							Close
-						</button>
-					</div>
-				</div>
-
-				<div class="grid gap-6 p-6 lg:grid-cols-[1.2fr_0.8fr]">
-					<div class="rounded-xl border border-white/10 bg-black p-3">
-						<canvas bind:this={navCanvas} class="h-auto w-full rounded-lg bg-black" width="320" height="240"></canvas>
-					</div>
-					<div class="space-y-4">
-						<div class="rounded-xl border border-white/10 bg-white/5 p-3">
-							<div class="grid gap-2">
-								<div class="grid grid-cols-3 gap-2">
-									<button
-										class="nav-btn"
-										onclick={() => void sendNavigatorCommand('nav prevpage')}
-									>
-										Pg↑
-									</button>
-									<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav up')}>▲</button>
-									<button
-										class="nav-btn"
-										onclick={() => void sendNavigatorCommand('nav sel 700')}
-									>
-										H
-									</button>
-								</div>
-								<div class="grid grid-cols-3 gap-2">
-									<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav prev')}>
-										◀
-									</button>
-									<button
-										class="nav-btn nav-ok"
-										onclick={() => void sendNavigatorCommand('nav sel')}
-									>
-										OK
-									</button>
-									<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav next')}>
-										▶
-									</button>
-								</div>
-								<div class="grid grid-cols-3 gap-2">
-									<button
-										class="nav-btn"
-										onclick={() => void sendNavigatorCommand('nav nextpage')}
-									>
-										Pg↓
-									</button>
-									<button
-										class="nav-btn"
-										onclick={() => void sendNavigatorCommand('nav down')}
-									>
-										▼
-									</button>
-									<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav esc')}>
-										⟲
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<div class="rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/70">
-							<p class="mb-2 font-semibold text-white">Shortcuts</p>
-							<p>Arrows = Navigation, Enter = OK, Backspace = Back</p>
-							<p>PageUp/PageDown = PgUp/PgDn, H = Sel hold, R = Reload</p>
-							<br>
-							<p class="mb-2 font-semibold text-white">Limitations</p>
-							<p>Images are not rendered in the Serial Navigator.</p>
-						</div>
-					</div>
-				</div>
-
-				<div class="flex items-center justify-between gap-3 border-t border-white/10 px-6 py-4">
-					<span class="text-xs text-white/70">After each command, you can force reload with Reload.</span>
-					<button
-						class="rounded-lg bg-[#9B51E0] px-4 py-2 text-sm font-semibold text-white transition hover:scale-105 hover:bg-[#8033C7]"
-						onclick={triggerDump}
-					>
-						Reload
-					</button>
-				</div>
+			<div class="flex flex-wrap gap-3 border-t border-[var(--rule)] p-6">
+				<Btn href="{base}/flasher">Update</Btn>
+				<Btn onclick={startNavigator} outline>
+					<Icon name="terminal" size={15} /> Navigator
+				</Btn>
+				<Btn onclick={reboot_bruce} outline>
+					<Icon name="refresh" size={15} /> Reboot
+				</Btn>
+				<Btn onclick={factory_reset} outline>Factory Reset</Btn>
 			</div>
 		</div>
 	{/if}
+</div>
+
+{#if connected && !loading && navigatorOpen}
+	<div
+		class="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="navigator-title"
+		tabindex="0"
+		onclick={(event) => {
+			if (event.currentTarget === event.target) {
+				void stopNavigator();
+			}
+		}}
+		onkeydown={(event) => {
+			if (event.currentTarget === event.target && (event.key === 'Enter' || event.key === ' ')) {
+				event.preventDefault();
+				void stopNavigator();
+			}
+		}}
+	>
+		<div class="w-full max-w-5xl border border-[var(--rule-strong)] bg-[var(--color-surface)]">
+			<div class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--rule)] px-6 py-4">
+				<div class="flex items-baseline gap-3">
+					<h2 id="navigator-title" class="text-lg font-semibold">Device Navigator</h2>
+					<span class="meta">Serial</span>
+				</div>
+				<button class="btn btn-quiet" onclick={stopNavigator}>Close</button>
+			</div>
+
+			<div class="grid gap-px bg-[var(--rule)] lg:grid-cols-[1.2fr_0.8fr]">
+				<div class="bg-[var(--color-ink)] p-6">
+					<canvas bind:this={navCanvas} class="h-auto w-full bg-black" width="320" height="240"></canvas>
+				</div>
+
+				<div class="space-y-5 bg-[var(--color-ink)] p-6">
+					<!-- D-pad: icons replace the arrow glyphs that used to be typed
+					     straight into the markup. -->
+					<div class="grid grid-cols-3 gap-2">
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav prevpage')} title="Page up" aria-label="Page up">
+							<Icon name="chevrons-up" size={16} />
+						</button>
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav up')} title="Up" aria-label="Up">
+							<Icon name="chevron-up" size={16} />
+						</button>
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav sel 700')} title="Select, hold" aria-label="Select, hold">
+							<span class="font-mono text-xs">H</span>
+						</button>
+
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav prev')} title="Previous" aria-label="Previous">
+							<Icon name="chevron-left" size={16} />
+						</button>
+						<button class="nav-btn nav-ok" onclick={() => void sendNavigatorCommand('nav sel')} title="Select" aria-label="Select">
+							<span class="font-mono text-xs">OK</span>
+						</button>
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav next')} title="Next" aria-label="Next">
+							<Icon name="chevron-right" size={16} />
+						</button>
+
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav nextpage')} title="Page down" aria-label="Page down">
+							<Icon name="chevrons-down" size={16} />
+						</button>
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav down')} title="Down" aria-label="Down">
+							<Icon name="chevron-down" size={16} />
+						</button>
+						<button class="nav-btn" onclick={() => void sendNavigatorCommand('nav esc')} title="Back" aria-label="Back">
+							<Icon name="corner-back" size={16} />
+						</button>
+					</div>
+
+					<div class="border border-[var(--rule)] p-4">
+						<h3 class="eyebrow">Shortcuts</h3>
+						<p class="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">Arrows = Navigation, Enter = OK, Backspace = Back</p>
+						<p class="text-xs leading-relaxed text-[var(--text-dim)]">PageUp/PageDown = PgUp/PgDn, H = Sel hold, R = Reload</p>
+
+						<h3 class="eyebrow mt-4">Limitations</h3>
+						<p class="mt-2 text-xs leading-relaxed text-[var(--text-dim)]">Images are not rendered in the Serial Navigator.</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--rule)] px-6 py-4">
+				<span class="meta">After each command, you can force reload with Reload.</span>
+				<button class="btn btn-primary" onclick={triggerDump}>
+					<Icon name="refresh" size={15} /> Reload
+				</button>
+			</div>
+		</div>
+	</div>
 {/if}
 
 <style>
 	.nav-btn {
-		border-radius: 0.75rem;
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		background: rgba(255, 255, 255, 0.05);
-		padding: 0.6rem 0.75rem;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: white;
-		transition: background 0.2s ease, transform 0.2s ease;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--rule);
+		background: var(--wash);
+		border-radius: 3px;
+		padding: 0.7rem;
+		color: #fff;
+		cursor: pointer;
+		transition:
+			background-color 0.18s ease,
+			border-color 0.18s ease;
 	}
 
 	.nav-btn:hover {
-		background: #9b51e0;
+		border-color: var(--color-brand);
+		background: rgba(155, 81, 224, 0.16);
 	}
 
 	.nav-ok {
-		background: #9b51e0;
+		border-color: var(--color-brand);
+		background: var(--color-brand);
+	}
+
+	.nav-ok:hover {
+		background: var(--color-brand-strong);
+	}
+
+	@keyframes lab-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.lab-spinner {
+		width: 2.5rem;
+		height: 2.5rem;
+		border: 2px solid rgba(255, 255, 255, 0.12);
+		border-top-color: var(--color-brand);
+		border-radius: 50%;
+		animation: lab-spin 0.8s linear infinite;
 	}
 </style>

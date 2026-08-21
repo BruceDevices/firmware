@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { DeviceCompatibility, FeatureRow } from '$lib/types/device';
 	import devicesData from '$lib/data/devices.json';
+	import Icon from '$lib/components/Icon.svelte';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 
@@ -12,19 +13,17 @@
 		features = Object.keys(compatibilityData[0]).filter((k) => k !== 'device') as (keyof FeatureRow)[];
 	}
 
+	// Columns only shown in the detailed view. Driven by state now instead of
+	// toggling .hidden on queried nodes, so the markup stays declarative.
+	const detailedKeys = ['Screen', 'ESP', 'Battery', 'Flash', 'PSRAM'];
+	const isDetailed = (k: string) => detailedKeys.includes(k);
+
 	let scrollContainer: HTMLElement;
-	let showGradient = false;
+	let showGradient = $state(false);
+	let detailed = $state(false);
 
 	function toggleDetailedView() {
-		const detailedRows = document.querySelectorAll('.detailed');
-		detailedRows.forEach((row) => {
-			row.classList.toggle('hidden');
-		});
-		document.getElementById('toggleDetailedView')!.textContent = detailedRows[0].classList.contains('hidden')
-			? 'Show Detailed View'
-			: 'Hide Detailed View';
-
-		// Recheck gradient visibility after toggling detailed view
+		detailed = !detailed;
 		setTimeout(checkGradientVisibility, 100);
 	}
 
@@ -54,103 +53,125 @@
 	});
 </script>
 
-<div class="container">
-	<div class="mx-auto mt-10 w-[90%] text-center">
-		<h1 class="mb-5 text-3xl font-bold text-white">Compatible Devices</h1>
-		<h2 class="mb-5 text-lg text-white">
-			This table shows the compatibility of various devices with Bruce's features. Click the button to toggle detailed view for more information.
-		</h2>
-		<button
-			id="toggleDetailedView"
-			class="mb-5 rounded bg-[#9B51E0] px-4 py-2 font-semibold text-white hover:bg-[#8033C7]"
-			on:click={toggleDetailedView}
-		>
-			Show Detailed View
+<section class="shell py-20">
+	<div class="mb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+		<div class="max-w-2xl">
+			<span class="eyebrow">Hardware support</span>
+			<h2 class="mt-3 text-3xl font-semibold md:text-4xl">Compatible Devices</h2>
+			<p class="lede mt-4 text-base">
+				This table shows the compatibility of various devices with Bruce's features. Click the button to toggle detailed view for more information.
+			</p>
+		</div>
+		<button class="btn btn-outline shrink-0" onclick={toggleDetailedView} aria-pressed={detailed}>
+			{detailed ? 'Hide Detailed View' : 'Show Detailed View'}
 		</button>
-		<div class="table-wrapper relative">
-			<div class="w-full overflow-x-auto whitespace-nowrap" bind:this={scrollContainer} on:scroll={handleScroll}>
-				<table class="w-full border-collapse rounded-lg bg-neutral-900">
-					<thead>
-						<tr>
-							<th class="sticky left-0 z-10 bg-neutral-900 px-4 py-3 text-center text-base text-white">Device</th>
-							{#each features as feat}
-								<th
-									class="px-4 py-3 text-center text-base text-white {feat === 'Screen' ||
-									feat === 'ESP' ||
-									feat === 'Battery' ||
-									feat === 'Flash' ||
-									feat === 'PSRAM'
-										? 'detailed hidden'
-										: ''}">{feat.replace('_', ' ')}</th
-								>
-							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each compatibilityData as row, index}
-							<tr class="group even:bg-neutral-800 hover:bg-neutral-700">
-								<td
-									class="sticky left-0 z-10 px-4 py-3 text-center text-base text-white {index % 2 === 0
-										? 'bg-neutral-900'
-										: 'bg-neutral-800'} group-hover:bg-neutral-700">{row.device}</td
-								>
-								{#each features as key}
-									<td
-										title={typeof row[key] === 'string' ? row[key] : ''}
-										class={key === 'Screen' || key === 'ESP' || key === 'Battery' || key === 'Flash' || key === 'PSRAM' ? 'detailed hidden' : ''}
-									>
-										{#if (key === 'Screen' || key === 'ESP' || key === 'Battery' || key === 'Flash' || key === 'PSRAM') && typeof row[key] === 'string'}
-											{row[key]}
+	</div>
+
+	<div class="relative border border-[var(--rule)]">
+		<div class="w-full overflow-x-auto" bind:this={scrollContainer} onscroll={handleScroll}>
+			<table class="w-full border-collapse text-sm whitespace-nowrap">
+				<thead>
+					<tr class="border-b border-[var(--rule)]">
+						<th class="sticky left-0 z-10 bg-[var(--color-surface)] px-4 py-3 text-left font-medium text-[var(--text-dim)]">Device</th>
+						{#each features as feat}
+							{#if !isDetailed(feat) || detailed}
+								<th class="bg-[var(--color-surface)] px-4 py-3 text-center font-medium text-[var(--text-dim)]">{feat.replace('_', ' ')}</th>
+							{/if}
+						{/each}
+					</tr>
+				</thead>
+				<tbody>
+					{#each compatibilityData as row}
+						<tr class="group border-b border-[var(--rule)] transition-colors last:border-b-0 hover:bg-white/[0.03]">
+							<td class="sticky left-0 z-10 bg-[var(--color-ink)] px-4 py-2.5 text-left font-medium">{row.device}</td>
+							{#each features as key}
+								{#if !isDetailed(key) || detailed}
+									<td class="px-4 py-2.5 text-center" title={typeof row[key] === 'string' ? row[key] : ''}>
+										{#if isDetailed(key) && typeof row[key] === 'string'}
+											<span class="font-mono text-xs text-[var(--text-dim)]">{row[key]}</span>
 										{:else if key === 'NFC' && typeof row[key] === 'string' && row[key] !== 'Module Required'}
-											✅
+											<span class="inline-flex text-[var(--color-brand)]" title="Supported"><Icon name="yes" size={15} /></span>
 										{:else if key === 'Mic'}
-											{typeof row[key] === 'string' ? '✅' : '❌'}
-											{#if typeof row[key] === 'string'}<span class="detailed hidden">{row[key]}</span>{/if}
+											{#if typeof row[key] === 'string'}
+												<span class="inline-flex items-center justify-center gap-1.5 text-[var(--color-brand)]" title={row[key]}>
+													<Icon name="yes" size={15} />
+													{#if detailed}<span class="font-mono text-xs text-[var(--text-dim)]">{row[key]}</span>{/if}
+												</span>
+											{:else}
+												<span class="inline-flex text-[var(--text-faint)]" title="Not supported"><Icon name="no" size={15} /></span>
+											{/if}
 										{:else if key === 'Audio'}
-											{row[key] === 'Tone' ? '🔈' : typeof row[key] === 'string' ? '🔊' : '❌'}
-											{#if typeof row[key] === 'string'}<span class="detailed hidden">{row[key] !== 'Tone' ? 'Full - ' : ''}{row[key]}</span>{/if}
-										{:else}
-											{row[key] === true ? '✅' : row[key] === false ? '❌' : row[key] === 'Module Required' ? 'ℹ️' : ''}
+											{#if row[key] === 'Tone'}
+												<span class="inline-flex items-center justify-center gap-1.5 text-[var(--color-brand)]" title="Tone">
+													<Icon name="volume-low" size={15} />
+													{#if detailed}<span class="font-mono text-xs text-[var(--text-dim)]">Tone</span>{/if}
+												</span>
+											{:else if typeof row[key] === 'string'}
+												<span class="inline-flex items-center justify-center gap-1.5 text-[var(--color-brand)]" title="Full - {row[key]}">
+													<Icon name="volume-high" size={15} />
+													{#if detailed}<span class="font-mono text-xs text-[var(--text-dim)]">Full - {row[key]}</span>{/if}
+												</span>
+											{:else}
+												<span class="inline-flex text-[var(--text-faint)]" title="Not supported"><Icon name="no" size={15} /></span>
+											{/if}
+										{:else if row[key] === true}
+											<span class="inline-flex text-[var(--color-brand)]" title="Supported"><Icon name="yes" size={15} /></span>
+										{:else if row[key] === false}
+											<span class="inline-flex text-[var(--text-faint)]" title="Not supported"><Icon name="no" size={15} /></span>
+										{:else if row[key] === 'Module Required'}
+											<span class="inline-flex text-[var(--text-dim)]" title="Module Required"><Icon name="info" size={15} /></span>
 										{/if}
 									</td>
-								{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			{#if showGradient}
-				<div class="scroll-gradient" transition:fade={{ duration: 300 }}></div>
-			{/if}
+								{/if}
+							{/each}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		</div>
-		<br />
-		<h2 class="text-lg">
-			For <strong>Wiring Diagrams</strong> check the
-			<a href="https://github.com/BruceDevices/firmware/tree/main/media/connections"><b>connections</b></a>
-			or <a href="https://wiki.bruce.computer"><b>Wiki</b></a>!
-		</h2>
-		<h2 class="text-lg">Every feature is also listed on Github.</h2>
+		{#if showGradient}
+			<div class="scroll-gradient" transition:fade={{ duration: 300 }}></div>
+		{/if}
 	</div>
-</div>
+
+	<!-- The glyphs above are unlabelled, so the legend states them once. -->
+	<dl class="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+		<div class="flex items-center gap-2">
+			<dt class="inline-flex text-[var(--color-brand)]"><Icon name="yes" size={14} /></dt>
+			<dd class="meta">Supported</dd>
+		</div>
+		<div class="flex items-center gap-2">
+			<dt class="inline-flex text-[var(--text-faint)]"><Icon name="no" size={14} /></dt>
+			<dd class="meta">Not supported</dd>
+		</div>
+		<div class="flex items-center gap-2">
+			<dt class="inline-flex text-[var(--text-dim)]"><Icon name="info" size={14} /></dt>
+			<dd class="meta">Module required</dd>
+		</div>
+		<div class="flex items-center gap-2">
+			<dt class="inline-flex text-[var(--color-brand)]"><Icon name="volume-low" size={14} /></dt>
+			<dd class="meta">Tone only</dd>
+		</div>
+	</dl>
+
+	<div class="mt-6 space-y-1 text-sm text-[var(--text-dim)]">
+		<p>
+			For <strong class="text-white">Wiring Diagrams</strong> check the
+			<a href="https://github.com/BruceDevices/firmware/tree/main/media/connections">connections</a>
+			or <a href="https://wiki.bruce.computer">Wiki</a>!
+		</p>
+		<p>Every feature is also listed on Github.</p>
+	</div>
+</section>
 
 <style>
-	.container {
-		width: 90%;
-		max-width: 100%;
-		margin: 0 auto;
-	}
-
-	.table-wrapper {
-		position: relative;
-	}
-
 	.scroll-gradient {
 		position: absolute;
 		top: 0;
 		right: 0;
 		bottom: 0;
 		width: 100px;
-		background: linear-gradient(to left, rgba(0, 0, 0, 0.9), transparent);
+		background: linear-gradient(to left, rgba(10, 10, 10, 0.95), transparent);
 		pointer-events: none;
 		z-index: 5;
 	}

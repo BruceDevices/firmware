@@ -1,4 +1,6 @@
 <script>
+	import Icon from '$lib/components/Icon.svelte';
+
 	let props = $props();
 
 	let isOpen = $state(false);
@@ -19,27 +21,25 @@
 <div class="relative inline-block text-left">
 	<button
 		type="button"
-		class="inline-flex w-full justify-center rounded-lg px-4 py-2.5 text-sm font-medium text-purple-500 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
+		class="inline-flex items-center gap-1.5 rounded-[3px] px-3 py-2 text-sm text-[var(--text-dim)] transition-colors hover:text-white"
 		onclick={toggleDropdown}
+		aria-expanded={isOpen}
 	>
 		{props.title}
-		<svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-			<path
-				fill-rule="evenodd"
-				d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-				clip-rule="evenodd"
-			/>
-		</svg>
+		<span class="transition-transform duration-200" class:rotate-180={isOpen}>
+			<Icon name="chevron-down" size={14} />
+		</span>
 	</button>
 
 	{#if isOpen}
-		<div class="shaodw-md absolute right-0 mt-2 w-56 origin-top-right rounded-md bg-[#222] py-1 text-center shadow-lg focus:outline-none">
+		<div
+			class="absolute right-0 z-50 mt-1 w-56 overflow-hidden rounded-[3px] border border-[var(--rule-strong)] bg-[var(--color-surface)] py-1 shadow-2xl"
+		>
 			{#each props.links as link}
-				<a href={link.href}>{link.title}</a>
+				<a href={link.href} class="block px-3 py-2 text-sm text-[var(--text-dim)] transition-colors hover:bg-white/5 hover:text-white">
+					{link.title}
+				</a>
 			{/each}
 		</div>
 	{/if}
 </div>
-
-<style>
-</style>

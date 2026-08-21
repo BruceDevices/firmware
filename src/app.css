@@ -1,2 +1,277 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/*
+ * Design tokens. Every colour here is one that already existed in the site —
+ * they are only centralised so the same purple/black/panel values are not
+ * re-typed as literals across twenty components.
+ */
+@theme {
+	--color-ink: #0a0a0a; /* page background */
+	--color-surface: #111111; /* header, footer, raised panels */
+	--color-surface-2: #222222; /* cards */
+	--color-brand: #9b51e0; /* primary purple */
+	--color-brand-strong: #8033c7; /* primary purple, hover */
+	--color-brand-link: #943ee5; /* inline link purple */
+	--color-plum-1: #3d0664; /* donate gradient */
+	--color-plum-2: #4b0082;
+	--color-plum-3: #2a0036;
+
+	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+}
+
+:root {
+	/* Hairlines and washes, expressed once so panels stay consistent. */
+	--rule: rgba(255, 255, 255, 0.08);
+	--rule-strong: rgba(255, 255, 255, 0.16);
+	--wash: rgba(255, 255, 255, 0.02);
+	--wash-2: rgba(255, 255, 255, 0.04);
+	--text-dim: rgba(255, 255, 255, 0.62);
+	--text-faint: rgba(255, 255, 255, 0.42);
+	--shell: min(1180px, 100% - 3rem);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+	overflow-x: hidden;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	background-color: var(--color-ink);
+	color: #fff;
+	font-family: var(--font-sans);
+	font-synthesis-weight: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+
+	/* Sticky footer. SvelteKit wraps the body in a `display: contents` div, so
+	   header/main/footer are the effective flex children here. */
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Grows to absorb the leftover height on short pages, which keeps the footer on
+   the bottom edge instead of floating mid-viewport. Not `body > main`: the
+   wrapper div is `display: contents`, which changes box generation but not the
+   DOM tree, so main is still a child of that div for selector purposes. */
+main {
+	flex: 1 0 auto;
+}
+
+a {
+	color: var(--color-brand-link);
+	text-decoration: none;
+}
+
+::selection {
+	background: var(--color-brand);
+	color: #fff;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-brand);
+	outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Layout primitives
+ * ------------------------------------------------------------------------- */
+
+.shell {
+	width: var(--shell);
+	margin-inline: auto;
+}
+
+/* A section label: small, monospaced, letterspaced. Used instead of decorative
+   badges so headings carry the hierarchy rather than coloured pills. */
+.eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.6875rem;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.rule {
+	border: 0;
+	border-top: 1px solid var(--rule);
+	margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Surfaces
+ * ------------------------------------------------------------------------- */
+
+.panel {
+	background: var(--wash);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+}
+
+.panel-solid {
+	background: var(--color-surface-2);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+}
+
+/* Hover state for interactive panels — a border and background shift rather
+   than a scale transform, so grids stay on their baseline while pointing. */
+.panel-interactive {
+	transition:
+		border-color 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.panel-interactive:hover {
+	border-color: var(--rule-strong);
+	background: var(--wash-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * Controls
+ * ------------------------------------------------------------------------- */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	border-radius: 3px;
+	border: 1px solid transparent;
+	padding: 0.625rem 1.125rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.01em;
+	cursor: pointer;
+	transition:
+		background-color 0.18s ease,
+		border-color 0.18s ease,
+		color 0.18s ease;
+}
+
+.btn-primary {
+	background: var(--color-brand);
+	color: #fff;
+}
+
+.btn-primary:hover {
+	background: var(--color-brand-strong);
+}
+
+.btn-outline {
+	border-color: var(--rule-strong);
+	color: #fff;
+	background: transparent;
+}
+
+.btn-outline:hover {
+	border-color: var(--color-brand);
+	background: rgba(155, 81, 224, 0.1);
+}
+
+.btn-quiet {
+	border-color: var(--rule);
+	background: var(--wash);
+	color: var(--text-dim);
+}
+
+.btn-quiet:hover {
+	border-color: var(--rule-strong);
+	color: #fff;
+}
+
+/* Selectable chip used by the flasher and the store filters. Square-ish and
+   bordered — a state control, not a decorative label. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--rule);
+	background: var(--wash);
+	border-radius: 3px;
+	padding: 0.5rem 0.9rem;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--text-dim);
+	cursor: pointer;
+	transition:
+		border-color 0.18s ease,
+		background-color 0.18s ease,
+		color 0.18s ease;
+}
+
+.chip:hover {
+	border-color: var(--rule-strong);
+	color: #fff;
+}
+
+.chip[data-active='true'] {
+	border-color: var(--color-brand);
+	background: rgba(155, 81, 224, 0.14);
+	color: #fff;
+}
+
+.field {
+	width: 100%;
+	border: 1px solid var(--rule);
+	background: var(--wash);
+	border-radius: 3px;
+	padding: 0.55rem 0.85rem;
+	font-size: 0.875rem;
+	color: #fff;
+	transition: border-color 0.18s ease;
+}
+
+.field::placeholder {
+	color: var(--text-faint);
+}
+
+.field:focus {
+	outline: none;
+	border-color: var(--color-brand);
+}
+
+/* ---------------------------------------------------------------------------
+ * Typography helpers
+ * ------------------------------------------------------------------------- */
+
+.meta {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--text-faint);
+}
+
+.lede {
+	font-size: 1.0625rem;
+	line-height: 1.65;
+	color: var(--text-dim);
+}
+
+h1,
+h2,
+h3,
+h4 {
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

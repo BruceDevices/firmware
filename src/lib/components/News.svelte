@@ -1,10 +1,14 @@
 <script>
 	export let title;
+	export let eyebrow = '';
 </script>
 
-<div
-	class="m-2.5 max-w-[400px] rounded-[10px] bg-[#222] p-5 text-center transition-all duration-300 ease-linear hover:scale-105 max-sm:m-2 max-sm:h-100"
->
-	<h3 class="mb-2.5 text-[1.8rem] font-bold">{title}</h3>
-	<slot />
-</div>
+<article class="panel panel-interactive flex h-full flex-col p-6 text-left">
+	{#if eyebrow}
+		<span class="eyebrow mb-3 block">{eyebrow}</span>
+	{/if}
+	<h3 class="mb-3 text-xl font-semibold">{title}</h3>
+	<div class="flex flex-1 flex-col justify-between gap-5">
+		<slot />
+	</div>
+</article>

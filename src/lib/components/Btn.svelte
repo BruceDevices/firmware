@@ -4,22 +4,14 @@
 	export let outline: boolean = false;
 </script>
 
-{#if !outline}
-	<a
-		{href}
-		class="inline-block rounded bg-[#9B51E0] px-6 py-3 font-semibold text-white transition-all duration-300 ease-in-out hover:scale-105 hover:bg-[#8033C7] {className}"
-		{...$$restProps}
-		style="color:white"
-	>
+<!-- Renders as a link when href is given, otherwise as a real button, so the
+     onclick handlers in Bruce Lab get proper keyboard/AT semantics. -->
+{#if href}
+	<a {href} class="btn {outline ? 'btn-outline' : 'btn-primary'} {className}" {...$$restProps} style="color:#fff">
 		<slot />
 	</a>
 {:else}
-	<a
-		{href}
-		class="inline-block rounded-lg border-2 border-[#9B51E0] bg-transparent px-6 py-3 font-semibold text-[#9B51E0] transition-all duration-300 ease-in-out hover:scale-105 hover:bg-[#9B51E0] hover:text-white {className}"
-		{...$$restProps}
-		style="color:white"
-	>
+	<button type="button" class="btn {outline ? 'btn-outline' : 'btn-primary'} {className}" {...$$restProps}>
 		<slot />
-	</a>
+	</button>
 {/if}

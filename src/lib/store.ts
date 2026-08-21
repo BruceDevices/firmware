@@ -3,7 +3,11 @@ export enum Page {
 	Flasher,
 	Donate,
 	MyBruce,
-	AppStore
+	AppStore,
+	Boards,
+	// Routes that are not in the nav (privacy). Without this, a page that never
+	// assigns `current_page` leaves the previous route's item highlighted.
+	Other
 }
 
 import { writable, get } from 'svelte/store';

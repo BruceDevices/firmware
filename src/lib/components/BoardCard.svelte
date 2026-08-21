@@ -1,5 +1,6 @@
 <script>
 	import { base } from '$app/paths';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let { images = [], title = '', description = '', className, children } = $props();
 
@@ -44,52 +45,59 @@
 	});
 </script>
 
-<!-- Board Card -->
-<div class="mx-auto">
-	<div class="overflow-hidden rounded-lg border border-white/10 bg-white/5 {className}">
-		<!-- Board Image Section -->
-		<div class="relative mx-auto max-w-2xl">
-			<div class="group relative">
-				<img
-					src={base + images[currentImageIndex]}
-					alt={title}
-					class="h-72 w-full rounded-lg object-cover max-sm:p-5"
-					onmouseenter={pauseInterval}
-					onmouseleave={resumeInterval}
-				/>
+<article class="panel overflow-hidden {className}">
+	<!-- Image plate -->
+	<div class="group relative border-b border-[var(--rule)] bg-black/40">
+		<img
+			src={base + images[currentImageIndex]}
+			alt={title}
+			class="h-72 w-full object-contain p-6"
+			onmouseenter={pauseInterval}
+			onmouseleave={resumeInterval}
+		/>
 
-				<!-- Navigation Buttons -->
-				{#if images.length > 1}
-					<div class="absolute inset-0 flex items-center justify-between px-5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-						<button
-							onclick={prevImage}
-							class="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border-none bg-black/50 text-lg text-white transition-all duration-300 hover:bg-black/80"
-						>
-							&lt;
-						</button>
-						<button
-							onclick={nextImage}
-							class="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border-none bg-black/50 text-lg text-white transition-all duration-300 hover:bg-black/80"
-						>
-							&gt;
-						</button>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Board Content -->
-		<div class="p-8 text-center">
-			<h2 class="mb-6 text-3xl font-bold">{title}</h2>
-
-			<div class="mb-8">
-				<p class="leading-relaxed text-gray-300">
-					{description}
-				</p>
+		{#if images.length > 1}
+			<div
+				class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-between px-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+			>
+				<button
+					onclick={prevImage}
+					aria-label="Previous image"
+					class="inline-flex h-9 w-9 items-center justify-center rounded-[3px] border border-[var(--rule-strong)] bg-black/70 text-white transition-colors hover:border-[var(--color-brand)]"
+				>
+					<Icon name="chevron-left" size={16} />
+				</button>
+				<button
+					onclick={nextImage}
+					aria-label="Next image"
+					class="inline-flex h-9 w-9 items-center justify-center rounded-[3px] border border-[var(--rule-strong)] bg-black/70 text-white transition-colors hover:border-[var(--color-brand)]"
+				>
+					<Icon name="chevron-right" size={16} />
+				</button>
 			</div>
 
-			<!-- Slot for technical specifications and action buttons -->
+			<!-- Position marker: ticks, not dots, matching the hero carousel. -->
+			<div class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
+				{#each images as _, i}
+					<button
+						onclick={() => (currentImageIndex = i)}
+						aria-label="Image {i + 1}"
+						aria-current={i === currentImageIndex}
+						class="h-[3px] w-6 transition-colors {i === currentImageIndex ? 'bg-[var(--color-brand)]' : 'bg-white/25 hover:bg-white/45'}"
+					></button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	<div class="p-8">
+		<h2 class="text-2xl font-semibold">{title}</h2>
+		<p class="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--text-dim)]">
+			{description}
+		</p>
+
+		<div class="mt-8">
 			{@render children()}
 		</div>
 	</div>
-</div>
+</article>
