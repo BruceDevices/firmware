@@ -17,7 +17,38 @@ static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
 static void setConfiguredWifiHostname() {
-    WiFi.setHostname(bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "");
+    const char *hostname = bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname.c_str() : "";
+    WiFi.setHostname(hostname);
+
+    esp_netif_t *staNetif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (staNetif != nullptr) esp_netif_set_hostname(staNetif, hostname);
+}
+
+static bool wifiHostnameMatchesConfiguration() {
+    if (!bruceConfig.wifiHostnameEnabled) return true;
+
+    const char *hostname = WiFi.getHostname();
+    return hostname != nullptr && bruceConfig.wifiHostname == hostname;
+}
+
+static bool reconnectWithConfiguredWifiHostname(const String &ssid, const String &pwd) {
+    if (!bruceConfig.wifiHostnameEnabled || wifiHostnameMatchesConfiguration()) return true;
+
+    for (uint8_t attempt = 0; attempt < 3; attempt++) {
+        WiFi.disconnect(true, true);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        WiFi.mode(WIFI_MODE_STA);
+        setConfiguredWifiHostname();
+        WiFi.begin(ssid, pwd);
+
+        for (uint8_t wait = 0; wait < 50 && !WiFi.isConnected(); wait++) {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
+
+        if (WiFi.isConnected() && wifiHostnameMatchesConfiguration()) return true;
+    }
+
+    return false;
 }
 
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
@@ -141,6 +172,11 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
         i++;
     }
 
+    if (WiFi.isConnected() && !reconnectWithConfiguredWifiHostname(ssid, pwd)) {
+        displayError("Hostname not applied");
+        return false;
+    }
+
     return WiFi.isConnected();
 }
 
@@ -164,12 +200,12 @@ void wifiDisconnect() {
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     if (mode & WIFI_MODE_STA) {
-        WiFi.disconnect(false, true);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        WiFi.disconnect(true, true);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     if (mode != WIFI_MODE_NULL) {
         WiFi.mode(WIFI_OFF);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
     wifiConnected = false;
@@ -326,6 +362,7 @@ void wifiConnectTask(void *pvParameters) {
         WiFi.begin(ssid, pwd);
         for (int i = 0; i < 50; i++) {
             if (WiFi.isConnected()) {
+                if (!reconnectWithConfiguredWifiHostname(ssid, pwd)) continue;
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
 
@@ -371,10 +408,11 @@ bool wifiConnecttoKnownNet(void) {
     bool result = false;
     int nets;
     WiFi.mode(WIFI_MODE_STA);
-    setConfiguredWifiHostname();
     displayTextLine("Scanning Networks..");
     WiFi.disconnect(true, true);
     vTaskDelay(10 / portTICK_PERIOD_MS);
+    WiFi.mode(WIFI_MODE_STA);
+    setConfiguredWifiHostname();
     nets = WiFi.scanNetworks();
     for (int i = 0; i < nets; i++) {
         vTaskDelay(10 / portTICK_PERIOD_MS);
