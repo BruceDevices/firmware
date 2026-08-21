@@ -192,7 +192,7 @@ static void render_page(
     tft.setTextFont(FP);
     tft.setTextSize(1);
     tft.setTextDatum(MC_DATUM);
-    tft.drawString("OK=select  ESC=back", tftWidth / 2, tftHeight - 13);
+    tft.drawString("OK=sel Hold=star ESC=back", tftWidth / 2, tftHeight - 13);
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextFont(FP);
@@ -377,7 +377,7 @@ static void grid_navigate(
 }
 
 // Grid screen for the .sub files inside one device folder. Short SEL sends the
-// signal (and records it in Recenti); HOLDING SEL toggles Preferiti.
+// signal (and records it in Recent); HOLDING SEL toggles Favorites.
 static void sub_grid(FS &fs, const std::vector<String> &files, const String &title) {
     if (files.empty()) {
         displayError("No .sub files found");
@@ -425,10 +425,10 @@ static void sub_grid(FS &fs, const std::vector<String> &files, const String &tit
             std::vector<HistEntry> favs = hist_load(fs, favFile);
             if (hist_has(favs, files[sel], clean)) {
                 hist_remove(favs, files[sel], clean);
-                displayWarning("Removed from Preferiti");
+                displayWarning("Removed from Favorites");
             } else {
                 hist_add(favs, files[sel], clean, false, HIST_FAV_CAP);
-                displaySuccess("Added to Preferiti");
+                displaySuccess("Added to Favorites");
             }
             hist_save(fs, favFile, favs);
             delay(600);
@@ -436,7 +436,7 @@ static void sub_grid(FS &fs, const std::vector<String> &files, const String &tit
     );
 }
 
-// Grid over a persisted history list (Preferiti/Recenti). Short SEL replays the
+// Grid over a persisted history list (Favorites/Recent). Short SEL replays the
 // signal; HOLDING SEL removes the entry.
 static void rf_history_grid(FS &fs, const String &file, const String &title, bool favMode) {
     std::vector<HistEntry> list = hist_load(fs, file);
@@ -720,72 +720,60 @@ static void show_categories() {
     g_rf_root = find_db_root(fs, "UniversalRF");
     String dbRoot = g_rf_root;
     String assetsRoot = g_rf_root + "/assets";
-
-    if (!fs.exists(dbRoot)) {
-        fs.mkdir(dbRoot);
-#if defined(UNIVERSAL_RF_LITTLEFS_ONLY)
-        displayError("Put RF files in /UniversalRF (LittleFS)");
-#else
-        displayError("Put RF files in /UniversalRF (SD or LittleFS)");
-#endif
-        delay(2000);
-        return;
-    }
+    bool hasDB = fs.exists(dbRoot);
 
     std::vector<String> cats;
-    String roots[2] = {assetsRoot, dbRoot};
-    for (int r = 0; r < 2; r++) {
-        File root = fs.open(roots[r]);
-        if (!root || !root.isDirectory()) continue;
-        while (true) {
-            bool isDir;
-            String fullPath = root.getNextFileName(&isDir);
-            if (fullPath == "") break;
-            if (isDir) {
-                String name = fullPath.substring(fullPath.lastIndexOf("/") + 1);
-                bool dup = false;
-                for (auto &c : cats) {
-                    if (c.equalsIgnoreCase(name)) {
-                        dup = true;
-                        break;
+    if (hasDB) {
+        String roots[2] = {assetsRoot, dbRoot};
+        for (int r = 0; r < 2; r++) {
+            File root = fs.open(roots[r]);
+            if (!root || !root.isDirectory()) continue;
+            while (true) {
+                bool isDir;
+                String fullPath = root.getNextFileName(&isDir);
+                if (fullPath == "") break;
+                if (isDir) {
+                    String name = fullPath.substring(fullPath.lastIndexOf("/") + 1);
+                    if (name.equalsIgnoreCase("assets")) continue; // skip meta-folder
+                    bool dup = false;
+                    for (auto &c : cats) {
+                        if (c.equalsIgnoreCase(name)) {
+                            dup = true;
+                            break;
+                        }
                     }
+                    if (!dup) cats.push_back(fullPath);
                 }
-                if (!dup) cats.push_back(fullPath);
             }
+            root.close();
         }
-        root.close();
-    }
-
-    if (cats.empty()) {
-        displayError("No category folders found");
-        delay(2000);
-        return;
     }
 
     returnToMenu = false;
     while (!returnToMenu) {
         options.clear();
-        // Quick access lists (persisted on the same FS as the DB).
-        String favFile = g_rf_root + "/favorites.txt";
-        String recFile = g_rf_root + "/recent.txt";
-        std::vector<HistEntry> favs = hist_load(fs, favFile);
-        std::vector<HistEntry> recs = hist_load(fs, recFile);
-        options.push_back({"★ Preferiti (" + String(favs.size()) + ")", [&fs, favFile]() {
-            rf_history_grid(fs, favFile, "Preferiti", true);
-        }});
-        options.push_back({"Recenti (" + String(recs.size()) + ")", [&fs, recFile]() {
-            rf_history_grid(fs, recFile, "Recenti", false);
-        }});
-        // Built-in test category: always present as the first option, no DB
-        // files required. A DB folder with the same name is skipped below.
-        options.push_back({"Generic", [&]() { generic_menu(); }});
-        for (auto &cat : cats) {
-            String name = cat.substring(cat.lastIndexOf("/") + 1);
-            if (name.equalsIgnoreCase("Generic")) continue;
-            options.push_back({pretty_name(name).c_str(), [&fs, cat, name]() {
-                browse_devices(fs, cat, pretty_name(name));
-            }            });
+        if (hasDB) {
+            // Quick access lists (persisted on the same FS as the DB).
+            String favFile = g_rf_root + "/favorites.txt";
+            String recFile = g_rf_root + "/recent.txt";
+            std::vector<HistEntry> favs = hist_load(fs, favFile);
+            std::vector<HistEntry> recs = hist_load(fs, recFile);
+            options.push_back({"★ Favorites (" + String(favs.size()) + ")", [&fs, favFile]() {
+                rf_history_grid(fs, favFile, "Favorites", true);
+            }});
+            options.push_back({"Recent (" + String(recs.size()) + ")", [&fs, recFile]() {
+                rf_history_grid(fs, recFile, "Recent", false);
+            }});
+            for (auto &cat : cats) {
+                String name = cat.substring(cat.lastIndexOf("/") + 1);
+                if (name.equalsIgnoreCase("Generic")) continue;
+                options.push_back({pretty_name(name).c_str(), [&fs, cat, name]() {
+                    browse_devices(fs, cat, pretty_name(name));
+                }            });
+            }
         }
+        // Always available — works with zero files on disk
+        options.push_back({"Generic", [&]() { generic_menu(); }});
         options.push_back({"Bruteforce", [&]() { rf_bruteforce(); }});
         options.push_back({"Freq Scanner", [&]() { rf_freq_scanner(); }});
         options.push_back({"Main Menu", [&]() { returnToMenu = true; }});

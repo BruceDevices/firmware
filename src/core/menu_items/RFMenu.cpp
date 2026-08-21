@@ -9,6 +9,7 @@
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_send.h"
 #include "modules/rf/rf_utils.h"
+#include "modules/rf/rf_audio.h"
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_waterfall.h"
 #include "modules/rf/universal_rf.h"
@@ -26,6 +27,7 @@ void RFMenu::optionsMenu() {
         {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
         {"SquareWave Spec", rf_SquareWave             }, // @Pirata
         {"Spectogram",      rf_waterfall              }, // dev_eclipse
+        {"Music RX",        rf_audio_rx               },
 #if defined(BUZZ_PIN) or defined(HAS_NS4168_SPKR) and defined(RF_LISTEN_H)
         {"Listen",          rf_listen                 }, // dev_eclipse
 #endif

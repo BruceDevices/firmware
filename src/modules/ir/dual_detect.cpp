@@ -49,6 +49,7 @@ typedef struct {
     String ir;             // IR file content or ""
     SemaphoreHandle_t sem; // counting(2), given once per finished task
     volatile bool abort;   // set by the caller to stop listening early
+    IrRead *irReader;      // pre-created before tasks to init ISR immediately
 } DualCtx;
 
 // --- Detector state ---------------------------------------------------------
@@ -246,11 +247,9 @@ static void _rfTask(void *arg) {
 
 static void _irTask(void *arg) {
     DualCtx *ctx = (DualCtx *)arg;
-    String ir;
-    {
-        IrRead irr(true, ctx->raw);
-        ir = irr.loop_headless(ctx->window, &ctx->abort);
-    } // ~IrRead() runs disableIRIn() + frees the IRrecv timer here
+    // Use the pre-created IrRead — its enableIRIn() already ran before task
+    // spawn, so the ISR is listening from the very start (fixes "press twice").
+    String ir = ctx->irReader->loop_headless(ctx->window, &ctx->abort);
     ctx->ir = _plausibleSignal("IR", ir) ? ir : "";
     xSemaphoreGive(ctx->sem);
     vTaskDelete(NULL);
@@ -266,6 +265,7 @@ int _dualListen(DualCtx &res, bool bothRaw) {
     ctx.raw = bothRaw;
     ctx.sem = xSemaphoreCreateCounting(2, 0);
     ctx.abort = false;
+    ctx.irReader = new IrRead(true, bothRaw); // enableIRIn() runs NOW, ISR starts immediately
     TaskHandle_t rfTask = NULL, irTask = NULL;
     if (ctx.sem == NULL) return PRESS_NONE;
 
@@ -284,8 +284,8 @@ int _dualListen(DualCtx &res, bool bothRaw) {
         if (rfTask != NULL) vTaskDelete(rfTask);
         if (irTask != NULL) vTaskDelete(irTask);
         if (!conflict) ctx.rf = _rfCapture(ctx.window, bothRaw, nullptr);
-        IrRead ir(true, bothRaw);
-        ctx.ir = ir.loop_headless(ctx.window);
+        ctx.ir = ctx.irReader->loop_headless(ctx.window);
+        delete ctx.irReader;
         vSemaphoreDelete(ctx.sem);
         res.rf = ctx.rf;
         res.ir = ctx.ir;
@@ -329,6 +329,7 @@ int _dualListen(DualCtx &res, bool bothRaw) {
     // handles left to reclaim (they are dangling once deleted).
     for (int i = 0; i < nTasks; i++) xSemaphoreTake(ctx.sem, pdMS_TO_TICKS(2000));
     vSemaphoreDelete(ctx.sem);
+    delete ctx.irReader; // clean up pre-created IrRead
 
     res.rf = ctx.rf;
     res.ir = ctx.ir;

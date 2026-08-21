@@ -7,7 +7,7 @@ Import("env")
 senv = env  # avoid shadowing with the action's 'env' parameter
 
 # Release version used in the merged deliverable name (BruceIRF<VER>-<board>.bin)
-FIRMWARE_VERSION = "3.6"
+FIRMWARE_VERSION = "4.0"
 
 # Optional: keep your extra flag
 senv.Append(CXXFLAGS=["-Wno-conversion-null"])

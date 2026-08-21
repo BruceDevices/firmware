@@ -18,7 +18,7 @@
 #define HIST_RECENT_CAP 24
 #define HIST_FAV_CAP 64
 
-// Long-press (hold SEL) threshold for the Preferiti toggle.
+// Long-press (hold SEL) threshold for the Favorites toggle.
 #define LONG_PRESS_MS 750
 
 // Resolved DB root for the running FS (see find_db_root). Some zip extractors
@@ -117,7 +117,7 @@ struct CategoryConfig {
 };
 
 // Describes where a SigIndex came from, so a signal can be replayed later from
-// the Preferiti/Recenti lists (path is a folder -> index recursively, or a
+// the Favorites/Recent lists (path is a folder -> index recursively, or a
 // single .ir file).
 struct IrSource {
     String path;
@@ -514,7 +514,7 @@ static void render_page(const GridMetrics &m, const std::vector<ButtonDef> &btns
     tft.setTextFont(FP);
     tft.setTextSize(1);
     tft.setTextDatum(MC_DATUM);
-    tft.drawString("OK=select  ESC=back", tftWidth / 2, tftHeight - 13);
+    tft.drawString("OK=sel Hold=star ESC=back", tftWidth / 2, tftHeight - 13);
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextFont(FP);
@@ -528,6 +528,217 @@ static void render_page(const GridMetrics &m, const std::vector<ButtonDef> &btns
     tft.setTextDatum(BL_DATUM);
     tft.drawString(seld, 8, tftHeight - 4);
 }
+
+// Built-in IR signals — works with no files on disk (like RF Generic / TV-B-Gone).
+// Common power codes for the most widespread TV protocols.
+static void ir_grid_navigate(
+    const std::vector<String> &labels, const String &title,
+    const std::function<bool(int)> &on_select, const std::function<void(int)> &on_long
+);
+
+// ── Built-in IR: signal table type ────────────────────────────────────
+struct BuiltInSig {
+    const char *proto;
+    const char *addr;
+    const char *cmd;
+    uint8_t bits;
+};
+
+static void _sendBuiltinSig(const BuiltInSig &s) {
+    IRCode code(s.proto, s.addr, s.cmd, "", s.bits);
+    sendIRCommand(&code, true);
+}
+
+// ── A "group" = one function (e.g. Power) with all brands' codes ─────
+struct BuiltinGroup {
+    const char *label;       // "Power", "Vol+", etc.
+    const BuiltInSig *sigs;
+    uint8_t count;
+};
+
+// ── Grid: show generic buttons, each sends ALL brands for that function ──
+static void _builtinFuncGrid(const char *title, const BuiltinGroup *groups, int groupCount) {
+    std::vector<String> labels;
+    for (int i = 0; i < groupCount; i++) labels.push_back(groups[i].label);
+    labels.push_back("Back");
+
+    ir_grid_navigate(labels, title, [title, groups, groupCount](int sel) -> bool {
+        if (sel >= groupCount) return true;
+        const BuiltinGroup &g = groups[sel];
+        tft.fillRect(0, 0, tftWidth, tftHeight, bruceConfig.bgColor);
+        drawMainBorderWithTitle(title);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.setTextFont(FM);
+        tft.setTextSize(1);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString(g.label, tftWidth / 2, tftHeight / 2 - 30);
+        tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+        tft.setTextFont(FP);
+        tft.drawString("ESC to cancel", tftWidth / 2, tftHeight / 2 + 15);
+        tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+        tft.setTextFont(FM);
+        for (int i = 0; i < g.count; i++) {
+            tft.fillRect(0, tftHeight / 2 - 10, tftWidth, 20, bruceConfig.bgColor);
+            tft.drawString(String(i + 1) + " / " + String(g.count), tftWidth / 2, tftHeight / 2 - 5);
+            _sendBuiltinSig(g.sigs[i]);
+            delay(300);
+            if (check(EscPress)) break;
+        }
+        return false;
+    }, nullptr);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TVs — each button sends ALL brands' codes
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _tvPower[] = {
+    {"Samsung32","07","02",32},{"NECext","04","08",32},{"SIRC","01","15",12},
+    {"RC5","00","0C",12},{"Kaseikyo","02","3D",48},{"NEC","40","09",32},
+    {"NEC","00","B7",32},{"NEC","04","08",32},{"NECext","20","08",32},
+};
+static const BuiltInSig _tvVolUp[] = {
+    {"Samsung32","07","07",32},{"NECext","04","02",32},{"SIRC","01","12",12},
+    {"RC5","00","10",12},{"Kaseikyo","02","20",48},{"NEC","40","1A",32},
+    {"NEC","00","B4",32},{"NEC","04","02",32},{"NECext","20","02",32},
+};
+static const BuiltInSig _tvVolDn[] = {
+    {"Samsung32","07","0B",32},{"NECext","04","03",32},{"SIRC","01","13",12},
+    {"RC5","00","11",12},{"Kaseikyo","02","21",48},{"NEC","40","1E",32},
+    {"NEC","00","B5",32},{"NEC","04","03",32},{"NECext","20","03",32},
+};
+static const BuiltInSig _tvMute[] = {
+    {"Samsung32","07","0F",32},{"NECext","04","06",32},{"SIRC","01","14",12},
+    {"RC5","00","0D",12},{"Kaseikyo","02","32",48},{"NEC","40","0D",32},
+    {"NEC","00","B6",32},{"NEC","04","06",32},{"NECext","20","06",32},
+};
+static const BuiltInSig _tvChUp[] = {
+    {"Samsung32","07","12",32},{"NECext","04","00",32},{"SIRC","01","10",12},
+    {"RC5","00","20",12},{"Kaseikyo","02","10",48},{"NEC","40","1B",32},
+};
+static const BuiltInSig _tvChDn[] = {
+    {"Samsung32","07","10",32},{"NECext","04","01",32},{"SIRC","01","11",12},
+    {"RC5","00","21",12},{"Kaseikyo","02","11",48},{"NEC","40","1F",32},
+};
+
+static const BuiltinGroup _tvGroups[] = {
+    {"Power",  _tvPower,  9},
+    {"Vol+",   _tvVolUp,  9},
+    {"Vol-",   _tvVolDn,  9},
+    {"Mute",   _tvMute,   9},
+    {"Ch+",    _tvChUp,   6},
+    {"Ch-",    _tvChDn,   6},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AC
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _acPower[]  = {{"NEC","00","B7",32}};
+static const BuiltInSig _acMode[]   = {{"NEC","00","B8",32}};
+static const BuiltInSig _acTempUp[] = {{"NEC","00","B4",32}};
+static const BuiltInSig _acTempDn[] = {{"NEC","00","B5",32}};
+static const BuiltInSig _acFanUp[]  = {{"NEC","00","B2",32}};
+static const BuiltInSig _acFanDn[]  = {{"NEC","00","B3",32}};
+static const BuiltInSig _acSwing[]  = {{"NEC","00","B6",32}};
+
+static const BuiltinGroup _acGroups[] = {
+    {"Power", _acPower, 1},{"Mode", _acMode, 1},{"Temp+", _acTempUp, 1},
+    {"Temp-", _acTempDn, 1},{"Fan+", _acFanUp, 1},{"Fan-", _acFanDn, 1},
+    {"Swing", _acSwing, 1},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Audio
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _audPower[] = {
+    {"NEC","40","0B",32},{"NECext","10","80",32},{"NEC","20","1A",32},
+    {"SIRC","10","15",12},{"Samsung32","07","02",32},{"NEC","0E","1C",32},
+};
+static const BuiltInSig _audVolUp[] = {
+    {"NEC","40","1A",32},{"NECext","10","81",32},{"NEC","20","18",32},
+    {"SIRC","10","12",12},{"Samsung32","07","07",32},{"NEC","0E","10",32},
+};
+static const BuiltInSig _audVolDn[] = {
+    {"NEC","40","1E",32},{"NECext","10","82",32},{"NEC","20","19",32},
+    {"SIRC","10","13",12},{"Samsung32","07","0B",32},{"NEC","0E","11",32},
+};
+static const BuiltInSig _audMute[] = {
+    {"NEC","40","0D",32},{"NECext","10","83",32},{"NEC","20","1B",32},
+    {"SIRC","10","14",12},{"Samsung32","07","0F",32},{"NEC","0E","14",32},
+};
+
+static const BuiltinGroup _audGroups[] = {
+    {"Power", _audPower, 6},{"Vol+", _audVolUp, 6},
+    {"Vol-", _audVolDn, 6},{"Mute", _audMute, 6},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Fans
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _fanPower[]  = {{"NEC","00","B7",32}};
+static const BuiltInSig _fanSpeed[]  = {{"NEC","00","B4",32}};
+static const BuiltInSig _fanSpeedD[] = {{"NEC","00","B5",32}};
+static const BuiltInSig _fanSwing[]  = {{"NEC","00","B6",32}};
+
+static const BuiltinGroup _fanGroups[] = {
+    {"Power", _fanPower, 1},{"Speed+", _fanSpeed, 1},
+    {"Speed-", _fanSpeedD, 1},{"Swing", _fanSwing, 1},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  LED Lighting
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _ledPowerOn[]  = {{"NEC","00","40",32}};
+static const BuiltInSig _ledPowerOff[] = {{"NEC","00","19",32}};
+static const BuiltInSig _ledRed[]      = {{"NEC","00","16",32}};
+static const BuiltInSig _ledGreen[]    = {{"NEC","00","1A",32}};
+static const BuiltInSig _ledBlue[]     = {{"NEC","00","11",32}};
+static const BuiltInSig _ledWhite[]    = {{"NEC","00","15",32}};
+static const BuiltInSig _ledBrUp[]     = {{"NEC","00","47",32}};
+static const BuiltInSig _ledBrDn[]     = {{"NEC","00","44",32}};
+static const BuiltInSig _ledSmooth[]   = {{"NEC","00","1B",32}};
+static const BuiltInSig _ledFlash[]    = {{"NEC","00","13",32}};
+
+static const BuiltinGroup _ledGroups[] = {
+    {"Power On",  _ledPowerOn,  1},{"Power Off", _ledPowerOff, 1},
+    {"Red",       _ledRed,      1},{"Green",     _ledGreen,    1},
+    {"Blue",      _ledBlue,     1},{"White",     _ledWhite,    1},
+    {"Bright+",   _ledBrUp,     1},{"Bright-",   _ledBrDn,     1},
+    {"Smooth",    _ledSmooth,   1},{"Flash",     _ledFlash,    1},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Projectors
+// ═══════════════════════════════════════════════════════════════════════
+static const BuiltInSig _projPower[] = {
+    {"NEC","04","08",32},{"NEC","00","0B",32},{"NEC","01","08",32},
+    {"SIRC","14","15",12},
+};
+static const BuiltInSig _projVolUp[] = {
+    {"NEC","04","02",32},{"NEC","00","10",32},{"NEC","01","02",32},
+    {"SIRC","14","12",12},
+};
+static const BuiltInSig _projVolDn[] = {
+    {"NEC","04","03",32},{"NEC","00","11",32},{"NEC","01","03",32},
+    {"SIRC","14","13",12},
+};
+static const BuiltInSig _projMute[] = {
+    {"NEC","04","06",32},{"NEC","00","14",32},{"SIRC","14","14",12},
+};
+
+static const BuiltinGroup _projGroups[] = {
+    {"Power", _projPower, 4},{"Vol+", _projVolUp, 4},
+    {"Vol-", _projVolDn, 4},{"Mute", _projMute, 3},
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Entry points
+// ═══════════════════════════════════════════════════════════════════════
+static void _tvBuiltin()       { _builtinFuncGrid("TVs",          _tvGroups,  6); }
+static void _acBuiltin()       { _builtinFuncGrid("AC",           _acGroups,  7); }
+static void _audioBuiltin()    { _builtinFuncGrid("Audio",        _audGroups, 4); }
+static void _fansBuiltin()     { _builtinFuncGrid("Fans",         _fanGroups, 4); }
+static void _ledBuiltin()      { _builtinFuncGrid("LED Lighting", _ledGroups, 10); }
+static void _projectorBuiltin(){ _builtinFuncGrid("Projectors",   _projGroups, 4); }
 
 static void show_brands_flow(
     FS &fs, String cat_path, const std::vector<ButtonDef> &buttons, int orientation, String title
@@ -562,7 +773,7 @@ static int grid_move_down(int sel, int total, const GridMetrics &m) {
 
 // Generic paged grid over plain labels (mirrors the RF module's grid_navigate).
 // Short SEL -> on_select(sel) (return true to exit), HOLD SEL (~750ms) ->
-// on_long(sel). Used by the Preferiti/Recenti lists.
+// on_long(sel). Used by the Favorites/Recent lists.
 static void ir_grid_navigate(
     const std::vector<String> &labels, const String &title,
     const std::function<bool(int)> &on_select, const std::function<void(int)> &on_long = nullptr
@@ -765,7 +976,7 @@ static bool remote_grid(
         }
         if (moved) render_page(m, btns, total, page, sel);
 
-        // Short tap = select, hold ~750ms = toggle Preferiti. Some boards
+        // Short tap = select, hold ~750ms = toggle Favorites. Some boards
         // re-set SelPress every ~200ms while the button is held, so the press is
         // considered released once SelPress stays clear for 60ms.
         if (millis() - openTs > 600 && SelPress) {
@@ -797,10 +1008,10 @@ static bool remote_grid(
                     std::vector<HistEntry> favs = hist_load(fs, g_ir_root + "/favorites.txt");
                     if (hist_has(favs, src.path, clean)) {
                         hist_remove(favs, src.path, clean);
-                        displayWarning("Removed from Preferiti");
+                        displayWarning("Removed from Favorites");
                     } else {
                         hist_add(favs, src.path, clean, src.isDir, HIST_FAV_CAP);
-                        displaySuccess("Added to Preferiti");
+                        displaySuccess("Added to Favorites");
                     }
                     hist_save(fs, g_ir_root + "/favorites.txt", favs);
                     btn.label = (hist_has(favs, src.path, clean) ? "★ " : "") + clean;
@@ -1118,7 +1329,7 @@ static std::vector<Category> discover_categories(FS &fs) {
         for (auto &c : cats) {
             String cl = c.name;
             cl.toLowerCase();
-            if (cl.startsWith(lower)) {
+            if (cl.startsWith(lower) || lower.startsWith(cl)) {
                 dup = true;
                 break;
             }
@@ -1178,7 +1389,7 @@ static void open_category(FS &fs, const Category &cat, const CategoryConfig &cfg
     delay(1500);
 }
 
-// Grid over a persisted history list (Preferiti/Recenti). Short SEL replays the
+// Grid over a persisted history list (Favorites/Recent). Short SEL replays the
 // signal (rebuilding its index from the stored path); HOLDING SEL removes it.
 static void ir_history_grid(FS &fs, const String &file, const String &title, bool favMode) {
     std::vector<HistEntry> list = hist_load(fs, file);
@@ -1257,61 +1468,9 @@ static void ir_clone_task(void *p) {
 }
 
 static void ir_clone_flow(FS &fs) {
-    // 1) Destination: existing folder categories or a brand-new folder.
-    std::vector<Category> cats = discover_categories(fs);
-    String target = "";
-    {
-        options.clear();
-        for (auto &c : cats) {
-            if (c.dir_path.length() == 0) continue; // virtual (flat-file) categories
-            String n = c.name;
-            options.push_back({n.c_str(), [&target, path = c.dir_path]() { target = path; }});
-        }
-        options.push_back({"New folder", [&]() { target = "__new__"; }});
-        options.push_back({"Back", [&]() { target = ""; }});
-        loopOptions(options, MENU_TYPE_SUBMENU, "Clone to category");
-    }
-    if (target == "") return;
-
-    if (target == "__new__") {
-        String folder = keyboard("NewFolder", 30, "Folder name:");
-        if (folder == "\x1B" || folder.length() == 0) return;
-        String clean;
-        for (unsigned int i = 0; i < folder.length(); i++) {
-            char ch = folder[i];
-            if (isalnum(ch) || ch == '_' || ch == '-' || ch == ' ' || ch == '/') clean += ch;
-        }
-        clean.trim();
-        if (clean.length() == 0) {
-            displayError("Invalid name");
-            delay(1500);
-            return;
-        }
-        target = g_ir_root + "/" + clean;
-        if (!fs.exists(target)) fs.mkdir(target);
-    }
-
-    // 2) Signal (button) name.
-    String sig = keyboard("Signal", 30, "Signal name:");
-    if (sig == "\x1B" || sig.length() == 0) return;
-    sig.trim();
-    if (sig.length() == 0) {
-        displayError("Invalid name");
-        delay(1500);
-        return;
-    }
-
-    // 3) Unique file path.
-    String path = target + "/" + sig + ".ir";
-    int n = 1;
-    while (fs.exists(path)) {
-        path = target + "/" + sig + "_" + String(n) + ".ir";
-        n++;
-    }
-
-    // 4) Capture (ESC aborts).
+    // 1) Capture signal FIRST (ESC aborts).
     tft.fillRect(0, 0, tftWidth, tftHeight, bruceConfig.bgColor);
-    drawMainBorderWithTitle("Clone");
+    drawMainBorderWithTitle("Clone IR");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextFont(FM);
     tft.setTextSize(1);
@@ -1337,7 +1496,7 @@ static void ir_clone_flow(FS &fs) {
         if (check(EscPress)) abort = true;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-    if (task != NULL) vTaskDelete(task); // task already self-deleted; stale handle is harmless
+    if (task != NULL) vTaskDelete(task);
 
     if (captured.length() == 0) {
         displayError("No signal captured");
@@ -1345,8 +1504,59 @@ static void ir_clone_flow(FS &fs) {
         return;
     }
 
-    // 5) Store the capture with the chosen button name (loop_headless labels it
-    //    "Unknown"), then refresh the category list so it shows up immediately.
+    // 2) Signal (button) name.
+    String sig = keyboard("Signal", 30, "Signal name:");
+    if (sig == "\x1B" || sig.length() == 0) return;
+    sig.trim();
+    if (sig.length() == 0) {
+        displayError("Invalid name");
+        delay(1500);
+        return;
+    }
+
+    // 3) Destination: existing folder categories or a brand-new folder.
+    std::vector<Category> cats = discover_categories(fs);
+    String target = "";
+    {
+        options.clear();
+        for (auto &c : cats) {
+            if (c.dir_path.length() == 0) continue;
+            String n = c.name;
+            options.push_back({n.c_str(), [&target, path = c.dir_path]() { target = path; }});
+        }
+        options.push_back({"New folder", [&]() { target = "__new__"; }});
+        options.push_back({"Cancel", [&]() { target = ""; }});
+        loopOptions(options, MENU_TYPE_SUBMENU, "Save to category");
+    }
+    if (target == "") return;
+
+    if (target == "__new__") {
+        String folder = keyboard("NewFolder", 30, "Folder name:");
+        if (folder == "\x1B" || folder.length() == 0) return;
+        String clean;
+        for (unsigned int i = 0; i < folder.length(); i++) {
+            char ch = folder[i];
+            if (isalnum(ch) || ch == '_' || ch == '-' || ch == ' ' || ch == '/') clean += ch;
+        }
+        clean.trim();
+        if (clean.length() == 0) {
+            displayError("Invalid name");
+            delay(1500);
+            return;
+        }
+        target = g_ir_root + "/" + clean;
+        if (!fs.exists(target)) fs.mkdir(target);
+    }
+
+    // 4) Unique file path.
+    String path = target + "/" + sig + ".ir";
+    int n = 1;
+    while (fs.exists(path)) {
+        path = target + "/" + sig + "_" + String(n) + ".ir";
+        n++;
+    }
+
+    // 5) Store the capture.
     String content = captured;
     content.replace("name: Unknown", "name: " + sig);
     File f = fs.open(path, FILE_WRITE);
@@ -1383,55 +1593,76 @@ static void show_categories() {
     FS &fs = *fsPtr;
 
     g_ir_root = find_db_root(fs, "UniversalIR");
-
-    if (!fs.exists(g_ir_root)) {
-        fs.mkdir(g_ir_root);
-#if defined(UNIVERSAL_IR_LITTLEFS_ONLY)
-        displayError("Put IR files in /UniversalIR (LittleFS)");
-#else
-        displayError("Put IR files in /UniversalIR (SD or LittleFS)");
-#endif
-        delay(2000);
-        return;
-    }
-
+    bool hasDB = fs.exists(g_ir_root);
     std::map<String, CategoryConfig> configs;
-    load_layouts(fs, configs);
-
     int globalRot = bruceConfigPins.rotation;
-    int irRot = load_ir_orient(fs, globalRot);
-    if (irRot != globalRot) apply_display_orientation(irRot);
+    if (hasDB) {
+        load_layouts(fs, configs);
+        int irRot = load_ir_orient(fs, globalRot);
+        if (irRot != globalRot) apply_display_orientation(irRot);
+    }
 
     returnToMenu = false;
     while (!returnToMenu) {
         options.clear();
 
-        // Quick access lists + clone into DB (persisted on same FS as DB)
-        String favFile = g_ir_root + "/favorites.txt";
-        String recFile = g_ir_root + "/recent.txt";
-        std::vector<HistEntry> favs = hist_load(fs, favFile);
-        std::vector<HistEntry> recs = hist_load(fs, recFile);
-        options.push_back({"★ Preferiti (" + String(favs.size()) + ")", [&fs, favFile]() {
-            ir_history_grid(fs, favFile, "Preferiti", true);
-        }});
-        options.push_back({"Recenti (" + String(recs.size()) + ")", [&fs, recFile]() {
-            ir_history_grid(fs, recFile, "Recenti", false);
-        }});
-        options.push_back({"Clone IR -> DB", [&fs]() {
-            ir_clone_flow(fs);
-        }});
-
-        std::vector<Category> cats = discover_categories(fs);
-        for (auto &cat : cats) {
-            String name = cat.name;
-            options.push_back({name.c_str(), [&fs, &configs, cat]() {
-                String key = cat.name;
-                key.toLowerCase();
-                CategoryConfig cfg;
-                if (configs.count(key) > 0) cfg = configs[key];
-                open_category(fs, cat, cfg);
+        if (hasDB) {
+            // Quick access lists + clone into DB (persisted on same FS as DB)
+            String favFile = g_ir_root + "/favorites.txt";
+            String recFile = g_ir_root + "/recent.txt";
+            std::vector<HistEntry> favs = hist_load(fs, favFile);
+            std::vector<HistEntry> recs = hist_load(fs, recFile);
+            options.push_back({"★ Favorites (" + String(favs.size()) + ")", [&fs, favFile]() {
+                ir_history_grid(fs, favFile, "Favorites", true);
             }});
+            options.push_back({"Recent (" + String(recs.size()) + ")", [&fs, recFile]() {
+                ir_history_grid(fs, recFile, "Recent", false);
+            }});
+            options.push_back({"Clone IR -> DB", [&fs]() {
+                ir_clone_flow(fs);
+            }});
+
+            std::vector<Category> cats = discover_categories(fs);
+            for (auto &cat : cats) {
+                String name = cat.name;
+                options.push_back({name.c_str(), [&fs, &configs, cat]() {
+                    String key = cat.name;
+                    key.toLowerCase();
+                    CategoryConfig cfg;
+                    if (configs.count(key) > 0) cfg = configs[key];
+                    open_category(fs, cat, cfg);
+                }});
+            }
         }
+
+        // Built-in categories — always add, skip if DB already has same name
+        {
+            struct Builtin { const char *name; std::function<void()> fn; };
+            Builtin builtins[] = {
+                {"TVs",          []() { _tvBuiltin(); }},
+                {"AC",           []() { _acBuiltin(); }},
+                {"Audio",        []() { _audioBuiltin(); }},
+                {"Fans",         []() { _fansBuiltin(); }},
+                {"LED Lighting", []() { _ledBuiltin(); }},
+                {"Projectors",   []() { _projectorBuiltin(); }},
+            };
+            for (auto &b : builtins) {
+                bool exists = false;
+                String bLower = String(b.name);
+                bLower.toLowerCase();
+                for (auto &o : options) {
+                    String oLower = String(o.label);
+                    oLower.toLowerCase();
+                    // Match exact or prefix (e.g. "ACs" matches "AC", "TVs" matches "TV")
+                    if (oLower == bLower || oLower.startsWith(bLower) || bLower.startsWith(oLower)) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) options.push_back({b.name, b.fn});
+            }
+        }
+
         options.push_back({"Main Menu", [&]() { returnToMenu = true; }});
         loopOptions(options);
     }
