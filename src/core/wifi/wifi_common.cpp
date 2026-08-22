@@ -312,7 +312,10 @@ void wifiConnectTask(void *pvParameters) {
     for (int i = 0; i < nets; i++) {
         ssid = WiFi.SSID(i);
         pwd = bruceConfig.getWifiPassword(ssid);
-        if (pwd == "") continue;
+        // An empty password only means "unknown network" for secured APs: known open
+        // networks are stored with an empty password and must be joined without one.
+        bool knownOpenNet = WiFi.encryptionType(i) == WIFI_AUTH_OPEN && bruceConfig.hasWifiCredential(ssid);
+        if (pwd == "" && !knownOpenNet) continue;
 
         WiFi.begin(ssid, pwd);
         for (int i = 0; i < 50; i++) {
