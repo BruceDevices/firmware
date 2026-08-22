@@ -21,7 +21,7 @@ static const uint8_t LED_BUILTIN = PIN_RGB_LED;
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;
 
-// I2C - matches your brucePins.conf
+// I2C -
 static const uint8_t SDA = 33;
 static const uint8_t SCL = 26;
 
