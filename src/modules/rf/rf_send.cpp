@@ -60,7 +60,7 @@ void sendCustomRF() {
 
         if (!readSubFile(filesystem, filepath, data)) continue;
 
-        if (data.protocol == "RcSwitch") {
+        if (data.protocol == "RcSwitch" || data.protocol.equalsIgnoreCase("keeloq")) {
             loopEmulate(data);
         } else {
             txSubFile(data);
