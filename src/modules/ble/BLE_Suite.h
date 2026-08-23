@@ -58,6 +58,9 @@ enum ConnectionPhase {
     CONN_RECONNECT
 };
 
+// FastPair version is defined in fastpair_crypto.h
+typedef FastPairProtocolVersion FastPairVersion;
+
 //=============================================================================
 // DeviceInfo and DeviceSnapshot structures
 //=============================================================================
@@ -344,8 +347,6 @@ extern const char *SAMSUNG_MAC_OUIS[];
 extern const int SAMSUNG_MAC_OUIS_COUNT;
 bool isSamsungDevice(const NimBLEAddress &address);
 bool isSamsungDevice(const String &mac);
-
-enum FastPairVersion { FP_VERSION_UNKNOWN = 0, FP_VERSION_1, FP_VERSION_2, FP_VERSION_3 };
 
 FastPairVersion detectFastPairVersion(NimBLEAddress target);
 
