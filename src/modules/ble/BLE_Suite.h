@@ -13,6 +13,7 @@
 #include <freertos/semphr.h>
 #include <functional>
 #include <vector>
+#include <map>
 
 extern volatile int tftWidth;
 extern volatile int tftHeight;
@@ -49,6 +50,14 @@ enum FastPairExploitType {
     FP_EXPLOIT_ALL
 };
 
+enum ConnectionPhase {
+    CONN_PROBE,
+    CONN_FAST,
+    CONN_AGGRESSIVE,
+    CONN_EXPLOIT,
+    CONN_RECONNECT
+};
+
 //=============================================================================
 // DeviceInfo and DeviceSnapshot structures
 //=============================================================================
@@ -74,6 +83,82 @@ struct DeviceSnapshot {
     std::vector<uint8_t> types;
 
     DeviceSnapshot() : version(0), count(0), timestamp(0) {}
+};
+
+//=============================================================================
+// Device Scoring and Caching Structures
+//=============================================================================
+
+struct DeviceScore {
+    int rssi;
+    int stability;
+    uint32_t lastSeen;
+    float rssiVariance;
+    int attackPotential;
+};
+
+struct CachedConnection {
+    String address;
+    std::vector<String> serviceUUIDs;
+    std::vector<String> characteristicUUIDs;
+    uint16_t mtuSize;
+    uint32_t lastConnected;
+    uint8_t connectionAttempts;
+    bool isBonded;
+    uint32_t averageResponseTime;
+    uint8_t preferredParams[4];
+};
+
+struct ConnectionResult {
+    bool success;
+    ConnectionPhase phase;
+    String method;
+    uint32_t durationMs;
+    uint32_t connectionId;
+    String errorMessage;
+    uint8_t quality;
+};
+
+struct DevicePersonality {
+    String address;
+    uint32_t responseTime;
+    uint8_t mtuPreference;
+    bool supportsNotifications;
+    bool supportsIndications;
+    std::vector<String> characteristicOrder;
+    uint32_t appearance;
+    uint8_t addressType;
+    uint32_t firstSeen;
+    uint32_t lastSeen;
+    uint32_t seenCount;
+};
+
+struct AttackStep {
+    String name;
+    bool (*execute)(NimBLEAddress);
+    bool (*canRevert)(NimBLEAddress);
+    bool (*revert)(NimBLEAddress);
+    int priority;
+    uint32_t timeoutMs;
+};
+
+struct AttackResult {
+    bool success;
+    String attackName;
+    uint32_t durationMs;
+    String failureReason;
+    std::vector<String> diagnostics;
+    uint8_t connectionQuality;
+};
+
+struct AttackLogEntry {
+    uint32_t timestamp;
+    String target;
+    String attackType;
+    bool success;
+    String details;
+    uint32_t durationMs;
+    uint8_t connectionQuality;
 };
 
 //=============================================================================
@@ -220,6 +305,22 @@ public:
 };
 
 //=============================================================================
+// Robust GATT Client Class
+//=============================================================================
+
+class RobustGATTClient {
+public:
+    bool writeCharacteristic(NimBLERemoteCharacteristic *ch, 
+                             uint8_t *data, 
+                             size_t len, 
+                             bool response = true,
+                             int retries = 2);
+    std::string readCharacteristic(NimBLERemoteCharacteristic *ch, int retries = 2);
+    bool discoverServicesWithRetry(NimBLEClient *client, int maxRetries = 2);
+    bool waitForNotification(NimBLERemoteCharacteristic *ch, uint32_t timeoutMs = 1000);
+};
+
+//=============================================================================
 // FastPair Structures and Functions
 //=============================================================================
 
@@ -239,13 +340,11 @@ struct FastPairModelInfo {
     const char *deviceType;
 };
 
-// v3.1: Samsung MAC OUI detection
 extern const char *SAMSUNG_MAC_OUIS[];
 extern const int SAMSUNG_MAC_OUIS_COUNT;
 bool isSamsungDevice(const NimBLEAddress &address);
 bool isSamsungDevice(const String &mac);
 
-// v3.1: FastPair version detection
 enum FastPairVersion { FP_VERSION_UNKNOWN = 0, FP_VERSION_1, FP_VERSION_2, FP_VERSION_3 };
 
 FastPairVersion detectFastPairVersion(NimBLEAddress target);
@@ -488,6 +587,53 @@ public:
 };
 
 //=============================================================================
+// Attack Orchestrator Class
+//=============================================================================
+
+class AttackOrchestrator {
+private:
+    std::vector<AttackStep> steps;
+    std::vector<AttackResult> results;
+    String currentTarget;
+
+public:
+    AttackOrchestrator();
+    void addStep(const AttackStep &step);
+    bool executeChain(NimBLEAddress target);
+    bool executeChainWithRollback(NimBLEAddress target);
+    std::vector<AttackResult> getResults();
+    void clearSteps();
+    bool canRevertChain();
+    bool revertChain();
+};
+
+//=============================================================================
+// BLE Mirage Class
+//=============================================================================
+
+class BLEMirage {
+private:
+    struct MirageInstance {
+        String address;
+        String name;
+        uint32_t modelId;
+        uint32_t startTime;
+        bool active;
+        NimBLEAdvertising *advertising;
+    };
+    std::vector<MirageInstance> instances;
+
+public:
+    BLEMirage();
+    ~BLEMirage();
+    bool spawnMirage(const String &targetAddress, const String &spoofName);
+    void createMirageNetwork(int count);
+    void stopMirage(const String &address);
+    void stopAll();
+    bool isMirageActive(const String &address);
+};
+
+//=============================================================================
 // Debug Memory Macros
 //=============================================================================
 
@@ -518,6 +664,46 @@ public:
 #define MEM_REPORT()
 #define MEM_CHECK()
 #endif
+
+//=============================================================================
+// Connection Management Functions
+//=============================================================================
+
+ConnectionResult graduatedConnect(NimBLEAddress target);
+bool hasCachedConnection(NimBLEAddress target);
+bool reconnectCached(NimBLEAddress target);
+CachedConnection *getCachedConnection(const String &address);
+void cacheDeviceProfile(const String &addr, NimBLEClient *client);
+void setOptimalParams(NimBLEClient *client, const String &deviceType);
+int calculateDeviceScore(const String &addr);
+uint32_t getDeviceScore(const String &addr);
+
+//=============================================================================
+// Attack Logging Functions
+//=============================================================================
+
+void logAttackResult(const AttackLogEntry &entry);
+bool exportAttackLog();
+std::vector<AttackLogEntry> getAttackLog();
+void clearAttackLog();
+
+//=============================================================================
+// UI Extension Functions
+//=============================================================================
+
+void drawAttackFlow(const String &title, const String &status, int progress);
+void showDevicePersonalityScreen(const DevicePersonality &personality);
+void showAttackLogScreen();
+
+//=============================================================================
+// New Attack Functions
+//=============================================================================
+
+void runSmartRecon(NimBLEAddress target);
+void runOrchestratedAttack(NimBLEAddress target);
+void runMirageAttack(NimBLEAddress target);
+void runDeviceFingerprinting(NimBLEAddress target);
+void runAttackScheduler(NimBLEAddress target);
 
 //=============================================================================
 // Function Declarations
@@ -576,7 +762,7 @@ void runAdvancedDuckyInjection(NimBLEAddress target);
 void runHIDVulnerabilityTest(NimBLEAddress target);
 void runMultiTargetAttack();
 void executeAudioTest(int testIndex, NimBLEAddress target);
-void showAttackProgress(const char *message, uint16_t color = TFT_WHITE);
+void showAttackProgress(const char *message, uint16_t color = bruceConfig.priColor);
 void showAttackResult(bool success, const char *message = nullptr);
 bool confirmAttack(const char *targetName);
 String selectTargetFromScan(const char *title);
