@@ -52,25 +52,25 @@ Stores discovered devices with service detection:
 - Audio/HID service flags
 - Device scoring and stability tracking
 
-### Device Scoring (v4.0)
+### Device Scoring
 - RSSI-based scoring with stability tracking
 - Attack potential calculation (0-100)
 - Automatic sorting of high-value targets
 - Activity pattern detection
 
-### Connection Caching (v4.0)
+### Connection Caching
 - Stores successful connection parameters
 - 60-80% faster reconnections
 - MTU and service UUID caching
 - Automatic parameter optimization per device type
 
-### Graduated Connection Strategy (v4.0)
+### Graduated Connection Strategy
 - 5-phase connection approach: Probe → Fast → Aggressive → Exploit → Reconnect
 - Automatic fallback between strategies
 - Device-type specific parameter tuning
 - Cached connection re-use
 
-### Robust GATT Client (v4.0)
+### Robust GATT Client
 - Retry logic for reads/writes
 - Automatic characteristic refresh
 - Notification waiting support
@@ -108,7 +108,7 @@ Stores discovered devices with service detection:
 - Popup spam (Regular/Fun/Prank/Custom)
 - Vulnerability testing
 
-### HFPExploitEngine (v4.0 - NimBLE Optimized)
+### HFPExploitEngine
 - Full AT command injection (works over GATT)
 - Information disclosure (IMEI, manufacturer, model, firmware)
 - Buffer overflow testing
@@ -140,27 +140,27 @@ Stores discovered devices with service detection:
 - NRF24 jamming coordination
 - Jam & connect attacks
 
-### Attack Orchestrator (v4.0)
+### Attack Orchestrator
 - Chain attacks with priority ordering
 - Rollback capability for failed attacks
 - Step execution with timeout
 - Attack result tracking
 - Automatic cleanup on failure
 
-### BLE Mirage (v4.0)
+### BLE Mirage
 - Clone device advertisements
 - Create network of fake devices
 - Device spoofing for misdirection
 - Defensive/offensive testing capability
 - **Note:** Single instance only (NimBLE limitation)
 
-### Attack Scheduler (v4.0)
+### Attack Scheduler
 - Analyzes device activity patterns
 - Predicts optimal attack windows
 - Suggests best timing for attacks
 - Tracks device wake patterns
 
-### Device Fingerprinting (v4.0)
+### Device Fingerprinting
 - Builds device personality profiles
 - Tracks response times and MTU preferences
 - Detects notification/indication support
@@ -171,8 +171,8 @@ Stores discovered devices with service detection:
 ### Reconnaissance
 1. **Quick Vulnerability Scan** - HFP + FastPair testing
 2. **Deep Device Profiling** - Full service enumeration with characteristic analysis
-3. **Smart Recon** - Scoring-based target prioritization (v4.0)
-4. **Device Fingerprinting** - Builds device personality profiles (v4.0)
+3. **Smart Recon** - Scoring-based target prioritization
+4. **Device Fingerprinting** - Builds device personality profiles
 
 ### Protocol Suites
 5. **FastPair Suite** - 9 options (vulnerability test, memory corruption, state confusion, crypto overflow, popup spam, all exploits, smart exploit)
@@ -183,16 +183,16 @@ Stores discovered devices with service detection:
 ### Advanced Attacks
 9. **Memory Corruption Suite** - 6 options (FastPair memory corruption, state confusion, crypto overflow, handshake fault, rapid connection, all)
 10. **DoS Attacks** - 4 options (connection flood, advertising spam, jam & connect, protocol fuzzer)
-11. **Orchestrated Attack** - Chain attacks with rollback (v4.0)
-12. **Mirage Attack** - Device cloning and spoofing (v4.0)
-13. **Attack Scheduler** - Optimal timing analysis (v4.0)
+11. **Orchestrated Attack** - Chain attacks with rollback
+12. **Mirage Attack** - Device cloning and spoofing
+13. **Attack Scheduler** - Optimal timing analysis
 14. **Payload Delivery** - 3 options (DuckyScript, PIN brute force, auth bypass)
 15. **Testing Tools** - 4 options (write access, audio control, fuzzer, HID test)
 
 ### Chain Attacks
 16. **Universal Attack Chain** - Attempts HFP → HID → FastPair sequentially based on detected services
 
-## Attack Logging (v4.0)
+## Attack Logging
 - JSON export of all attack attempts
 - Timestamp, target, attack type, success/failure
 - Connection quality metrics
@@ -217,7 +217,7 @@ Stores discovered devices with service detection:
 - NRF24L01+ (optional)
 
 ## Flow
-Welcome screen (once per session) → Main menu → Select attack → Scan for targets → Execute → Return to menu
+Main menu → Select attack → Scan for targets → Execute → Return to menu
 
 ## NimBLE-Specific Features
 
