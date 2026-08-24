@@ -15,13 +15,9 @@ void _setup_gpio() {
 }
 
 void _post_setup_gpio() {
-    if (!touch.begin(acquireSPIBus(
-            (gpio_num_t)XPT2046_SPI_BUS_SCLK_IO_NUM,
-            (gpio_num_t)XPT2046_SPI_BUS_MISO_IO_NUM,
-            (gpio_num_t)XPT2046_SPI_BUS_MOSI_IO_NUM
-        ))) {
-        Serial.println("Touchscreen initialization failed!");
-    }
+    // Use software SPI (GPIO bit-banging) for touch to avoid conflicts with AUX_SPI
+    // CYD28_TouchR::begin() with no arguments uses software SPI mode on the defined GPIO pins
+    if (!touch.begin()) { Serial.println("Touchscreen initialization failed!"); }
 }
 
 int getBattery() { return 0; }
