@@ -131,7 +131,7 @@ void cacheDeviceProfile(const String &addr, NimBLEClient *client) {
     cache.address = addr;
     cache.lastConnected = millis();
     cache.connectionAttempts = 1;
-    cache.isBonded = client->isBonded();
+    cache.isBonded = client->isConnected() && client->secureConnection();
     cache.mtuSize = client->getMTU();
     
     const std::vector<NimBLERemoteService *> &services = client->getServices(true);
@@ -350,7 +350,7 @@ bool RobustGATTClient::writeCharacteristic(NimBLERemoteCharacteristic *ch,
         
         if (i == 0) {
             delay(50);
-            NimBLERemoteService *service = ch->getService();
+            NimBLERemoteService *service = ch->getRemoteService();
             if (service && service->getClient()) {
                 service->getClient()->discoverAttributes();
                 ch = service->getCharacteristic(ch->getUUID());
@@ -372,7 +372,7 @@ std::string RobustGATTClient::readCharacteristic(NimBLERemoteCharacteristic *ch,
         } catch (...) {
             if (i < retries - 1) {
                 delay(100);
-                NimBLERemoteService *service = ch->getService();
+                NimBLERemoteService *service = ch->getRemoteService();
                 if (service) {
                     ch = service->getCharacteristic(ch->getUUID());
                 }
@@ -497,7 +497,6 @@ void ScannerData::addDevice(
                 snapshotCache = nullptr;
             }
             
-            // Update device score
             if (scoreMutex) {
                 if (xSemaphoreTake(scoreMutex, 50 / portTICK_PERIOD_MS)) {
                     DeviceScore &ds = deviceScores[address];
@@ -784,6 +783,7 @@ DeviceProfile BLEAttackManager::profileDevice(NimBLEAddress target) {
     profile.hasFastPair = false;
     profile.hasAVRCP = false;
     profile.hasHID = false;
+    profile.hasHFP = false;
     profile.hasBattery = false;
     profile.hasDeviceInfo = false;
 
@@ -804,6 +804,8 @@ DeviceProfile BLEAttackManager::profileDevice(NimBLEAddress target) {
             if (uuidStr.find("fe2c") != std::string::npos) profile.hasFastPair = true;
             if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
                 profile.hasAVRCP = true;
+            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                profile.hasHFP = true;
             if (uuidStr.find("1812") != std::string::npos) profile.hasHID = true;
             if (uuidStr.find("180f") != std::string::npos) profile.hasBattery = true;
             if (uuidStr.find("180a") != std::string::npos) profile.hasDeviceInfo = true;
