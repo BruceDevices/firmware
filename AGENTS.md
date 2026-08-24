@@ -1,7 +1,7 @@
 # Project Handoff & Developer Notes
 
 Bruce (Universal IR / firmware) fork. Working repo: `C:\Users\Utente\Documents\Default Project`.
-Base is Bruce firmware (ESP32), stable at tag `1.16.1`. **Release version is now `3.6`** (user request 2026-08-18): on-device `BRUCE_VERSION` = `"3.6"`, deliverable bins `BruceIRF3.6-<board>.bin`.
+Base is Bruce firmware (ESP32), stable at tag `1.16.1`. **Release version is now `4.0`** (user request 2026-08-24): on-device `BRUCE_VERSION` = `"4.0"`, deliverable bins `BruceIRF4.0-<board>.bin`.
 
 ## Build commands (Windows / PowerShell)
 
@@ -21,24 +21,24 @@ pio run -e <env> -j 2 *> build_log.txt 2>&1
 
 ## Versioning rules (very important)
 
-- `platformio.ini` (`env` `build_flags`): `-DBRUCE_VERSION='"3.6"'` → on-device displayed version.
-- `build.py`: `FIRMWARE_VERSION = "3.6"` → output bin filename (`BruceIRF3.6-<board>.bin`). For a **test build** set `"3.6-test"` (and `platformio.ini` `BRUCE_VERSION` to `"3.6-test"`) → outputs `BruceIRF3.6-test-<board>.bin` (boot shows `3.6-test`). Remember to revert both to `3.6` for release.
-- Verify after build: binary should contain `"3.6"` (or `"3.6-test"` for test builds).
+- `platformio.ini` (`env` `build_flags`): `-DBRUCE_VERSION='"4.0"'` → on-device displayed version.
+- `build.py`: `FIRMWARE_VERSION = "4.0"` → output bin filename (`BruceIRF4.0-<board>.bin`). For a **test build** set `"4.0-test"` (and `platformio.ini` `BRUCE_VERSION` to `"4.0-test"`) → outputs `BruceIRF4.0-test-<board>.bin` (boot shows `4.0-test`). Remember to revert both to `4.0` for release.
+- Verify after build: binary should contain `"4.0"` (or `"4.0-test"` for test builds).
 - Built deliverable bins live in project root; merged via `esptool.py --chip esp32s3 merge-bin` (bootloader @0x0, partitions @0x8000, firmware @0x10000).
 
 ## Deliverables (project root)
 
-- `BruceIRF3.6-lilygo-t-embed-cc1101.bin` — **current T-Embed deliverable** (all v3.5 fixes + **RF Bruteforce infinite loop** + **RF Frequency Scanner** + **IR Clone into DB** + **Preferiti/Recenti for IR & RF**). Built 2026-08-18 (release 3.6, migrated to Bruce stable 1.16.1).
-- `BruceIRF3.6-m5stack-sticks3.bin` — **current sticks3 deliverable** (same features). Built 2026-08-18 (release 3.6).
-- `BruceIRF3.6-m5stack-cardputer.bin` — **Cardputer deliverable (v1 + ADV)** (same features; one env covers both variants; `-DARDUINO_LOOP_STACK_SIZE=16384`). Built 2026-08-18 (release 3.6).
-- **ESP32-C5 + ILI9341:** 3.6 build SKIPPED (intentional, same as 3.5). Only `BruceIRF3.0-esp32-c5-tft.bin` (2026-08-06) exists; rebuild on request.
-- Old 3.0/3.5 bins/zips were removed after their respective releases — only the release artifacts are kept. For a future test build, `platformio.ini` `BRUCE_VERSION` = `"3.6-test"` + `build.py` `FIRMWARE_VERSION` = `"3.6-test"` produce `BruceIRF3.6-test-<board>.bin` (boot shows `3.6-test`); remember to revert both for release.
+- `BruceIRF4.0-lilygo-t-embed-cc1101.bin` — **current T-Embed deliverable** (all v3.6 features + **SubGHz Music RX** + **Pablo Mode easter egg** + English localization). Built 2026-08-24 (release 4.0).
+- `BruceIRF4.0-m5stack-sticks3.bin` — **current sticks3 deliverable** (same features). Built 2026-08-24 (release 4.0).
+- `BruceIRF4.0-m5stack-cardputer.bin` — **Cardputer deliverable (v1 + ADV)** (same features; one env covers both variants; `-DARDUINO_LOOP_STACK_SIZE=16384`). Built 2026-08-24 (release 4.0).
+- **ESP32-C5 + ILI9341:** 4.0 build SKIPPED (intentional). Only `BruceIRF3.0-esp32-c5-tft.bin` (2026-08-06) exists; rebuild on request.
+- Old 3.5/3.6 bins/zips were removed after their respective releases — only the release artifacts are kept. For a future test build, `platformio.ini` `BRUCE_VERSION` = `"4.0-test"` + `build.py` `FIRMWARE_VERSION` = `"4.0-test"` produce `BruceIRF4.0-test-<board>.bin` (boot shows `4.0-test`); remember to revert both for release.
 - `build_wrapper.bat` / `build_release.bat` — detached background build wrappers (Start-Process pattern; see Build commands). `build_release.bat` builds all 4 envs with `-t build-firmware` sequentially.
 - `BruceIR-Cyberpunk.json` — user theme (cyan/pink). priColor `07FF`, secColor `F81F`, bgColor `0010`, border 1, label 1, ledColor `FF00FF`, ledBright 50.
-- IR DB content is bundled ONLY in the combined packages below (the standalone `BruceIR2.0-UniversalIR-*.zip` were removed 2026-08-05 as superseded; IR Lite ~0.16 MB / 7 files fits in the 3 MB LittleFS partition).
-- RF DB content is bundled ONLY in the combined packages below (the standalone `BruceIR3.0-UniversalRF-*.zip` were removed 2026-08-05, same content merged into the combined zips).
-- `BruceIR3.6-UniversalIR-RF-Lite.zip` (0.62 MB) — **combined IR+Lite + RF+Lite in one zip** (`UniversalIR/` 7 files + `UniversalRF/` 103 files). Extracts to both roots; fits in the 3 MB LittleFS partition (~1.6 MB total). Use for sticks3/Cardputer/C5 (LittleFS).
-- `BruceIR3.6-UniversalIR-RF-Full.zip` (9.0 MiB) — **combined IR+Full + RF-Full** (`UniversalIR/` 829 files + `UniversalRF/` 2052 files = `Garages/` + `Gates/` + `Vehicles/` only). For SD users (T-Embed). The ~11k-file junk categories (TPMS, bracelets, WeVibe, RobotDog, dog collars, etc.) were DROPPED from the package by user request — the bruteforce families already live inside `Garages/`/`Gates/` (CAME/NICE/Chamberlain/Linear/OOK/deBruijn). Old 16 MiB zip backed up at `%TEMP%\opencode\old_full_16MiB.zip`.
+- IR DB content is bundled ONLY in the Full combined package (the standalone `BruceIR2.0-UniversalIR-*.zip` were removed 2026-08-05 as superseded; IR is in Full zip only since firmware has hardcoded Built-in IR categories).
+- RF DB content is bundled in both Lite and Full packages.
+- `BruceIR4.0-UniversalRF-Lite.zip` (0.48 MB) — **RF+Lite only** (`UniversalRF/` 103 files: `Garages/` + `Gates/` + `Vehicles/`). Fits in the 3 MB LittleFS partition. Use for sticks3/Cardputer/C5 (LittleFS). IR DB not included — Built-in IR categories are hardcoded in firmware.
+- `BruceIR4.0-UniversalIR-RF-Full.zip` (9.0 MiB) — **combined IR+Full + RF-Full** (`UniversalIR/` 829 files + `UniversalRF/` 2052 files = `Garages/` + `Gates/` + `Vehicles/` only). For SD users (T-Embed). The ~11k-file junk categories (TPMS, bracelets, WeVibe, RobotDog, dog collars, etc.) were DROPPED from the package by user request — the bruteforce families already live inside `Garages/`/`Gates/` (CAME/NICE/Chamberlain/Linear/OOK/deBruijn). Old 16 MiB zip backed up at `%TEMP%\opencode\old_full_16MiB.zip`.
 - `sd_card_data/` — extracted DB contents.
 
 ## README (2026-08-08)
@@ -158,6 +158,31 @@ Built on `release-316` branch (branched from tag `1.16.1`, `ba519c93`). All 4 fe
 - **RF:** `sub_grid()` records every sent signal to `/UniversalRF/recent.txt`; SEL-hold toggles `/UniversalRF/favorites.txt`. Main menu shows `★ Preferiti (N)` + `Recenti (N)` at top, each opens a history grid (SEL replays, SEL-hold removes entry).
 - **IR:** same pattern with `/UniversalIR/recent.txt` and `/UniversalIR/favorites.txt`. `remote_grid()` records on send, SEL-hold toggles favorite. Main menu shows `★ Preferiti (N)` + `Recenti (N)` at top.
 - `HIST_RECENT_CAP=24`, `HIST_FAV_CAP=64` defined at file scope in both modules.
+
+## v4.0 new features (2026-08-24)
+
+### SubGHz Music RX (src/modules/rf/rf_audio.cpp, rf_audio.h)
+
+- RF audio player accessible from SubGHz menu → **SubGHz Music RX**.
+- Generates square-wave melodies using direct I2S/LEDC output, bypassing ESP8266Audio for T-Embed compatibility.
+- Predefined song list (various melodies); next/prev to cycle, play/stop, volume control.
+- Menu integration in `src/core/menu_items/RFMenu.cpp`.
+
+### Pablo Mode Easter Egg (src/core/pablo_mode.cpp, pablo_mode.h)
+
+- Hidden Easter egg in Others menu → **Pablo Mode**.
+- Mango chaos: animated mango shapes (ovals with stem + leaf) flooding the screen with escalating text ("mango", "PABLO", etc.).
+- LEDC-based tones via the speaker pin (no I2S driver conflicts).
+- Runs as FreeRTOS task, ESC to abort, auto-restarts after 42s.
+- Audio uses `ledcAttach`/`ledcWriteTone` on `DOUT` pin (board-agnostic fallback when `BUZZ_PIN` not defined).
+
+### English localization
+
+- UI strings in `universal_ir.cpp` and `universal_rf.cpp` translated from Italian to English (grid labels, error messages, menu entries).
+
+### Built-in IR always shown
+
+- Built-in IR categories (TV, Audio, DVD, etc.) are always visible in the IR menu regardless of SD/LittleFS DB presence — no sub-menu picker, direct generic functional buttons (Power, Vol+, Vol-, Mute, Ch+, Ch-) that cycle through ALL brands' protocol codes.
 
 ## RCA IR protocol fix (2026-08-02)
 
