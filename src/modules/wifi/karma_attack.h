@@ -11,30 +11,30 @@
 // Attack prioritization tiers
 enum AttackTier {
     TIER_NONE = 0,
-    TIER_FAST = 1,
-    TIER_MEDIUM = 2,
-    TIER_HIGH = 3,
-    TIER_CLONE = 4
+    TIER_FAST = 1,   // Quick opportunistic attacks
+    TIER_MEDIUM = 2, // Standard priority targets
+    TIER_HIGH = 3,   // High-value targets
+    TIER_CLONE = 4   // Clone network attacks
 };
 
-// Broadcast attack configuration with evasion
+// Broadcast attack configuration
 struct BroadcastConfig {
     bool enableBroadcast = false;
-    uint32_t broadcastInterval = 150;
-    uint16_t batchSize = 200;
-    bool rotateChannels = true;
-    uint32_t channelHopInterval = 5000;
-    bool respondToProbes = true;
-    uint8_t maxActiveAttacks = 3;
-    bool prioritizeResponses = true;
-    bool randomizeInterval = true;
+    uint32_t broadcastInterval = 150;   // ms between broadcasts
+    uint16_t batchSize = 200;           // SSIDs per batch
+    bool rotateChannels = true;         // Auto-rotate channels
+    uint32_t channelHopInterval = 5000; // ms between channel hops
+    bool respondToProbes = true;        // Launch attacks on probe responses
+    uint8_t maxActiveAttacks = 3;       // Max queued auto-attacks
+    bool prioritizeResponses = true;    // Focus on SSIDs that get responses
+    bool randomizeInterval = true;      // Add jitter to avoid detection
     uint32_t minInterval = 100;
     uint32_t maxInterval = 300;
     bool useExponentialBackoff = true;
     uint8_t maxRetries = 5;
 };
 
-// Broadcast statistics
+// Broadcast statistics tracking
 struct BroadcastStats {
     size_t totalBroadcasts = 0;
     size_t totalResponses = 0;
@@ -47,21 +47,30 @@ struct BroadcastStats {
     uint32_t rateLimitedCount = 0;
 };
 
-// RSN/WPA2/WPA3 security info
+// RSN/WPA2/WPA3 security info for encryption mimicry
 typedef struct {
     uint16_t version;
     uint8_t groupCipher;
     uint8_t pairwiseCipher;
-    uint8_t akmSuite;
-    bool isTransitionMode;
+    uint8_t akmSuite; // 0 = none, 1 = WPA2, 2 = WPA3
+    bool isTransitionMode; // WPA2/WPA3 transition
 } RSNInfo;
 
-// Probe request data
+// Client fingerprint for tracking across MAC randomization
+typedef struct {
+    uint32_t ieHash;            // Hash of Information Elements
+    uint8_t supportedRates[16]; // Supported rates
+    uint8_t htCapabilities[32]; // HT capabilities
+    uint8_t vendorIEs[64];      // Vendor-specific IEs
+    uint8_t ieCount;            // Number of IEs
+} ClientFingerprint;
+
 constexpr size_t PROBE_MAC_STR_LEN = 18;
 constexpr size_t PROBE_SSID_MAX_LEN = 32;
 constexpr size_t PROBE_SSID_BUF_LEN = PROBE_SSID_MAX_LEN + 1;
 constexpr size_t PROBE_FRAME_CAPTURE_LEN = 128;
 
+// Probe request data structure
 typedef struct {
     char mac[PROBE_MAC_STR_LEN];
     char ssid[PROBE_SSID_BUF_LEN];
@@ -69,9 +78,9 @@ typedef struct {
     uint32_t timestamp;
     uint8_t channel;
     uint16_t frame_len;
-    uint32_t fingerprint;
+    uint32_t fingerprint; // Hash of IE parameters for device tracking
     uint8_t *frame;
-    bool isPMKID;
+    bool isPMKID; // Indicates if this probe contains PMKID
 } ProbeRequest;
 
 typedef struct {
@@ -85,10 +94,10 @@ typedef struct {
     bool isPMKID;
 } QueuedProbeEvent;
 
-// Enhanced client behavior tracking
+// Client behavior tracking with enhanced metrics
 typedef struct {
-    uint32_t fingerprint;
-    String lastMAC;
+    uint32_t fingerprint; // Unique client identifier
+    String lastMAC;       // Last seen MAC (for reference only)
     unsigned long firstSeen;
     unsigned long lastSeen;
     uint32_t probeCount;
@@ -97,6 +106,7 @@ typedef struct {
     uint8_t favoriteChannel;
     unsigned long lastKarmaAttempt;
     bool isVulnerable;
+    // Enhanced tracking
     uint32_t successfulInteractions = 0;
     uint32_t failedInteractions = 0;
     float successRate = 0.0f;
@@ -107,7 +117,7 @@ typedef struct {
     uint8_t priorityScore = 0;
 } ClientBehavior;
 
-// Active network
+// Active network for beaconing
 typedef struct {
     String ssid;
     uint8_t channel;
@@ -119,18 +129,18 @@ typedef struct {
     uint8_t responseCount;
 } ActiveNetwork;
 
-// Network history
+// Network history tracking
 typedef struct {
     String ssid;
     uint32_t responsesSent;
     uint32_t successfulConnections;
     unsigned long lastResponse;
     uint8_t failureCount;
-    uint8_t successRate;
+    uint8_t successRate; // Percentage
     unsigned long lastAttempt;
 } NetworkHistory;
 
-// Probe response task
+// Probe response task for queueing
 typedef struct {
     String ssid;
     String targetMAC;
@@ -141,17 +151,17 @@ typedef struct {
     bool isRetry;
 } ProbeResponseTask;
 
-// Portal template
+// Portal template structure
 typedef struct {
     String name;
     String filename;
     bool isDefault;
     bool verifyPassword;
-    uint8_t priority;
-    String category;
+    uint8_t priority; // For A/B testing
+    String category;  // corporate, home, public, etc.
 } PortalTemplate;
 
-// Pending portal attack
+// Pending portal attack with enhanced fields
 typedef struct {
     String ssid;
     uint8_t channel;
@@ -173,24 +183,24 @@ typedef struct {
     unsigned long lastAttempt;
 } PendingPortal;
 
-// Active portal instance
+// Single active portal instance
 struct BackgroundPortal {
-    EvilPortal *instance;
-    String portalId;
-    String ssid;
-    uint8_t channel;
-    unsigned long lastHeartbeat;
-    unsigned long launchTime;
-    bool hasCreds;
-    String capturedPassword;
-    uint32_t clientFingerprint;
-    String capturedIdentifier;
-    bool targetEngaged;
-    unsigned long engagementTime;
-    uint8_t pageViewCount;
+    EvilPortal *instance;             // Portal instance
+    String portalId;                  // Unique ID for file naming
+    String ssid;                      // SSID being spoofed
+    uint8_t channel;                   // Channel this portal runs on
+    unsigned long lastHeartbeat;      // Last time we checked this portal
+    unsigned long launchTime;         // When portal was launched
+    bool hasCreds;                    // Whether credentials captured
+    String capturedPassword;          // Captured password if any
+    uint32_t clientFingerprint;       // Fingerprint of connected victim
+    String capturedIdentifier;        // Username/identifier if captured
+    bool targetEngaged;               // Whether target viewed the portal
+    unsigned long engagementTime;     // When engagement started
+    uint8_t pageViewCount;            // Number of pages viewed
 };
 
-// Enhanced Karma config
+// Enhanced Karma configuration
 typedef struct {
     bool enableAutoKarma;
     bool enableDeauth;
@@ -198,15 +208,15 @@ typedef struct {
     bool prioritizeVulnerable;
     bool enableAutoPortal;
     uint16_t maxClients;
-    uint8_t rateLimitPerTarget;
-    uint32_t rateLimitWindow;
+    uint8_t rateLimitPerTarget;      // Max responses per target per minute
+    uint32_t rateLimitWindow;        // Window for rate limiting (ms)
     bool enableDetectionEvasion;
-    uint8_t beaconJitterPercent;
-    bool enablePermanentTargets;
-    uint8_t permanentThreshold;
+    uint8_t beaconJitterPercent;     // Random jitter for beacons (0-100)
+    bool enablePermanentTargets;      // Track high-value targets persistently
+    uint8_t permanentThreshold;      // Interactions before becoming permanent
 } KarmaConfig;
 
-// Attack config
+// Attack strategy configuration
 typedef struct {
     AttackTier defaultTier;
     bool enableCloneMode;
@@ -221,12 +231,12 @@ typedef struct {
     uint8_t maxCloneNetworks;
     uint16_t baseDuration;
     uint16_t extendedDuration;
-    bool enableTemplateA/BTesting;
-    uint8_t templateRotationInterval;
-    bool enableContextualTemplate;
+    bool enableTemplateABTesting;
+    uint8_t templateRotationInterval; // Minutes between template rotation
+    bool enableContextualTemplate;    // Choose template based on SSID context
 } AttackConfig;
 
-// Handshake capture
+// Handshake capture structure
 struct HandshakeCapture {
     uint8_t bssid[6];
     String ssid;
@@ -235,12 +245,12 @@ struct HandshakeCapture {
     uint8_t eapolFrame[256];
     uint16_t frameLen;
     bool complete;
-    uint8_t messageType;
+    uint8_t messageType; // 1-4 for EAPOL messages
     uint32_t keyInfo;
     bool isValid;
 };
 
-// Sync state for multi-device
+// Synchronization state for multi-device
 struct SyncState {
     uint32_t deviceId;
     unsigned long lastSync;
@@ -305,7 +315,7 @@ private:
     void updateBackoffCounter(const String &ssid, bool success);
 };
 
-// SSID Database with hybrid batch + LRU cache
+// SSID Database class
 class SSIDDatabase {
 private:
     static String currentFilename;
@@ -337,11 +347,11 @@ public:
     static String getSourceFile();
 };
 
-// Operation modes
+// Operation modes for Karma
 enum KarmaMode {
-    MODE_PASSIVE = 0,
-    MODE_BROADCAST = 1,
-    MODE_FULL = 2
+    MODE_PASSIVE = 0,   // Listen only, respond to probes
+    MODE_BROADCAST = 1, // Actively advertise SSIDs + beacons
+    MODE_FULL = 2       // Both passive and broadcast
 };
 
 // Function prototypes
@@ -354,8 +364,10 @@ void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd)
 void launchTieredEvilPortal(PendingPortal &portal);
 std::vector<ProbeRequest> getUniqueProbes();
 std::vector<ClientBehavior> getVulnerableClients();
-size_t buildEnhancedProbeResponse(uint8_t *buffer, const String &ssid, const String &targetMAC, 
-                                  uint8_t channel, const RSNInfo &rsn, bool isHidden);
+size_t buildEnhancedProbeResponse(
+    uint8_t *buffer, const String &ssid, const String &targetMAC, uint8_t channel, const RSNInfo &rsn,
+    bool isHidden
+);
 size_t buildBeaconFrame(uint8_t *buffer, const String &ssid, uint8_t channel, const RSNInfo &rsn);
 void generateRandomBSSID(uint8_t *bssid);
 void rotateBSSID();
@@ -369,13 +381,15 @@ void saveNetworkHistory(FS &fs);
 void sendBeaconFrameHelper(const String &ssid, uint8_t channel);
 void saveCredentialsToFile(const String &ssid, const String &password);
 void saveProbesToPCAP(FS &fs);
-void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName, 
-                           const String &templateFile = "");
+void launchBackgroundPortal(
+    const String &ssid, uint8_t channel, const String &templateName, const String &templateFile = ""
+);
 void checkPortals();
 String generatePortalId(const String &templateName);
-void savePortalCredentials(const String &ssid, const String &identifier, const String &password, 
-                          const String &mac, uint8_t channel, const String &templateName, 
-                          const String &portalId);
+void savePortalCredentials(
+    const String &ssid, const String &identifier, const String &password, const String &mac, uint8_t channel,
+    const String &templateName, const String &portalId
+);
 String getDisplayName(const String &fullPath, bool isSD);
 void matchAPSignal(uint8_t channel);
 void setChannelWithSecond(uint8_t channel);
