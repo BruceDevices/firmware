@@ -350,7 +350,7 @@ bool RobustGATTClient::writeCharacteristic(NimBLERemoteCharacteristic *ch,
         
         if (i == 0) {
             delay(50);
-            NimBLERemoteService *service = ch->getRemoteService();
+            const NimBLERemoteService *service = ch->getRemoteService();
             if (service && service->getClient()) {
                 service->getClient()->discoverAttributes();
                 ch = service->getCharacteristic(ch->getUUID());
@@ -372,7 +372,7 @@ std::string RobustGATTClient::readCharacteristic(NimBLERemoteCharacteristic *ch,
         } catch (...) {
             if (i < retries - 1) {
                 delay(100);
-                NimBLERemoteService *service = ch->getRemoteService();
+                const NimBLERemoteService *service = ch->getRemoteService();
                 if (service) {
                     ch = service->getCharacteristic(ch->getUUID());
                 }
