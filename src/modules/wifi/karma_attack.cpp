@@ -4,6 +4,7 @@
   Version: 2.0
   Last updated: 25/08/2026
 */
+
 #ifndef LITE_VERSION
 #include "karma_attack.h"
 #include "FS.h"
