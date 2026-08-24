@@ -109,7 +109,7 @@ struct CachedConnection {
     uint8_t connectionAttempts;
     bool isBonded;
     uint32_t averageResponseTime;
-    uint8_t preferredParams[4];
+    uint16_t preferredParams[4];
 };
 
 struct ConnectionResult {
@@ -218,6 +218,7 @@ struct DeviceProfile {
     bool hasFastPair;
     bool hasAVRCP;
     bool hasHID;
+    bool hasHFP;
     bool hasBattery;
     bool hasDeviceInfo;
     std::vector<String> services;
