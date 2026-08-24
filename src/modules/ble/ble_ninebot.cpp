@@ -19,15 +19,6 @@
 #define CMD_DELAY 500      // UI delay after commands
 #define UI_READ_DELAY 2000 // UI delay for read feedback
 
-#if __has_include(<NimBLEExtAdvertising.h>)
-#define NIMBLE_V2_PLUS 1
-#endif
-
-#ifdef NIMBLE_V2_PLUS
-#define __Override__
-#else
-#define __Override__ override
-#endif
 
 static NimBLEScan *pBLEScan;
 static NimBLEClient *pClient = nullptr;
@@ -39,7 +30,7 @@ static NimBLEUUID txCharUUID("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
 bool scooterDisconnected = true;
 
 class ScooterClientCallbacks : public NimBLEClientCallbacks {
-    void onDisconnect(NimBLEClient *client) __Override__ { scooterDisconnected = true; }
+    void onDisconnect(NimBLEClient *client) { scooterDisconnected = true; }
 };
 
 static const uint8_t max2Gpayload[] = {
@@ -133,11 +124,7 @@ void BLENinebot::loop() {
     while (!check(EscPress)) {
         redrawMainBorder();
         displayTextLine("Scanning...");
-#ifdef NIMBLE_V2_PLUS
         NimBLEScanResults results = pBLEScan->getResults(SCAN_TIME * 1000, false);
-#else
-        NimBLEScanResults results = pBLEScan->start(SCAN_TIME, false);
-#endif
         if (check(EscPress)) return;
 
         if (results.getCount() == 0) {
@@ -152,26 +139,16 @@ void BLENinebot::loop() {
         deviceSelection.reserve(results.getCount() + 2);
 
         for (int i = 0; i < results.getCount(); ++i) {
-#ifdef NIMBLE_V2_PLUS
             const NimBLEAdvertisedDevice *adv = results.getDevice(i);
             String name = adv->getName().length() ? String(adv->getName().c_str())
                                                   : String(adv->getAddress().toString().c_str());
-#else
-            NimBLEAdvertisedDevice adv = results.getDevice(i);
-            String name = adv.getName().length() ? String(adv.getName().c_str())
-                                                 : String(adv.getAddress().toString().c_str());
-#endif
 
             deviceSelection.push_back(
                 {name, [&, adv](void) mutable {
                      redrawMainBorder();
                      displayTextLine("Connecting...");
                      scooterDisconnected = false;
-#ifdef NIMBLE_V2_PLUS
                      if (!pClient->connect(adv->getAddress()))
-#else
-                     if (!pClient->connect(adv.getAddress()))
-#endif
                      {
                          displayTextLine("Connection failed.");
                          delay(UI_READ_DELAY);

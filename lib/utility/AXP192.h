@@ -13,6 +13,7 @@ class AXP192 {
    public:
     AXP192();
     void begin(void);
+    void setWire(TwoWire *wire) { _wire = wire; }
     void ScreenBreath(int brightness);
     void ScreenSwitch(bool state);
 
@@ -77,6 +78,9 @@ class AXP192 {
     uint32_t Read24bit(uint8_t Addr);
     uint32_t Read32bit(uint8_t Addr);
     void ReadBuff(uint8_t Addr, uint8_t Size, uint8_t *Buff);
+
+   private:
+    TwoWire *_wire = &Wire1;
 };
 
 #endif

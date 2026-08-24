@@ -22,7 +22,7 @@ JSValue native_badusbRunFile(JSContext *ctx, JSValue *this_val, int argc, JSValu
 
 JSValue native_badusbSetup(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(USB_as_HID)
-    if (hid_usb != nullptr) ducky_startKb(hid_usb, false);
+    if (hid_usb == nullptr) ducky_startKb(hid_usb, false);
     return JS_NewBool(true);
 #else
     return JS_NewBool(false);

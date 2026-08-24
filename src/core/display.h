@@ -26,7 +26,7 @@ struct Opt_Coord {
     uint16_t fgcolor = bruceConfig.priColor;
     uint16_t bgcolor = bruceConfig.bgColor;
 };
-void displayScrollingText(const String &text, Opt_Coord &coord);
+void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight = false);
 
 #if !defined(LITE_VERSION)
 
@@ -64,12 +64,7 @@ public:
     AnimatedGIF *gif;
 
 private:
-    unsigned long lTime = millis();
-
     static FS *GifFs;
-
-    int zero = 0;
-    int *delayMilliseconds = &zero;
 
     GifPosition gifPosition;
 
@@ -94,19 +89,19 @@ private:
  * @param playDurationMs: time that the GIF will be played
  */
 bool drawImg(
-    FS &fs, String filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
+    FS &fs, const String &filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
     bool resetButtonStatus = true
 );
-bool drawPNG(FS &fs, String filename, int x, int y, bool center);
-bool preparePngBin(FS &fs, String filename);
-bool drawBmp(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
+bool drawPNG(FS &fs, const String &filename, int x, int y, bool center);
+bool preparePngBin(FS &fs, const String &filename);
+bool drawBmp(FS &fs, const String &filename, int x = 0, int y = 0, bool center = false);
 #if !defined(LITE_VERSION)
 bool showGif(
     FS *fs, const char *filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
     bool clearButtonStatus = true
 );
 #endif
-bool showJpeg(FS &fs, String filename, int x = 0, int y = 0, bool center = false);
+bool showJpeg(FS &fs, const String &filename, int x = 0, int y = 0, bool center = false);
 bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool center = false);
 
 uint16_t getComplementaryColor(uint16_t color);
@@ -125,17 +120,17 @@ void setTftDisplay(
 void turnOffDisplay();
 bool wakeUpScreen();
 
-void displayRedStripe(String text, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_RED);
+void displayRedStripe(const String &text, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_RED);
 
 int8_t displayMessage(
     const char *message, const char *leftButton, const char *centerButton, const char *rightButton,
     uint16_t color
 );
-void displayError(String txt, bool waitKeyPress = false);    // Red Stripe
-void displayWarning(String txt, bool waitKeyPress = false);  // Yellow Stripe
-void displayInfo(String txt, bool waitKeyPress = false);     // Blue Stripe
-void displaySuccess(String txt, bool waitKeyPress = false);  // Green Strupe
-void displayTextLine(String txt, bool waitKeyPress = false); // UI Colored stripe
+void displayError(const String &txt, bool waitKeyPress = false);    // Red Stripe
+void displayWarning(const String &txt, bool waitKeyPress = false);  // Yellow Stripe
+void displayInfo(const String &txt, bool waitKeyPress = false);     // Blue Stripe
+void displaySuccess(const String &txt, bool waitKeyPress = false);  // Green Strupe
+void displayTextLine(const String &txt, bool waitKeyPress = false); // UI Colored stripe
 void setPadCursor(int16_t padx = 1, int16_t pady = 0);
 
 void padprintf(int16_t padx, const char *format, ...);
@@ -186,17 +181,17 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title);
 
 void drawStatusBar();
 void drawMainBorder(bool clear = true);
-void drawMainBorderWithTitle(String title, bool clear = true);
-void printTitle(String title);
-void printSubtitle(String subtitle, bool withLine = true);
-void printFootnote(String text);
-void printCenterFootnote(String text);
+void drawMainBorderWithTitle(const String &title, bool clear = true);
+void printTitle(const String &title);
+void printSubtitle(const String &subtitle, bool withLine = true);
+void printFootnote(const String &text);
+void printCenterFootnote(const String &text);
 
 Opt_Coord listFiles(int index, std::vector<FileList> fileList);
 
 void drawWireguardStatus(int x, int y);
 
-void progressHandler(int progress, size_t total, String message = "Running, Wait");
+void progressHandler(int progress, size_t total, const String &message = "Running, Wait");
 
 bool __attribute__((weak)) isCharging();
 
@@ -213,6 +208,8 @@ void drawBLE_beacon(int x, int y, uint16_t color);
 void drawGPS(int x, int y);
 
 void drawGpsSmall(int x, int y);
+
+void drawSdSmall(int x, int y);
 
 void drawCreditCard(int x, int y);
 

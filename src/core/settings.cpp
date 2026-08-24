@@ -171,6 +171,7 @@ void setSleepMode() {
             returnToMenu = true;
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -599,6 +600,26 @@ void setEvilPasswordMode() {
 }
 
 /*********************************************************************
+** Function: setEvilGatewayIp
+** Handles menu for setting the Evil Portal gateway IP
+***********************************************************************/
+void setEvilGatewayIp() {
+    options = {
+        {"172.0.0.1",
+         [=]() { bruceConfig.setEvilGatewayIp("172.0.0.1"); },
+         bruceConfig.evilPortalGatewayIp == "172.0.0.1"},
+        {"192.168.4.1",
+         [=]() { bruceConfig.setEvilGatewayIp("192.168.4.1"); },
+         bruceConfig.evilPortalGatewayIp == "192.168.4.1"},
+        {"Custom", [=]() {
+             String ip = num_keyboard("", 15, "Gateway Addr");
+             bruceConfig.setEvilGatewayIp(ip);
+         }},
+    };
+    loopOptions(options, bruceConfig.evilPortalGatewayIp == "192.168.4.1" ? 1 : 0);
+}
+
+/*********************************************************************
 **  Function: setRFModuleMenu
 **  Handles Menu to set the RF module in use
 **********************************************************************/
@@ -673,7 +694,7 @@ void setRFModuleMenu() {
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
             deinitRfModule();
-            if (pins_setup == 1) CC_NRF_SPI.end();
+            if (pins_setup == 1) AUX_SPI.end();
             return;
         }
         // else display an error
@@ -738,6 +759,14 @@ void setRFIDModuleMenu() {
         {"RC522 on SPI",
          [=]() { bruceConfigPins.setRfidModule(RC522_SPI_MODULE); },
          bruceConfigPins.rfidModule == RC522_SPI_MODULE    },
+#if !defined(LITE_VERSION)
+        {"ST25R3916 SPI",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE},
+        {"ST25R3916 I2C",
+         [=]() { bruceConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
+         bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+#endif
     };
     loopOptions(options, bruceConfigPins.rfidModule);
 }
@@ -883,7 +912,7 @@ void setClock() {
         updateClockTimezone();
 
     } else {
-        int hr, mn, am;
+        int hr, mn, am = 0; // Initialize am to default value
         options = {};
         for (int i = 0; i < 12; i++) {
             String tmp = String(i < 10 ? "0" : "") + String(i);
@@ -1426,8 +1455,9 @@ void setMacAddressMenu() {
              uint8_t randomMac[6];
              for (int i = 0; i < 6; i++) randomMac[i] = random(0x00, 0xFF);
              char buf[18];
-             sprintf(
+             snprintf(
                  buf,
+                 sizeof(buf),
                  "%02X:%02X:%02X:%02X:%02X:%02X",
                  randomMac[0],
                  randomMac[1],
@@ -1547,6 +1577,10 @@ RELOAD:
 **  Main Menu to manually set SPI Pins
 **********************************************************************/
 void setI2CPinsMenu(BruceConfigPins::I2CPins &value) {
+#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0
+    displayError("I2C Pins cannot be changed on this board", true);
+    return;
+#else
     uint8_t opt = 0;
     bool changed = false;
     BruceConfigPins::I2CPins points = value;
@@ -1583,6 +1617,7 @@ RELOAD:
         changed = true;
         goto RELOAD;
     }
+#endif
 }
 
 /*********************************************************************
@@ -1661,8 +1696,8 @@ bool appStoreInstalled() {
 #include <HTTPClient.h>
 void installAppStoreJS() {
 
-    if (WiFi.status() != WL_CONNECTED) { wifiConnectMenu(WIFI_STA); }
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) { wifiConnectMenu(WIFI_STA); }
+    if (!WiFi.isConnected()) {
         displayWarning("WiFi not connected", true);
         return;
     }
@@ -1688,7 +1723,7 @@ void installAppStoreJS() {
     }
 
     HTTPClient http;
-    http.begin("http://ghp.iceis.co.uk/service/appstore/");
+    http.begin("https://ghp.iceis.co.uk/service/appstore/");
     int httpCode = http.GET();
     if (httpCode != 200) {
         http.end();

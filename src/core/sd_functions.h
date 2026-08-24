@@ -14,7 +14,9 @@ struct FileList {
 
 // extern SPIClass sdcardSPI;
 
-bool setupSdCard();
+bool setupLittleFS(uint8_t maxFiles = 3);
+
+bool setupSdCard(uint8_t maxFiles = 3);
 
 void closeSdCard();
 
@@ -32,23 +34,25 @@ bool pasteFile(FS fs, String path);
 
 bool createFolder(FS fs, String path);
 
+bool folderExists(FS fs, String path);
+
 String readLineFromFile(File myFile);
 
-String readSmallFile(FS &fs, String filepath);
+String readSmallFile(FS &fs, const String &filepath);
 
-char *readBigFile(FS *fs, String filepath, bool binary = false, size_t *fileSize = NULL);
+char *readBigFile(FS *fs, const String &filepath, bool binary = false, size_t *fileSize = NULL);
 
-String md5File(FS &fs, String filepath);
+String md5File(FS &fs, const String &filepath);
 
-String crc32File(FS &fs, String filepath);
+String crc32File(FS &fs, const String &filepath);
 
-void readFs(FS fs, String folder, String allowed_ext = "*");
+void readFs(FS &fs, const String &folder, const String &allowed_ext = "*");
 
 bool sortList(const FileList &a, const FileList &b);
 
-String loopSD(FS &fs, bool filePicker = false, String allowed_ext = "*", String rootPath = "/");
+String loopSD(FS &fs, bool filePicker = false, const String &allowed_ext = "*", String rootPath = "/");
 
-void viewFile(FS fs, String filepath);
+void viewFile(FS &fs, const String &filepath);
 
 bool checkLittleFsSize();
 
@@ -56,7 +60,7 @@ bool checkLittleFsSizeNM(); // Don't display msg
 
 bool getFsStorage(FS *&fs);
 
-void fileInfo(FS fs, String filepath);
+void fileInfo(FS &fs, const String &filepath);
 
 File createNewFile(FS *&fs, String filepath, String filename);
 

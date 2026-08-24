@@ -23,6 +23,7 @@ public:
         WRITE_MODE,
         WRITE_NDEF_MODE,
         EMULATE_MODE,
+        EMULATE_NDEF_MODE,
         ERASE_MODE,
         LOAD_MODE,
         SAVE_MODE
@@ -50,8 +51,8 @@ public:
     String read_tag_headless(int timeout_seconds);
     String read_uid_headless(int timeout_seconds);
     int write_tag_headless(int timeout_seconds);
-    String save_file_headless(String filename);
-    int load_file_headless(String filename);
+    String save_file_headless(const String &filename);
+    int load_file_headless(const String &filename);
     RFIDInterface *getRFIDInterface() { return _rfid; } // Controlled Access Getter
 #endif
 
@@ -82,6 +83,7 @@ private:
     void select_state();
     void set_state(RFID_State state);
     void delayWithReturn(uint32_t ms);
+    bool ndefEmulationSupported();
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
@@ -95,6 +97,7 @@ private:
     void erase_card();
     void write_data();
     void write_ndef_data();
+    void emulate_ndef_data();
     void save_file();
     void save_scan_result();
     void load_file();
@@ -105,6 +108,11 @@ private:
     void create_ndef_message();
     void create_ndef_url();
     void create_ndef_text();
+    void create_ndef_wifi();
+    void create_ndef_link();
+    void build_ndef_text_payload(const String &text);
+    void build_ndef_url_payload(const String &url);
+    void buildWifiNdef(const String &ssid, const String &password);
 };
 
 #endif

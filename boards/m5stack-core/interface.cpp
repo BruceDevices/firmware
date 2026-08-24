@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <M5Unified.h>
 #include <interface.h>
@@ -9,6 +10,7 @@
 ***************************************************************************************/
 void _setup_gpio() {
     M5.begin(); // Need to test if SDCard inits with the new setup
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
 }
 
 /***************************************************************************************
@@ -37,7 +39,12 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, check(SelPress), AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    M5.update();
+    // RFID driver mid-transaction - skip this cycle's M5.update(), buttons below are plain GPIO
+    // so they're unaffected; just retry next tick.
+    if (trylockSysI2CBus()) {
+        M5.update();
+        unlockSysI2CBus();
+    }
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
 
@@ -50,8 +57,11 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (aPressed && cPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = aPressed;
-    EscPress = aPressed;
     NextPress = cPressed;
     SelPress = bPressed;
 }

@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Arduino.h>
@@ -43,10 +44,21 @@ void _setup_gpio() {
     digitalWrite(XPT2046_CS, HIGH);
 #endif
 
+#if defined(HAS_CAPACITIVE_TOUCH)
+    setSysI2CBus(&Wire1);
+#if defined(TOUCH_GT911_I2C)
+    bruceConfigPins.sys_i2c.sda = (gpio_num_t)SYS_I2C_SDA;
+    bruceConfigPins.sys_i2c.scl = (gpio_num_t)SYS_I2C_SCL;
+#else
+    bruceConfigPins.sys_i2c.sda = (gpio_num_t)CYD28_TouchC_SDA;
+    bruceConfigPins.sys_i2c.scl = (gpio_num_t)CYD28_TouchC_SCL;
+#endif
+#endif
+
 #if defined(TOUCH_GT911_I2C)
     pinMode(BOARD_TOUCH_INT, INPUT);
     touch.setPins(-1, BOARD_TOUCH_INT);
-    if (!touch.begin(Wire, GT911_SLAVE_ADDRESS_L, GT911_I2C_CONFIG_SDA_IO_NUM, GT911_I2C_CONFIG_SCL_IO_NUM)) {
+    if (!touch.begin(Wire1, GT911_SLAVE_ADDRESS_L, SYS_I2C_SDA, SYS_I2C_SCL)) {
         Serial.println("Failed to find GT911 - check your wiring!");
     }
 #else
@@ -100,6 +112,40 @@ void _post_setup_gpio() {
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
     ledcWrite(TFT_BL, 255);
+
+    // Force sync color inversion to prevent bruceConf.json from overriding
+    // the value set in _setup_gpio(). For CYD variants with TFT_INVERSION_ON,
+    // the init() sequence sends INVON; we send INVOFF here to ensure normal colors.
+#ifdef TFT_INVERSION_ON
+    bruceConfig.colorInverted = 0;
+    tft.invertDisplay(0);
+#else
+    bruceConfig.colorInverted = 1;
+    tft.invertDisplay(1);
+#endif
+
+    bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
+    bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;
+    bruceConfigPins.gpsBaudrate = 9600;
+
+    bool pinsChanged = false;
+    if (bruceConfigPins.rfTx != 22) {
+        bruceConfigPins.rfTx = 22;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.rfRx != 27) {
+        bruceConfigPins.rfRx = 27;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.irTx != 22) {
+        bruceConfigPins.irTx = 22;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.irRx != 27) {
+        bruceConfigPins.irRx = 27;
+        pinsChanged = true;
+    }
+    if (pinsChanged) bruceConfigPins.saveFile();
 }
 
 /*********************************************************************

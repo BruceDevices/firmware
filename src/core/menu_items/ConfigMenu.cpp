@@ -1,11 +1,11 @@
 #include "ConfigMenu.h"
+#include "../mykeyboard.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/main_menu.h"
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "../mykeyboard.h"
 #ifdef HAS_RGB_LED
 #include "core/led_control.h"
 #endif
@@ -28,10 +28,13 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
+#if !defined(LITE_VERSION) && (defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR))
             {"Audio Config",  [this]() { audioMenu(); }    },
+#endif
             {"System Config", [this]() { systemMenu(); }   },
             {"Power",         [this]() { powerMenu(); }    },
         };
+
 #if !defined(LITE_VERSION)
         if (!appStoreInstalled()) {
             localOptions.push_back({"Install App Store", []() { installAppStoreJS(); }});
@@ -170,7 +173,7 @@ void ConfigMenu::systemMenu() {
             {"Startup App",                                                         [this]() { setStartupApp(); }        },
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {"Clock",                                                               [this]() { setClock(); }             },
-            {String("Keyboard Language: ") + bruceConfig.keyboardLang,             [this]() { setKeyboardLanguage(); }  },
+            {String("Keyboard Language: ") + bruceConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
             {"Back",                                                                []() {}                              },
         };
@@ -190,13 +193,19 @@ void ConfigMenu::systemMenu() {
 void ConfigMenu::advancedMenu() {
     while (true) {
         std::vector<Option> localOptions = {
+            {"Set Device pins", [this]() { pinsMenu(); }           },
 #if !defined(LITE_VERSION)
-            {"Toggle BLE API", [this]() { enableBLEAPI(); }       },
-            {"BadUSB/BLE",     [this]() { setBadUSBBLEMenu(); }   },
+            {"Toggle BLE API",  [this]() { enableBLEAPI(); }       },
+            {"BadUSB/BLE",      [this]() { setBadUSBBLEMenu(); }   },
 #endif
-            {"Network Creds",  [this]() { setNetworkCredsMenu(); }},
+            {"BLE name",
+             [this]() {
+                 String name = keyboard(bruceConfigPins.bleName, 30, "BLE device name");
+                 if (name.length() > 0 && name != "\x1B") bruceConfigPins.setBleName(name);
+             }                                                     },
+            {"Network Creds",   [this]() { setNetworkCredsMenu(); }},
             {"Factory Reset",
-                                      []() {
+             []() {
                  // Confirmation dialog for destructive action
                  drawMainBorder(true);
                  int8_t choice = displayMessage(
@@ -213,8 +222,8 @@ void ConfigMenu::advancedMenu() {
                      bruceConfig.factoryReset(); // Restarts ESP
                  }
                  // If cancelled, loop continues and menu rebuilds
-             }                                                                             },
-            {"Back",           []() {}                            },
+             }                                                     },
+            {"Back",            []() {}                            },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Advanced");
@@ -260,21 +269,10 @@ void ConfigMenu::powerMenu() {
 void ConfigMenu::devMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-            {"I2C Finder",      [this]() { find_i2c_addresses(); }                      },
-            {"CC1101 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
-            {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
-#if !defined(LITE_VERSION)
-            {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-            {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
-#endif
-            {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
-            {"I2C Pins",        [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
-            {"UART Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
-            {"GPS Pins",        [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
-            {"Serial USB",      [this]() { switchToUSBSerial(); }                       },
-            {"Serial UART",     [this]() { switchToUARTSerial(); }                      },
-            {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }             },
-            {"Back",            []() {}                                                 },
+            {"Serial use USB",  [this]() { switchToUSBSerial(); }          },
+            {"Serial use UART", [this]() { switchToUARTSerial(); }         },
+            {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }},
+            {"Back",            []() {}                                    },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Dev Mode");
@@ -284,6 +282,38 @@ void ConfigMenu::devMenu() {
             returnToMenu = true; // Signal to exit all Config menus
             return;
         }
+
+        // Exit to Config menu on Back or ESC
+        if (selected == -1 || selected == localOptions.size() - 1) { return; }
+        // Menu rebuilds after each action
+    }
+}
+
+/*********************************************************************
+**  Function: pinsMenu
+**  Developer mode menu for advanced hardware configuration
+**********************************************************************/
+void ConfigMenu::pinsMenu() {
+    while (true) {
+        std::vector<Option> localOptions = {
+            {"I2C Finder",     [this]() { find_i2c_addresses(); }                      },
+            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
+            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
+#if !defined(LITE_VERSION)
+            {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
+            {"ST25R3916 Pins", [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
+            {"W5500 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
+#endif
+            {"SDCard Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
+            {"I2C Pins",       [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
+            {"UART Pins",      [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
+            {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
+            //{"Serial use USB",  [this]() { switchToUSBSerial(); }                       },
+            //{"Serial use UART", [this]() { switchToUARTSerial(); }                      },
+            {"Back",           []() {}                                                 },
+        };
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Pins Setup");
 
         // Exit to Config menu on Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
@@ -316,7 +346,7 @@ void ConfigMenu::switchToUARTSerial() {
         bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
+        AUX_SPI.end();
     }
 
     // Configure UART pins and switch serial output

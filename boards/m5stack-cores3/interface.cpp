@@ -1,14 +1,46 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
 #include <interface.h>
+#include <soc/gpio_reg.h>
+#include <soc/gpio_sig_map.h>
+
+static void setupCoreS3SharedSpiPins() {
+    pinMode(TFT_CS, OUTPUT);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    digitalWrite(SDCARD_CS, HIGH);
+
+    // CoreS3 shares the display D/C pin with SPI MISO. M5.begin() and the first
+    // TFT_eSPI draw happen before storage is mounted, so release GPIO35 back to
+    // MISO at the pre-storage hook. TFT_eSPI switches it to D/C only while TFT CS is active.
+#if defined(USE_HSPI_PORT)
+    pinMatrixInAttach(TFT_MISO, SPI3_Q_IN_IDX, false);
+    *(volatile uint32_t *)GPIO_FUNC35_OUT_SEL_CFG_REG = SPI3_Q_OUT_IDX;
+#else
+    pinMatrixInAttach(TFT_MISO, FSPIQ_IN_IDX, false);
+    *(volatile uint32_t *)GPIO_FUNC35_OUT_SEL_CFG_REG = FSPIQ_OUT_IDX;
+#endif
+    *(volatile uint32_t *)GPIO_ENABLE1_W1TC_REG = 1u << (TFT_MISO - 32);
+}
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
 ** Description:   initial setup for the device
 ***************************************************************************************/
-void _setup_gpio() { M5.begin(); }
+void _setup_gpio() {
+    M5.begin();
+    M5.Power.setUsbOutput(false);
+    M5.Power.setExtOutput(true);
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
+}
+
+void _pre_storage_gpio() { setupCoreS3SharedSpiPins(); }
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -35,7 +67,9 @@ void _setBrightness(uint8_t brightval) { M5.Display.setBrightness(brightval); }
 void InputHandler(void) {
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
     auto t = M5.Touch.getDetail();
     if (t.isPressed() || t.isHolding()) {
         tm = millis();

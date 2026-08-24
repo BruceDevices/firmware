@@ -49,5 +49,5 @@ void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDef
 void sendKaseikyoCommand(String address, String command, bool hideDefaultUI = false);
 bool sendDecodedCommand(String protocol, String value, uint8_t bits = 32, bool hideDefaultUI = false);
 void otherIRcodes();
-bool txIrFile(FS *fs, String filepath, bool hideDefaultUI = false);
-bool chooseCmdIrFile(FS *fs, String filepath);
+bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);
+bool chooseCmdIrFile(FS *fs, const String &filepath);

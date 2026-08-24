@@ -1,10 +1,27 @@
 ---
 name: Build and Push Releases
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
-      - main, workflow
+      - main
+      - dev
+
+    paths:
+        - "**.yml"
+        - "**.h"
+        - "**.cpp"
+        - "**.py"
+        - "**.html"
+        - "**.css"
+        - "**.js"
+        - "**.ini"
+        - "**.json"
+        - "**.csv"
     tags:
       - "*"
   workflow_dispatch:
@@ -17,6 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         board:
+          - { env: "arduino-nesso-n1",                family: "ESP32-C6",}
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
           - { env: "m5stack-sticks3",                 family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
@@ -26,9 +44,12 @@ jobs:
           - { env: "m5stack-core16mb",                family: "ESP32",}
           - { env: "m5stack-core4mb",                 family: "ESP32",}
           - { env: "m5stack-cores3",                  family: "ESP32-S3",}
+          - { env: "m5stack-dinmeter",                family: "ESP32-S3",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
+          - { env: "esp32-s3-devkitc-1-psram",        family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
           - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
+          - { env: "nm-cyd-c5",                       family: "ESP32-C5",}
           - { env: "CYD-2432S028",                    family: "ESP32",}
           - { env: "CYD-2USB",                        family: "ESP32",}
           - { env: "CYD-2432W328C",                   family: "ESP32",}
@@ -41,7 +62,7 @@ jobs:
           - { env: "LAUNCHER_CYD-2USB",               family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328C",          family: "ESP32",}
           - { env: "LAUNCHER_CYD-3248S035R",          family: "ESP32",}
-          # - { env: "LAUNCHER_CYD-3248S035C",          family: "ESP32",}
+          - { env: "LAUNCHER_CYD-3248S035C",          family: "ESP32",}
           - { env: "lilygo-t-embed-cc1101",           family: "ESP32-S3",}
           - { env: "lilygo-t-embed",                  family: "ESP32-S3",}
           - { env: "lilygo-t-deck",                   family: "ESP32-S3",}
@@ -55,6 +76,9 @@ jobs:
           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
+          - { env: "elecrow-24B",                     family: "ESP32",}
+          - { env: "elecrow-28B",                     family: "ESP32",}
+          - { env: "elecrow-advance-35-s3",           family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
@@ -125,6 +149,7 @@ jobs:
 
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             version=${{ github.ref_name }}
+            sed -i "s/-D ENABLE_RAM_LOGGING=1/;-D ENABLE_RAM_LOGGING=1'\"$version\"' ; /g" ./platformio.ini
           else
             version="${GITHUB_SHA::7}"
           fi
@@ -287,6 +312,9 @@ jobs:
     environment: github_release
     needs: [compile_sketch]
     if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+      issues: write
     steps:
       - id: bruce_version
         name: Get Version
@@ -320,3 +348,22 @@ jobs:
           generate_release_notes: true
           files: |
             Bruce-*.bin
+
+      - name: Close "Fixed on Beta" issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.bruce_version.outputs.version }}
+        run: |
+          set -x
+          gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "Fixed on Beta" \
+            --state open \
+            --limit 500 \
+            --json number \
+            --jq '.[].number' | while read -r issue; do
+            [ -z "$issue" ] && continue
+            gh issue close "$issue" \
+              --repo "${{ github.repository }}" \
+              --comment "Fixed on ${VERSION}. Issue automatically closed after release"
+          done

@@ -141,7 +141,7 @@ private:
         {49157, "Windows RPC"                                                      }
     }; */
     void client_stop();
-    void client_connect(IPAddress ip, int port);
+    void client_connect(IPAddress ip, int port, int timeout_ms = 3000);
     bool client_connected();
     int sockfd = -1;
 

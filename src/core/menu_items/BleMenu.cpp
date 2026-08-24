@@ -7,6 +7,8 @@
 #include "modules/ble/ble_spam.h"
 #if !defined(LITE_VERSION)
 #include "modules/ble/BLE_Suite.h"
+#else
+#include "modules/ble/ble_sniffer.h"
 #endif
 #include <globals.h>
 
@@ -15,15 +17,10 @@ void BleMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
     if (BLEConnected) {
         options.push_back({"Disconnect", [=]() {
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-                               esp_bt_controller_deinit();
-#else
-            BLEDevice::deinit();
-#endif
+                               BLEDevice::deinit();
                                BLEConnected = false;
                                delete hid_ble;
                                hid_ble = nullptr;
-                               if (_Ask_for_restart == 1) _Ask_for_restart = 2;
                            }});
     }
 #endif
@@ -41,6 +38,9 @@ void BleMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
     options.push_back({"BLE Suite", [=]() { BleSuiteMenu(); }});
     options.push_back({"Ninebot", [=]() { BLENinebot(); }});
+    options.push_back({"Presenter mode", [=]() { PresenterMode(hid_ble, true); }});
+#else
+    options.push_back({"BLE Sniffer", [=]() { BLE_SnifferMenu(); }});
 #endif
     addOptionToMainMenu();
 

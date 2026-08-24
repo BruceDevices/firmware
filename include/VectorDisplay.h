@@ -500,15 +500,15 @@ public:
     void text(int x, int y, const char *str, int n) {
         args.xyText.x = x;
         args.xyText.y = y;
-        if (n > VECTOR_DISPLAY_MAX_STRING) n = VECTOR_DISPLAY_MAX_STRING;
+        if (n > VECTOR_DISPLAY_MAX_STRING - 1) n = VECTOR_DISPLAY_MAX_STRING - 1;
         strncpy(args.xyText.text, str, n);
+        args.xyText.text[n] = 0; // Explicit null termination before loop
 
         if (fixCP437) {
             for (int i = 0; i < n; i++) {
                 if ((uint8_t)args.xyText.text[i] >= 176) args.xyText.text[i]++;
             }
         }
-        args.xyText.text[n] = 0;
         sendCommand('T', &args, 4 + strlen(args.xyText.text) + 1);
     }
 
@@ -520,15 +520,15 @@ public:
 
     void addButton(uint8_t command, const char *str) {
         args.charText.c = command;
-        strncpy(args.charText.text, str, VECTOR_DISPLAY_MAX_STRING);
-        args.charText.text[VECTOR_DISPLAY_MAX_STRING] = 0;
+        strncpy(args.charText.text, str, VECTOR_DISPLAY_MAX_STRING - 1);
+        args.charText.text[VECTOR_DISPLAY_MAX_STRING - 1] = 0;
         sendCommand('U', &args, 1 + strlen(args.charText.text) + 1);
     }
 
     void addButton(uint8_t command, String str) { addButton(command, str.c_str()); }
 
     void toast(const char *str, unsigned n) {
-        if (VECTOR_DISPLAY_MAX_STRING < n) n = VECTOR_DISPLAY_MAX_STRING;
+        if (VECTOR_DISPLAY_MAX_STRING - 1 < n) n = VECTOR_DISPLAY_MAX_STRING - 1;
         strncpy(args.text, str, n);
         args.text[n] = 0;
         sendCommand('M', &args, n + 1);

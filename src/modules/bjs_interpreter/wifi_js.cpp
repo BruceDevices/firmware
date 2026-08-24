@@ -62,9 +62,9 @@ JSValue native_wifiConnect(JSContext *ctx, JSValue *this_val, int argc, JSValue 
             Serial.println("timeout");
             break;
         }
-    } while (WiFi.status() != WL_CONNECTED);
+    } while (!WiFi.isConnected());
 
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.isConnected()) {
         r = true;
         wifiIP = WiFi.localIP().toString();
         wifiConnected = true;
@@ -103,8 +103,8 @@ JSValue native_httpFetch(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 
     JSCStringBuf stringBuffer;
 
-    if (WiFi.status() != WL_CONNECTED) wifiConnectMenu();
-    if (WiFi.status() != WL_CONNECTED) return JS_ThrowTypeError(ctx, "WIFI Not Connected");
+    if (!WiFi.isConnected()) wifiConnectMenu();
+    if (!WiFi.isConnected()) return JS_ThrowTypeError(ctx, "WIFI Not Connected");
 
     if (argc < 1 || !JS_IsString(ctx, argv[0]))
         return JS_ThrowTypeError(ctx, "httpFetch(url:string, options?:object|headers?:array)");

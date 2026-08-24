@@ -35,6 +35,9 @@
 #ifndef IO_EXP_NRF // Used in C5
 #define IO_EXP_NRF -1
 #endif
+#ifndef IO_EXP_NFC // Used in T-LoraPager
+#define IO_EXP_NFC -1
+#endif
 
 // Button pins (likely inputs on the expander)
 #ifndef IO_EXP_UP
@@ -62,6 +65,12 @@ class io_expander : public IO_EXP_CLASS {
 private:
     bool _started = false;
 
+    void output(int8_t pin, bool val) {
+        if (pin < 0 || pin > 15) return;
+        IO_EXP_CLASS::pinMode(static_cast<uint8_t>(pin), OUTPUT);
+        IO_EXP_CLASS::digitalWrite(static_cast<uint8_t>(pin), val);
+    }
+
     static void clearInterruptBit(uint16_t &mask, int8_t pin) {
         if (pin >= 0 && pin <= 15) {
             mask = static_cast<uint16_t>(mask & ~(static_cast<uint16_t>(1u) << static_cast<uint8_t>(pin)));
@@ -84,15 +93,14 @@ public:
         _started = begin(a, _w);
         if (!_started) return false;
 
-        configureDirection(0xFFFF); // All outputs initially
-
-        turnPinOnOff(IO_EXP_GPS, LOW);   // SMOOOCHIE||REAPER
-        turnPinOnOff(IO_EXP_MIC, LOW);   // SMOOOCHIE
-        turnPinOnOff(IO_EXP_VIBRO, LOW); // SMOOOCHIE||REAPER
-        turnPinOnOff(IO_EXP_CC_RX, LOW); // SMOOOCHIE||REAPER
-        turnPinOnOff(IO_EXP_CC_TX, LOW); // SMOOOCHIE||REAPER
-        turnPinOnOff(IO_EXP_LOGO, HIGH); // BRUCE LOGO LEAD ON REAPER
-        turnPinOnOff(IO_EXP_NRF, HIGH);  // NRF ON BY DEFAULT FOR C5
+        output(IO_EXP_GPS, LOW);   // SMOOOCHIE||REAPER
+        output(IO_EXP_MIC, LOW);   // SMOOCHIE
+        output(IO_EXP_VIBRO, LOW); // SMOOCHIE||REAPER
+        output(IO_EXP_CC_RX, LOW); // SMOOCHIE||REAPER
+        output(IO_EXP_CC_TX, LOW); // SMOOCHIE||REAPER
+        output(IO_EXP_LOGO, HIGH); // BRUCE LOGO LED ON REAPER
+        output(IO_EXP_NRF, HIGH);  // NRF ON BY DEFAULT FOR C5
+        output(IO_EXP_NFC, HIGH);  // ST25R NFC chip power on Lilygo T-LoraPager
 
         // Set button pins as inputs
         button(IO_EXP_UP);
@@ -110,7 +118,7 @@ public:
 
     void turnPinOnOff(int8_t pin, bool val) {
         if (!_started) return;
-        return pin >= 0 ? IO_EXP_CLASS::digitalWrite(pin, val) : delay(0);
+        output(pin, val);
     }
 
     void setPinDirection(uint8_t pin, uint8_t mode) {
