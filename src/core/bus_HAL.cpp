@@ -216,6 +216,20 @@ void releaseI2CBus() {
 }
 
 bool checkAndRecoverSysI2CBus() {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // Cardputer ADV 3-in-1 expansion:
+    // GPIO8/9 are multiplexed between the TCA8418 I2C keyboard
+    // and NRF24 CE/CS.
+    //
+    // NRF24 CE is intentionally held LOW while idle, so sampling
+    // GPIO8 as an I2C SDA health signal would falsely report a
+    // permanently stuck I2C bus and trigger recovery.
+    //
+    // Keyboard access is explicitly handled by the board-specific
+    // GPIO8/9 multiplexing code in interface.cpp.
+    return false;
+#endif
+
     int8_t sda = (int8_t)bruceConfigPins.sys_i2c.sda;
     int8_t scl = (int8_t)bruceConfigPins.sys_i2c.scl;
     if (sda < 0 || scl < 0) return false; // board has no sys_i2c
