@@ -28,7 +28,8 @@ All ready-to-flash files are in the **[Releases](https://github.com/bollgio/Bruc
 - :musical_note: **SubGHz Music RX** — RF audio player in SubGHz menu. Predefined melodies, next/prev, play/stop, volume control.
 - :mango: **Pablo Mode Easter Egg** — Hidden in Others menu. Mango chaos with animated shapes, LEDC tones, escalating text. Auto-restarts after 42s.
 - :earth_africa: **English Localization** — All UI strings in Universal IR/RF translated from Italian to English.
-- :tv: **Built-in IR always visible** — IR categories (TV, Audio, DVD, etc.) always shown with generic functional buttons (Power, Vol+, Vol-, Mute, Ch+, Ch-) that cycle through all brands' protocol codes.
+- :tv: **Built-in IR always visible** — IR categories (TV, Audio, DVD, etc.) always shown with generic functional buttons (Power, Vol+, Vol-, Mute, Ch+, Ch-) that cycle through all brands' protocol codes. **Brands** and **Orient** options included in the grid.
+- :open_file_folder: **Embedded IR database** — 6 core IR files (TV, AC, Audio, Fans, LEDs, Projectors) compressed with LZ4 and embedded in the firmware. Works **without SD card or LittleFS** — on first boot, files are decompressed and written to storage automatically.
 - :wrench: **MCLK pin conflict fix** on T-Embed CC1101, Dual spectrum fix, IR Clone UX, SD dedup.
 
 ### v3.6
@@ -99,7 +100,7 @@ The database folders are included in this repository and in the release zips:
 | `BruceIR4.0-UniversalRF-Lite.zip` | RF 103 files (Garages, Gates, Vehicles) | **LittleFS** (sticks3/Cardputer/C5) |
 | `BruceIR4.0-UniversalIR-RF-Full.zip` | IR 829 + RF 2052 files | **SD card** (T-Embed) |
 
-> **Note:** IR Built-in categories (TV, Audio, DVD, etc.) are hardcoded in the firmware and work **without any database files**. The RF database is only needed for the Universal RF Remote browser.
+> **Note:** IR Built-in categories (TV, Audio, DVD, etc.) are **embedded in the firmware** (LZ4-compressed) and work **without any database files**. On first boot they are decompressed to storage. Additional IR brands can be added via the Full zip on SD. The RF database is only needed for the Universal RF Remote browser.
 
 ### SD card (Full)
 Extract the **Full** zip to the SD card root so you get `UniversalIR/` and `UniversalRF/` folders.

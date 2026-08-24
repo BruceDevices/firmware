@@ -5,6 +5,7 @@
 #include "core/sd_functions.h"
 #include "core/settings.h"
 #include "custom_ir.h"
+#include "ir_embedded_bin.h"
 #include "ir_read.h"
 #include "universal_history.h"
 
@@ -557,12 +558,39 @@ struct BuiltinGroup {
 };
 
 // ── Grid: show generic buttons, each sends ALL brands for that function ──
-static void _builtinFuncGrid(const char *title, const BuiltinGroup *groups, int groupCount) {
+static void show_brands_flow(
+    FS &fs, String cat_path, const std::vector<ButtonDef> &buttons, int orientation, String title
+);
+static std::vector<ButtonDef> layout_for(const String &lower);
+
+static void _builtinFuncGrid(const char *title, const BuiltinGroup *groups, int groupCount,
+                              const String &brands_path = "") {
+    int brandsIdx = -1, orientIdx = -1, backIdx = -1;
     std::vector<String> labels;
     for (int i = 0; i < groupCount; i++) labels.push_back(groups[i].label);
-    labels.push_back("Back");
+    if (brands_path.length() > 0) { brandsIdx = labels.size(); labels.push_back("Brands"); }
+    orientIdx = labels.size(); labels.push_back("Orient");
+    backIdx = labels.size(); labels.push_back("Back");
 
-    ir_grid_navigate(labels, title, [title, groups, groupCount](int sel) -> bool {
+    int total = labels.size();
+    ir_grid_navigate(labels, title, [title, groups, groupCount, brands_path, brandsIdx, orientIdx, backIdx, total](int sel) -> bool {
+        if (sel == backIdx) return true;
+        if (sel == orientIdx) {
+            gsetRotation(true);
+            return false;
+        }
+        if (sel == brandsIdx) {
+            FS *fsPtr = nullptr;
+            if (setupSdCard()) fsPtr = &SD;
+            else if (setupLittleFS()) fsPtr = &LittleFS;
+            if (fsPtr) {
+                String titleLower = String(title);
+                titleLower.toLowerCase();
+                std::vector<ButtonDef> btns = layout_for(titleLower);
+                show_brands_flow(*fsPtr, brands_path, btns, bruceConfigPins.rotation, title);
+            }
+            return false;
+        }
         if (sel >= groupCount) return true;
         const BuiltinGroup &g = groups[sel];
         tft.fillRect(0, 0, tftWidth, tftHeight, bruceConfig.bgColor);
@@ -731,18 +759,14 @@ static const BuiltinGroup _projGroups[] = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Entry points
+//  Entry points — brands_path is resolved by caller (show_categories)
 // ═══════════════════════════════════════════════════════════════════════
-static void _tvBuiltin()       { _builtinFuncGrid("TVs",          _tvGroups,  6); }
-static void _acBuiltin()       { _builtinFuncGrid("AC",           _acGroups,  7); }
-static void _audioBuiltin()    { _builtinFuncGrid("Audio",        _audGroups, 4); }
-static void _fansBuiltin()     { _builtinFuncGrid("Fans",         _fanGroups, 4); }
-static void _ledBuiltin()      { _builtinFuncGrid("LED Lighting", _ledGroups, 10); }
-static void _projectorBuiltin(){ _builtinFuncGrid("Projectors",   _projGroups, 4); }
-
-static void show_brands_flow(
-    FS &fs, String cat_path, const std::vector<ButtonDef> &buttons, int orientation, String title
-);
+static void _tvBuiltin(const String &bp = "")       { _builtinFuncGrid("TVs",          _tvGroups,  6, bp); }
+static void _acBuiltin(const String &bp = "")       { _builtinFuncGrid("AC",           _acGroups,  7, bp); }
+static void _audioBuiltin(const String &bp = "")    { _builtinFuncGrid("Audio",        _audGroups, 4, bp); }
+static void _fansBuiltin(const String &bp = "")     { _builtinFuncGrid("Fans",         _fanGroups, 4, bp); }
+static void _ledBuiltin(const String &bp = "")      { _builtinFuncGrid("LED Lighting", _ledGroups, 10, bp); }
+static void _projectorBuiltin(const String &bp = ""){ _builtinFuncGrid("Projectors",   _projGroups, 4, bp); }
 
 // Vertical navigation across pages: Up/Down move by column and stay on the
 // same page unless at an edge, where they flow to the adjacent page. Wrap to
@@ -1594,6 +1618,16 @@ static void show_categories() {
 
     g_ir_root = find_db_root(fs, "UniversalIR");
     bool hasDB = fs.exists(g_ir_root);
+
+    // Auto-provision embedded .ir files (compressed binary) if missing from storage
+    {
+        String assetsDir = g_ir_root + "/assets";
+        if (!fs.exists(g_ir_root)) fs.mkdir(g_ir_root);
+        if (!fs.exists(assetsDir)) fs.mkdir(assetsDir);
+        embedded_ir_bin_write_all(fs, assetsDir);
+        if (!hasDB) hasDB = true;
+    }
+
     std::map<String, CategoryConfig> configs;
     int globalRot = bruceConfigPins.rotation;
     if (hasDB) {
@@ -1622,9 +1656,21 @@ static void show_categories() {
                 ir_clone_flow(fs);
             }});
 
+            // DB categories — ONLY add ones that don't match built-in names
+            const char *builtinNames[] = {"tvs","ac","audio","fans","led lighting","projectors"};
             std::vector<Category> cats = discover_categories(fs);
             for (auto &cat : cats) {
                 String name = cat.name;
+                String nameLower = name;
+                nameLower.toLowerCase();
+                bool isBuiltin = false;
+                for (auto &bn : builtinNames) {
+                    if (nameLower == bn || nameLower.startsWith(bn)) {
+                        isBuiltin = true;
+                        break;
+                    }
+                }
+                if (isBuiltin) continue; // skip — built-in handles this
                 options.push_back({name.c_str(), [&fs, &configs, cat]() {
                     String key = cat.name;
                     key.toLowerCase();
@@ -1635,31 +1681,34 @@ static void show_categories() {
             }
         }
 
-        // Built-in categories — always add, skip if DB already has same name
+        // Built-in categories — ALWAYS add, instant hardcoded signals
+        // Look up DB dir_path for each built-in to pass brands_path
         {
-            struct Builtin { const char *name; std::function<void()> fn; };
+            struct Builtin { const char *name; std::function<void(const String&)> fn; };
             Builtin builtins[] = {
-                {"TVs",          []() { _tvBuiltin(); }},
-                {"AC",           []() { _acBuiltin(); }},
-                {"Audio",        []() { _audioBuiltin(); }},
-                {"Fans",         []() { _fansBuiltin(); }},
-                {"LED Lighting", []() { _ledBuiltin(); }},
-                {"Projectors",   []() { _projectorBuiltin(); }},
+                {"TVs",          [](const String &bp) { _tvBuiltin(bp); }},
+                {"AC",           [](const String &bp) { _acBuiltin(bp); }},
+                {"Audio",        [](const String &bp) { _audioBuiltin(bp); }},
+                {"Fans",         [](const String &bp) { _fansBuiltin(bp); }},
+                {"LED Lighting", [](const String &bp) { _ledBuiltin(bp); }},
+                {"Projectors",   [](const String &bp) { _projectorBuiltin(bp); }},
             };
+            // Build a map of DB category name → dir_path
+            std::map<String, String> dbDirPaths;
+            if (hasDB) {
+                std::vector<Category> cats = discover_categories(fs);
+                for (auto &cat : cats) {
+                    String key = cat.name;
+                    key.toLowerCase();
+                    dbDirPaths[key] = cat.dir_path;
+                }
+            }
             for (auto &b : builtins) {
-                bool exists = false;
                 String bLower = String(b.name);
                 bLower.toLowerCase();
-                for (auto &o : options) {
-                    String oLower = String(o.label);
-                    oLower.toLowerCase();
-                    // Match exact or prefix (e.g. "ACs" matches "AC", "TVs" matches "TV")
-                    if (oLower == bLower || oLower.startsWith(bLower) || bLower.startsWith(oLower)) {
-                        exists = true;
-                        break;
-                    }
-                }
-                if (!exists) options.push_back({b.name, b.fn});
+                String bp = "";
+                if (dbDirPaths.count(bLower) > 0) bp = dbDirPaths[bLower];
+                options.push_back({b.name, [fn = b.fn, bp]() { fn(bp); }});
             }
         }
 
