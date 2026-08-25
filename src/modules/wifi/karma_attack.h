@@ -174,7 +174,7 @@ typedef struct {
     bool verifyPassword;
     uint8_t priority;
     AttackTier tier;
-    uint16_t duration;
+    uint32_t duration;
     bool isCloneAttack;
     uint32_t probeCount;
     uint32_t clientFingerprint;
@@ -224,13 +224,13 @@ typedef struct {
     uint8_t priorityThreshold;
     uint8_t cloneThreshold;
     bool enableBeaconing;
-    uint16_t highTierDuration;
-    uint16_t mediumTierDuration;
-    uint16_t fastTierDuration;
+    uint32_t highTierDuration;
+    uint32_t mediumTierDuration;
+    uint32_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
-    uint16_t baseDuration;
-    uint16_t extendedDuration;
+    uint32_t baseDuration;
+    uint32_t extendedDuration;
     bool enableTemplateABTesting;
     uint8_t templateRotationInterval; // Minutes between template rotation
     bool enableContextualTemplate;    // Choose template based on SSID context
@@ -345,6 +345,7 @@ public:
     static void warmCache(const std::vector<String> &frequentSSIDs);
     static bool isLoaded();
     static String getSourceFile();
+    static size_t getCacheSize();
 };
 
 // Operation modes for Karma
