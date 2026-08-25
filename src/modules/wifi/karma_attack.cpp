@@ -373,7 +373,7 @@ static void freeProbeFrame(ProbeRequest &probe) {
     probe.frame_len = 0;
 }
 
-// Macro definitions for state access - KEEP ALL EXCEPT attackConfig, selectedTemplate, pendingPortals
+// Macro definitions for state access
 #define activePortalChannel (state().activePortalChannel)
 #define deauthCount (state().deauthCount)
 #define lastDeauthReset (state().lastDeauthReset)
@@ -408,7 +408,7 @@ static void freeProbeFrame(ProbeRequest &probe) {
 #define probeBufferIndex (state().probeBufferIndex)
 #define bufferWrapped (state().bufferWrapped)
 #define karmaConfig (state().karmaConfig)
-// #define attackConfig (state().attackConfig)  // REMOVED - use attackConfigRef() instead
+#define attackConfig (state().attackConfig)
 #define screenNeedsRedraw (state().screenNeedsRedraw)
 #define pmkidCaptured (state().pmkidCaptured)
 #define assocBlocked (state().assocBlocked)
@@ -431,11 +431,11 @@ static void freeProbeFrame(ProbeRequest &probe) {
 #define macBlacklist (state().macBlacklist)
 #define currentBSSID (state().currentBSSID)
 #define portalTemplates (state().portalTemplates)
-// #define selectedTemplate (state().selectedTemplate)  // REMOVED - use selectedTemplateRef() instead
+#define selectedTemplate (state().selectedTemplate)
 #define templateSelected (state().templateSelected)
 #define ssidFrequency (state().ssidFrequency)
 #define popularSSIDs (state().popularSSIDs)
-// #define pendingPortals (state().pendingPortals)  // REMOVED - use pendingPortalsRef() instead
+#define pendingPortals (state().pendingPortals)
 #define targetRateLimit (state().targetRateLimit)
 #define lastRateLimitReset (state().lastRateLimitReset)
 #define lastTemplateRotation (state().lastTemplateRotation)
@@ -889,15 +889,15 @@ void ActiveBroadcastAttack::launchAttackForResponse(const String &ssid, const St
     if (!templateSelectedRef()) return;
     if (ssid.isEmpty() || ssid == "*WILDCARD*") return;
     
-    auto &pendingPortals = pendingPortalsRef();
-    auto &selectedTemplate = selectedTemplateRef();
-    auto &attackConfig = attackConfigRef();
+    auto &pendingList = pendingPortalsRef();
+    auto &selectedTpl = selectedTemplateRef();
+    auto &attackCfg = attackConfigRef();
     
     int queuedCount = 0;
-    for (const auto &portal : pendingPortals)
+    for (const auto &portal : pendingList)
         if (!portal.launched) queuedCount++;
     if (queuedCount >= config.maxActiveAttacks) return;
-    if (pendingPortals.size() >= MAX_PENDING_PORTALS) return;
+    if (pendingList.size() >= MAX_PENDING_PORTALS) return;
     
     PendingPortal portal;
     portal.ssid = ssid;
@@ -905,13 +905,13 @@ void ActiveBroadcastAttack::launchAttackForResponse(const String &ssid, const St
     portal.targetMAC = mac;
     portal.timestamp = millis();
     portal.launched = false;
-    portal.templateName = selectedTemplate.name;
-    portal.templateFile = selectedTemplate.filename;
-    portal.isDefaultTemplate = selectedTemplate.isDefault;
-    portal.verifyPassword = selectedTemplate.verifyPassword;
+    portal.templateName = selectedTpl.name;
+    portal.templateFile = selectedTpl.filename;
+    portal.isDefaultTemplate = selectedTpl.isDefault;
+    portal.verifyPassword = selectedTpl.verifyPassword;
     portal.priority = 95;
     portal.tier = TIER_HIGH;
-    portal.duration = attackConfig.highTierDuration;
+    portal.duration = attackCfg.highTierDuration;
     portal.isCloneAttack = false;
     portal.probeCount = 1;
     portal.clientFingerprint = 0;
