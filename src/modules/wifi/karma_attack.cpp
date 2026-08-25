@@ -42,6 +42,18 @@ void handleBroadcastResponse(const String &ssid, const String &mac);
 void updateChannelActivity(uint8_t channel);
 void updateSSIDFrequency(const String &ssid);
 
+// Static forward declarations - MUST be before any usage
+static bool ensureKarmaState();
+static struct KarmaRuntimeState &state();
+static void releaseKarmaState();
+static std::vector<PendingPortal> &pendingPortalsRef();
+static PortalTemplate &selectedTemplateRef();
+static AttackConfig &attackConfigRef();
+static bool templateSelectedRef();
+static bool samePendingPortal(const PendingPortal &a, const PendingPortal &b);
+static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize = false);
+static void destroyActivePortal();
+static size_t activePortalCount();
 static bool isApModeActive();
 static bool ensureKarmaApInterface(uint8_t channel);
 static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel);
@@ -49,12 +61,9 @@ static void copyStringToBuffer(char *dest, size_t destSize, const String &src);
 static bool probeSSIDEquals(const ProbeRequest &probe, const char *value);
 static bool probeSSIDEmpty(const ProbeRequest &probe);
 static void freeProbeFrame(ProbeRequest &probe);
-static bool ensureKarmaState();
-static std::vector<PendingPortal> &pendingPortalsRef();
-static PortalTemplate &selectedTemplateRef();
-static AttackConfig &attackConfigRef();
-static bool templateSelectedRef();
-static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize = false);
+
+// Global gKarmaState pointer
+static KarmaRuntimeState *gKarmaState = nullptr;
 
 // SyncState for multi-device sync
 SyncState syncState;
@@ -120,7 +129,320 @@ const uint8_t vendorOUIs[][3] PROGMEM = {
 };
 
 // ============================================================
-// SSIDDatabase - HYBRID BATCH + LRU CACHE
+// Karma Runtime State - MUST be defined before functions that use it
+// ============================================================
+
+struct KarmaRuntimeState {
+    uint8_t activePortalChannel = 0;
+    unsigned long deauthCount[14] = {0};
+    unsigned long lastDeauthReset = 0;
+    unsigned long lastBeaconBurst = 0;
+    uint8_t beaconsInBurst = 0;
+    QueueHandle_t karmaQueue = nullptr;
+    TaskHandle_t karmaWriterHandle = nullptr;
+    bool storageAvailable = true;
+    KarmaMode karmaMode = MODE_PASSIVE;
+    bool karmaPaused = false;
+    BackgroundPortal *activePortal = nullptr;
+    unsigned long lastPortalHeartbeat = 0;
+    bool handshakeCaptureEnabled = false;
+    std::vector<HandshakeCapture> handshakeBuffer;
+    std::map<uint32_t, ClientBehavior> clientBehaviors;
+    ActiveBroadcastAttack broadcastAttack;
+    unsigned long last_time = 0;
+    unsigned long last_ChannelChange = 0;
+    unsigned long lastFrequencyReset = 0;
+    unsigned long lastBeaconTime = 0;
+    unsigned long lastMACRotation = 0;
+    uint8_t channl = 0;
+    bool flOpen = false;
+    bool is_LittleFS = true;
+    uint32_t pkt_counter = 0;
+    bool auto_hopping = true;
+    uint16_t hop_interval = DEFAULT_HOP_INTERVAL;
+    File probe_file;
+    RingbufHandle_t macRingBuffer = nullptr;
+    String filen = "";
+    std::vector<ProbeRequest> probeBuffer;
+    uint16_t probeBufferIndex = 0;
+    bool bufferWrapped = false;
+    KarmaConfig karmaConfig = {};
+    AttackConfig attackConfig = {};
+    bool screenNeedsRedraw = false;
+    uint32_t pmkidCaptured = 0;
+    uint32_t assocBlocked = 0;
+    uint8_t channelActivity[14] = {0};
+    uint8_t currentPriorityChannel = 0;
+    unsigned long lastDeauthTime = 0;
+    unsigned long lastSaveTime = 0;
+    uint32_t totalProbes = 0;
+    uint32_t uniqueClients = 0;
+    uint32_t karmaResponsesSent = 0;
+    uint32_t deauthPacketsSent = 0;
+    uint32_t autoPortalsLaunched = 0;
+    uint32_t cloneAttacksLaunched = 0;
+    uint32_t beaconsSent = 0;
+    bool isPortalActive = false;
+    bool restartKarmaAfterPortal = false;
+    std::map<String, NetworkHistory> networkHistory;
+    std::queue<ProbeResponseTask> responseQueue;
+    std::vector<ActiveNetwork> activeNetworks;
+    std::map<String, uint32_t> macBlacklist;
+    uint8_t currentBSSID[6] = {0};
+    std::vector<PortalTemplate> portalTemplates;
+    PortalTemplate selectedTemplate;
+    bool templateSelected = false;
+    std::map<String, uint16_t> ssidFrequency;
+    std::vector<std::pair<String, uint16_t>> popularSSIDs;
+    std::vector<PendingPortal> pendingPortals;
+    std::map<String, uint8_t> targetRateLimit;
+    unsigned long lastRateLimitReset = 0;
+    unsigned long lastTemplateRotation = 0;
+    size_t templateRotationIndex = 0;
+    bool isCoordinator = false;
+
+    KarmaRuntimeState() {
+        probeBuffer.resize(MAX_PROBE_BUFFER);
+        handshakeBuffer.reserve(20);
+        activeNetworks.reserve(MAX_CONCURRENT_SSIDS);
+        portalTemplates.reserve(MAX_PORTAL_TEMPLATES);
+        popularSSIDs.reserve(MAX_POPULAR_SSIDS);
+        pendingPortals.reserve(MAX_PENDING_PORTALS);
+    }
+
+    ~KarmaRuntimeState() {
+        for (auto &probe : probeBuffer) freeProbeFrame(probe);
+        if (activePortal != nullptr) {
+            delete activePortal->instance;
+            delete activePortal;
+            activePortal = nullptr;
+        }
+        if (macRingBuffer) {
+            vRingbufferDelete(macRingBuffer);
+            macRingBuffer = nullptr;
+        }
+        if (karmaQueue) {
+            vQueueDelete(karmaQueue);
+            karmaQueue = nullptr;
+        }
+        if (probe_file) probe_file.close();
+    }
+};
+
+// ============================================================
+// Static Function Implementations
+// ============================================================
+
+static bool ensureKarmaState() {
+    if (gKarmaState != nullptr) return true;
+    gKarmaState = new (std::nothrow) KarmaRuntimeState();
+    return gKarmaState != nullptr;
+}
+
+static KarmaRuntimeState &state() {
+    if (!ensureKarmaState()) {
+        Serial.println("[KARMA] Failed to allocate runtime state");
+        while (true) delay(1000);
+    }
+    return *gKarmaState;
+}
+
+static void releaseKarmaState() {
+    delete gKarmaState;
+    gKarmaState = nullptr;
+}
+
+static std::vector<PendingPortal> &pendingPortalsRef() { return state().pendingPortals; }
+static PortalTemplate &selectedTemplateRef() { return state().selectedTemplate; }
+static AttackConfig &attackConfigRef() { return state().attackConfig; }
+static bool templateSelectedRef() { return state().templateSelected; }
+
+static size_t activePortalCount() { return state().activePortal != nullptr ? 1U : 0U; }
+
+static bool samePendingPortal(const PendingPortal &a, const PendingPortal &b) {
+    return a.ssid == b.ssid && a.channel == b.channel && a.targetMAC == b.targetMAC &&
+           a.templateFile == b.templateFile && a.isCloneAttack == b.isCloneAttack;
+}
+
+static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize) {
+    auto &queue = pendingPortalsRef();
+
+    for (auto &existing : queue) {
+        if (!samePendingPortal(existing, portal)) continue;
+        existing.timestamp = portal.timestamp;
+        existing.priority = std::max(existing.priority, portal.priority);
+        existing.probeCount = std::max(existing.probeCount, portal.probeCount);
+        if (portal.tier > existing.tier) existing.tier = portal.tier;
+        existing.duration = std::max(existing.duration, portal.duration);
+        existing.verifyPassword = portal.verifyPassword;
+        existing.isDefaultTemplate = portal.isDefaultTemplate;
+        if (!portal.templateName.isEmpty()) existing.templateName = portal.templateName;
+        if (!portal.templateFile.isEmpty()) existing.templateFile = portal.templateFile;
+        if (portal.isHighValueTarget) existing.isHighValueTarget = true;
+        return true;
+    }
+
+    if (queue.size() >= MAX_PENDING_PORTALS) {
+        auto worstIt =
+            std::min_element(queue.begin(), queue.end(), [](const PendingPortal &a, const PendingPortal &b) {
+                if (a.priority != b.priority) return a.priority < b.priority;
+                return a.timestamp < b.timestamp;
+            });
+        if (worstIt == queue.end()) return false;
+        if (portal.priority < worstIt->priority) return false;
+        if (portal.priority == worstIt->priority && portal.timestamp <= worstIt->timestamp) return false;
+        queue.erase(worstIt);
+    }
+
+    if (prioritize) queue.insert(queue.begin(), portal);
+    else queue.push_back(portal);
+    return true;
+}
+
+static void destroyActivePortal() {
+    if (state().activePortal == nullptr) return;
+    if (state().activePortal->instance != nullptr) {
+        delete state().activePortal->instance;
+        state().activePortal->instance = nullptr;
+    }
+    delete state().activePortal;
+    state().activePortal = nullptr;
+    state().activePortalChannel = 0;
+    state().isPortalActive = false;
+    state().restartKarmaAfterPortal = true;
+    state().auto_hopping = true;
+}
+
+// ============================================================
+// State Management Functions
+// ============================================================
+
+static bool isApModeActive() {
+    wifi_mode_t mode = WiFi.getMode();
+    return mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA;
+}
+
+static bool ensureKarmaApInterface(uint8_t channel) {
+    if (channel < 1 || channel > 14) channel = 1;
+
+    if (!isApModeActive()) {
+        if (!WiFi.mode(WIFI_MODE_AP)) {
+            Serial.println("[KARMA] Failed to switch WiFi to AP mode");
+            return false;
+        }
+        if (!WiFi.softAP("BruceKarma", "", channel, 1, 4, false)) {
+            Serial.println("[KARMA] Failed to start AP interface");
+            return false;
+        }
+    }
+
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    return true;
+}
+
+static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
+    if (buffer == nullptr || len <= 0) return false;
+    if (!ensureKarmaApInterface(channel)) return false;
+
+    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
+    if (err != ESP_OK) {
+        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
+        return false;
+    }
+
+    return true;
+}
+
+static void copyStringToBuffer(char *dest, size_t destSize, const String &src) {
+    if (destSize == 0) return;
+    strncpy(dest, src.c_str(), destSize - 1);
+    dest[destSize - 1] = '\0';
+}
+
+static bool probeSSIDEquals(const ProbeRequest &probe, const char *value) {
+    return strcmp(probe.ssid, value) == 0;
+}
+
+static bool probeSSIDEmpty(const ProbeRequest &probe) { return probe.ssid[0] == '\0'; }
+
+static void freeProbeFrame(ProbeRequest &probe) {
+    if (probe.frame != nullptr) {
+        free(probe.frame);
+        probe.frame = nullptr;
+    }
+    probe.frame_len = 0;
+}
+
+// Macro definitions for state access
+#define activePortalChannel (state().activePortalChannel)
+#define deauthCount (state().deauthCount)
+#define lastDeauthReset (state().lastDeauthReset)
+#define lastBeaconBurst (state().lastBeaconBurst)
+#define beaconsInBurst (state().beaconsInBurst)
+#define karmaQueue (state().karmaQueue)
+#define karmaWriterHandle (state().karmaWriterHandle)
+#define storageAvailable (state().storageAvailable)
+#define karmaMode (state().karmaMode)
+#define karmaPaused (state().karmaPaused)
+#define activePortal (state().activePortal)
+#define lastPortalHeartbeat (state().lastPortalHeartbeat)
+#define handshakeCaptureEnabled (state().handshakeCaptureEnabled)
+#define handshakeBuffer (state().handshakeBuffer)
+#define clientBehaviors (state().clientBehaviors)
+#define broadcastAttack (state().broadcastAttack)
+#define last_time (state().last_time)
+#define last_ChannelChange (state().last_ChannelChange)
+#define lastFrequencyReset (state().lastFrequencyReset)
+#define lastBeaconTime (state().lastBeaconTime)
+#define lastMACRotation (state().lastMACRotation)
+#define channl (state().channl)
+#define flOpen (state().flOpen)
+#define is_LittleFS (state().is_LittleFS)
+#define pkt_counter (state().pkt_counter)
+#define auto_hopping (state().auto_hopping)
+#define hop_interval (state().hop_interval)
+#define _probe_file (state().probe_file)
+#define macRingBuffer (state().macRingBuffer)
+#define filen (state().filen)
+#define probeBuffer (state().probeBuffer)
+#define probeBufferIndex (state().probeBufferIndex)
+#define bufferWrapped (state().bufferWrapped)
+#define karmaConfig (state().karmaConfig)
+#define attackConfig (state().attackConfig)
+#define screenNeedsRedraw (state().screenNeedsRedraw)
+#define pmkidCaptured (state().pmkidCaptured)
+#define assocBlocked (state().assocBlocked)
+#define channelActivity (state().channelActivity)
+#define currentPriorityChannel (state().currentPriorityChannel)
+#define lastDeauthTime (state().lastDeauthTime)
+#define lastSaveTime (state().lastSaveTime)
+#define totalProbes (state().totalProbes)
+#define uniqueClients (state().uniqueClients)
+#define karmaResponsesSent (state().karmaResponsesSent)
+#define deauthPacketsSent (state().deauthPacketsSent)
+#define autoPortalsLaunched (state().autoPortalsLaunched)
+#define cloneAttacksLaunched (state().cloneAttacksLaunched)
+#define beaconsSent (state().beaconsSent)
+#define isPortalActive (state().isPortalActive)
+#define restartKarmaAfterPortal (state().restartKarmaAfterPortal)
+#define networkHistory (state().networkHistory)
+#define responseQueue (state().responseQueue)
+#define activeNetworks (state().activeNetworks)
+#define macBlacklist (state().macBlacklist)
+#define currentBSSID (state().currentBSSID)
+#define portalTemplates (state().portalTemplates)
+#define selectedTemplate (state().selectedTemplate)
+#define templateSelected (state().templateSelected)
+#define ssidFrequency (state().ssidFrequency)
+#define popularSSIDs (state().popularSSIDs)
+#define pendingPortals (state().pendingPortals)
+#define targetRateLimit (state().targetRateLimit)
+#define lastRateLimitReset (state().lastRateLimitReset)
+#define lastTemplateRotation (state().lastTemplateRotation)
+#define templateRotationIndex (state().templateRotationIndex)
+
+// ============================================================
+// SSIDDatabase Implementation
 // ============================================================
 
 String SSIDDatabase::currentFilename = "/ssid_list.txt";
@@ -602,317 +924,6 @@ void ActiveBroadcastAttack::launchAttackForResponse(const String &ssid, const St
         updateBackoffCounter(ssid, true);
     }
 }
-
-// ============================================================
-// State Management
-// ============================================================
-
-static bool isApModeActive() {
-    wifi_mode_t mode = WiFi.getMode();
-    return mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA;
-}
-
-static bool ensureKarmaApInterface(uint8_t channel) {
-    if (channel < 1 || channel > 14) channel = 1;
-
-    if (!isApModeActive()) {
-        if (!WiFi.mode(WIFI_MODE_AP)) {
-            Serial.println("[KARMA] Failed to switch WiFi to AP mode");
-            return false;
-        }
-        if (!WiFi.softAP("BruceKarma", "", channel, 1, 4, false)) {
-            Serial.println("[KARMA] Failed to start AP interface");
-            return false;
-        }
-    }
-
-    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    return true;
-}
-
-static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
-    if (buffer == nullptr || len <= 0) return false;
-    if (!ensureKarmaApInterface(channel)) return false;
-
-    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
-    if (err != ESP_OK) {
-        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
-        return false;
-    }
-
-    return true;
-}
-
-static void copyStringToBuffer(char *dest, size_t destSize, const String &src) {
-    if (destSize == 0) return;
-    strncpy(dest, src.c_str(), destSize - 1);
-    dest[destSize - 1] = '\0';
-}
-
-static bool probeSSIDEquals(const ProbeRequest &probe, const char *value) {
-    return strcmp(probe.ssid, value) == 0;
-}
-
-static bool probeSSIDEmpty(const ProbeRequest &probe) { return probe.ssid[0] == '\0'; }
-
-static void freeProbeFrame(ProbeRequest &probe) {
-    if (probe.frame != nullptr) {
-        free(probe.frame);
-        probe.frame = nullptr;
-    }
-    probe.frame_len = 0;
-}
-
-static bool ensureKarmaState() {
-    if (gKarmaState != nullptr) return true;
-    gKarmaState = new (std::nothrow) KarmaRuntimeState();
-    return gKarmaState != nullptr;
-}
-
-static std::vector<PendingPortal> &pendingPortalsRef() { return state().pendingPortals; }
-static PortalTemplate &selectedTemplateRef() { return state().selectedTemplate; }
-static AttackConfig &attackConfigRef() { return state().attackConfig; }
-static bool templateSelectedRef() { return state().templateSelected; }
-
-static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize) {
-    auto &queue = pendingPortalsRef();
-
-    for (auto &existing : queue) {
-        if (!samePendingPortal(existing, portal)) continue;
-        existing.timestamp = portal.timestamp;
-        existing.priority = std::max(existing.priority, portal.priority);
-        existing.probeCount = std::max(existing.probeCount, portal.probeCount);
-        if (portal.tier > existing.tier) existing.tier = portal.tier;
-        existing.duration = std::max(existing.duration, portal.duration);
-        existing.verifyPassword = portal.verifyPassword;
-        existing.isDefaultTemplate = portal.isDefaultTemplate;
-        if (!portal.templateName.isEmpty()) existing.templateName = portal.templateName;
-        if (!portal.templateFile.isEmpty()) existing.templateFile = portal.templateFile;
-        if (portal.isHighValueTarget) existing.isHighValueTarget = true;
-        return true;
-    }
-
-    if (queue.size() >= MAX_PENDING_PORTALS) {
-        auto worstIt =
-            std::min_element(queue.begin(), queue.end(), [](const PendingPortal &a, const PendingPortal &b) {
-                if (a.priority != b.priority) return a.priority < b.priority;
-                return a.timestamp < b.timestamp;
-            });
-        if (worstIt == queue.end()) return false;
-        if (portal.priority < worstIt->priority) return false;
-        if (portal.priority == worstIt->priority && portal.timestamp <= worstIt->timestamp) return false;
-        queue.erase(worstIt);
-    }
-
-    if (prioritize) queue.insert(queue.begin(), portal);
-    else queue.push_back(portal);
-    return true;
-}
-
-// ============================================================
-// Karma Runtime State
-// ============================================================
-
-struct KarmaRuntimeState {
-    uint8_t activePortalChannel = 0;
-    unsigned long deauthCount[14] = {0};
-    unsigned long lastDeauthReset = 0;
-    unsigned long lastBeaconBurst = 0;
-    uint8_t beaconsInBurst = 0;
-    QueueHandle_t karmaQueue = nullptr;
-    TaskHandle_t karmaWriterHandle = nullptr;
-    bool storageAvailable = true;
-    KarmaMode karmaMode = MODE_PASSIVE;
-    bool karmaPaused = false;
-    BackgroundPortal *activePortal = nullptr;
-    unsigned long lastPortalHeartbeat = 0;
-    bool handshakeCaptureEnabled = false;
-    std::vector<HandshakeCapture> handshakeBuffer;
-    std::map<uint32_t, ClientBehavior> clientBehaviors;
-    ActiveBroadcastAttack broadcastAttack;
-    unsigned long last_time = 0;
-    unsigned long last_ChannelChange = 0;
-    unsigned long lastFrequencyReset = 0;
-    unsigned long lastBeaconTime = 0;
-    unsigned long lastMACRotation = 0;
-    uint8_t channl = 0;
-    bool flOpen = false;
-    bool is_LittleFS = true;
-    uint32_t pkt_counter = 0;
-    bool auto_hopping = true;
-    uint16_t hop_interval = DEFAULT_HOP_INTERVAL;
-    File probe_file;
-    RingbufHandle_t macRingBuffer = nullptr;
-    String filen = "";
-    std::vector<ProbeRequest> probeBuffer;
-    uint16_t probeBufferIndex = 0;
-    bool bufferWrapped = false;
-    KarmaConfig karmaConfig = {};
-    AttackConfig attackConfig = {};
-    bool screenNeedsRedraw = false;
-    uint32_t pmkidCaptured = 0;
-    uint32_t assocBlocked = 0;
-    uint8_t channelActivity[14] = {0};
-    uint8_t currentPriorityChannel = 0;
-    unsigned long lastDeauthTime = 0;
-    unsigned long lastSaveTime = 0;
-    uint32_t totalProbes = 0;
-    uint32_t uniqueClients = 0;
-    uint32_t karmaResponsesSent = 0;
-    uint32_t deauthPacketsSent = 0;
-    uint32_t autoPortalsLaunched = 0;
-    uint32_t cloneAttacksLaunched = 0;
-    uint32_t beaconsSent = 0;
-    bool isPortalActive = false;
-    bool restartKarmaAfterPortal = false;
-    std::map<String, NetworkHistory> networkHistory;
-    std::queue<ProbeResponseTask> responseQueue;
-    std::vector<ActiveNetwork> activeNetworks;
-    std::map<String, uint32_t> macBlacklist;
-    uint8_t currentBSSID[6] = {0};
-    std::vector<PortalTemplate> portalTemplates;
-    PortalTemplate selectedTemplate;
-    bool templateSelected = false;
-    std::map<String, uint16_t> ssidFrequency;
-    std::vector<std::pair<String, uint16_t>> popularSSIDs;
-    std::vector<PendingPortal> pendingPortals;
-    std::map<String, uint8_t> targetRateLimit;
-    unsigned long lastRateLimitReset = 0;
-    unsigned long lastTemplateRotation = 0;
-    size_t templateRotationIndex = 0;
-    bool isCoordinator = false;
-
-    KarmaRuntimeState() {
-        probeBuffer.resize(MAX_PROBE_BUFFER);
-        handshakeBuffer.reserve(20);
-        activeNetworks.reserve(MAX_CONCURRENT_SSIDS);
-        portalTemplates.reserve(MAX_PORTAL_TEMPLATES);
-        popularSSIDs.reserve(MAX_POPULAR_SSIDS);
-        pendingPortals.reserve(MAX_PENDING_PORTALS);
-    }
-
-    ~KarmaRuntimeState() {
-        for (auto &probe : probeBuffer) freeProbeFrame(probe);
-        if (activePortal != nullptr) {
-            delete activePortal->instance;
-            delete activePortal;
-            activePortal = nullptr;
-        }
-        if (macRingBuffer) {
-            vRingbufferDelete(macRingBuffer);
-            macRingBuffer = nullptr;
-        }
-        if (karmaQueue) {
-            vQueueDelete(karmaQueue);
-            karmaQueue = nullptr;
-        }
-        if (probe_file) probe_file.close();
-    }
-};
-
-static KarmaRuntimeState *gKarmaState = nullptr;
-
-static KarmaRuntimeState &state() {
-    if (!ensureKarmaState()) {
-        Serial.println("[KARMA] Failed to allocate runtime state");
-        while (true) delay(1000);
-    }
-    return *gKarmaState;
-}
-
-static void releaseKarmaState() {
-    delete gKarmaState;
-    gKarmaState = nullptr;
-}
-
-static size_t activePortalCount() { return state().activePortal != nullptr ? 1U : 0U; }
-
-static bool samePendingPortal(const PendingPortal &a, const PendingPortal &b) {
-    return a.ssid == b.ssid && a.channel == b.channel && a.targetMAC == b.targetMAC &&
-           a.templateFile == b.templateFile && a.isCloneAttack == b.isCloneAttack;
-}
-
-static void destroyActivePortal() {
-    if (state().activePortal == nullptr) return;
-    if (state().activePortal->instance != nullptr) {
-        delete state().activePortal->instance;
-        state().activePortal->instance = nullptr;
-    }
-    delete state().activePortal;
-    state().activePortal = nullptr;
-    state().activePortalChannel = 0;
-    state().isPortalActive = false;
-    state().restartKarmaAfterPortal = true;
-    state().auto_hopping = true;
-}
-
-// Macro definitions for state access
-#define activePortalChannel (state().activePortalChannel)
-#define deauthCount (state().deauthCount)
-#define lastDeauthReset (state().lastDeauthReset)
-#define lastBeaconBurst (state().lastBeaconBurst)
-#define beaconsInBurst (state().beaconsInBurst)
-#define karmaQueue (state().karmaQueue)
-#define karmaWriterHandle (state().karmaWriterHandle)
-#define storageAvailable (state().storageAvailable)
-#define karmaMode (state().karmaMode)
-#define karmaPaused (state().karmaPaused)
-#define activePortal (state().activePortal)
-#define lastPortalHeartbeat (state().lastPortalHeartbeat)
-#define handshakeCaptureEnabled (state().handshakeCaptureEnabled)
-#define handshakeBuffer (state().handshakeBuffer)
-#define clientBehaviors (state().clientBehaviors)
-#define broadcastAttack (state().broadcastAttack)
-#define last_time (state().last_time)
-#define last_ChannelChange (state().last_ChannelChange)
-#define lastFrequencyReset (state().lastFrequencyReset)
-#define lastBeaconTime (state().lastBeaconTime)
-#define lastMACRotation (state().lastMACRotation)
-#define channl (state().channl)
-#define flOpen (state().flOpen)
-#define is_LittleFS (state().is_LittleFS)
-#define pkt_counter (state().pkt_counter)
-#define auto_hopping (state().auto_hopping)
-#define hop_interval (state().hop_interval)
-#define _probe_file (state().probe_file)
-#define macRingBuffer (state().macRingBuffer)
-#define filen (state().filen)
-#define probeBuffer (state().probeBuffer)
-#define probeBufferIndex (state().probeBufferIndex)
-#define bufferWrapped (state().bufferWrapped)
-#define karmaConfig (state().karmaConfig)
-#define attackConfig (state().attackConfig)
-#define screenNeedsRedraw (state().screenNeedsRedraw)
-#define pmkidCaptured (state().pmkidCaptured)
-#define assocBlocked (state().assocBlocked)
-#define channelActivity (state().channelActivity)
-#define currentPriorityChannel (state().currentPriorityChannel)
-#define lastDeauthTime (state().lastDeauthTime)
-#define lastSaveTime (state().lastSaveTime)
-#define totalProbes (state().totalProbes)
-#define uniqueClients (state().uniqueClients)
-#define karmaResponsesSent (state().karmaResponsesSent)
-#define deauthPacketsSent (state().deauthPacketsSent)
-#define autoPortalsLaunched (state().autoPortalsLaunched)
-#define cloneAttacksLaunched (state().cloneAttacksLaunched)
-#define beaconsSent (state().beaconsSent)
-#define isPortalActive (state().isPortalActive)
-#define restartKarmaAfterPortal (state().restartKarmaAfterPortal)
-#define networkHistory (state().networkHistory)
-#define responseQueue (state().responseQueue)
-#define activeNetworks (state().activeNetworks)
-#define macBlacklist (state().macBlacklist)
-#define currentBSSID (state().currentBSSID)
-#define portalTemplates (state().portalTemplates)
-#define selectedTemplate (state().selectedTemplate)
-#define templateSelected (state().templateSelected)
-#define ssidFrequency (state().ssidFrequency)
-#define popularSSIDs (state().popularSSIDs)
-#define pendingPortals (state().pendingPortals)
-#define targetRateLimit (state().targetRateLimit)
-#define lastRateLimitReset (state().lastRateLimitReset)
-#define lastTemplateRotation (state().lastTemplateRotation)
-#define templateRotationIndex (state().templateRotationIndex)
 
 // ============================================================
 // Display Functions
@@ -1730,7 +1741,7 @@ void updateChannelActivity(uint8_t channel) {
     if (channel >= 1 && channel <= 14) {
         channelActivity[channel - 1]++;
         // Decay old activity
-        if (channelActivity[channel - 1] > 1000) {
+        if (channelActivity[channel - 1] > 100) {
             for (int i = 0; i < 14; i++) {
                 if (i != channel - 1) channelActivity[i] *= 0.9;
             }
