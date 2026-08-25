@@ -42,6 +42,23 @@ void handleBroadcastResponse(const String &ssid, const String &mac);
 void updateChannelActivity(uint8_t channel);
 void updateSSIDFrequency(const String &ssid);
 
+static bool isApModeActive();
+static bool ensureKarmaApInterface(uint8_t channel);
+static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel);
+static void copyStringToBuffer(char *dest, size_t destSize, const String &src);
+static bool probeSSIDEquals(const ProbeRequest &probe, const char *value);
+static bool probeSSIDEmpty(const ProbeRequest &probe);
+static void freeProbeFrame(ProbeRequest &probe);
+static bool ensureKarmaState();
+static std::vector<PendingPortal> &pendingPortalsRef();
+static PortalTemplate &selectedTemplateRef();
+static AttackConfig &attackConfigRef();
+static bool templateSelectedRef();
+static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize = false);
+
+// SyncState for multi-device sync
+SyncState syncState;
+
 // Constants
 #define FILENAME "probe_capture_"
 #define SAVE_INTERVAL 10
@@ -327,6 +344,7 @@ void SSIDDatabase::clearCache() {
 
 bool SSIDDatabase::isLoaded() { return totalCount > 0 || !lruCache.empty(); }
 String SSIDDatabase::getSourceFile() { return currentFilename; }
+size_t SSIDDatabase::getCacheSize() { return lruCache.size(); }
 
 // ============================================================
 // ActiveBroadcastAttack Implementation
@@ -413,7 +431,7 @@ void ActiveBroadcastAttack::updateBackoffCounter(const String &ssid, bool succes
         if (it == backoffCounters.end()) {
             backoffCounters[ssid] = 1;
         } else {
-            it->second = std::min(it->second + 1, (uint8_t)MAX_BACKOFF_LEVEL);
+            it->second = std::min((uint8_t)(it->second + 1), (uint8_t)MAX_BACKOFF_LEVEL);
         }
     }
 }
@@ -645,12 +663,51 @@ static void freeProbeFrame(ProbeRequest &probe) {
     probe.frame_len = 0;
 }
 
-static bool ensureKarmaState();
-static std::vector<PendingPortal> &pendingPortalsRef();
-static PortalTemplate &selectedTemplateRef();
-static AttackConfig &attackConfigRef();
-static bool templateSelectedRef();
-static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize = false);
+static bool ensureKarmaState() {
+    if (gKarmaState != nullptr) return true;
+    gKarmaState = new (std::nothrow) KarmaRuntimeState();
+    return gKarmaState != nullptr;
+}
+
+static std::vector<PendingPortal> &pendingPortalsRef() { return state().pendingPortals; }
+static PortalTemplate &selectedTemplateRef() { return state().selectedTemplate; }
+static AttackConfig &attackConfigRef() { return state().attackConfig; }
+static bool templateSelectedRef() { return state().templateSelected; }
+
+static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize) {
+    auto &queue = pendingPortalsRef();
+
+    for (auto &existing : queue) {
+        if (!samePendingPortal(existing, portal)) continue;
+        existing.timestamp = portal.timestamp;
+        existing.priority = std::max(existing.priority, portal.priority);
+        existing.probeCount = std::max(existing.probeCount, portal.probeCount);
+        if (portal.tier > existing.tier) existing.tier = portal.tier;
+        existing.duration = std::max(existing.duration, portal.duration);
+        existing.verifyPassword = portal.verifyPassword;
+        existing.isDefaultTemplate = portal.isDefaultTemplate;
+        if (!portal.templateName.isEmpty()) existing.templateName = portal.templateName;
+        if (!portal.templateFile.isEmpty()) existing.templateFile = portal.templateFile;
+        if (portal.isHighValueTarget) existing.isHighValueTarget = true;
+        return true;
+    }
+
+    if (queue.size() >= MAX_PENDING_PORTALS) {
+        auto worstIt =
+            std::min_element(queue.begin(), queue.end(), [](const PendingPortal &a, const PendingPortal &b) {
+                if (a.priority != b.priority) return a.priority < b.priority;
+                return a.timestamp < b.timestamp;
+            });
+        if (worstIt == queue.end()) return false;
+        if (portal.priority < worstIt->priority) return false;
+        if (portal.priority == worstIt->priority && portal.timestamp <= worstIt->timestamp) return false;
+        queue.erase(worstIt);
+    }
+
+    if (prioritize) queue.insert(queue.begin(), portal);
+    else queue.push_back(portal);
+    return true;
+}
 
 // ============================================================
 // Karma Runtime State
@@ -755,12 +812,6 @@ struct KarmaRuntimeState {
 
 static KarmaRuntimeState *gKarmaState = nullptr;
 
-static bool ensureKarmaState() {
-    if (gKarmaState != nullptr) return true;
-    gKarmaState = new (std::nothrow) KarmaRuntimeState();
-    return gKarmaState != nullptr;
-}
-
 static KarmaRuntimeState &state() {
     if (!ensureKarmaState()) {
         Serial.println("[KARMA] Failed to allocate runtime state");
@@ -774,51 +825,11 @@ static void releaseKarmaState() {
     gKarmaState = nullptr;
 }
 
-static std::vector<PendingPortal> &pendingPortalsRef() { return state().pendingPortals; }
-static PortalTemplate &selectedTemplateRef() { return state().selectedTemplate; }
-static AttackConfig &attackConfigRef() { return state().attackConfig; }
-static bool templateSelectedRef() { return state().templateSelected; }
-
 static size_t activePortalCount() { return state().activePortal != nullptr ? 1U : 0U; }
 
 static bool samePendingPortal(const PendingPortal &a, const PendingPortal &b) {
     return a.ssid == b.ssid && a.channel == b.channel && a.targetMAC == b.targetMAC &&
            a.templateFile == b.templateFile && a.isCloneAttack == b.isCloneAttack;
-}
-
-static bool enqueuePendingPortal(const PendingPortal &portal, bool prioritize) {
-    auto &queue = pendingPortalsRef();
-
-    for (auto &existing : queue) {
-        if (!samePendingPortal(existing, portal)) continue;
-        existing.timestamp = portal.timestamp;
-        existing.priority = std::max(existing.priority, portal.priority);
-        existing.probeCount = std::max(existing.probeCount, portal.probeCount);
-        if (portal.tier > existing.tier) existing.tier = portal.tier;
-        existing.duration = std::max(existing.duration, portal.duration);
-        existing.verifyPassword = portal.verifyPassword;
-        existing.isDefaultTemplate = portal.isDefaultTemplate;
-        if (!portal.templateName.isEmpty()) existing.templateName = portal.templateName;
-        if (!portal.templateFile.isEmpty()) existing.templateFile = portal.templateFile;
-        if (portal.isHighValueTarget) existing.isHighValueTarget = true;
-        return true;
-    }
-
-    if (queue.size() >= MAX_PENDING_PORTALS) {
-        auto worstIt =
-            std::min_element(queue.begin(), queue.end(), [](const PendingPortal &a, const PendingPortal &b) {
-                if (a.priority != b.priority) return a.priority < b.priority;
-                return a.timestamp < b.timestamp;
-            });
-        if (worstIt == queue.end()) return false;
-        if (portal.priority < worstIt->priority) return false;
-        if (portal.priority == worstIt->priority && portal.timestamp <= worstIt->timestamp) return false;
-        queue.erase(worstIt);
-    }
-
-    if (prioritize) queue.insert(queue.begin(), portal);
-    else queue.push_back(portal);
-    return true;
 }
 
 static void destroyActivePortal() {
@@ -1664,9 +1675,9 @@ AttackTier determineAttackTier(uint8_t priority) {
     return TIER_NONE;
 }
 
-uint16_t getPortalDuration(AttackTier tier) {
+uint32_t getPortalDuration(AttackTier tier) {
     switch (tier) {
-        case TIER_CLONE: return (uint16_t)attackConfig.cloneDuration;
+        case TIER_CLONE: return attackConfig.cloneDuration;
         case TIER_HIGH: return attackConfig.highTierDuration;
         case TIER_MEDIUM: return attackConfig.mediumTierDuration;
         case TIER_FAST: return attackConfig.fastTierDuration;
@@ -1706,8 +1717,8 @@ void handlePermanentTarget(ClientBehavior &client) {
         
         enqueuePendingPortal(portal, true);
         
-        Serial.printf("[KARMA] High-value permanent target: %s (FP: %u, Rate: %.1f%%)\n",
-                     portal.ssid.c_str(), client.fingerprint, client.successRate);
+        Serial.printf("[KARMA] High-value permanent target: %s (FP: %lu, Rate: %.1f%%)\n",
+                     portal.ssid.c_str(), (unsigned long)client.fingerprint, client.successRate);
     }
 }
 
@@ -1718,6 +1729,7 @@ void handlePermanentTarget(ClientBehavior &client) {
 void updateChannelActivity(uint8_t channel) {
     if (channel >= 1 && channel <= 14) {
         channelActivity[channel - 1]++;
+        // Decay old activity
         if (channelActivity[channel - 1] > 1000) {
             for (int i = 0; i < 14; i++) {
                 if (i != channel - 1) channelActivity[i] *= 0.9;
@@ -1847,7 +1859,7 @@ void checkCloneAttackOpportunities() {
                 portal.verifyPassword = selectedTemplate.verifyPassword;
                 portal.priority = 100;
                 portal.tier = TIER_CLONE;
-                portal.duration = (uint16_t)attackConfig.cloneDuration;
+                portal.duration = attackConfig.cloneDuration;
                 portal.isCloneAttack = true;
                 portal.probeCount = ssidPair.second;
                 portal.clientFingerprint = 0;
@@ -2159,7 +2171,7 @@ void checkPortals() {
 
         if (activePortal->instance->hasCredentials()) {
             String password = activePortal->instance->getCapturedPassword();
-            String identifier = activePortal->instance->getCapturedIdentifier();
+            String identifier = ""; // EvilPortal doesn't have getCapturedIdentifier
             activePortal->hasCreds = true;
             activePortal->capturedPassword = password;
             activePortal->capturedIdentifier = identifier;
@@ -2183,7 +2195,7 @@ void checkPortals() {
         }
 
         if (activePortal->targetEngaged) {
-            unsigned long maxDuration = attackConfig.extendedDuration;
+            uint32_t maxDuration = attackConfig.extendedDuration;
             if (activePortal->pageViewCount > 10) {
                 maxDuration = attackConfig.extendedDuration * 2;
             }
@@ -2280,7 +2292,7 @@ void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &t
 void launchTieredEvilPortal(PendingPortal &portal) {
     Serial.printf("[TIER-%d] Launching background portal for %s\n", portal.tier, portal.ssid.c_str());
     
-    if (attackConfig.enableTemplateA/BTesting) {
+    if (attackConfig.enableTemplateABTesting) {
         unsigned long now = millis();
         if (now - lastTemplateRotation > TEMPLATE_ROTATION_INTERVAL) {
             templateRotationIndex = (templateRotationIndex + 1) % portalTemplates.size();
@@ -2767,7 +2779,7 @@ void probe_sniffer(void *buf, wifi_promiscuous_pkt_type_t type) {
     probe.isPMKID = isPMKIDValid(frame, pkt->rx_ctrl.sig_len);
 
     if (hasRSNInfo || probe.isPMKID) {
-        probe.frame_len = std::min(pkt->rx_ctrl.sig_len, (uint16_t)PROBE_FRAME_CAPTURE_LEN);
+        probe.frame_len = std::min((uint16_t)pkt->rx_ctrl.sig_len, (uint16_t)PROBE_FRAME_CAPTURE_LEN);
         probe.frame = (uint8_t *)malloc(probe.frame_len);
         if (probe.frame != nullptr) memcpy(probe.frame, pkt->payload, probe.frame_len);
         else probe.frame_len = 0;
@@ -3332,7 +3344,7 @@ void karma_setup() {
     attackConfig.maxCloneNetworks = 3;
     attackConfig.baseDuration = 15000;
     attackConfig.extendedDuration = 180000;
-    attackConfig.enableTemplateA/BTesting = true;
+    attackConfig.enableTemplateABTesting = true;
     attackConfig.templateRotationInterval = 5;
     attackConfig.enableContextualTemplate = true;
 
@@ -3656,7 +3668,7 @@ void karma_setup() {
                               tft.print("Total SSIDs: " + String(total));
                               tft.setCursor(10, y);
                               y += 15;
-                              tft.print("Cached: " + String(SSIDDatabase::lruCache.size()) + "/" + String(total));
+                              tft.print("Cached: " + String(SSIDDatabase::getCacheSize()) + "/" + String(total));
                               tft.setCursor(10, y);
                               y += 15;
                               tft.print("Progress: " + broadcastAttack.getProgressString());
@@ -3667,7 +3679,7 @@ void karma_setup() {
                          {"Warm Cache", [&]() {
                               std::vector<String> frequent = {"Google", "AndroidAP", "iPhone", "NETGEAR"};
                               SSIDDatabase::warmCache(frequent);
-                              displayTextLine("Cache warmed: " + String(SSIDDatabase::lruCache.size()));
+                              displayTextLine("Cache warmed: " + String(SSIDDatabase::getCacheSize()));
                               delay(1000);
                           }},
                          {"Set Speed", [&]() {
