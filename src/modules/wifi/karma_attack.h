@@ -1,4 +1,10 @@
-// karma_attack.h
+/*
+  Bruce Enhanced Karma attack module v2
+  Author: Ninja-Jr. (@Ninja-jr)
+  Version: 2.0
+  Last updated: 27/08/2026
+*/
+
 #ifndef KARMA_ATTACK_H
 #define KARMA_ATTACK_H
 
@@ -11,10 +17,7 @@
 #include <queue>
 #include <vector>
 
-// ============================================================
-// Attack Prioritization Tiers
-// ============================================================
-
+// Attack prioritization tiers
 enum AttackTier {
     TIER_NONE = 0,
     TIER_FAST = 1,   // Quick opportunistic attacks
