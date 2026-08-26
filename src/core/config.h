@@ -9,6 +9,12 @@
 #include <set>
 #include <vector>
 
+// Most panels want the framebuffer inverted; boards whose panel does not
+// (e.g. the LilyGO T4 ILI9341) can override this default from their build flags.
+#ifndef DEFAULT_COLOR_INVERTED
+#define DEFAULT_COLOR_INVERTED 1
+#endif
+
 enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSWORD = 2, SAVE_LENGTH = 3 };
 
 class BruceConfig : public BruceTheme {
@@ -86,7 +92,7 @@ public:
     String wigleBasicToken = "";
     String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
     int devMode = 0;
-    int colorInverted = 1;
+    int colorInverted = DEFAULT_COLOR_INVERTED;
     int badUSBBLEKeyboardLayout = 0;
     uint16_t badUSBBLEKeyDelay = 10;
     bool badUSBBLEShowOutput = true;

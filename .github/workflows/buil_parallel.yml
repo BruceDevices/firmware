@@ -74,6 +74,7 @@ jobs:
           - { env: "lilygo-t-display-s3-touch-mmc",   family: "ESP32-S3",}
           - { env: "lilygo-t-display-S3-pro",         family: "ESP32-S3",}
           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
+          - { env: "lilygo-t4",                       family: "ESP32",}
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "elecrow-24B",                     family: "ESP32",}

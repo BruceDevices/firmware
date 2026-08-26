@@ -40,6 +40,8 @@
 #include "../lilygo-t-display-s3-pro/pins_arduino.h"
 #elif TTGO
 #include "../lilygo-t-display-ttgo/pins_arduino.h"
+#elif LILYGO_T4
+#include "../lilygo-t4/pins_arduino.h"
 #elif MARAUDER_TOUCH
 #include "../marauder-touch/pins_arduino.h"
 #elif MARAUDER_MINI
