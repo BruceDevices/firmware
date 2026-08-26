@@ -159,6 +159,60 @@ int getWiFiBand(int channel) {
     return BAND_2_4GHZ;
 }
 
+// =============================================================================
+// Deauther-Specific Channel Functions
+// =============================================================================
+
+std::vector<int> buildChannelListFromAPs(const std::vector<APInfo> &aps) {
+    std::vector<int> channels;
+    for (const auto &ap : aps) {
+        // Only include channels from supported bands
+        if (isBandSupported(ap.band)) {
+            channels.push_back(ap.channel);
+        }
+    }
+    return channels;
+}
+
+std::vector<int> buildDefaultChannelList() {
+    std::vector<int> channels;
+    
+    // Get supported bands
+    detectSupportedBands();
+    SupportedBands bands = getSupportedBands();
+    
+    if (bands.has2_4GHz) {
+        // 2.4GHz channels (1, 6, 11 are most common)
+        channels.push_back(1);
+        channels.push_back(6);
+        channels.push_back(11);
+        // Add more if needed
+        for (int ch = 2; ch <= 14; ch++) {
+            if (ch != 1 && ch != 6 && ch != 11) {
+                channels.push_back(ch);
+            }
+        }
+    }
+    
+    if (bands.has5GHz) {
+        // 5GHz channels (36, 40, 44, 48, 149, 153, 157, 161)
+        int fiveGHzChannels[] = {36, 40, 44, 48, 149, 153, 157, 161};
+        for (int ch : fiveGHzChannels) {
+            channels.push_back(ch);
+        }
+    }
+    
+    if (bands.has6GHz) {
+        // 6GHz channels
+        int sixGHzChannels[] = {1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217, 221, 225, 229, 233};
+        for (int ch : sixGHzChannels) {
+            channels.push_back(ch);
+        }
+    }
+    
+    return channels;
+}
+
 void cacheSameSSIDAPs() {
     sameSSID_APs.clear();
     String currentSSID = WiFi.SSID();
