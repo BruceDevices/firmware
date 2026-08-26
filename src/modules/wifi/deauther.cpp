@@ -44,41 +44,22 @@ static const int DEAUTH_REASON_COUNT = sizeof(DEAUTH_REASONS) / sizeof(DEAUTH_RE
 static const uint8_t DEAUTH_REASONS_5GHZ[] = {0x30, 0x31, 0x32, 0x33, 0x34, 0x07, 0x08, 0x0A, 0x0D, 0x0F};
 static const int DEAUTH_REASONS_5GHZ_COUNT = sizeof(DEAUTH_REASONS_5GHZ) / sizeof(DEAUTH_REASONS_5GHZ[0]);
 
-// Band type enum for cleaner code
-enum BandType {
-    BAND_2_4GHZ = 0,
-    BAND_5GHZ = 1,
-    BAND_6GHZ = 2
-};
-
-struct APInfo {
-    uint8_t bssid[6];
-    int channel;
-    int band;
-    bool is_5ghz;
-    int frequency;
-};
 static std::vector<APInfo> sameSSID_APs;
-
 static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
 static bool clientScanActive = false;
 
 // =============================================================================
-// Band Detection and Capability
+// Supported Bands - Global for the module
 // =============================================================================
-
-struct SupportedBands {
-    bool has2_4GHz = false;
-    bool has5GHz = false;
-    bool has6GHz = false;
-    int bandCount = 0;
-    std::vector<int> bandList; // 0=2.4, 1=5, 2=6
-};
 
 static SupportedBands g_supportedBands;
 
-static void detectSupportedBands() {
+// =============================================================================
+// Band Detection and Channel Building Functions
+// =============================================================================
+
+void detectSupportedBands() {
     // Reset
     g_supportedBands = SupportedBands();
     
@@ -90,7 +71,6 @@ static void detectSupportedBands() {
     }
     
     // Check 5GHz (channels 36-165)
-    // Try a typical 5GHz channel
     if (esp_wifi_set_channel(36, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
         g_supportedBands.has5GHz = true;
         g_supportedBands.bandList.push_back(BAND_5GHZ);
@@ -101,11 +81,9 @@ static void detectSupportedBands() {
         g_supportedBands.bandCount++;
     }
     
-    // Check 6GHz (channels 1-233, but typically 1-233 with 20MHz spacing)
-    // Try a typical 6GHz channel (like channel 1)
+    // Check 6GHz (channels 1-233)
     if (esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
-        // Verify it's actually 6GHz by checking if channel 1 is 6GHz
-        // This is a simplified check; real detection would need more
+        // Simplified 6GHz detection
         g_supportedBands.has6GHz = true;
         g_supportedBands.bandList.push_back(BAND_6GHZ);
         g_supportedBands.bandCount++;
@@ -119,7 +97,7 @@ static void detectSupportedBands() {
                   g_supportedBands.has6GHz, g_supportedBands.bandCount);
 }
 
-static bool isBandSupported(int band) {
+bool isBandSupported(int band) {
     switch (band) {
         case BAND_2_4GHZ: return g_supportedBands.has2_4GHz;
         case BAND_5GHZ: return g_supportedBands.has5GHz;
@@ -128,11 +106,20 @@ static bool isBandSupported(int band) {
     }
 }
 
-// =============================================================================
-// Channel List Building for Adaptive Hopping
-// =============================================================================
+SupportedBands getSupportedBands() {
+    return g_supportedBands;
+}
 
-static std::vector<int> buildChannelListFromAPs(const std::vector<APInfo> &aps) {
+String getBandName(int band) {
+    switch (band) {
+        case BAND_2_4GHZ: return "2.4GHz";
+        case BAND_5GHZ: return "5GHz";
+        case BAND_6GHZ: return "6GHz";
+        default: return "Unknown";
+    }
+}
+
+std::vector<int> buildChannelListFromAPs(const std::vector<APInfo> &aps) {
     std::vector<int> channels;
     for (const auto &ap : aps) {
         // Only include channels from supported bands
@@ -143,7 +130,7 @@ static std::vector<int> buildChannelListFromAPs(const std::vector<APInfo> &aps) 
     return channels;
 }
 
-static std::vector<int> buildDefaultChannelList() {
+std::vector<int> buildDefaultChannelList() {
     std::vector<int> channels;
     
     if (g_supportedBands.has2_4GHz) {
@@ -168,7 +155,7 @@ static std::vector<int> buildDefaultChannelList() {
     }
     
     if (g_supportedBands.has6GHz) {
-        // 6GHz channels (1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217, 221, 225, 229, 233)
+        // 6GHz channels
         int sixGHzChannels[] = {1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217, 221, 225, 229, 233};
         for (int ch : sixGHzChannels) {
             channels.push_back(ch);
@@ -284,7 +271,7 @@ bool macCompare(const uint8_t *mac1, const uint8_t *mac2) {
 int getWiFiBand(int channel) {
     if (channel >= 1 && channel <= 14) return BAND_2_4GHZ;
     else if (channel >= 36 && channel <= 165) return BAND_5GHZ;
-    else if (channel >= 1 && channel <= 233) return BAND_6GHZ; // Simplified 6GHz detection
+    else if (channel >= 1 && channel <= 233) return BAND_6GHZ;
     return BAND_2_4GHZ;
 }
 
@@ -673,6 +660,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     NextPress = false;
     delay(100);
 
+    // ADD THESE MISSING VARIABLES
+    int total_frames = 0;
+    uint32_t burst_counter = 0;
+
     // Use the adaptive deauth loop
     if (channelList.size() > 1) {
         // Multi-channel/band hopping
@@ -681,12 +672,10 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
         // Single channel - use original fast loop
         long tmp = millis();
         int cont = 0;
-        int total_frames = 0;
         uint8_t current_reason = 0;
         int reason_index = 0;
         int ap_index = 0;
         bool storm_active = false;
-        uint32_t burst_counter = 0;
         uint8_t consecutive_failures = 0;
 
         while (!check(EscPress)) {
