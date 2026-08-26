@@ -17,6 +17,22 @@ enum AttackTier {
     TIER_CLONE = 4   // Clone network attacks
 };
 
+// Band type enum for cleaner code
+enum BandType {
+    BAND_2_4GHZ = 0,
+    BAND_5GHZ = 1,
+    BAND_6GHZ = 2
+};
+
+// Structure to hold supported bands
+struct SupportedBands {
+    bool has2_4GHz = false;
+    bool has5GHz = false;
+    bool has6GHz = false;
+    int bandCount = 0;
+    std::vector<int> bandList; // 0=2.4, 1=5, 2=6
+};
+
 // Broadcast attack configuration
 struct BroadcastConfig {
     bool enableBroadcast = false;
@@ -355,7 +371,38 @@ enum KarmaMode {
     MODE_FULL = 2       // Both passive and broadcast
 };
 
-// Function prototypes
+// ============================================================================
+// Band Detection and Adaptive Functions
+// ============================================================================
+
+// Detect which bands the current hardware supports
+void detectSupportedBands();
+
+// Check if a specific band is supported
+bool isBandSupported(int band);
+
+// Get the list of supported bands
+SupportedBands getSupportedBands();
+
+// Get band name as string
+String getBandName(int band);
+
+// Build channel list for Karma based on supported bands
+std::vector<int> buildKarmaChannelList();
+
+// Karma-specific adaptive channel management
+void karmaAdaptiveHop();
+
+// Set Karma channel with validation
+void setKarmaChannel(uint8_t channel);
+
+// Check if a channel is valid for the current hardware
+bool isKarmaChannelValid(uint8_t channel);
+
+// ============================================================================
+// Existing Function Prototypes
+// ============================================================================
+
 void karma_setup();
 void clearProbes();
 void saveProbesToFile(FS &fs, bool compressed);
