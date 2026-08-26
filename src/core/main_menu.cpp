@@ -9,6 +9,7 @@ MainMenu::MainMenu() {
         &bleMenu,
         &rfMenu,
         &nrf24Menu,
+        &blueFishMenu,
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
@@ -43,27 +44,26 @@ void MainMenu::begin(void) {
     for (int i = 0; i < _totalItems; i++) {
         String itemName = _menuItems[i]->getName();
         if (find(l.begin(), l.end(), itemName) == l.end()) { // If menu item is not disabled
-            options.push_back(
-                {// selected lambda
-                 itemName,
-                 [this, i]() { _menuItems[i]->optionsMenu(); },
-                 false,                                  // selected = false
-                 [](void *menuItem, bool shouldRender) { // render lambda
-                     if (!shouldRender) return false;
-                     drawMainBorder(false);
+            options.push_back({                              // selected lambda
+                               itemName,
+                               [this, i]() { _menuItems[i]->optionsMenu(); },
+                               false,                                  // selected = false
+                               [](void *menuItem, bool shouldRender) { // render lambda
+                                   if (!shouldRender) return false;
+                                   drawMainBorder(false);
 
-                     MenuItemInterface *obj = static_cast<MenuItemInterface *>(menuItem);
-                     float scale = float((float)tftWidth / (float)240);
-                     if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
-                     obj->draw(scale);
+                                   MenuItemInterface *obj = static_cast<MenuItemInterface *>(menuItem);
+                                   float scale = float((float)tftWidth / (float)240);
+                                   if (bruceConfigPins.rotation & 0b01)
+                                       scale = float((float)tftHeight / (float)135);
+                                   obj->draw(scale);
 #if defined(HAS_TOUCH)
-                     TouchFooter();
+                                   TouchFooter();
 #endif
-                     return true;
-                 },
-                 _menuItems[i]
-                }
-            );
+                                   return true;
+                               },
+                               _menuItems[i]
+            });
         }
     }
     _currentIndex = loopOptions(options, MENU_TYPE_MAIN, "Main Menu", _currentIndex);

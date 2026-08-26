@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "badusb_commands.h"
+#include "bluefish_commands.h"
 #include "core/sd_functions.h"
 #include "crypto_commands.h"
 #include "gpio_commands.h"
@@ -35,6 +36,7 @@ SerialCli::SerialCli() { setup(); }
 void SerialCli::setup() {
     _cli.setOnError(cliErrorCallback);
 
+    createBlueFishCommands(&_cli);
     createCryptoCommands(&_cli);
     createGpioCommands(&_cli);
     createIrCommands(&_cli);
