@@ -14,10 +14,28 @@ struct WiFiState {
     wifi_mode_t wifi_mode = WIFI_MODE_NULL;
 };
 
+// Band type enum for cleaner code
+enum BandType {
+    BAND_2_4GHZ = 0,
+    BAND_5GHZ = 1,
+    BAND_6GHZ = 2
+};
+
+// Structure to hold supported bands
+struct SupportedBands {
+    bool has2_4GHz = false;
+    bool has5GHz = false;
+    bool has6GHz = false;
+    int bandCount = 0;
+    std::vector<int> bandList; // 0=2.4, 1=5, 2=6
+};
+
+// Main deauth functions
 void stationDeauth(Host host, const uint8_t *apBssid = nullptr);
 void deauthAll();
 void deauthTargetList(const std::vector<Host> &targets);
 
+// WiFi state management
 WiFiState saveWiFiState();
 void restoreWiFiState(const WiFiState &state);
 
@@ -44,5 +62,42 @@ void clientSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type);
 
 // Channel detection - shared with wifi_atks
 int getAPChannel(const uint8_t *target_bssid, bool *found = nullptr);
+
+// =============================================================================
+// NEW: Band Detection and Adaptive Functions
+// =============================================================================
+
+// Detect which bands the current hardware supports
+void detectSupportedBands();
+
+// Check if a specific band is supported
+bool isBandSupported(int band);
+
+// Get the list of supported bands
+SupportedBands getSupportedBands();
+
+// Build channel list from APs (for multi-band hopping)
+std::vector<int> buildChannelListFromAPs(const std::vector<APInfo> &aps);
+
+// Build default channel list based on supported bands
+std::vector<int> buildDefaultChannelList();
+
+// Get band name as string
+String getBandName(int band);
+
+// =============================================================================
+// NEW: APInfo structure (was previously in .cpp, now exposed for header)
+// =============================================================================
+
+struct APInfo {
+    uint8_t bssid[6];
+    int channel;
+    int band;
+    bool is_5ghz;
+    int frequency;
+};
+
+// Cache same SSID APs across bands
+void cacheSameSSIDAPs();
 
 #endif
