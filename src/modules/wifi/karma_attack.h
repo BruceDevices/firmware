@@ -1,5 +1,6 @@
 #ifndef KARMA_ATTACK_H
 #define KARMA_ATTACK_H
+
 #ifndef LITE_VERSION
 #include "evil_portal.h"
 #include <Arduino.h>
@@ -15,22 +16,6 @@ enum AttackTier {
     TIER_MEDIUM = 2, // Standard priority targets
     TIER_HIGH = 3,   // High-value targets
     TIER_CLONE = 4   // Clone network attacks
-};
-
-// Band type enum for cleaner code
-enum BandType {
-    BAND_2_4GHZ = 0,
-    BAND_5GHZ = 1,
-    BAND_6GHZ = 2
-};
-
-// Structure to hold supported bands
-struct SupportedBands {
-    bool has2_4GHz = false;
-    bool has5GHz = false;
-    bool has6GHz = false;
-    int bandCount = 0;
-    std::vector<int> bandList; // 0=2.4, 1=5, 2=6
 };
 
 // Broadcast attack configuration
@@ -382,7 +367,7 @@ void detectSupportedBands();
 bool isBandSupported(int band);
 
 // Get the list of supported bands
-SupportedBands getSupportedBands();
+struct SupportedBands getSupportedBands();
 
 // Get band name as string
 String getBandName(int band);
@@ -447,5 +432,5 @@ String getContextualTemplate(const String &ssid);
 void syncMultiDeviceState();
 void handlePermanentTarget(ClientBehavior &client);
 
-#endif
-#endif
+#endif // LITE_VERSION
+#endif // KARMA_ATTACK_H
