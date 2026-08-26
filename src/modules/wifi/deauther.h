@@ -1,4 +1,3 @@
-// deauther.h
 #ifndef WIFI_DEAUTHER_H
 #define WIFI_DEAUTHER_H
 
