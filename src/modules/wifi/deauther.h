@@ -4,6 +4,27 @@
 #include "scan_hosts.h"
 #include <vector>
 
+// Band type enum moved to shared header - keep only if karma_attack.h not included
+// But since both are included, we'll use the ones from karma_attack.h
+// Instead of redeclaring, we conditionally define if not already defined
+
+#ifndef BAND_TYPE_DEFINED
+#define BAND_TYPE_DEFINED
+enum BandType {
+    BAND_2_4GHZ = 0,
+    BAND_5GHZ = 1,
+    BAND_6GHZ = 2
+};
+
+struct SupportedBands {
+    bool has2_4GHz = false;
+    bool has5GHz = false;
+    bool has6GHz = false;
+    int bandCount = 0;
+    std::vector<int> bandList;
+};
+#endif
+
 struct WiFiState {
     bool was_connected = false;
     String ssid = "";
@@ -12,22 +33,6 @@ struct WiFiState {
     bool ap_active = false;
     String ap_ssid = "";
     wifi_mode_t wifi_mode = WIFI_MODE_NULL;
-};
-
-// Band type enum for cleaner code
-enum BandType {
-    BAND_2_4GHZ = 0,
-    BAND_5GHZ = 1,
-    BAND_6GHZ = 2
-};
-
-// Structure to hold supported bands
-struct SupportedBands {
-    bool has2_4GHz = false;
-    bool has5GHz = false;
-    bool has6GHz = false;
-    int bandCount = 0;
-    std::vector<int> bandList;
 };
 
 // AP Info structure
