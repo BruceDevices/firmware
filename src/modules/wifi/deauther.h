@@ -4,10 +4,6 @@
 #include "scan_hosts.h"
 #include <vector>
 
-// Band type enum moved to shared header - keep only if karma_attack.h not included
-// But since both are included, we'll use the ones from karma_attack.h
-// Instead of redeclaring, we conditionally define if not already defined
-
 #ifndef BAND_TYPE_DEFINED
 #define BAND_TYPE_DEFINED
 enum BandType {
