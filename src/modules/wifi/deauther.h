@@ -27,7 +27,16 @@ struct SupportedBands {
     bool has5GHz = false;
     bool has6GHz = false;
     int bandCount = 0;
-    std::vector<int> bandList; // 0=2.4, 1=5, 2=6
+    std::vector<int> bandList;
+};
+
+// AP Info structure
+struct APInfo {
+    uint8_t bssid[6];
+    int channel;
+    int band;
+    bool is_5ghz;
+    int frequency;
 };
 
 // Main deauth functions
@@ -64,7 +73,7 @@ void clientSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type);
 int getAPChannel(const uint8_t *target_bssid, bool *found = nullptr);
 
 // =============================================================================
-// NEW: Band Detection and Adaptive Functions
+// Band Detection and Adaptive Functions
 // =============================================================================
 
 // Detect which bands the current hardware supports
@@ -84,18 +93,6 @@ std::vector<int> buildDefaultChannelList();
 
 // Get band name as string
 String getBandName(int band);
-
-// =============================================================================
-// NEW: APInfo structure (was previously in .cpp, now exposed for header)
-// =============================================================================
-
-struct APInfo {
-    uint8_t bssid[6];
-    int channel;
-    int band;
-    bool is_5ghz;
-    int frequency;
-};
 
 // Cache same SSID APs across bands
 void cacheSameSSIDAPs();
