@@ -1533,75 +1533,17 @@ void sendProbeResponse(const String &ssid, const String &mac, uint8_t channel) {
 }
 
 // ============================================================
-// Band Detection and Adaptive Channel Management
+// KARMA-SPECIFIC CHANNEL FUNCTIONS
 // ============================================================
-
-static SupportedBands g_karmaSupportedBands;
-
-void detectSupportedBands() {
-    // Reset
-    g_karmaSupportedBands = SupportedBands();
-    
-    // Check 2.4GHz (channels 1-14)
-    if (esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
-        g_karmaSupportedBands.has2_4GHz = true;
-        g_karmaSupportedBands.bandList.push_back(BAND_2_4GHZ);
-        g_karmaSupportedBands.bandCount++;
-    }
-    
-    // Check 5GHz (channels 36-165)
-    if (esp_wifi_set_channel(36, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
-        g_karmaSupportedBands.has5GHz = true;
-        g_karmaSupportedBands.bandList.push_back(BAND_5GHZ);
-        g_karmaSupportedBands.bandCount++;
-    } else if (esp_wifi_set_channel(149, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
-        g_karmaSupportedBands.has5GHz = true;
-        g_karmaSupportedBands.bandList.push_back(BAND_5GHZ);
-        g_karmaSupportedBands.bandCount++;
-    }
-    
-    // Check 6GHz (channels 1-233)
-    if (esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) == ESP_OK) {
-        // Simplified 6GHz detection
-        g_karmaSupportedBands.has6GHz = true;
-        g_karmaSupportedBands.bandList.push_back(BAND_6GHZ);
-        g_karmaSupportedBands.bandCount++;
-    }
-    
-    // Restore to a safe channel
-    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-    
-    Serial.printf("[KARMA] Supported bands: 2.4:%d 5:%d 6:%d Count:%d\n",
-                  g_karmaSupportedBands.has2_4GHz, g_karmaSupportedBands.has5GHz,
-                  g_karmaSupportedBands.has6GHz, g_karmaSupportedBands.bandCount);
-}
-
-bool isBandSupported(int band) {
-    switch (band) {
-        case BAND_2_4GHZ: return g_karmaSupportedBands.has2_4GHz;
-        case BAND_5GHZ: return g_karmaSupportedBands.has5GHz;
-        case BAND_6GHZ: return g_karmaSupportedBands.has6GHz;
-        default: return false;
-    }
-}
-
-SupportedBands getSupportedBands() {
-    return g_karmaSupportedBands;
-}
-
-String getBandName(int band) {
-    switch (band) {
-        case BAND_2_4GHZ: return "2.4GHz";
-        case BAND_5GHZ: return "5GHz";
-        case BAND_6GHZ: return "6GHz";
-        default: return "Unknown";
-    }
-}
 
 std::vector<int> buildKarmaChannelList() {
     std::vector<int> channels;
     
-    if (g_karmaSupportedBands.has2_4GHz) {
+    // Detect bands and build channel list
+    detectSupportedBands();
+    SupportedBands bands = getSupportedBands();
+    
+    if (bands.has2_4GHz) {
         // 2.4GHz channels - prioritize 1, 6, 11
         channels.push_back(1);
         channels.push_back(6);
@@ -1614,7 +1556,7 @@ std::vector<int> buildKarmaChannelList() {
         }
     }
     
-    if (g_karmaSupportedBands.has5GHz) {
+    if (bands.has5GHz) {
         // 5GHz channels - common ones
         int fiveGHzChannels[] = {36, 40, 44, 48, 149, 153, 157, 161};
         for (int ch : fiveGHzChannels) {
@@ -1622,7 +1564,7 @@ std::vector<int> buildKarmaChannelList() {
         }
     }
     
-    if (g_karmaSupportedBands.has6GHz) {
+    if (bands.has6GHz) {
         // 6GHz channels - representative subset
         int sixGHzChannels[] = {1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 165, 169, 173, 177, 181, 185, 189, 193, 197, 201, 205, 209, 213, 217, 221, 225, 229, 233};
         for (int ch : sixGHzChannels) {
@@ -1647,7 +1589,6 @@ void karmaAdaptiveHop() {
     
     if (!initialized) {
         // Detect bands and build channel list
-        detectSupportedBands();
         channelList = buildKarmaChannelList();
         initialized = true;
         
