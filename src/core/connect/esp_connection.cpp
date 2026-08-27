@@ -1,4 +1,5 @@
-#if !defined(LITE_VERSION)
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
+#if !defined(LITE_VERSION) && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "esp_connection.h"
 #include "core/display.h"
 #include <WiFi.h>
@@ -212,4 +213,14 @@ void EspConnection::onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_st
 void EspConnection::onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
     if (instance) instance->onDataRecv(info->src_addr, incomingData, len);
 }
+#elif !defined(LITE_VERSION)
+// ESP32-P4 has no ESP-NOW: its Wi-Fi is provided by the ESP-Hosted co-processor,
+// which does not expose the esp_now_* API. Only the base ctor/dtor are defined so the
+// derived stub classes (FileSharing / EspSerialCmd) still link.
+#include "esp_connection.h"
+
+EspConnection *EspConnection::instance = nullptr;
+
+EspConnection::EspConnection() { setInstance(this); }
+EspConnection::~EspConnection() {}
 #endif

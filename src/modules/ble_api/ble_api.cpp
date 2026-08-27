@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION)
 #include "ble_api.hpp"
 #include <NimBLEDevice.h>
+#include "modules/ble/ble_p4_compat.h"
 #include <core/USBSerial/USBSerial.h>
 #include <globals.h>
 
