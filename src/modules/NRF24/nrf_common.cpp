@@ -1,10 +1,42 @@
 #include "nrf_common.h"
 #include "../../core/bus_HAL.h"
+#include "../../core/display.h"
 #include "../../core/mykeyboard.h"
 
 RF24 NRFradio(bruceConfigPins.NRF24_bus.io0, bruceConfigPins.NRF24_bus.cs);
 HardwareSerial NRFSerial = HardwareSerial(2); // Uses UART2 for External NRF's
 SPIClass *NRFSPI;
+
+NRF_BACK_ACTION nrf_checkBackButton() {
+#ifdef HAS_3_BUTTONS
+    if (PrevPress) {
+        const uint32_t pressStarted = millis();
+        LongPress = true;
+        while (PrevPress) {
+            const uint32_t elapsed = millis() - pressStarted;
+            if (elapsed > 200) {
+                int sweep = 360 * (elapsed - 200) / 500;
+                if (sweep > 360) sweep = 360;
+                tft.drawArc(
+                    tftWidth / 2,
+                    tftHeight / 2,
+                    25,
+                    15,
+                    0,
+                    sweep,
+                    getColorVariation(bruceConfig.priColor),
+                    bruceConfig.bgColor
+                );
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        tft.drawArc(tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor);
+        LongPress = false;
+        return millis() - pressStarted > 700 ? NRF_BACK_EXIT : NRF_BACK_SHORT;
+    }
+#endif
+    return check(EscPress) ? NRF_BACK_EXIT : NRF_BACK_NONE;
+}
 
 void nrf_info() {
     tft.fillScreen(bruceConfig.bgColor);

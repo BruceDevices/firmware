@@ -28,6 +28,7 @@ static MjTarget mj_targets[MJ_MAX_TARGETS];
 static uint8_t mj_targetCount = 0;
 static uint16_t mj_msSequence = 0;
 static NRF24_MODE mj_nrfMode = NRF_MODE_SPI;
+static bool mj_scanCancelled = false;
 
 // ── ASCII to HID scancode lookup table ──────────────────────────
 // Maps ASCII 0x20-0x7E to {modifier, keycode}
@@ -465,9 +466,9 @@ static void mj_sendKeystroke(const MjTarget &target, uint8_t modifier, uint8_t k
 }
 
 // ── Type a string as keystrokes ─────────────────────────────────
-static void mj_typeString(const MjTarget &target, const char *text) {
+static bool mj_typeString(const MjTarget &target, const char *text) {
     for (size_t i = 0; text[i] != '\0'; i++) {
-        if (check(EscPress)) return;
+        if (nrf_checkBackButton() == NRF_BACK_EXIT) return false;
 
         MjHidKey entry;
         char c = text[i];
@@ -483,6 +484,7 @@ static void mj_typeString(const MjTarget &target, const char *text) {
         mj_sendKeystroke(target, entry.modifier, entry.keycode);
         delay(ATTACK_INTER_KEY_MS);
     }
+    return true;
 }
 
 // ── DuckyScript line parser ─────────────────────────────────────
@@ -491,7 +493,13 @@ static bool mj_parseDuckyLine(const String &line, const MjTarget &target) {
 
     if (line.startsWith("DELAY ") || line.startsWith("DELAY\t")) {
         int delayMs = line.substring(6).toInt();
-        if (delayMs > 0 && delayMs <= 60000) delay(delayMs);
+        if (delayMs > 0 && delayMs <= 60000) {
+            const uint32_t delayStarted = millis();
+            while (millis() - delayStarted < (uint32_t)delayMs) {
+                if (nrf_checkBackButton() == NRF_BACK_EXIT) return false;
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+        }
         return true;
     }
 
@@ -500,12 +508,11 @@ static bool mj_parseDuckyLine(const String &line, const MjTarget &target) {
     }
 
     if (line.startsWith("STRING ")) {
-        mj_typeString(target, line.substring(7).c_str());
-        return true;
+        return mj_typeString(target, line.substring(7).c_str());
     }
 
     if (line.startsWith("STRINGLN ")) {
-        mj_typeString(target, line.substring(9).c_str());
+        if (!mj_typeString(target, line.substring(9).c_str())) return false;
         mj_sendKeystroke(target, MJ_MOD_NONE, MJ_KEY_ENTER);
         return true;
     }
@@ -633,11 +640,16 @@ static void mj_drawScanScreen(uint8_t currentCh, bool initial) {
     int footerY = tftHeight - BORDER_PAD_X - FP * LH - 2;
     tft.fillRect(7, footerY, tftWidth - 14, FP * LH, bruceConfig.bgColor);
     tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
+#ifdef HAS_3_BUTTONS
+    tft.drawCentreString("Hold Back: Stop", tftWidth / 2, footerY, 1);
+#else
     tft.drawCentreString("[ESC] Stop", tftWidth / 2, footerY, 1);
+#endif
 }
 
 // ── Scanning function ───────────────────────────────────────────
 static bool mj_scan() {
+    mj_scanCancelled = false;
     mj_targetCount = 0;
     memset(mj_targets, 0, sizeof(mj_targets));
 
@@ -677,7 +689,8 @@ static bool mj_scan() {
     while (scanning) {
         // Sweep channels 2-84 (ESB range)
         for (uint8_t ch = 2; ch <= 84 && scanning; ch++) {
-            if (check(EscPress)) {
+            if (nrf_checkBackButton() == NRF_BACK_EXIT) {
+                mj_scanCancelled = true;
                 scanning = false;
                 break;
             }
@@ -784,10 +797,11 @@ static void mj_attackString(int targetIndex) {
         }
     }
 
-    mj_typeString(target, text.c_str());
+    bool completed = mj_typeString(target, text.c_str());
 
     NRFradio.powerDown();
-    displaySuccess("Injection complete", true);
+    displaySuccess(completed ? "Injection complete" : "Injection stopped", completed);
+    if (!completed) delay(500);
 }
 
 // ── Attack: DuckyScript from SD Card ────────────────────────────
@@ -850,9 +864,13 @@ static void mj_attackDucky(int targetIndex) {
 
     uint16_t defaultDelayMs = 0;
     String lastLine;
+    bool completed = true;
 
     while (file.available()) {
-        if (check(EscPress)) break;
+        if (nrf_checkBackButton() == NRF_BACK_EXIT) {
+            completed = false;
+            break;
+        }
 
         String line = file.readStringUntil('\n');
         line.trim();
@@ -871,21 +889,42 @@ static void mj_attackDucky(int targetIndex) {
             if (reps < 1) reps = 1;
             if (reps > 500) reps = 500;
             for (int r = 0; r < reps; r++) {
-                if (check(EscPress)) break;
-                if (lastLine.length() > 0) { mj_parseDuckyLine(lastLine, target); }
+                if (nrf_checkBackButton() == NRF_BACK_EXIT) {
+                    completed = false;
+                    break;
+                }
+                if (lastLine.length() > 0 && !mj_parseDuckyLine(lastLine, target)) {
+                    completed = false;
+                    break;
+                }
             }
+            if (!completed) break;
             continue;
         }
 
-        mj_parseDuckyLine(line, target);
+        if (!mj_parseDuckyLine(line, target)) {
+            completed = false;
+            break;
+        }
         lastLine = line;
 
-        if (defaultDelayMs > 0) delay(defaultDelayMs);
+        if (defaultDelayMs > 0) {
+            const uint32_t delayStarted = millis();
+            while (millis() - delayStarted < defaultDelayMs) {
+                if (nrf_checkBackButton() == NRF_BACK_EXIT) {
+                    completed = false;
+                    break;
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            if (!completed) break;
+        }
     }
 
     file.close();
     NRFradio.powerDown();
-    displaySuccess("Script complete", true);
+    displaySuccess(completed ? "Script complete" : "Script stopped", completed);
+    if (!completed) delay(500);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -943,7 +982,7 @@ void nrf_mousejack() {
          [=]() {
              if (mj_scan()) {
                  mj_targetListMenu();
-             } else {
+             } else if (!mj_scanCancelled) {
                  displayInfo("No devices found", true);
              }
          }                                             },

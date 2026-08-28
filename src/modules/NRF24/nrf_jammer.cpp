@@ -144,7 +144,11 @@ void nrf_jammer() {
                 padprintln("");
                 padprintln("> Switch Mode: Next/Prev");
                 padprintln("> Hop Mode: Sel");
+#ifdef HAS_3_BUTTONS
+                padprintln("> Exit: Hold Back");
+#else
                 padprintln("> Exit: Esc");
+#endif
 
                 tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
                 if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) {
@@ -181,7 +185,15 @@ void nrf_jammer() {
                 need_reshuffle = true;
                 redraw = true;
             }
-            if (check(PrevPress)) {
+            bool previousMode = false;
+#ifdef HAS_3_BUTTONS
+            NRF_BACK_ACTION backAction = nrf_checkBackButton();
+            if (backAction == NRF_BACK_EXIT) break;
+            previousMode = backAction == NRF_BACK_SHORT;
+#else
+            previousMode = check(PrevPress);
+#endif
+            if (previousMode) {
                 modeIndex--;
                 if (modeIndex < 0) modeIndex = (sizeof(modes) / sizeof(modes[0])) - 1;
                 hopIndex = 0;
@@ -198,7 +210,11 @@ void nrf_jammer() {
             }
         }
 
-        if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+        if (CHECK_NRF_SPI(mode)) {
+            NRFradio.stopConstCarrier();
+            digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+            NRFradio.powerDown();
+        }
         if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) { NRFSerial.println("OFF"); }
 
     } else {
