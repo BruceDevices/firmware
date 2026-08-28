@@ -1,5 +1,5 @@
-#ifndef __SETTINGS_H__
-#define __SETTINGS_H__
+#ifndef BRUCE_CORE_SETTINGS_H
+#define BRUCE_CORE_SETTINGS_H
 
 #include "config.h"
 #include "configPins.h"
@@ -93,6 +93,8 @@ void setStartupApp();
 void setGpsBaudrateMenu();
 
 void setNetworkCredsMenu();
+
+void setWifiHostnameMenu();
 
 void setBadUSBBLEMenu();
 void setBadUSBBLEKeyboardLayoutMenu();
