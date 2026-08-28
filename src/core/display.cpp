@@ -10,6 +10,8 @@
 
 #define MAX_MENU_SIZE (int)(tftHeight / 25)
 
+uint8_t mainMenuGridColumns = 0;
+
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
 #if defined(ST7789_2_DRIVER) || defined(ST7789_DRIVER)
@@ -628,6 +630,33 @@ int loopOptions(
         if (menuType != MENU_TYPE_MAIN && check(EscPress)) {
             index = -1;
             break;
+        }
+
+        // Grid main menu: Up/Down jump a whole row, Prev/Next keep stepping one cell at a time.
+        // Consumed here so the linear handlers below don't also act on the same press.
+        if (menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
+            mainMenuGridColumns < static_cast<int>(options.size())) {
+            int rowStep = 0;
+            if (check(UpPress)) rowStep = -1;
+            else if (check(DownPress)) rowStep = 1;
+
+            if (rowStep != 0) {
+                int size = static_cast<int>(options.size());
+                int cols = mainMenuGridColumns;
+                int rows = (size + cols - 1) / cols;
+                int col = index % cols;
+                int row = index / cols + rowStep;
+
+                if (row < 0) row = rows - 1;
+                else if (row >= rows) row = 0;
+
+                int idx = row * cols + col;
+                if (idx >= size) idx = size - 1; // the last row can be shorter than the others
+                if (options[idx].enabled) index = idx;
+
+                devModeCounter = 0;
+                redraw = true;
+            }
         }
 
 #ifdef HAS_ENCODER

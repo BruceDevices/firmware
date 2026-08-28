@@ -15,6 +15,10 @@
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
 
+// Columns of the main menu grid layout, set by MainMenu::begin().
+// 0 means the carousel layout is active and navigation stays linear.
+extern uint8_t mainMenuGridColumns;
+
 void panelSleep(bool on);
 void turnOffDisplay();
 bool wakeUpScreen();
