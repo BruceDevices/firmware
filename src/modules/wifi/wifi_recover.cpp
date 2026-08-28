@@ -560,8 +560,8 @@ static void sha1_final(Sha1Ctx &ctx, uint8_t digest[20]) {
    HMAC-SHA1 with pre-computed pads (software, no mutex)
 ───────────────────────────────────────────────────────────── */
 struct HmacSha1Pre {
-    Sha1Ctx inner;
-    Sha1Ctx outer;
+    uint32_t inner[5];
+    uint32_t outer[5];
 };
 
 static void hmac_sha1_precompute(const uint8_t *key, size_t klen, HmacSha1Pre &out) {
@@ -581,28 +581,31 @@ static void hmac_sha1_precompute(const uint8_t *key, size_t klen, HmacSha1Pre &o
         k_ipad[i] ^= key[i];
         k_opad[i] ^= key[i];
     }
-    sha1_init(out.inner);
-    sha1_update(out.inner, k_ipad, 64);
-    sha1_init(out.outer);
-    sha1_update(out.outer, k_opad, 64);
+    Sha1Ctx ctx;
+    sha1_init(ctx);
+    sha1_update(ctx, k_ipad, 64);
+    memcpy(out.inner, ctx.state, sizeof(out.inner));
+    sha1_init(ctx);
+    sha1_update(ctx, k_opad, 64);
+    memcpy(out.outer, ctx.state, sizeof(out.outer));
 }
 
 static IRAM_ATTR __attribute__((optimize("O3"), hot, always_inline)) void
 hmac_sha1_20(const HmacSha1Pre &pre, const uint8_t data[20], uint8_t out[20]) {
     uint32_t state[5];
-    state[0] = pre.inner.state[0];
-    state[1] = pre.inner.state[1];
-    state[2] = pre.inner.state[2];
-    state[3] = pre.inner.state[3];
-    state[4] = pre.inner.state[4];
+    state[0] = pre.inner[0];
+    state[1] = pre.inner[1];
+    state[2] = pre.inner[2];
+    state[3] = pre.inner[3];
+    state[4] = pre.inner[4];
     sha1_transform_20b(state, data);
     uint32_t ih0 = state[0], ih1 = state[1], ih2 = state[2], ih3 = state[3], ih4 = state[4];
     const uint32_t ih[5] = {ih0, ih1, ih2, ih3, ih4};
-    state[0] = pre.outer.state[0];
-    state[1] = pre.outer.state[1];
-    state[2] = pre.outer.state[2];
-    state[3] = pre.outer.state[3];
-    state[4] = pre.outer.state[4];
+    state[0] = pre.outer[0];
+    state[1] = pre.outer[1];
+    state[2] = pre.outer[2];
+    state[3] = pre.outer[3];
+    state[4] = pre.outer[4];
     sha1_transform_20w(state, ih);
     sha1_extract(state, out);
 }
@@ -610,18 +613,18 @@ hmac_sha1_20(const HmacSha1Pre &pre, const uint8_t data[20], uint8_t out[20]) {
 static IRAM_ATTR __attribute__((optimize("O3"), hot, always_inline)) void
 hmac_sha1_20w(const HmacSha1Pre &pre, const uint32_t data[5], uint32_t out[5]) {
     uint32_t state[5];
-    state[0] = pre.inner.state[0];
-    state[1] = pre.inner.state[1];
-    state[2] = pre.inner.state[2];
-    state[3] = pre.inner.state[3];
-    state[4] = pre.inner.state[4];
+    state[0] = pre.inner[0];
+    state[1] = pre.inner[1];
+    state[2] = pre.inner[2];
+    state[3] = pre.inner[3];
+    state[4] = pre.inner[4];
     sha1_transform_20w(state, data);
     uint32_t ih[5] = {state[0], state[1], state[2], state[3], state[4]};
-    state[0] = pre.outer.state[0];
-    state[1] = pre.outer.state[1];
-    state[2] = pre.outer.state[2];
-    state[3] = pre.outer.state[3];
-    state[4] = pre.outer.state[4];
+    state[0] = pre.outer[0];
+    state[1] = pre.outer[1];
+    state[2] = pre.outer[2];
+    state[3] = pre.outer[3];
+    state[4] = pre.outer[4];
     sha1_transform_20w(state, ih);
     out[0] = state[0];
     out[1] = state[1];
@@ -632,10 +635,15 @@ hmac_sha1_20w(const HmacSha1Pre &pre, const uint32_t data[5], uint32_t out[5]) {
 
 static void hmac_sha1_with_pre(const HmacSha1Pre &pre, const uint8_t *data, size_t dlen, uint8_t *out20) {
     uint8_t inner_hash[20];
-    Sha1Ctx ctx = pre.inner;
+    Sha1Ctx ctx;
+    memcpy(ctx.state, pre.inner, sizeof(pre.inner));
+    ctx.count[0] = 512;
+    ctx.count[1] = 0;
     sha1_update(ctx, data, dlen);
     sha1_final(ctx, inner_hash);
-    ctx = pre.outer;
+    memcpy(ctx.state, pre.outer, sizeof(pre.outer));
+    ctx.count[0] = 512;
+    ctx.count[1] = 0;
     sha1_update(ctx, inner_hash, 20);
     sha1_final(ctx, out20);
 }
@@ -721,70 +729,60 @@ static IRAM_ATTR __attribute__((optimize("O3"), hot)) void pbkdf2_precomp(
 }
 
 /* ─────────────────────────────────────────────────────────────
-   PTK Derivation (PRF-512)
+   KCK Derivation (first block of PRF-512)
 ───────────────────────────────────────────────────────────── */
-static bool derive_ptk(
-    const uint8_t *pmk, const uint8_t *ap_mac, const uint8_t *sta_mac, const uint8_t *anonce,
-    const uint8_t *snonce, uint8_t *ptk_out
-) {
+static size_t build_ptk_message(const HandshakeData &hs, uint8_t *msg) {
     uint8_t data[76];
     size_t pos = 0;
-    if (memcmp(ap_mac, sta_mac, 6) < 0) {
-        memcpy(data + pos, ap_mac, 6);
+    if (memcmp(hs.ap_mac, hs.sta_mac, 6) < 0) {
+        memcpy(data + pos, hs.ap_mac, 6);
         pos += 6;
-        memcpy(data + pos, sta_mac, 6);
+        memcpy(data + pos, hs.sta_mac, 6);
         pos += 6;
     } else {
-        memcpy(data + pos, sta_mac, 6);
+        memcpy(data + pos, hs.sta_mac, 6);
         pos += 6;
-        memcpy(data + pos, ap_mac, 6);
+        memcpy(data + pos, hs.ap_mac, 6);
         pos += 6;
     }
-    if (memcmp(anonce, snonce, 32) < 0) {
-        memcpy(data + pos, anonce, 32);
+    if (memcmp(hs.anonce, hs.snonce, 32) < 0) {
+        memcpy(data + pos, hs.anonce, 32);
         pos += 32;
-        memcpy(data + pos, snonce, 32);
+        memcpy(data + pos, hs.snonce, 32);
         pos += 32;
     } else {
-        memcpy(data + pos, snonce, 32);
+        memcpy(data + pos, hs.snonce, 32);
         pos += 32;
-        memcpy(data + pos, anonce, 32);
+        memcpy(data + pos, hs.anonce, 32);
         pos += 32;
     }
 
     const char *label = "Pairwise key expansion";
     const size_t label_len = 22;
 
-    HmacSha1Pre pmk_pre;
-    hmac_sha1_precompute(pmk, 32, pmk_pre);
-
-    uint8_t msg[label_len + 1 + 76 + 1];
     memcpy(msg, label, label_len);
     msg[label_len] = 0x00;
     memcpy(msg + label_len + 1, data, pos);
+    msg[label_len + 1 + pos] = 0;
+    return label_len + 1 + pos + 1;
+}
 
-    for (int i = 0; i < 4; i++) {
-        if (g_abortRequested) return false;
-        msg[label_len + 1 + pos] = (uint8_t)i;
-        uint8_t hash[20];
-        hmac_sha1_with_pre(pmk_pre, msg, label_len + 1 + pos + 1, hash);
-        size_t cp = (i == 3) ? 4 : 20;
-        memcpy(ptk_out + (i * 20), hash, cp);
-    }
-    return true;
+static void derive_kck(const uint8_t *pmk, const uint8_t *ptk_msg, size_t ptk_msg_len, uint8_t *kck) {
+    HmacSha1Pre pmk_pre;
+    hmac_sha1_precompute(pmk, 32, pmk_pre);
+    uint8_t hash[20];
+    hmac_sha1_with_pre(pmk_pre, ptk_msg, ptk_msg_len, hash);
+    memcpy(kck, hash, 16);
 }
 
 /* ─────────────────────────────────────────────────────────────
    MIC Verification
 ───────────────────────────────────────────────────────────── */
-static bool verify_mic(const HandshakeData &hs, const uint8_t *ptk) {
-    uint8_t eapol_copy[256];
-    memcpy(eapol_copy, hs.eapol, hs.eapol_len);
-    memset(eapol_copy + 81, 0, 16);
+static bool verify_mic(const HandshakeData &hs, const uint8_t *kck) {
     HmacSha1Pre kck_pre;
-    hmac_sha1_precompute(ptk, 16, kck_pre);
+    hmac_sha1_precompute(kck, 16, kck_pre);
     uint8_t computed_mic[20];
-    hmac_sha1_with_pre(kck_pre, eapol_copy, hs.eapol_len, computed_mic);
+    hmac_sha1_with_pre(kck_pre, hs.eapol, hs.eapol_len, computed_mic);
     return memcmp(computed_mic, hs.mic, 16) == 0;
 }
 
@@ -801,6 +799,8 @@ struct PwEntry {
 
 struct CrackShared {
     const HandshakeData *hs;
+    uint8_t ptk_msg[100];
+    uint8_t ptk_msg_len;
     QueueHandle_t queue;
     volatile bool found;
     char found_pw[PW_MAX_LEN];
@@ -817,9 +817,10 @@ try_password(const CrackShared &S, const char *pw, uint8_t pw_len) {
     hmac_sha1_precompute((const uint8_t *)pw, pw_len, pw_pre);
     uint8_t pmk[32];
     pbkdf2_precomp(pw_pre, (const uint8_t *)hs.ssid, ssid_len, 4096, pmk, 32);
-    uint8_t ptk[64];
-    if (!derive_ptk(pmk, hs.ap_mac, hs.sta_mac, hs.anonce, hs.snonce, ptk)) return false;
-    return verify_mic(hs, ptk);
+    if (g_abortRequested) return false;
+    uint8_t kck[16];
+    derive_kck(pmk, S.ptk_msg, S.ptk_msg_len, kck);
+    return verify_mic(hs, kck);
 }
 
 static void crack_worker_task(void *arg) {
@@ -994,6 +995,8 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
 
     CrackShared shared;
     shared.hs = &hs;
+    shared.ptk_msg_len = (uint8_t)build_ptk_message(hs, shared.ptk_msg);
+    memset(hs.eapol + 81, 0, 16);
     shared.found = false;
     shared.abort = false;
     shared.attempts = 0;
@@ -1012,7 +1015,7 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     xTaskCreatePinnedToCore(
         crack_worker_task,
         "crack_w",
-        24576, // 24KB: covers blk[16] + Sha1Ctx frames nested 5 deep
+        24576, // 24KB: ample headroom for the O3-inlined SHA1 hot path
         &shared,
         5, // priority
         NULL,
