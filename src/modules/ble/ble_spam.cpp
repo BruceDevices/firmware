@@ -1711,7 +1711,7 @@ static void bleSpamRenderConfigRows(
         bool editing = (editState.editing && editState.edit_row == i);
 
         tft.fillRect(10, rowY, tftWidth - 20, rowH, bruceConfig.bgColor);
-        uint16_t fg = selected ? TFT_YELLOW : bruceConfig.priColor;
+        uint16_t fg = selected ? bruceConfig.secColor : bruceConfig.priColor;
         tft.setTextColor(fg, bruceConfig.bgColor);
         tft.drawString(rows[i].label, 12, rowY + 2, 1);
 
@@ -1748,7 +1748,7 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
             bleSpamRenderConfigRows(config, cursor, editState, rowStart, rowH);
 
             tft.fillRect(10, startRowY, tftWidth - 20, rowH, bruceConfig.bgColor);
-            uint16_t startColor = (cursor == 4) ? TFT_YELLOW : bruceConfig.priColor;
+            uint16_t startColor = (cursor == 4) ? bruceConfig.secColor : bruceConfig.priColor;
             tft.setTextColor(startColor, bruceConfig.bgColor);
             tft.drawCentreString("[ Start ]", tftWidth / 2, startRowY + 2, 1);
 
