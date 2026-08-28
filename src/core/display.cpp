@@ -10,6 +10,8 @@
 
 #define MAX_MENU_SIZE (int)(tftHeight / 25)
 
+uint8_t mainMenuGridColumns = 0;
+
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
 #if defined(ST7789_2_DRIVER) || defined(ST7789_DRIVER)
@@ -630,6 +632,33 @@ int loopOptions(
             break;
         }
 
+        // Grid main menu: Up/Down jump a whole row, Prev/Next keep stepping one cell at a time.
+        // Consumed here so the linear handlers below don't also act on the same press.
+        if (menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
+            mainMenuGridColumns < static_cast<int>(options.size())) {
+            int rowStep = 0;
+            if (check(UpPress)) rowStep = -1;
+            else if (check(DownPress)) rowStep = 1;
+
+            if (rowStep != 0) {
+                int size = static_cast<int>(options.size());
+                int cols = mainMenuGridColumns;
+                int rows = (size + cols - 1) / cols;
+                int col = index % cols;
+                int row = index / cols + rowStep;
+
+                if (row < 0) row = rows - 1;
+                else if (row >= rows) row = 0;
+
+                int idx = row * cols + col;
+                if (idx >= size) idx = size - 1; // the last row can be shorter than the others
+                if (options[idx].enabled) index = idx;
+
+                devModeCounter = 0;
+                redraw = true;
+            }
+        }
+
 #ifdef HAS_ENCODER
         int32_t rotarySteps = drainRotarySteps();
         if (rotarySteps != 0) {
@@ -944,7 +973,11 @@ void drawStatusBar() {
     int iconCount = 0;
     bool showSD = sdcardMounted;
     bool showGPS = gpsConnected;
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    bool showWifi = WiFi.isConnected() || WiFi.AP.started();
+#else
     bool showWifi = (WiFi.getMode() != 0);
+#endif
     bool showWeb = isWebUIActive;
     bool showBLE = BLEConnected;
     bool showWG = isConnectedWireguard;
@@ -1735,6 +1768,31 @@ uint16_t getColorVariation(uint16_t color, int delta, int direction) {
     uint16_t compl_color = r << 11 | g << 5 | b;
 
     return compl_color;
+}
+
+uint16_t blendColors(uint16_t a, uint16_t b, uint8_t t) {
+    int ar = (a >> 11) & 0x1f, ag = (a >> 5) & 0x3f, ab = a & 0x1f;
+    int br = (b >> 11) & 0x1f, bg = (b >> 5) & 0x3f, bb = b & 0x1f;
+    int r = ar + (br - ar) * t / 255;
+    int g = ag + (bg - ag) * t / 255;
+    int bl = ab + (bb - ab) * t / 255;
+    return (uint16_t)((r << 11) | (g << 5) | bl);
+}
+
+void buildHeatPalette(uint16_t *lut, uint8_t n) {
+    if (!lut || n < 2) return;
+    uint16_t bg = bruceConfig.bgColor;
+    uint16_t pri = bruceConfig.priColor;
+    uint16_t hot = blendColors(pri, TFT_WHITE, 150);
+
+    lut[0] = bg;
+    for (uint8_t i = 1; i < n; i++) {
+        int t = i * 255 / (n - 1);
+        // ramp to the primary for the lower two thirds, then burn toward the
+        // highlight so strong signals stay readable against a busy plot
+        lut[i] = (t < 170) ? blendColors(bg, pri, 55 + t * 200 / 255)
+                           : blendColors(pri, hot, (t - 170) * 255 / 85);
+    }
 }
 
 // Draw BITMAP files

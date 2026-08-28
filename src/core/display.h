@@ -15,6 +15,10 @@
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
 
+// Columns of the main menu grid layout, set by MainMenu::begin().
+// 0 means the carousel layout is active and navigation stays linear.
+extern uint8_t mainMenuGridColumns;
+
 void panelSleep(bool on);
 void turnOffDisplay();
 bool wakeUpScreen();
@@ -107,6 +111,12 @@ bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool ce
 uint16_t getComplementaryColor(uint16_t color);
 uint16_t getComplementaryColor2(uint16_t color);
 uint16_t getColorVariation(uint16_t color, int delta = 10, int direction = 0);
+// Linear RGB565 mix: t = 0 returns a, t = 255 returns b. Use it to derive dim
+// or highlighted shades from the theme instead of hardcoding TFT_* constants.
+uint16_t blendColors(uint16_t a, uint16_t b, uint8_t t);
+// Fills lut[0..n-1] with a theme ramp going from the background up to a
+// brightened primary, for waterfalls and other intensity plots.
+void buildHeatPalette(uint16_t *lut, uint8_t n);
 
 void resetTftDisplay(
     int x = 0, int y = 0, uint16_t fc = bruceConfig.priColor, int size = FM,

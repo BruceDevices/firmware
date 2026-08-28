@@ -262,6 +262,24 @@ void setUIColor() {
     }
 }
 
+/*********************************************************************
+**  Function: setMainMenuStyleMenu
+**  Choose how the main menu presents the modules
+**********************************************************************/
+void setMainMenuStyleMenu() {
+    options = {
+        {"Carousel",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_CAROUSEL); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_CAROUSEL},
+        {"Grid",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_GRID); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_GRID     },
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, bruceConfig.mainMenuStyle);
+}
+
 uint16_t alterOneColorChannel565(uint16_t color, int newR, int newG, int newB) {
     uint8_t r = (color >> 11) & 0x1F;
     uint8_t g = (color >> 5) & 0x3F;
@@ -1695,6 +1713,15 @@ void enableBLEAPI() {
     }
 
     ble_api_enabled = !ble_api_enabled;
+
+    // Give the user visual feedback about the new state, otherwise the toggle
+    // looks like it does nothing and gets pressed repeatedly (which cycles the
+    // BLE stack setup/teardown and can corrupt the GATT table).
+    if (ble_api_enabled) {
+        displayInfo("BLE API ON > Advertising as 'Bruce'", true);
+    } else {
+        displayInfo("BLE API OFF", true);
+    }
 }
 
 bool appStoreInstalled() {

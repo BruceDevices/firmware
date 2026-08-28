@@ -76,6 +76,7 @@ private:
     void dump_check_details();
     void dump_ndef_details();
     void dump_scan_results();
+    void show_not_implemented_card();
 
     /////////////////////////////////////////////////////////////////////////////////////
     // State management
