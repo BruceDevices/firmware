@@ -25,6 +25,7 @@ jobs:
           - { env: "m5stack-core16mb",                family: "ESP32",}
           - { env: "m5stack-core4mb",                 family: "ESP32",}
           - { env: "m5stack-cores3",                  family: "ESP32-S3",}
+          - { env: "m5stack-tab5",                    family: "ESP32-P4",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
           - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
@@ -35,6 +36,7 @@ jobs:
           - { env: "CYD-2432W328R-or-S024R",          family: "ESP32",}
           - { env: "CYD-3248S035R",                   family: "ESP32",}
           - { env: "CYD-3248S035C",                   family: "ESP32",}
+          - { env: "ES3C28P",                         family: "ESP32-S3",}
           - { env: "LAUNCHER_CYD-2432W328R-or-S024R", family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432S028",           family: "ESP32",}
           - { env: "LAUNCHER_CYD-2USB",               family: "ESP32",}
