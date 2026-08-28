@@ -944,7 +944,11 @@ void drawStatusBar() {
     int iconCount = 0;
     bool showSD = sdcardMounted;
     bool showGPS = gpsConnected;
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    bool showWifi = WiFi.isConnected() || WiFi.AP.started();
+#else
     bool showWifi = (WiFi.getMode() != 0);
+#endif
     bool showWeb = isWebUIActive;
     bool showBLE = BLEConnected;
     bool showWG = isConnectedWireguard;
