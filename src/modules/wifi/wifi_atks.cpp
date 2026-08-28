@@ -115,7 +115,9 @@ void wifi_complete_cleanup(bool wait = true) {
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_stop();
     WiFi.disconnect(true);
+#ifndef CONFIG_IDF_TARGET_ESP32P4
     WiFi.mode(WIFI_OFF);
+#endif
     if (wait) delay(300);
 }
 

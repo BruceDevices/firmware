@@ -162,10 +162,12 @@ void wifiDisconnect() {
         WiFi.disconnect(false, true);
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
+#ifndef CONFIG_IDF_TARGET_ESP32P4
     if (mode != WIFI_MODE_NULL) {
         WiFi.mode(WIFI_OFF);
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
+#endif
 
     wifiConnected = false;
     wifiTransitioning = false;

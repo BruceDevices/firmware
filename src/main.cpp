@@ -220,6 +220,14 @@ void _pre_storage_gpio() __attribute__((weak));
 void _pre_storage_gpio() {}
 
 /*********************************************************************
+ **  Function: _late_setup_gpio()
+ **  Sets up a weak (empty) function for board fixes that must run
+ **  Runs right before animation
+ *********************************************************************/
+void _late_setup_gpio() __attribute__((weak));
+void _late_setup_gpio() {}
+
+/*********************************************************************
  **  Function: setup_gpio
  **  Setup GPIO pins
  *********************************************************************/
@@ -546,6 +554,7 @@ void setup() {
     );
 #endif
     // #endif
+    _late_setup_gpio();
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {

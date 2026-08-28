@@ -1,3 +1,4 @@
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #ifndef __ESP_CONNECTION_H__
 #define __ESP_CONNECTION_H__
 #if !defined(LITE_VERSION)
