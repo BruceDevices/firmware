@@ -576,7 +576,7 @@ void runAdvancedDuckyInjection(NimBLEAddress target);
 void runHIDVulnerabilityTest(NimBLEAddress target);
 void runMultiTargetAttack();
 void executeAudioTest(int testIndex, NimBLEAddress target);
-void showAttackProgress(const char *message, uint16_t color = TFT_WHITE);
+void showAttackProgress(const char *message, uint16_t color = bruceConfig.priColor);
 void showAttackResult(bool success, const char *message = nullptr);
 bool confirmAttack(const char *targetName);
 String selectTargetFromScan(const char *title);
