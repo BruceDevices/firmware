@@ -13,7 +13,8 @@
 		{ "id": "m5stack-cplus1_1", "name": "StickCPlus 1.1", "family": "ESP32" },
 		{ "id": "m5stack-cplus2", "name": "StickCPlus2", "family": "ESP32" },
 		{ "id": "m5stack-dinmeter", "name": "DinMeter", "family": "ESP32-S3" },
-		{ "id": "m5stack-sticks3", "name": "StickS3", "family": "ESP32-S3" }
+		{ "id": "m5stack-sticks3", "name": "StickS3", "family": "ESP32-S3" },
+		{ "id": "m5stack-tab5", "name": "Tab5", "family": "ESP32-P4" }
 	],
 	"Lilygo": [
 		{ "id": "lilygo-t-deck-pro", "name": "Lilygo T-Deck Plus", "family": "ESP32-S3" },
@@ -44,6 +45,7 @@
 		{ "id": "CYD-2USB", "name": "CYD-2432S028 (2USB or inverted Colors)", "family": "ESP32" },
 		{ "id": "CYD-3248S035R", "name": "CYD-3248S035R", "family": "ESP32" },
 		{ "id": "CYD-3248S035C", "name": "CYD-3248S035C", "family": "ESP32" },
+		{ "id": "ES3C28P", "name": "CBD-ES3C28P", "family": "ESP32-S3" },
 		{ "id": "nm-cyd-c5", "name": "NM-CYD-C5", "family": "ESP32-C5" }
 	],
 	"ESP32": [
