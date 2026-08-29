@@ -178,6 +178,12 @@ void MainMenu::drawGrid(int index) {
     _gridScroll = scroll;
 
     if (redrawAll) {
+        // Cells scrolled out of the visible window won't get a drawGridCell() call below to refresh
+        // their tap rect, so clear everyone's first (mirrors drawOptions()'s same stale-rect concern).
+        for (auto &opt : options) {
+            opt.w = 0;
+            opt.h = 0;
+        }
         drawMainBorder(false);
         tft.fillRect(
             _grid.x,
@@ -214,6 +220,11 @@ void MainMenu::drawGridCell(int index, bool selected) {
 
     int x = _grid.x + col * _grid.cellW;
     int y = _grid.y + row * _grid.cellH;
+
+    options[index].x = x;
+    options[index].y = y;
+    options[index].w = _grid.cellW;
+    options[index].h = _grid.cellH;
 
     uint16_t bgColor = selected ? bruceConfig.priColor : bruceConfig.bgColor;
     uint16_t fgColor = selected ? bruceConfig.bgColor : bruceConfig.priColor;

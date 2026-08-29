@@ -541,6 +541,14 @@ int loopOptions(
 ) {
     if (options.empty()) return -1;
 
+    // drawSubmenu()'s carousel doesn't populate per-item tap rects, so leave zone-based touch on for it;
+    // everything else (regular lists, the main menu grid) gets tap-to-select via the hit-test below.
+    bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
+                          (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
+
+    bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
+    if (useTapToSelect) touchZoneOutsideFooterEnabled = false;
+
     auto findFirstEnabled = [&]() -> int {
         for (size_t i = 0; i < options.size(); i++) {
             if (options[i].enabled) return static_cast<int>(i);
@@ -586,6 +594,16 @@ int loopOptions(
     bool firstRender = true;
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
+#if defined(HAS_TOUCH)
+    // Regular lists are the only menuType that exits on EscPress, so only they get a tappable "[ x ]"
+    // close button (top-left, matching drawSubmenu()'s existing one) now that zone-based touch Esc is
+    // off for them. Grid/MAIN has no "back" to go to, so it stays unaffected.
+    bool showEscButton = useTapToSelect && menuType == MENU_TYPE_REGULAR;
+    const int escX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
+    const int escY = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
+    const int escW = 5 * LW * FM + 4;
+    const int escH = LH * FM + 4;
+#endif
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -629,6 +647,30 @@ int loopOptions(
             firstRender = false;
             redraw = false;
         }
+
+#if defined(HAS_TOUCH)
+        // Tap the "[ x ]" close button to fire EscPress, same as the top-left zone used to.
+        if (showEscButton && touchPoint.pressed && touchPoint.x >= escX && touchPoint.x < escX + escW &&
+            touchPoint.y >= escY && touchPoint.y < escY + escH) {
+            EscPress = true;
+            touchPoint.pressed = false;
+        }
+        // Tap-to-select: a tap on a different item just selects it (redraw); a second tap on the
+        // item that's already selected fires SelPress to execute it, same as the physical button.
+        if (useTapToSelect && touchPoint.pressed) {
+            for (size_t i = 0; i < options.size(); i++) {
+                if (options[i].enabled && options[i].contain(touchPoint.x, touchPoint.y)) {
+                    if (static_cast<int>(i) == index) SelPress = true;
+                    else {
+                        index = static_cast<int>(i);
+                        redraw = true;
+                    }
+                    break;
+                }
+            }
+            touchPoint.pressed = false;
+        }
+#endif
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
@@ -791,6 +833,7 @@ int loopOptions(
     }
 
     RotaryNetSteps = 0; // reset rotary steps to avoid unexpected jumps in the next menu
+    touchZoneOutsideFooterEnabled = prevTouchZoneOutsideFooterEnabled;
     return index;
 }
 
@@ -868,10 +911,20 @@ Opt_Coord drawOptions(
         else last_index = menuSize - 1;            // from last to first
     }
 
+    // Scrolled-out items keep a stale tap rect otherwise; clear before repopulating the visible ones.
+    for (auto &opt : options) {
+        opt.w = 0;
+        opt.h = 0;
+    }
+
     cont = 1;
     for (i = 0; i < options.size(); i++) {
         if (i >= init) {
             int16_t cursorY = tft.getCursorY();
+            options[i].x = tftWidth * 0.10;
+            options[i].y = cursorY;
+            options[i].w = tftWidth * 0.8;
+            options[i].h = FM * LH + 4;
             // Erase previously highlited element,
             if (i == last_index) {
                 tft.fillRoundRect(
@@ -915,6 +968,11 @@ Opt_Coord drawOptions(
     // update history
     last_index = index;
 #if defined(HAS_TOUCH)
+    // Zone-based touch Esc is off while loopOptions() does tap-to-select, so give this list the
+    // same "[ x ]" close button drawSubmenu() draws for itself; loopOptions() hit-tests the tap.
+    tft.setTextColor(getColorVariation(bruceConfig.priColor), bgcolor);
+    tft.setTextSize(FM);
+    tft.drawString("[ x ]", BORDER_OFFSET_FROM_SCREEN_EDGE + 2, BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1);
     TouchFooter();
 #endif
     return coord;
