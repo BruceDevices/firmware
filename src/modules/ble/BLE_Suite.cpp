@@ -5549,10 +5549,10 @@ void runAudioControlTest(NimBLEAddress target) {
             tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
+            tft.setTextSize(FM);
             tft.setCursor((tftWidth - tft.textWidth("AUDIO CONTROL TEST")) / 2, 15);
             tft.print("AUDIO CONTROL TEST");
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
             tft.setCursor(20, 60);
