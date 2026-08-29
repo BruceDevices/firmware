@@ -165,7 +165,7 @@ void displaySpamStatus() {
     drawTopCanvas();
     drawBottomCanvas();
     tft.fillRect(0, 20, tftWidth, tftHeight - 40, bruceConfig.bgColor);
-    tft.setTextSize(1.5);
+    tft.setTextSize(FP);
     tft.setCursor(0, 20);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.println("PwnGrid Spam Running...");
