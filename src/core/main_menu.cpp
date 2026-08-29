@@ -124,7 +124,7 @@ void MainMenu::buildGridLayout(int itemCount) {
     if (itemCount < 1) itemCount = 1;
 
     int areaX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
-    int areaY = 28; // first line free under the status bar separator
+    int areaY = STATUS_BAR_HEIGHT - 2; // first line free under the status bar separator
     int areaW = tftWidth - 2 * areaX - SCROLLBAR_AREA;
     int areaH = tftHeight - areaY - areaX;
 

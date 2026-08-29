@@ -904,7 +904,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
                         delay(50);
                     }
                     printStatusBadUSBBLE("Running");
-                    tft.setTextSize(1);
+                    tft.setTextSize(FP);
                 } else if (PriCmd->type == DuckyCommandType_Delay) {
                     if ((int)PriCmd->key > 0) delay(DEF_DELAY);
                     else {
@@ -1026,10 +1026,12 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     drawMainBorder();
-    tft.setCursor(10, 28);
+    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y);
     if (ble) tft.println("BLE Keyboard:");
     else tft.println("USB Keyboard:");
-    tft.drawCentreString("> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - 20, 1);
+    tft.drawCentreString(
+        "> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - BORDER_PAD_X - LH * FP, 1
+    );
     tft.setTextSize(FP);
 
     while (1) {
@@ -1422,18 +1424,24 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawCentreString("Time", tftWidth / 2, tftHeight / 2 + 15, 1);
 
-        tft.setTextSize(1);
+        tft.setTextSize(FP);
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, tftHeight - 15, 1);
     };
 
-    auto updateSlideDisplay = [&]() {
-        tft.fillRect(0, tftHeight / 2 - 35, tftWidth, 40, bruceConfig.bgColor);
+    // Tuned for text size 4 at LW=6/LH=8 defaults; scaled proportionally for other boards.
+    const int slideSize = FG + 1;
+    const int slideClearH = 40 * slideSize / 4;
+    const int slideClearY = tftHeight / 2 - 35 * slideSize / 4;
+    const int slideDrawY = tftHeight / 2 - 30 * slideSize / 4;
 
-        tft.setTextSize(4);
+    auto updateSlideDisplay = [&]() {
+        tft.fillRect(0, slideClearY, tftWidth, slideClearH, bruceConfig.bgColor);
+
+        tft.setTextSize(slideSize);
         tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
         String slideStr = "Slide " + String(currentSlide);
-        tft.drawCentreString(slideStr, tftWidth / 2, tftHeight / 2 - 30, 1);
+        tft.drawCentreString(slideStr, tftWidth / 2, slideDrawY, 1);
         lastDisplayedSlide = currentSlide;
     };
 
@@ -1452,10 +1460,14 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
             snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", minutes, seconds);
         }
 
-        tft.fillRect(0, tftHeight / 2 + 30, tftWidth, 30, bruceConfig.bgColor);
-        tft.setTextSize(3);
+        const int timerSize = FG;
+        const int timerClearY = tftHeight / 2 + 30 * timerSize / 3;
+        const int timerClearH = 30 * timerSize / 3;
+        const int timerDrawY = tftHeight / 2 + 35 * timerSize / 3;
+        tft.fillRect(0, timerClearY, tftWidth, timerClearH, bruceConfig.bgColor);
+        tft.setTextSize(timerSize);
         tft.setTextColor(timerStarted ? TFT_GREEN : TFT_DARKGREY, bruceConfig.bgColor);
-        tft.drawCentreString(timeBuffer, tftWidth / 2, tftHeight / 2 + 35, 1);
+        tft.drawCentreString(timeBuffer, tftWidth / 2, timerDrawY, 1);
 
         lastDisplayedSeconds = elapsed;
     };

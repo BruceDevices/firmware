@@ -75,6 +75,9 @@
 #ifndef FG                  // LArge Font -> Fonte Grande
   #define FG 3
 #endif
+#ifndef TOUCH_FOOTER_HEIGHT
+  #define TOUCH_FOOTER_HEIGHT (LH * FM + 2 * (FP + 4))
+#endif
 #ifndef ROTATION
   #define ROTATION 1
 #endif
