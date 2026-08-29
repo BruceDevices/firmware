@@ -51,6 +51,11 @@ public:
     void drawGrid(int index);
     int gridIndexOf(MenuItemInterface *item);
 
+    // Registered as gridPageTapHandler (see display.h) so loopOptions() can offer a page-up/down
+    // tap zone without depending on this header. Returns true and writes newIndex when (x, y)
+    // landed in the zone; currentIndex is used to keep roughly the same column on the new page.
+    bool handleGridPageTap(int x, int y, int currentIndex, int &newIndex);
+
 private:
     struct GridLayout {
         int x = 0;

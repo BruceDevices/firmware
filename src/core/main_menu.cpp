@@ -31,6 +31,12 @@ MainMenu::MainMenu() {
     };
 
     _totalItems = _menuItems.size();
+
+#if defined(HAS_TOUCH)
+    gridPageTapHandler = [](int x, int y, int currentIndex, int &newIndex) -> bool {
+        return mainMenu.handleGridPageTap(x, y, currentIndex, newIndex);
+    };
+#endif
 }
 
 MainMenu::~MainMenu() {}
@@ -111,31 +117,51 @@ int MainMenu::gridIndexOf(MenuItemInterface *item) {
 
 /*********************************************************************
 **  Function: buildGridLayout
-**  Fits as many module cells as possible in the area below the status bar,
-**  scrolling by rows when they don't all fit at a readable size.
+**  Picks the column count that makes cells (and therefore icons) as large as possible for the
+**  available area, instead of just cramming in as many columns as fit at the minimum size. Only
+**  falls back to the minimum size, with paging, once even one column can't make cells that big.
 **********************************************************************/
 void MainMenu::buildGridLayout(int itemCount) {
-    // Below this a cell can't hold a legible icon plus its label
-    const int MIN_CELL_W = 54;
-    const int MIN_CELL_H = 40;
-    const int MAX_CELL_H = 72;
-    const int SCROLLBAR_AREA = 5;
+    // Floor so a cell never gets too small to tap/read — this is what triggers paging, not a
+    // preferred size. Scaled by FP so it still means something on high-res boards.
+    const int MIN_CELL_W = 54 * FP;
+    const int MIN_CELL_H = 40 * FP;
+    // Right-edge column reserved for the scrollbar and the page-up/page-down tap zone (see
+    // MainMenu::handleGridPageTap()) — wide enough to actually tap, not just the 3px bar itself.
+    const int PAGE_TAP_W = 4 * BORDER_OFFSET_FROM_SCREEN_EDGE;
 
     if (itemCount < 1) itemCount = 1;
 
     int areaX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
     int areaY = STATUS_BAR_HEIGHT - 2; // first line free under the status bar separator
-    int areaW = tftWidth - 2 * areaX - SCROLLBAR_AREA;
+    int areaW = tftWidth - 2 * areaX - PAGE_TAP_W;
     int areaH = tftHeight - areaY - areaX;
 
-    _grid.cols = max(1, areaW / MIN_CELL_W);
-    if (_grid.cols > itemCount) _grid.cols = itemCount;
+    // Try every column count down to the MIN_CELL_W floor and keep the one whose resulting cells
+    // are largest in their smaller dimension (min(cellW, cellH)) — that's what a lopsided grid
+    // wastes: a handful of very wide, short rows or very tall, narrow columns both score low here,
+    // while a balanced, roughly-square cell that actually fills the screen scores high.
+    int maxCols = max(1, min(itemCount, areaW / MIN_CELL_W));
+    int bestCols = 1;
+    int bestScore = -1;
+    for (int cols = 1; cols <= maxCols; cols++) {
+        int rows = (itemCount + cols - 1) / cols;
+        int score = min(areaW / cols, areaH / rows);
+        if (score > bestScore) {
+            bestScore = score;
+            bestCols = cols;
+        }
+    }
+
+    _grid.cols = bestCols;
     _grid.cellW = areaW / _grid.cols;
     _grid.rows = (itemCount + _grid.cols - 1) / _grid.cols;
 
+    // Rows still get capped to what fits at MIN_CELL_H — that's the paging trigger when there
+    // are simply too many items for one screen even at the smallest usable size.
     _grid.visibleRows = max(1, areaH / MIN_CELL_H);
     if (_grid.visibleRows > _grid.rows) _grid.visibleRows = _grid.rows;
-    _grid.cellH = min(MAX_CELL_H, areaH / _grid.visibleRows);
+    _grid.cellH = areaH / _grid.visibleRows; // fills whatever height is actually available
 
     _grid.labelSize = _grid.cellW >= 8 * LW * FM ? FM : FP;
     // Everything the cell has left once the label and a thin margin are taken out
@@ -264,6 +290,32 @@ void MainMenu::drawGridScrollBar() {
     int thumbH = max(6, trackH * _grid.visibleRows / _grid.rows);
     int thumbY = trackY + (trackH - thumbH) * _gridScroll / (_grid.rows - _grid.visibleRows);
     tft.fillRect(barX, thumbY, 3, thumbH, bruceConfig.priColor);
+}
+
+/*********************************************************************
+**  Function: handleGridPageTap
+**  Right-edge strip (see PAGE_TAP_W in buildGridLayout): tapping the top half jumps a full page
+**  up, the bottom half a full page down. Needed because a tap can only select a cell that's
+**  already on screen, unlike Prev/Next which auto-scroll into view one cell at a time.
+**********************************************************************/
+bool MainMenu::handleGridPageTap(int x, int y, int currentIndex, int &newIndex) {
+    if (_grid.rows <= _grid.visibleRows) return false; // everything already fits on one page
+
+    int zoneX = _grid.x + _grid.cols * _grid.cellW;
+    int zoneY = _grid.y;
+    int zoneW = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - zoneX;
+    int zoneH = _grid.visibleRows * _grid.cellH;
+    if (x < zoneX || x >= zoneX + zoneW || y < zoneY || y >= zoneY + zoneH) return false;
+
+    int maxScroll = _grid.rows - _grid.visibleRows;
+    int targetScroll = (y < zoneY + zoneH / 2) ? max(0, _gridScroll - _grid.visibleRows)
+                                                : min(maxScroll, _gridScroll + _grid.visibleRows);
+
+    // Keep the same column, jump to the first row of the new page.
+    int col = currentIndex % _grid.cols;
+    int itemCount = static_cast<int>(options.size());
+    newIndex = min(targetScroll * _grid.cols + col, itemCount - 1);
+    return true;
 }
 
 /*********************************************************************

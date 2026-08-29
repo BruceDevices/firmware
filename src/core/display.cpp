@@ -11,6 +11,7 @@
 #define MAX_MENU_SIZE (int)(tftHeight / 25)
 
 uint8_t mainMenuGridColumns = 0;
+bool (*gridPageTapHandler)(int x, int y, int currentIndex, int &newIndex) = nullptr;
 
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
@@ -545,6 +546,10 @@ int loopOptions(
     // everything else (regular lists, the main menu grid) gets tap-to-select via the hit-test below.
     bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
                           (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
+    if (menuType == MENU_TYPE_SUBMENU) {
+        useTapToSelect = false;
+        touchZoneOutsideFooterEnabled = true;
+    }
 
     bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
     if (useTapToSelect) touchZoneOutsideFooterEnabled = false;
@@ -654,6 +659,17 @@ int loopOptions(
             touchPoint.y >= escY && touchPoint.y < escY + escH) {
             EscPress = true;
             touchPoint.pressed = false;
+        }
+        // Grid page-up/page-down tap zone (right edge strip) — needed because tap-to-select can
+        // only ever reach cells that are actually on screen, unlike Prev/Next which auto-scroll.
+        if (useTapToSelect && touchPoint.pressed && menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
+            gridPageTapHandler) {
+            int newIndex;
+            if (gridPageTapHandler(touchPoint.x, touchPoint.y, index, newIndex)) {
+                index = newIndex;
+                redraw = true;
+                touchPoint.pressed = false;
+            }
         }
         // Tap-to-select: a tap on a different item just selects it (redraw); a second tap on the
         // item that's already selected fires SelPress to execute it, same as the physical button.
