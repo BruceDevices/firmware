@@ -605,18 +605,19 @@ static void mj_drawScanScreen(uint8_t currentCh, bool initial) {
 
     // Status line (below title, inside border)
     tft.setTextSize(FP);
-    tft.fillRect(7, contentY, tftWidth - 14, 12, bruceConfig.bgColor);
+    int rowH = LH * FP + 4;
+    tft.fillRect(7, contentY, tftWidth - 14, rowH, bruceConfig.bgColor);
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
     char statusBuf[40];
     snprintf(statusBuf, sizeof(statusBuf), "CH:%3d  Targets:%d", currentCh, mj_targetCount);
     tft.drawCentreString(statusBuf, tftWidth / 2, contentY, 1);
 
     // Target list
-    int maxItems = listH / 12;
+    int maxItems = listH / rowH;
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     for (int i = 0; i < maxItems && i < mj_targetCount; i++) {
-        int y = listY + i * 12;
-        tft.fillRect(7, y, tftWidth - 14, 12, bruceConfig.bgColor);
+        int y = listY + i * rowH;
+        tft.fillRect(7, y, tftWidth - 14, rowH, bruceConfig.bgColor);
         char line[40];
         snprintf(
             line,
@@ -754,10 +755,10 @@ static void mj_attackString(int targetIndex) {
     tft.drawCentreString(
         "[" + String(mj_getTypeLabel(target.type)) + "] " + mj_formatAddr(target), tftWidth / 2, cy, 1
     );
-    cy += 16;
+    cy += LH * FP + 8;
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
     tft.drawCentreString("Sending keystrokes...", tftWidth / 2, cy, 1);
-    cy += 16;
+    cy += LH * FP + 8;
 
     // Show first 30 chars of the text
     String preview = text.substring(0, 30);
@@ -811,10 +812,10 @@ static void mj_attackDucky(int targetIndex) {
     tft.drawCentreString(
         "[" + String(mj_getTypeLabel(target.type)) + "] " + mj_formatAddr(target), tftWidth / 2, cy, 1
     );
-    cy += 16;
+    cy += LH * FP + 8;
     tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
     tft.drawCentreString("Running script...", tftWidth / 2, cy, 1);
-    cy += 16;
+    cy += LH * FP + 8;
 
     // Show filename
     int lastSlash = filepath.lastIndexOf('/');

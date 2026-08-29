@@ -115,7 +115,9 @@ void wifi_complete_cleanup(bool wait = true) {
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_stop();
     WiFi.disconnect(true);
+#ifndef CONFIG_IDF_TARGET_ESP32P4
     WiFi.mode(WIFI_OFF);
+#endif
     if (wait) delay(300);
 }
 
@@ -168,11 +170,15 @@ void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan
 void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
-    tft.drawCentreString("-=Information=-", tft.width() / 2, 28, SMOOTH_FONT);
-    tft.drawString("AP: " + tssid, 10, 48);
-    tft.drawString("Channel: " + String(channel), 10, 66);
-    tft.drawString(mac, 10, 84);
-    tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, tftHeight - 20);
+    int rowStep = LH * FP + 10;
+    int row1Y = BORDER_PAD_Y + FM * LH + 4;
+    tft.drawCentreString("-=Information=-", tft.width() / 2, BORDER_PAD_Y, SMOOTH_FONT);
+    tft.drawString("AP: " + tssid, BORDER_PAD_X, row1Y);
+    tft.drawString("Channel: " + String(channel), BORDER_PAD_X, row1Y + rowStep);
+    tft.drawString(mac, BORDER_PAD_X, row1Y + 2 * rowStep);
+    tft.drawString(
+        "Press " + String(BTN_ALIAS) + " to act", BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP
+    );
     vTaskDelay(200 / portTICK_PERIOD_MS);
     SelPress = false;
 

@@ -10,6 +10,7 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/wifi/wifi_common.h"
+#include "wifi_spectrum.h"
 #include <Arduino.h>
 #include <globals.h>
 
@@ -72,75 +73,39 @@ static void jd_stop_wifi() {
     vTaskDelay(1 / portTICK_RATE_MS);
 }
 
-static void
-jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, int attackCh) {
-    drawMainBorderWithTitle("Jam Detect");
-    tft.setTextSize(FP);
-
-    const int x0 = 8;
-    int y = 26;
-
-    // status banner
-    bool attack = (attackCh >= 0);
-    uint16_t sc = attack ? TFT_RED : TFT_GREEN;
-    tft.fillRect(x0, y, tftWidth - 2 * x0, 18, sc);
-    tft.setTextColor(TFT_BLACK, sc);
-    String banner = attack ? ("ATTACK ch" + String(attackCh) + "  " + String(dps[attackCh]) + "/s")
-                           : "scanning... no jamming";
-    tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
-    y += 24;
-
-    // per-channel deauth bars
-    const int labelW = 28;
-    const int valW = 26;
-    const int barX = x0 + labelW;
-    const int bottom = tftHeight - 14;
-    const int rowH = (bottom - y) / JD_NCH;
-    const int barW = tftWidth - barX - valW - 6;
+// Rates are unbounded, so normalise against twice the alert threshold: a channel
+// sitting exactly on the threshold fills half the lobe and anything past double
+// it saturates. Keeps the shared spectrum view fed with plain 0-100 levels.
+static void jd_normalize(const uint16_t *src, uint8_t *dst, uint32_t thr) {
     uint32_t scale = thr * 2;
     if (scale < 4) scale = 4;
-
     for (int i = 0; i < JD_NCH; i++) {
         uint8_t ch = JD_CHANNELS[i];
-        int ry = y + i * rowH;
-        bool isCur = (ch == curCh);
-        bool over = (dps[ch] >= thr);
-
-        tft.setTextColor(
-            isCur ? bruceConfig.bgColor : bruceConfig.priColor,
-            isCur ? bruceConfig.priColor : bruceConfig.bgColor
-        );
-        tft.drawString("Ch" + String(ch), x0, ry, 1);
-
-        int bh = rowH - 3;
-        if (bh < 4) bh = 4;
-        tft.drawRect(barX, ry, barW, bh, bruceConfig.priColor);
-        tft.fillRect(barX + 1, ry + 1, barW - 2, bh - 2, bruceConfig.bgColor);
-        uint32_t fillW = (uint32_t)(barW - 2) * dps[ch] / scale;
-        if (fillW > (uint32_t)(barW - 2)) fillW = barW - 2;
-        if (fillW > 0) tft.fillRect(barX + 1, ry + 1, (int)fillW, bh - 2, over ? TFT_RED : bruceConfig.priColor);
-        // peak-hold marker
-        uint32_t pkX = (uint32_t)(barX + 1) + (uint32_t)(barW - 2) * peak[ch] / scale;
-        if (peak[ch] > 0 && pkX > (uint32_t)(barX + 1)) tft.drawFastVLine((int)pkX, ry + 1, bh - 2, TFT_YELLOW);
-
-        tft.setTextColor(over ? TFT_RED : bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawString(String(dps[ch]), barX + barW + 4, ry, 1);
+        uint32_t v = (uint32_t)src[ch] * 100UL / scale;
+        dst[ch] = (uint8_t)(v > 100 ? 100 : v);
     }
-
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawString("scan ch" + String(curCh) + " thr" + String(thr) + "/s  UP/DN  ESC", x0, tftHeight - 12, 1);
 }
 
 void jam_detect_setup() {
     returnToMenu = false;
 
-    uint16_t dps[12] = {0};  // last measured deauth/s per channel (latched)
-    uint16_t peak[12] = {0}; // peak-hold
+    uint16_t dps[WifiSpectrumView::CH_MAX] = {0};  // last measured deauth/s per channel (latched)
+    uint16_t peak[WifiSpectrumView::CH_MAX] = {0}; // peak-hold
+    uint8_t lvl[WifiSpectrumView::CH_MAX] = {0};   // dps[] scaled to the 0-100 the view wants
+    uint8_t lvlPeak[WifiSpectrumView::CH_MAX] = {0};
     uint32_t threshold = 10; // deauth/s to flag (adjustable)
     int idx = 0;
+    int attackCh = -1;
+
+    WifiSpectrumView view;
+    if (!view.begin("Jam Detect")) {
+        displayError("Out of memory", true);
+        return;
+    }
 
     jd_start_wifi();
-    tft.fillScreen(bruceConfig.bgColor);
+    view.commit(lvl, JD_CHANNELS[0]);
+    view.status("CH" + String(JD_CHANNELS[0]) + " scanning  thr" + String(threshold) + "/s");
 
     for (;;) {
         if (returnToMenu) break;
@@ -161,6 +126,7 @@ void jam_detect_setup() {
         // and redraw RIGHT AWAY instead of waiting for the dwell to finish.
         bool tripped = false;
         uint32_t t0 = millis();
+        uint32_t lastFrame = 0;
         while (millis() - t0 < JD_DWELL) {
             if (check(EscPress)) {
                 returnToMenu = true;
@@ -175,6 +141,12 @@ void jam_detect_setup() {
                 tripped = true;
                 break; // detected — stop dwelling, draw immediately, then hop on
             }
+            // Keep the trace breathing between hops; the dwell is short, so this
+            // usually lands once per channel.
+            if (millis() - lastFrame >= 60) {
+                lastFrame = millis();
+                view.animate(lvl, lvlPeak, ch, attackCh >= 0);
+            }
             vTaskDelay(5 / portTICK_PERIOD_MS);
         }
         if (returnToMenu) break;
@@ -188,7 +160,7 @@ void jam_detect_setup() {
         // across the sweep so an attack stays flagged after we hop away).
         // `tripped` guarantees the channel we just left is considered even if a
         // later channel happens to read higher this redraw.
-        int attackCh = -1;
+        attackCh = -1;
         uint16_t worst = 0;
         for (int i = 0; i < JD_NCH; i++) {
             uint8_t c = JD_CHANNELS[i];
@@ -199,10 +171,26 @@ void jam_detect_setup() {
         }
         if (tripped && attackCh < 0) attackCh = ch; // ensure the live trip is shown
 
-        jd_draw(dps, peak, threshold, ch, attackCh);
+        jd_normalize(dps, lvl, threshold);
+        jd_normalize(peak, lvlPeak, threshold);
+
+        view.animate(lvl, lvlPeak, ch, attackCh >= 0);
+        view.commit(lvl, ch);
+        if (attackCh >= 0) {
+            view.status(
+                "! ATTACK CH" + String(attackCh) + " " + String(dps[attackCh]) + "/s  thr" +
+                    String(threshold),
+                true
+            );
+        } else {
+            view.status("CH" + String(ch) + " clear  thr" + String(threshold) + "/s  UP/DN");
+        }
+
         idx = (idx + 1) % JD_NCH;
+        if (idx == 0) drawStatusBar(); // keep battery/clock fresh once per sweep
     }
 
+    view.end();
     jd_stop_wifi();
 }
 

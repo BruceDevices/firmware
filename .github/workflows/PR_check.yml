@@ -67,6 +67,11 @@ jobs:
               env: "arduino-nesso-n1",
               partitions: { bootloader_addr: "0x2000" },
             }
+          - {
+              name: "ESP32-P4",
+              env: "m5stack-tab5",
+              partitions: { bootloader_addr: "0" },
+            }
     steps:
       - uses: actions/checkout@v4
 
