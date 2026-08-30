@@ -3503,182 +3503,6 @@ static BleRowDrawer bleTextRow(const char *const *items) {
 // File Operations
 //=============================================================================
 
-//=============================================================================
-// Shared UI helpers
-//
-// Every screen here used to hardcode its own frame, palette and pixel grid.
-// The grid assumed a tall panel: on a 135px Cardputer the menus fit two rows
-// and the device list exactly one, which is why a long list lost all sense of
-// place. These helpers derive the layout from the display and take every
-// colour from the active theme, so the suite matches the rest of Bruce.
-//=============================================================================
-
-struct BleUiGeom {
-    int listL, listW; // list rectangle
-    int top;          // first row
-    int rowH;
-    int rows;  // rows that actually fit
-    int footY; // hint / position line
-};
-
-static BleUiGeom bleUiGeom() {
-    BleUiGeom g;
-    g.listL = 8;
-    g.listW = tftWidth - 16;
-    g.top = BORDER_PAD_Y + 8 * FM + 3; // just below the Bruce title
-    g.footY = tftHeight - 8 * FP - 6;
-    g.rowH = 8 * FP + 6;
-    int avail = g.footY - g.top - 2;
-    if (avail < g.rowH) avail = g.rowH;
-    g.rows = avail / g.rowH;
-    if (g.rows < 1) g.rows = 1;
-    return g;
-}
-
-// Secondary and highlight shades of the theme, using the core helper so this
-// module stops inventing its own fixed greys and whites.
-static uint16_t bleDim() { return getColorVariation(bruceConfig.priColor, 8, -1); }
-static uint16_t bleAccent() { return getColorVariation(bruceConfig.priColor, 8, 1); }
-
-// Trims to fit `maxPx`, measuring real glyph width instead of counting
-// characters, so proportional titles and names stop overflowing.
-static String bleFit(const String &text, int maxPx) {
-    if (maxPx <= 0) return "";
-    if (tft.textWidth(text.c_str()) <= maxPx) return text;
-    String s = text;
-    while (s.length() > 1 && tft.textWidth((s + "..").c_str()) > maxPx) s.remove(s.length() - 1);
-    return s + "..";
-}
-
-// Legacy call sites pass a fixed TFT_ constant to say how bad the news is,
-// chosen back when it was the background of a full-screen flood. Several pass
-// TFT_BLACK, which is invisible once the screen follows the theme, so map the
-// intent onto a marker colour instead of drawing it as text.
-static uint16_t bleSeverity(uint16_t legacy) {
-    switch (legacy) {
-        case TFT_GREEN:
-        case TFT_DARKGREEN: return TFT_GREEN;
-        case TFT_RED: return TFT_RED;
-        case TFT_ORANGE:
-        case TFT_YELLOW: return TFT_ORANGE;
-        default: return bruceConfig.priColor;
-    }
-}
-
-// Splits `text` into lines that fit `w`, measuring glyphs rather than assuming
-// a 6px cell.
-static void bleWrapInto(const String &text, int w, std::vector<String> &out) {
-    tft.setTextSize(FP);
-    const int len = text.length();
-    if (len == 0) {
-        out.push_back("");
-        return;
-    }
-    int start = 0;
-    while (start < len) {
-        int end = start, lastSpace = -1;
-        while (end < len) {
-            if (text.charAt(end) == ' ') lastSpace = end;
-            if (tft.textWidth(text.substring(start, end + 1).c_str()) > w) break;
-            end++;
-        }
-        int cut = (end >= len) ? len : (lastSpace > start ? lastSpace : end);
-        out.push_back(text.substring(start, cut));
-        start = (cut < len && text.charAt(cut) == ' ') ? cut + 1 : cut;
-    }
-}
-
-// Four-step signal meter, so RSSI reads at a glance instead of as a number.
-static void bleDrawRssi(int x, int y, int rssi, uint16_t color) {
-    int bars = 0;
-    if (rssi > -55) bars = 4;
-    else if (rssi > -68) bars = 3;
-    else if (rssi > -80) bars = 2;
-    else if (rssi > -92) bars = 1;
-    for (int i = 0; i < 4; i++) {
-        int h = 2 + i * 2;
-        if (i < bars) tft.fillRect(x + i * 3, y + 8 - h, 2, h, color);
-        else tft.drawFastHLine(x + i * 3, y + 7, 2, color);
-    }
-}
-
-typedef std::function<void(int idx, int x, int y, int w, bool selected)> BleRowDrawer;
-
-// Scrollable list wearing the standard Bruce frame. Returns the chosen index or
-// -1 when the user backs out; `cursor` carries the selection in and out so a
-// menu reopens where it was left. Only the list body is repainted between key
-// presses, so moving the cursor no longer flashes the whole screen.
-static int bleListLoop(
-    const char *title, int count, const String &hint, BleRowDrawer drawRow, int *cursor = nullptr
-) {
-    if (count <= 0) return -1;
-    BleUiGeom g = bleUiGeom();
-    int sel = (cursor && *cursor >= 0 && *cursor < count) ? *cursor : 0;
-    int off = 0, lastSel = -1, lastOff = -1;
-
-    if (sel >= g.rows) off = sel - g.rows + 1;
-    drawMainBorderWithTitle(title);
-
-    for (;;) {
-        if (sel != lastSel || off != lastOff) {
-            tft.setTextSize(FP);
-            for (int i = 0; i < g.rows; i++) {
-                int y = g.top + i * g.rowH;
-                int idx = off + i;
-                bool selected = (idx == sel);
-                tft.fillRect(
-                    g.listL,
-                    y - 2,
-                    g.listW,
-                    g.rowH,
-                    selected ? bruceConfig.priColor : bruceConfig.bgColor
-                );
-                if (idx < count) drawRow(idx, g.listL + 3, y, g.listW - 6, selected);
-            }
-
-            // Position readout: the list is windowed, so say where we are.
-            tft.fillRect(g.listL, g.footY, g.listW, 8 * FP, bruceConfig.bgColor);
-            tft.setTextSize(FP);
-            String pos = String(sel + 1) + "/" + String(count);
-            int posW = tft.textWidth(pos.c_str());
-            tft.setTextColor(bleDim(), bruceConfig.bgColor);
-            tft.drawString(bleFit(hint, g.listW - posW - 8), g.listL, g.footY, 1);
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.drawRightString(pos, g.listL + g.listW, g.footY, 1);
-
-            lastSel = sel;
-            lastOff = off;
-            if (cursor) *cursor = sel;
-        }
-
-        if (check(EscPress)) return -1;
-        else if (check(PrevPress) || check(UpPress)) sel = (sel > 0) ? sel - 1 : count - 1;
-        else if (check(NextPress) || check(DownPress)) sel = (sel < count - 1) ? sel + 1 : 0;
-        else if (check(SelPress)) {
-            if (cursor) *cursor = sel;
-            return sel;
-        }
-
-        if (sel < off) off = sel;
-        if (sel >= off + g.rows) off = sel - g.rows + 1;
-        if (off > count - g.rows) off = std::max(0, count - g.rows);
-        if (off < 0) off = 0;
-        vTaskDelay(20 / portTICK_PERIOD_MS);
-    }
-}
-
-// Numbered text rows, used by the menus.
-static BleRowDrawer bleTextRow(const char *const *items) {
-    return [items](int idx, int x, int y, int w, bool sel) {
-        uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
-        uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
-        const int cw = FP * LW;
-        tft.setTextColor(fg, bg);
-        tft.drawString(String(idx + 1) + ".", x, y, 1);
-        tft.drawString(bleFit(items[idx], w - 4 * cw), x + 4 * cw, y, 1);
-    };
-}
-
 String selectFileFromSD() {
     if (!setupSdCard()) {
         showErrorMessage("SD Card not found");
@@ -3711,8 +3535,6 @@ String selectFileFromSD() {
         return "";
     }
 
-    // Rows own their own drawing so the file list follows the same geometry and
-    // palette as every other list in the suite.
     BleRowDrawer row = [&files](int idx, int x, int y, int w, bool sel) {
         tft.setTextSize(FP);
         tft.setTextColor(
@@ -3775,7 +3597,7 @@ String getScriptFromUser() {
 
     int cursor = 0;
     int chosen = bleListLoop("Select Script", scriptCount, "SEL run  ESC back", row, &cursor);
-    if (chosen < 0 || chosen == scriptCount - 1) return ""; // cancelled
+    if (chosen < 0 || chosen == scriptCount - 1) return "";
 
     if (scripts[chosen] == "Load from SD") {
         String filename = selectFileFromSD();
@@ -4852,9 +4674,6 @@ String selectTargetFromScan(const char *title) {
         }
     }
 
-    // One row per device: ordinal, name, MAC tail, capability tags and a signal
-    // meter. Tags reserve their width before the name is measured, so a long
-    // name can no longer push the vulnerability markers off screen.
     BleRowDrawer deviceRow = [snapshot](int idx, int x, int y, int w, bool sel) {
         uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
         uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
@@ -4862,7 +4681,6 @@ String selectTargetFromScan(const char *title) {
         const int cw = FP * LW;
         tft.setTextSize(FP);
 
-        // the ordinal is the ID the list never had
         tft.setTextColor(fg, bg);
         tft.drawString(String(idx + 1), x, y, 1);
         int cur = x + 3 * cw;
@@ -4883,12 +4701,11 @@ String selectTargetFromScan(const char *title) {
             right -= tw + 2;
         }
 
-        // last two MAC octets tell apart devices advertising the same name
         String mac = snapshot->addresses[idx];
         String name = snapshot->names[idx];
         String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
         int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
-        if (right - cur < tailW + 8 * cw) tailW = 0; // too narrow, the name wins
+        if (right - cur < tailW + 8 * cw) tailW = 0;
 
         tft.setTextColor(fg, bg);
         tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
@@ -4945,10 +4762,6 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
     size_t deviceCount = scannerData.deviceAddresses.size();
     std::vector<bool> picked(deviceCount, false);
 
-    // The old screen advertised "NEXT: Confirm" but no key ever confirmed, so
-    // the only way out was ESC, which cleared the selection - the success path
-    // was unreachable. A trailing row now does the confirming, which also keeps
-    // the whole flow on the four keys every device has.
     int rowCount = (int)deviceCount + 1;
     int cursor = 0;
 
@@ -4991,7 +4804,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
             targets.clear();
             return "";
         }
-        if (chosen >= (int)deviceCount) break; // confirm row
+        if (chosen >= (int)deviceCount) break;
 
         picked[chosen] = !picked[chosen];
         if (picked[chosen]) {
@@ -5320,9 +5133,6 @@ void runAdvertisingSpam(NimBLEAddress target) {
 static bool welcomeShown = false;
 
 void showWelcomeScreen() {
-    // The suite used to block for two seconds on a splash carrying its own
-    // hardcoded version number. Nothing else in Bruce does that, so the menu
-    // now opens straight away.
     welcomeShown = true;
 }
 
@@ -5633,11 +5443,9 @@ void BleSuiteMenu() {
     int selected = 0;
 
     while (true) {
-        int choice =
-            bleListLoop("BLE Suite", MENU_ITEMS, "SEL run  ESC back", bleTextRow(menuItems), &selected);
+        int choice = bleListLoop("BLE Suite", MENU_ITEMS, "SEL run  ESC back", bleTextRow(menuItems), &selected);
 
         if (choice < 0) {
-            // Clear data when exiting the menu
             if (g_pBLEScan) {
                 g_pBLEScan->stop();
                 g_pBLEScan->clearResults();
@@ -5650,8 +5458,24 @@ void BleSuiteMenu() {
             return;
         }
 
-        if (choice == MENU_ITEMS - 1) BLE_Sniffer();
-        else executeAttackWithTargetScan(choice);
+        switch (choice) {
+            case 0: executeAttackWithTargetScan(0); break;
+            case 1: executeAttackWithTargetScan(1); break;
+            case 2: executeAttackWithTargetScan(2); break;
+            case 3: executeAttackWithTargetScan(3); break;
+            case 4: executeAttackWithTargetScan(4); break;
+            case 5: executeAttackWithTargetScan(5); break;
+            case 6: executeAttackWithTargetScan(6); break;
+            case 7: executeAttackWithTargetScan(7); break;
+            case 8: executeAttackWithTargetScan(8); break;
+            case 9: executeAttackWithTargetScan(9); break;
+            case 10: executeAttackWithTargetScan(10); break;
+            case 11: executeAttackWithTargetScan(11); break;
+            case 12: executeAttackWithTargetScan(12); break;
+            case 13: executeAttackWithTargetScan(13); break;
+            case 14: executeAttackWithTargetScan(14); break;
+            case 15: BLE_Sniffer(); break;
+        }
     }
 }
 
@@ -5725,8 +5549,6 @@ void executeAttackWithTargetScan(int attackIndex) {
 //=============================================================================
 
 int showSubMenu(const char *title, const char *options[], int optionCount) {
-    // Carry the chosen target into the hint line so the submenus stop hiding
-    // which device the attack is aimed at.
     String hint = g_selectedDevice.address.isEmpty()
                       ? String("SEL run  ESC back")
                       : ("> " + (g_selectedDevice.name.length() ? g_selectedDevice.name
@@ -6603,10 +6425,10 @@ void runAudioControlTest(NimBLEAddress target) {
             tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(FM);
+            tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("AUDIO CONTROL TEST")) / 2, 15);
             tft.print("AUDIO CONTROL TEST");
-            tft.setTextSize(FP);
+            tft.setTextSize(1);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
             tft.setCursor(20, 60);
@@ -6763,8 +6585,6 @@ void runHFPHIDPivotAttack(NimBLEAddress target) {
 // UI Helpers
 //=============================================================================
 
-// Wraps `text` inside the list area, measuring glyphs rather than assuming a
-// 6px cell. Returns the y just past the last line drawn.
 static int bleWrapText(const String &text, int x, int y, int w, int bottom) {
     tft.setTextSize(FP);
     int lh = 8 * FP + 2;
@@ -6791,14 +6611,9 @@ void showAttackProgress(const char *message, uint16_t color) {
     static String lastMsg;
     String msg = message ? String(message) : String("");
 
-    // Only repaint the frame when the message actually changes; the spinner
-    // used to be redrawn under a full-screen clear, so it flashed instead of
-    // turning.
     if (msg != lastMsg) {
         lastMsg = msg;
         drawMainBorderWithTitle("BLE Suite");
-        // same reasoning as the results screen: the caller's colour is a hint,
-        // not something to paint text with
         tft.setTextColor(bleSeverity(color), bruceConfig.bgColor);
         bleWrapText(msg, g.listL, g.top, g.listW - 12, g.footY - 2);
         tft.setTextColor(bleDim(), bruceConfig.bgColor);
@@ -6861,9 +6676,6 @@ int8_t showAdaptiveMessage(
     const char *line1, const char *btn1, const char *btn2, const char *btn3, uint16_t color, bool showEscHint,
     bool autoProgress
 ) {
-    // The hint line used to be drawn with TFT_BLACK on the theme background,
-    // i.e. invisible on every dark theme, and the body wrapped against a
-    // hardcoded y = 140 ceiling.
     (void)showEscHint;
     int buttonCount = 0;
     if (strlen(btn1) > 0) buttonCount++;
@@ -6921,10 +6733,6 @@ void showSuccessMessage(const char *message) { displaySuccess(String(message), t
 void showDeviceInfoScreen(
     const char *title, const std::vector<String> &lines, uint16_t bgColor, uint16_t textColor
 ) {
-    // textColor is ignored on purpose: six call sites pass TFT_BLACK, which was
-    // legible only against the solid colour this screen used to flood the panel
-    // with. Body text now always uses the theme foreground, and the severity the
-    // caller meant to convey moves to a marker down the left edge.
     (void)textColor;
 
     BleUiGeom g = bleUiGeom();
@@ -6933,8 +6741,6 @@ void showDeviceInfoScreen(
     const int textX = g.listL + barW + 4;
     const int textW = g.listW - barW - 4;
 
-    // Wrap everything up front so the screen can scroll instead of silently
-    // dropping whatever did not fit.
     std::vector<String> rows;
     for (size_t i = 0; i < lines.size(); i++) bleWrapInto(lines[i], textW, rows);
 
