@@ -51,3 +51,21 @@ platformio run -e esp32-tft-128x160 -t upload
 | DOWN     | GPIO27 |
 | SELECT   | GPIO25 |
 | BACK     | GPIO26 |
+
+## NRF24L01
+
+| NRF24 |    ESP32      |
+|-------|---------------|
+| VCC   | 3.3V          |
+| GND   | GND           |
+| CE    | GPIO2         |
+| CSN   | GPIO14        |
+| SCK   | GPIO18        |
+| MOSI  | GPIO23        |
+| MISO  | GPIO19        |
+| IRQ   | not connected |
+
+> NRF24 shares the SPI bus with the TFT and SD card (SCK/MOSI/MISO). Only CE and CSN are dedicated pins.
+> Note: this board has no dedicated Left/Right buttons. `pins_arduino.h` sets `#define HAS_3_BUTTONS`,
+ and `interface.cpp` maps UP → PrevPress and DOWN → NextPress (in addition to their normal Up/Down roles)
+so that navigation-heavy screens like BLE Spam and the on-screen keyboard work correctly.

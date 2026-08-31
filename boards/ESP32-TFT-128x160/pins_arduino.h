@@ -1,6 +1,11 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 #define HAS_3_BUTTONS
+#define NRF24_CE_PIN 2
+#define NRF24_SS_PIN 14
+#define NRF24_MOSI_PIN SPI_MOSI_PIN
+#define NRF24_SCK_PIN SPI_SCK_PIN
+#define NRF24_MISO_PIN SPI_MISO_PIN
 
 #include "soc/soc_caps.h"
 #include <stdint.h>
