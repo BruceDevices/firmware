@@ -10,6 +10,7 @@
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
 #include "modules/wifi/evil_portal.h"
+#include "modules/wifi/jammer_identifier.h"
 #include "modules/wifi/karma_attack.h"
 #include "modules/wifi/netcut.h"
 #include "modules/wifi/responder.h"
@@ -60,6 +61,7 @@ void WifiMenu::optionsMenu() {
         options.push_back({"AP info", displayAPInfo});
     }
     options.push_back({"Wifi Atks", wifi_atk_menu});
+    options.push_back({"Jammer Identifier", jammerIdentifier});
     options.push_back({"Evil Portal", [=]() {
                            // WebUI cleanup now handled automatically inside EvilPortal constructor
                            EvilPortal();
