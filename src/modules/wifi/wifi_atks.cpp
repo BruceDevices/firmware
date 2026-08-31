@@ -28,11 +28,11 @@ extern bool showHiddenNetworks;
 const uint8_t _default_target[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 std::vector<wifi_ap_record_t> ap_records;
-
-extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
-    if (arg == 31337) return 1;
-    else return 0;
-}
+// command out due to multiple sanity checks :(newer Arduino-ESP32 already provides it):)(remove this cmd for old boards)
+// extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
+//     if (arg == 31337) return 1;
+//     else return 0;
+// }
 
 uint8_t deauth_frame[sizeof(deauth_frame_default)];
 
