@@ -1,6 +1,7 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
-#define HAS_5_BUTTON
+#define HAS_3_BUTTONS
+
 #include "soc/soc_caps.h"
 #include <stdint.h>
 
