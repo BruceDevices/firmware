@@ -34,6 +34,12 @@
 #include <string.h>
 #include <vector>
 
+// ──────────────────────────────────────────
+// FALLBACK AP CONFIGURATION
+// ──────────────────────────────────────────
+#define KARMA_FALLBACK_SSID "Free_WiFi"
+#define KARMA_FALLBACK_PASSWORD ""
+
 // Forward declarations
 void probe_sniffer(void *buf, wifi_promiscuous_pkt_type_t type);
 void saveHandshakeToFile(const HandshakeCapture &hs);
@@ -346,7 +352,8 @@ static bool ensureKarmaApInterface(uint8_t channel) {
             Serial.println("[KARMA] Failed to switch WiFi to AP mode");
             return false;
         }
-        if (!WiFi.softAP("BruceKarma", "", channel, 1, 4, false)) {
+        // Use fallback SSID instead of "BruceKarma"
+        if (!WiFi.softAP(KARMA_FALLBACK_SSID, KARMA_FALLBACK_PASSWORD, channel, 0, 4, false)) {
             Serial.println("[KARMA] Failed to start AP interface");
             return false;
         }
@@ -815,10 +822,9 @@ void ActiveBroadcastAttack::update() {
             updateCounter++;
             lastBroadcastTime = now;
             if (updateCounter >= 5) updateCounter = 0;
-        } else {
-            currentIndex++;
-            ssidsProcessed++;
         }
+        // ✅ FIX: Increment currentIndex after processing
+        currentIndex++;
     }
 }
 
@@ -1294,7 +1300,8 @@ void generateRandomBSSID(uint8_t *bssid) {
     bssid[3] = esp_random() & 0xFF;
     bssid[4] = esp_random() & 0xFF;
     bssid[5] = esp_random() & 0xFF;
-    bssid[0] &= 0xFE;
+    bssid[0] &= 0xFE;  // Clear multicast bit
+    bssid[0] |= 0x02;  // ✅ Set locally administered bit
 }
 
 void rotateBSSID() {
@@ -1463,10 +1470,10 @@ void sendBeaconFrameHelper(const String &ssid, uint8_t channel) {
     beaconPacket[pos++] = 0x00;
     memset(&beaconPacket[pos], 0xFF, 6);
     pos += 6;
-    uint8_t sourceMAC[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
-    memcpy(&beaconPacket[pos], sourceMAC, 6);
+    // ✅ FIX: Use currentBSSID instead of hardcoded MAC
+    memcpy(&beaconPacket[pos], currentBSSID, 6);
     pos += 6;
-    memcpy(&beaconPacket[pos], sourceMAC, 6);
+    memcpy(&beaconPacket[pos], currentBSSID, 6);
     pos += 6;
     beaconPacket[pos++] = 0x00;
     beaconPacket[pos++] = 0x00;
@@ -3126,7 +3133,7 @@ void updateKarmaDisplay() {
             padprintln("");
         }
 
-        tft.setCursor(10, tftHeight - 15);
+        tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_Y - LH * FP);
         tft.print("SEL/ESC:Menu | Prev/Next:Channel");
     }
 }
@@ -3596,6 +3603,36 @@ void karma_setup() {
             if (!karmaPaused) {
                 vTaskDelay(50 / portTICK_PERIOD_MS);
                 esp_wifi_set_promiscuous(true);
+            }
+        }
+
+        // ──────────────────────────────────────────
+        // FALLBACK AP CLIENT DETECTION
+        // ──────────────────────────────────────────
+        static unsigned long lastClientCheck = 0;
+        if (millis() - lastClientCheck > 2000) {
+            lastClientCheck = millis();
+            
+            // Only trigger if:
+            // 1. We're in AP mode
+            // 2. A client is connected
+            // 3. No portal is already active
+            // 4. We have a template selected
+            if (isApModeActive() && 
+                WiFi.softAPgetStationNum() > 0 && 
+                !isPortalActive &&
+                templateSelected) {
+                
+                Serial.printf("[KARMA] Client connected to fallback AP! Launching portal for %s\n", 
+                             KARMA_FALLBACK_SSID);
+                
+                // Use currently selected template
+                launchBackgroundPortal(
+                    KARMA_FALLBACK_SSID,
+                    pgm_read_byte(&karma_channels[channl % 14]),
+                    selectedTemplate.name,
+                    selectedTemplate.filename
+                );
             }
         }
 
