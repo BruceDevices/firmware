@@ -576,13 +576,13 @@ void responder() {
 
     netbiosname_str = keyboard("Bruce", 20);
     if (netbiosname_str == "\x1B") return;
-    netbiosName = stringTochar(netbiosname_str);
+    netbiosName = netbiosname_str.c_str();
     netbiosdomain_str = keyboard("BRUCEGROUP", 20);
     if (netbiosdomain_str == "\x1B") return;
-    netbiosDomain = stringTochar(netbiosdomain_str);
+    netbiosDomain = netbiosdomain_str.c_str();
     dnsdomain_str = keyboard("Bruce.Local", 20);
     if (dnsdomain_str == "\x1B") return;
-    dnsDomain = stringTochar(dnsdomain_str);
+    dnsDomain = dnsdomain_str.c_str();
 
     drawMainBorderWithTitle("RESPONDER"); // draw again after keyboard
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);

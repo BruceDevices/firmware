@@ -53,6 +53,7 @@ protected:
     uint8_t dstAddress[6];
     uint8_t broadcastAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     std::vector<Message> recvQueue;
+    SemaphoreHandle_t queueMutex = nullptr;
 
     bool beginSend();
     bool beginEspnow();
