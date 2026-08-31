@@ -45,6 +45,16 @@ volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
 
+#ifndef DEFAULT_LORA_RADIO
+#define DEFAULT_LORA_RADIO "SX1276"
+#endif
+
+#ifndef DEFAULT_LORA_FREQUENCY
+#define DEFAULT_LORA_FREQUENCY "434500000.00"
+#endif
+
+bool __attribute__((weak)) prepareBoardLoRaRadio() { return true; }
+
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
     return LORA_IRQ;
@@ -85,8 +95,9 @@ void onLoraPacket() {
 }
 
 SPIClass *selectLoraSPIBus() {
-    SPIClass *bus =
-        acquireSPIBus(bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi);
+    SPIClass *bus = acquireSPIBus(
+        bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi
+    );
     if (!bus) {
         Serial.println("No hardware SPI bus available for LoRa, falling back to default SPI");
         return &SPI;
@@ -108,6 +119,12 @@ bool startLoraRadio(float bandMHz) {
     if (irqPin == GPIO_NUM_NC) {
         Serial.println("LoRa IRQ pin not configured!");
         displayError("LoRa IRQ pin not configured!", true);
+        return false;
+    }
+
+    if (!prepareBoardLoRaRadio()) {
+        Serial.println("Preparing LoRa frontend failed!");
+        displayError("LoRa Init Failed", true);
         return false;
     }
 
@@ -293,7 +310,7 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
-    String stored = doc["LoRa_Radio"] | "SX1276";
+    String stored = doc["LoRa_Radio"] | DEFAULT_LORA_RADIO;
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
@@ -387,9 +404,9 @@ void lorachat() {
         Serial.println("creating lora settings .json file");
         JsonDocument doc;
         File file = LittleFS.open("/lora_settings.json", "w");
-        doc["LoRa_Frequency"] = "434500000.00";
+        doc["LoRa_Frequency"] = DEFAULT_LORA_FREQUENCY;
         doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] = DEFAULT_LORA_RADIO;
         serializeJson(doc, file);
         file.close();
     }
