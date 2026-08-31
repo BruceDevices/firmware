@@ -109,6 +109,9 @@ struct Option {
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
 
+    bool hasColor = false;
+    uint16_t color = 0;
+
     // On-screen bounding box of this item in its most recent draw, for tap-to-select hit-testing
     // (see loopOptions()). Populated by drawOptions()/drawGridCell(); zero/unused otherwise.
     uint16_t x = 0, y = 0, w = 0, h = 0;
@@ -117,19 +120,19 @@ struct Option {
     Option(
         const char *lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,
-        bool en = true
+        bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr),
-          hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 
     Option(
         const String &lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) =
             nullptr, // hover lambda returns true if it already handled rendering
-        void *ptr = nullptr, bool hvrd = false, bool en = true
+        void *ptr = nullptr, bool hvrd = false, bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr),
-          hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!

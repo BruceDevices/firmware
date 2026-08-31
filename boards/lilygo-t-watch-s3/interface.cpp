@@ -173,7 +173,7 @@ void InputHandler(void) {
             touch.getPoint(t.x, t.y, 1);
             // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d",t.x, t.y);
             if (bruceConfigPins.rotation == 3) {
-                t.y[0] = (tftHeight + 20) - t.y[0];
+                t.y[0] = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y[0];
                 t.x[0] = t.x[0];
             }
             if (bruceConfigPins.rotation == 0) {

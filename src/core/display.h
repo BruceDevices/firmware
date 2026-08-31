@@ -178,7 +178,7 @@ void padprintln(double n, int digits, int16_t padx = 1);
 // loopOptions will now return the last index used in the function
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index = 0,
-    bool interpreter = false
+    bool interpreter = false, bool letterShortcuts = false, uint16_t pageJumpSize = 0, bool border = true
 );
 inline int loopOptions(std::vector<Option> &options, int _index) {
     return loopOptions(options, MENU_TYPE_REGULAR, "", _index, false);
@@ -189,7 +189,7 @@ inline int loopOptions(std::vector<Option> &options) {
 
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
-    bool firstRender = true
+    bool firstRender = true, bool border = true
 );
 
 void drawSubmenu(int index, std::vector<Option> &options, const char *title);
@@ -201,8 +201,6 @@ void printTitle(const String &title);
 void printSubtitle(const String &subtitle, bool withLine = true);
 void printFootnote(const String &text);
 void printCenterFootnote(const String &text);
-
-Opt_Coord listFiles(int index, std::vector<FileList> fileList);
 
 void drawWireguardStatus(int x, int y);
 

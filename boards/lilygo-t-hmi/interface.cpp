@@ -80,7 +80,7 @@ void InputHandler(void) {
                 t.x = tftWidth - t.x;
             }
             if (bruceConfigPins.rotation == 1) {
-                t.y = (tftHeight + 20) - t.y;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
                 // t.x = t.x;
             }
             if (bruceConfigPins.rotation == 0) {
@@ -91,7 +91,7 @@ void InputHandler(void) {
             if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
-                t.y = (tftHeight + 20) - tmp;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
             }
             // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n", t.x, t.y);
 
