@@ -1,0 +1,9 @@
+GUI r
+DELAY 200
+STRING powershell
+ENTER
+DELAY 1050
+STRING start "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ"
+DELAY 100
+ENTER
+

