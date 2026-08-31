@@ -47,7 +47,7 @@ platformio run -e esp32-tft-128x160 -t upload
 
 | Function | GPIO   |
 |----------|--------|
-| UP       | GPIO32 |
-| DOWN     | GPIO33 |
+| UP       | GPIO33 |
+| DOWN     | GPIO27 |
 | SELECT   | GPIO25 |
 | BACK     | GPIO26 |

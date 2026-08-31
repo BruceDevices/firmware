@@ -10,9 +10,10 @@
  *   GPIO27 = DOWN
  *
  * Wiring:
- *   GPIO32 ---- button ---- GND
- *   GPIO33 ---- button ---- GND
- *   GPIO27 ---- button ---- GND
+ *   GPIO25 ---- button ---- GND select
+ *   GPIO33 ---- button ---- GND up
+ *   GPIO27 ---- button ---- GND down
+ *   GPIO26 ---- button ---- GND esc
  *
  * INPUT_PULLUP is used, therefore:
  *   HIGH = released
@@ -23,6 +24,7 @@ void _setup_gpio() {
     pinMode(SEL_BTN, INPUT_PULLUP);
     pinMode(UP_BTN, INPUT_PULLUP);
     pinMode(DW_BTN, INPUT_PULLUP);
+    pinMode(ESC_BTN, INPUT_PULLUP);
 
     bruceConfig.colorInverted = 0;
     bruceConfigPins.rotation = 0;
@@ -40,24 +42,25 @@ void _setBrightness(uint8_t brightval) {
 }
 
 void InputHandler(void) {
-    static unsigned long tm = 0;
+    static unsigned long lastPress = 0;
 
-    // Small debounce
-    if (millis() - tm < 120 && !LongPress) {
-        return;
-    }
-
-    bool selPressed = (digitalRead(SEL_BTN) == LOW);
-    bool upPressed  = (digitalRead(UP_BTN) == LOW);
+    bool selPressed  = (digitalRead(SEL_BTN) == LOW);
+    bool upPressed   = (digitalRead(UP_BTN) == LOW);
     bool downPressed = (digitalRead(DW_BTN) == LOW);
+    bool escPressed  = (digitalRead(ESC_BTN) == LOW);
 
-    if (!selPressed && !upPressed && !downPressed) {
+    if (!selPressed && !upPressed && !downPressed && !escPressed) {
         return;
     }
 
-    tm = millis();
+    // Debounce(try removing or decreasing or increasing if issue occur)
+    if (millis() - lastPress < 150) {
+        return;
+    }
 
-    // Wake screen if necessary
+    lastPress = millis();
+
+    // Wake screen if sleeping
     if (wakeUpScreen()) {
         return;
     }
@@ -78,10 +81,9 @@ void InputHandler(void) {
         SelPress = true;
         AnyKeyPress = true;
     }
-}
 
-void powerOff() {
-}
-
-void checkReboot() {
+    if (escPressed) {
+        EscPress = true;
+        AnyKeyPress = true;
+    }
 }
