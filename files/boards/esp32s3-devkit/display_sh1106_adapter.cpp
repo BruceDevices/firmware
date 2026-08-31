@@ -48,12 +48,13 @@ void displayFillRect(int x, int y, int w, int h) {
 }
 
 void displayDrawCentreString(const String &s, int cx, int cy) {
-    // Approximate width: 6 pixels per char at size 1. Use current text size.
-    uint8_t ts = sh1106.getTextSize();
-    int pw = s.length() * 6 * ts;
+    // Approximate width: 6 pixels per char at size 1. 
+    // Note: Adafruit_SH1106G doesn't have getTextSize(), so we use a fixed estimate
+    int textSize = 1;  // Assuming default text size
+    int pw = s.length() * 6 * textSize;
     int px = cx - (pw / 2);
-    // Use baseline y as cy - (font height/2) ~ font height 8*ts
-    int py = cy - (8 * ts) / 2;
+    // Use baseline y as cy - (font height/2) ~ font height 8*textSize
+    int py = cy - (8 * textSize) / 2;
     sh1106.setCursor(px, py);
     sh1106.print(s);
 }
