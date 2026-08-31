@@ -64,11 +64,13 @@ void InputHandler(void) {
 
     if (upPressed) {
         UpPress = true;
+        PrevPress = true;
         AnyKeyPress = true;
     }
 
     if (downPressed) {
         DownPress = true;
+        NextPress = true;
         AnyKeyPress = true;
     }
 
