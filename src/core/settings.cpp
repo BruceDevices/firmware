@@ -197,6 +197,29 @@ void setDimmerTimeMenu() {
 }
 
 /*********************************************************************
+**  Function: setAutoDeepSleepMenu
+**  Handles Menu to set auto deep sleep time
+**********************************************************************/
+void setAutoDeepSleepMenu() {
+    int idx = 0;
+    if (bruceConfig.autoDeepSleepSet == 60) idx = 0;
+    else if (bruceConfig.autoDeepSleepSet == 300) idx = 1;
+    else if (bruceConfig.autoDeepSleepSet == 900) idx = 2;
+    else if (bruceConfig.autoDeepSleepSet == 1800) idx = 3;
+    else if (bruceConfig.autoDeepSleepSet == 3600) idx = 4;
+    else if (bruceConfig.autoDeepSleepSet == 0) idx = 5;
+    options = {
+        {"1min",     [=]() { bruceConfig.setAutoDeepSleep(60); },   bruceConfig.autoDeepSleepSet == 60  },
+        {"5min",     [=]() { bruceConfig.setAutoDeepSleep(300); },  bruceConfig.autoDeepSleepSet == 300 },
+        {"15min",    [=]() { bruceConfig.setAutoDeepSleep(900); },  bruceConfig.autoDeepSleepSet == 900 },
+        {"30min",    [=]() { bruceConfig.setAutoDeepSleep(1800); }, bruceConfig.autoDeepSleepSet == 1800},
+        {"1hour",    [=]() { bruceConfig.setAutoDeepSleep(3600); }, bruceConfig.autoDeepSleepSet == 3600},
+        {"Disabled", [=]() { bruceConfig.setAutoDeepSleep(0); },    bruceConfig.autoDeepSleepSet == 0   },
+    };
+    loopOptions(options, idx);
+}
+
+/*********************************************************************
 **  Function: setUIColor
 **  Set and store main UI color
 **********************************************************************/
