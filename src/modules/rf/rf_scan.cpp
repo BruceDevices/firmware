@@ -890,8 +890,11 @@ void display_signal_data(RfCodes received, bool headless) {
         } else {
             if (received.fix == 0) {
                 rf_info_line(headless, "Length: " + String(received.Bit) + " bits");
-                const char *b = dec2binWzerofill(received.key, min(received.Bit, 40));
-                rf_info_line(headless, "Binary: " + String(b));
+                char *b = dec2binWzerofill(received.key, min(received.Bit, 40));
+                if (b) {
+                    rf_info_line(headless, "Binary: " + String(b));
+                    free(b);
+                }
             }
         }
     } else {

@@ -8,13 +8,20 @@
 EspConnection *EspConnection::instance = nullptr;
 std::vector<Option> peerOptions;
 
-EspConnection::EspConnection() { setInstance(this); }
+EspConnection::EspConnection() {
+    queueMutex = xSemaphoreCreateMutex();
+    setInstance(this);
+}
 
 EspConnection::~EspConnection() {
     esp_now_unregister_send_cb();
     esp_now_unregister_recv_cb();
 
     esp_now_deinit();
+    if (queueMutex) {
+        vSemaphoreDelete(queueMutex);
+        queueMutex = nullptr;
+    }
 }
 
 bool EspConnection::beginSend() {
@@ -66,7 +73,8 @@ EspConnection::Message EspConnection::createMessage(String text) {
     message.bytesSent = text.length();
     message.done = true;
 
-    strncpy(message.data, text.c_str(), ESP_DATA_SIZE);
+    strncpy(message.data, text.c_str(), sizeof(message.data) - 1);
+    message.data[sizeof(message.data) - 1] = '\0';
 
     return message;
 }
@@ -78,8 +86,14 @@ EspConnection::Message EspConnection::createFileMessage(File file) {
     message.isFile = true;
     message.totalBytes = file.size();
 
-    strncpy(message.filename, file.name(), ESP_FILENAME_SIZE);
-    strncpy(message.filepath, path.substring(0, path.lastIndexOf("/")).c_str(), ESP_FILEPATH_SIZE);
+    strncpy(message.filename, file.name(), sizeof(message.filename) - 1);
+    message.filename[sizeof(message.filename) - 1] = '\0';
+    strncpy(
+        message.filepath,
+        path.substring(0, path.lastIndexOf("/")).c_str(),
+        sizeof(message.filepath) - 1
+    );
+    message.filepath[sizeof(message.filepath) - 1] = '\0';
 
     return message;
 }
@@ -192,18 +206,24 @@ void EspConnection::onDataSent(const uint8_t *mac_addr, esp_now_send_status_t st
 }
 
 void EspConnection::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
-    Message recvMessage;
+    if (len < (int)sizeof(Message) || !incomingData) return;
 
-    // Use reinterpret_cast and copy assignment
-    const Message *incomingMessage = reinterpret_cast<const Message *>(incomingData);
-    recvMessage = *incomingMessage; // Use copy assignment
+    Message recvMessage;
+    memcpy(&recvMessage, incomingData, sizeof(Message));
 
     printMessage(recvMessage);
 
     if (recvMessage.ping) return sendPong(mac);
     if (recvMessage.pong) return appendPeerToList(mac);
 
-    recvQueue.push_back(recvMessage);
+    if (queueMutex) {
+        if (xSemaphoreTake(queueMutex, 50 / portTICK_PERIOD_MS) == pdTRUE) {
+            recvQueue.push_back(recvMessage);
+            xSemaphoreGive(queueMutex);
+        }
+    } else {
+        recvQueue.push_back(recvMessage);
+    }
 }
 
 void EspConnection::onDataSentStatic(const wifi_tx_info_t *info, esp_now_send_status_t status) {

@@ -66,7 +66,7 @@ private:
     void emv_read_visa(std::vector<uint8_t> *pdol_data, EMVCard *card);
     std::vector<uint8_t> emv_read_record(uint8_t p1, uint8_t p2);
 
-    PN532 *_rfid;
+    PN532 *_rfid = nullptr;
     Adafruit_PN532 *nfc = nullptr;
     bool _cancelled = false;
     EMVCard read_emv_card();
@@ -75,7 +75,12 @@ private:
 
 public:
     EMVReader() { setup(); };
-    ~EMVReader() {};
+    ~EMVReader() {
+        if (_rfid != nullptr) {
+            delete _rfid;
+            _rfid = nullptr;
+        }
+    };
     void setup();
 };
 
