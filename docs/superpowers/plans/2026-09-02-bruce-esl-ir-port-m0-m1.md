@@ -21,7 +21,15 @@
 - RMT: `resolution_hz = 80000000`, `rmt_new_copy_encoder`, and `rmt_transmit_config_t.flags.eot_level = 0`.
 - Always `digitalWrite(bruceConfigPins.irTx, LED_OFF)` on teardown so the IR LED never idles energised.
 - **Encode-then-transmit invariant:** the complete `TagTinkerImagePayload` must be in RAM before the IR pin is claimed. No SD reads may occur after `setup_ir_pin()`.
-- Frame repeat counts are fixed: Color 2.6 = wake `400`, param/data/refresh `1`; generic = ping `80`, param `15`, data `2`, refresh `20`. `delay` is always `1` (500 µs). Remember `repeats = N` means **N+1** transmissions.
+- **This is a 1:1 port.** Bruce must behave as TagTinker behaves. Never substitute a cleaner-looking constant, threshold, or policy for the upstream one, and never hardcode something upstream obtains at runtime. Every intentional divergence is already listed in the spec's "Deliberate adaptations" table — if your change is not in that table, it must match upstream.
+- **Nothing is hardcoded that upstream asks the user for.** The tag barcode always comes from a prompt. There is no compiled-in barcode, PLID, or profile anywhere in the port.
+- Frame repeat counts are fixed: Color 2.6 = wake `400`, param/data/refresh `1`; generic = ping `80`, param `15`, data `data_frame_repeats` (default `2`), refresh `20`. `delay` is always `1` (500 µs). Remember `repeats = N` means **N+1** transmissions.
+- **Data-frame pacing differs per family and must not be shared:** Color 2.6 waits **50 ms after every data frame**; generic waits **1 ms after every 32nd data frame**. Stage settles are 50 ms for both.
+- BMP header parsing accepts bpp **1, 2, 24, 32** (as `tx_bmp_open` does). Rejecting non-1/2 is the Color 2.6 *send path's* job, not the parser's.
+- Color 2.6 BMP file cap is **24576** bytes (`TX_COLOR26_BMP_MAX`). Do not raise it.
+- The image page is **user-selectable 0–7**, mirroring `scene_image_options`. Position (0,0), compression (auto RLE) and frame-repeat (×2) stay fixed at upstream's defaults — upstream deliberately exposes only the page.
+- **All dot-matrix profiles are supported**, not just Color 2.6. Segment-kind profiles are rejected (they have no image page).
+- **Do not add chunked streaming to the image path.** `tx_should_send_full_job`, `tx_pick_chunk_height` and `tx_chunk_settle_delay_ms` are used only by the text path upstream; `tx_stream_bmp_image` never chunks. Chunking is M2 work.
 - Use `ps_malloc` for BMP and payload buffers.
 - Host tests must pass with `-std=c11 -Wall -Wextra -Werror` (our code) and `-Wall -Wextra` (vendored code).
 - Firmware build target: `lilygo-t-embed-cc1101`.
@@ -715,7 +723,7 @@ git commit -m "feat(esl): add host-tested PP4 symbol builder"
 
 **Interfaces:**
 - Consumes: from Task 1 — `tagtinker_make_wake_frame`, `tagtinker_make_ping_frame`, `tagtinker_make_refresh_frame`, `tagtinker_make_image_param_frame`, `tagtinker_make_image_data_frame`, `tagtinker_color26_resolve_page`, `TagTinkerImagePayload`, `TAGTINKER_MAX_FRAME_SIZE`, `TAGTINKER_IMAGE_DATA_BYTES_PER_FRAME`, `TAGTINKER_COLOR26_WIRE_W/H`.
-- Produces: `EslTxOps` (fields `send`, `settle_ms`, `aborted`, `progress`, `ctx`), `bool esl_tx_send_color26(const EslTxOps*, const uint8_t plid[4], const TagTinkerImagePayload*, uint8_t page)`, `bool esl_tx_send_generic(const EslTxOps*, const uint8_t plid[4], const TagTinkerImagePayload*, uint8_t page, uint16_t width, uint16_t height, uint16_t pos_x, uint16_t pos_y)`, `size_t esl_tx_step_count(const TagTinkerImagePayload*)`, and the repeat-count macros. Tasks 5 and 7 call these.
+- Produces: `EslTxOps` (fields `send`, `settle_ms`, `aborted`, `progress`, `ctx`), `bool esl_tx_send_color26(const EslTxOps*, const uint8_t plid[4], const TagTinkerImagePayload*, uint8_t page)`, `bool esl_tx_send_generic(const EslTxOps*, const uint8_t plid[4], const TagTinkerImagePayload*, uint8_t page, uint16_t width, uint16_t height, uint16_t pos_x, uint16_t pos_y, uint16_t data_repeats)`, `size_t esl_tx_step_count(const TagTinkerImagePayload*)`, the repeat-count macros, and the pacing macros `ESL_COLOR26_DATA_PACE_EVERY/MS` (1 / 50) and `ESL_GENERIC_DATA_PACE_EVERY/MS` (32 / 1). Tasks 5 and 7 call these.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -735,10 +743,12 @@ typedef struct {
     uint8_t delay;
 } Rec;
 
+#define MAX_SETTLE 128
+
 typedef struct {
     Rec rec[MAX_REC];
     size_t count;
-    uint32_t settle_total_ms;
+    uint32_t settle[MAX_SETTLE]; /* ordered log of settle durations */
     size_t settle_calls;
     size_t progress_calls;
     size_t last_done;
@@ -763,7 +773,7 @@ static bool fake_send(void *ctx, const uint8_t *f, size_t len, uint16_t repeats,
 
 static void fake_settle(void *ctx, uint32_t ms) {
     Fake *k = (Fake *)ctx;
-    k->settle_total_ms += ms;
+    if (k->settle_calls < MAX_SETTLE) k->settle[k->settle_calls] = ms;
     k->settle_calls++;
 }
 
@@ -844,8 +854,11 @@ static void test_color26_sequence(void) {
     for (size_t i = 0; i < k.count; i++)
         CHECK_EQ(k.rec[i].delay, ESL_FRAME_DELAY_UNITS);
 
-    /* Settles are 50 ms each and progress runs to completion. */
-    CHECK_EQ(k.settle_total_ms, k.settle_calls * ESL_SETTLE_MS);
+    /* Color 2.6 pacing: 50 ms after wake, after param, after each data frame
+     * except the last, then once more before refresh. */
+    CHECK_EQ(k.settle_calls, 5);
+    for (size_t i = 0; i < 5; i++) CHECK_EQ(k.settle[i], 50);
+
     CHECK_EQ(k.last_done, k.last_total);
     CHECK_EQ(k.last_total, esl_tx_step_count(&p));
     CHECK_EQ(k.last_total, 6);
@@ -870,12 +883,14 @@ static void test_generic_sequence(void) {
     EslTxOps ops;
     TagTinkerImagePayload p;
     fake_init(&k, &ops);
-    payload_init(&p, 2);
+    /* 40 data frames so the every-32nd pacing rule is actually exercised. */
+    payload_init(&p, 40);
 
-    CHECK(esl_tx_send_generic(&ops, PLID, &p, 3, 296, 128, 0, 0));
+    CHECK(esl_tx_send_generic(&ops, PLID, &p, 3, 296, 128, 0, 0,
+                              ESL_GENERIC_DATA_REPEATS));
 
-    /* ping + param + 2 data + refresh */
-    CHECK_EQ(k.count, 5);
+    /* ping + param + 40 data + refresh */
+    CHECK_EQ(k.count, 43);
     CHECK_EQ(k.rec[0].frame[5], 0x97); /* ping */
     CHECK_EQ(k.rec[0].repeats, ESL_GENERIC_PING_REPEATS);
     CHECK_EQ(k.rec[0].repeats, 80);
@@ -885,10 +900,35 @@ static void test_generic_sequence(void) {
     CHECK_EQ(k.rec[1].frame[14], 3); /* generic path does not remap the page */
     CHECK_EQ(k.rec[2].repeats, ESL_GENERIC_DATA_REPEATS);
     CHECK_EQ(k.rec[2].repeats, 2);
-    CHECK_EQ(k.rec[4].frame[9], 0x01); /* refresh */
-    CHECK_EQ(k.rec[4].repeats, ESL_GENERIC_REFRESH_REPEATS);
-    CHECK_EQ(k.rec[4].repeats, 20);
+    CHECK_EQ(k.rec[42].frame[9], 0x01); /* refresh */
+    CHECK_EQ(k.rec[42].repeats, ESL_GENERIC_REFRESH_REPEATS);
+    CHECK_EQ(k.rec[42].repeats, 20);
 
+    /* Generic pacing is NOT the Color 2.6 policy: 50 ms after ping, 50 ms
+     * after param, a single 1 ms pause after the 32nd data frame, then 50 ms
+     * before refresh. Four settles total, not one per data frame. */
+    CHECK_EQ(k.settle_calls, 4);
+    CHECK_EQ(k.settle[0], 50);
+    CHECK_EQ(k.settle[1], 50);
+    CHECK_EQ(k.settle[2], ESL_GENERIC_DATA_PACE_MS);
+    CHECK_EQ(k.settle[2], 1);
+    CHECK_EQ(k.settle[3], 50);
+
+    free(p.data);
+}
+
+/* data_frame_repeats is a Settings knob upstream (1-10), so it must be
+ * threaded through rather than baked in. */
+static void test_generic_honours_data_repeats(void) {
+    Fake k;
+    EslTxOps ops;
+    TagTinkerImagePayload p;
+    fake_init(&k, &ops);
+    payload_init(&p, 2);
+
+    CHECK(esl_tx_send_generic(&ops, PLID, &p, 0, 296, 128, 0, 0, 7));
+    CHECK_EQ(k.rec[2].repeats, 7);
+    CHECK_EQ(k.rec[3].repeats, 7);
     free(p.data);
 }
 
@@ -943,6 +983,7 @@ int main(void) {
     test_color26_sequence();
     test_explicit_page_preserved();
     test_generic_sequence();
+    test_generic_honours_data_repeats();
     test_abort_stops_early();
     test_send_failure_propagates();
     test_guards();
@@ -978,11 +1019,19 @@ Create `src/modules/ir/esl/esl_tx.h`:
 #define ESL_COLOR26_STAGE_REPEATS 1u
 #define ESL_GENERIC_PING_REPEATS 80u
 #define ESL_GENERIC_PARAM_REPEATS 15u
-#define ESL_GENERIC_DATA_REPEATS 2u
+#define ESL_GENERIC_DATA_REPEATS 2u /* upstream default; Settings exposes 1-10 (M2) */
 #define ESL_GENERIC_REFRESH_REPEATS 20u
 
-#define ESL_SETTLE_MS 50u
+#define ESL_SETTLE_MS 50u        /* between stages, both families */
 #define ESL_FRAME_DELAY_UNITS 1u /* 1 unit = 500 us between repeats */
+
+/* Data-frame pacing, as (every_n, ms): pause ms after every every_n-th data
+ * frame. The two families differ and must not share a policy — Color 2.6
+ * pauses 50 ms after every frame, generic pauses 1 ms after every 32nd. */
+#define ESL_COLOR26_DATA_PACE_EVERY 1u
+#define ESL_COLOR26_DATA_PACE_MS 50u
+#define ESL_GENERIC_DATA_PACE_EVERY 32u
+#define ESL_GENERIC_DATA_PACE_MS 1u
 
 typedef struct {
     /* Required. Sends one frame, repeated repeats+1 times. */
@@ -1005,12 +1054,14 @@ size_t esl_tx_step_count(const TagTinkerImagePayload *payload);
 bool esl_tx_send_color26(const EslTxOps *ops, const uint8_t plid[4],
                          const TagTinkerImagePayload *payload, uint8_t page);
 
-/* Generic dot-matrix tags: ping -> param -> data -> refresh.
+/* Generic dot-matrix tags: ping -> param -> data -> refresh. The page is passed
+ * straight through (only Color 2.6 remaps). data_repeats mirrors upstream's
+ * app->data_frame_repeats; pass ESL_GENERIC_DATA_REPEATS for the default.
  * NOTE: unverified against real hardware; the project has no generic tag. */
 bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
                          const TagTinkerImagePayload *payload, uint8_t page,
                          uint16_t width, uint16_t height, uint16_t pos_x,
-                         uint16_t pos_y);
+                         uint16_t pos_y, uint16_t data_repeats);
 ```
 
 - [ ] **Step 4: Write the implementation**
@@ -1034,8 +1085,12 @@ static bool tx_frame(const EslTxOps *ops, const uint8_t *frame, size_t len,
     return ops->send(ops->ctx, frame, len, repeats, ESL_FRAME_DELAY_UNITS);
 }
 
+static void tx_settle_ms(const EslTxOps *ops, uint32_t ms) {
+    if (ops->settle_ms != NULL) ops->settle_ms(ops->ctx, ms);
+}
+
 static void tx_settle(const EslTxOps *ops) {
-    if (ops->settle_ms != NULL) ops->settle_ms(ops->ctx, ESL_SETTLE_MS);
+    tx_settle_ms(ops, ESL_SETTLE_MS);
 }
 
 static void tx_step(const EslTxOps *ops, size_t *done, size_t total) {
@@ -1059,37 +1114,51 @@ static bool args_ok(const EslTxOps *ops, const uint8_t plid[4],
            data_frame_count(payload) > 0u;
 }
 
-/* Sends the param frame, all data frames, then the refresh frame. Shared by
- * both tag families; only the repeat counts and the param dims differ. */
+/* Repeat counts and data-frame pacing for one tag family. */
+typedef struct {
+    uint16_t param_repeats;
+    uint16_t data_repeats;
+    uint16_t refresh_repeats;
+    uint16_t data_pace_every; /* pause after every Nth data frame */
+    uint32_t data_pace_ms;
+} EslTxProfile;
+
+/* Sends the param frame, all data frames, then the refresh frame. The stage
+ * order is common to both families; the repeat counts and the data pacing come
+ * from the caller's profile, because upstream paces the two families
+ * differently. */
 static bool tx_payload_stages(const EslTxOps *ops, const uint8_t plid[4],
                               const TagTinkerImagePayload *payload,
                               uint8_t page, uint16_t width, uint16_t height,
                               uint16_t pos_x, uint16_t pos_y,
-                              uint16_t param_repeats, uint16_t data_repeats,
-                              uint16_t refresh_repeats, size_t *done,
+                              const EslTxProfile *prof, size_t *done,
                               size_t total) {
     uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
 
     size_t len = tagtinker_make_image_param_frame(
         frame, plid, (uint16_t)payload->byte_count, payload->comp_type, page,
         width, height, pos_x, pos_y);
-    if (!tx_frame(ops, frame, len, param_repeats)) return false;
+    if (!tx_frame(ops, frame, len, prof->param_repeats)) return false;
     tx_step(ops, done, total);
     tx_settle(ops);
 
     const size_t frames = data_frame_count(payload);
+    const uint16_t every =
+        (prof->data_pace_every == 0u) ? 1u : prof->data_pace_every;
     for (size_t i = 0u; i < frames; i++) {
         len = tagtinker_make_image_data_frame(
             frame, plid, (uint16_t)i,
             &payload->data[i * TAGTINKER_IMAGE_DATA_BYTES_PER_FRAME]);
-        if (!tx_frame(ops, frame, len, data_repeats)) return false;
+        if (!tx_frame(ops, frame, len, prof->data_repeats)) return false;
         tx_step(ops, done, total);
-        if ((i + 1u) < frames) tx_settle(ops);
+        if (((i + 1u) % every) == 0u && (i + 1u) < frames) {
+            tx_settle_ms(ops, prof->data_pace_ms);
+        }
     }
     tx_settle(ops);
 
     len = tagtinker_make_refresh_frame(frame, plid);
-    if (!tx_frame(ops, frame, len, refresh_repeats)) return false;
+    if (!tx_frame(ops, frame, len, prof->refresh_repeats)) return false;
     tx_step(ops, done, total);
     return true;
 }
@@ -1107,19 +1176,26 @@ bool esl_tx_send_color26(const EslTxOps *ops, const uint8_t plid[4],
     tx_step(ops, &done, total);
     tx_settle(ops);
 
+    const EslTxProfile prof = {
+        .param_repeats = ESL_COLOR26_STAGE_REPEATS,
+        .data_repeats = ESL_COLOR26_STAGE_REPEATS,
+        .refresh_repeats = ESL_COLOR26_STAGE_REPEATS,
+        .data_pace_every = ESL_COLOR26_DATA_PACE_EVERY,
+        .data_pace_ms = ESL_COLOR26_DATA_PACE_MS,
+    };
+
     /* resolve_page is idempotent for 2..7, so resolving here is safe even if
      * the caller already resolved it. */
     return tx_payload_stages(
         ops, plid, payload, tagtinker_color26_resolve_page(page),
-        TAGTINKER_COLOR26_WIRE_W, TAGTINKER_COLOR26_WIRE_H, 0u, 0u,
-        ESL_COLOR26_STAGE_REPEATS, ESL_COLOR26_STAGE_REPEATS,
-        ESL_COLOR26_STAGE_REPEATS, &done, total);
+        TAGTINKER_COLOR26_WIRE_W, TAGTINKER_COLOR26_WIRE_H, 0u, 0u, &prof,
+        &done, total);
 }
 
 bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
                          const TagTinkerImagePayload *payload, uint8_t page,
                          uint16_t width, uint16_t height, uint16_t pos_x,
-                         uint16_t pos_y) {
+                         uint16_t pos_y, uint16_t data_repeats) {
     if (!args_ok(ops, plid, payload)) return false;
 
     const size_t total = esl_tx_step_count(payload);
@@ -1131,10 +1207,16 @@ bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
     tx_step(ops, &done, total);
     tx_settle(ops);
 
+    const EslTxProfile prof = {
+        .param_repeats = ESL_GENERIC_PARAM_REPEATS,
+        .data_repeats = data_repeats,
+        .refresh_repeats = ESL_GENERIC_REFRESH_REPEATS,
+        .data_pace_every = ESL_GENERIC_DATA_PACE_EVERY,
+        .data_pace_ms = ESL_GENERIC_DATA_PACE_MS,
+    };
+
     return tx_payload_stages(ops, plid, payload, page, width, height, pos_x,
-                             pos_y, ESL_GENERIC_PARAM_REPEATS,
-                             ESL_GENERIC_DATA_REPEATS,
-                             ESL_GENERIC_REFRESH_REPEATS, &done, total);
+                             pos_y, &prof, &done, total);
 }
 ```
 
@@ -1414,7 +1496,7 @@ git commit -m "feat(esl): add ESP32 RMT PP4 infrared driver"
 
 ---
 
-## Task 5: M0 first-light on real hardware
+## Task 5: M0 timing checkpoint on real hardware
 
 **Files:**
 - Create: `src/modules/ir/esl/esl_app.h`
@@ -1422,25 +1504,34 @@ git commit -m "feat(esl): add ESP32 RMT PP4 infrared driver"
 - Modify: `src/core/menu_items/IRMenu.cpp:1-29`
 
 **Interfaces:**
-- Consumes: Task 1 (`esl_proto.h`, `tagtinker_barcode_to_plid`, `tagtinker_barcode_to_profile`, `tagtinker_encode_fn_payload`, `tagtinker_free_image_payload`), Task 3 (`EslTxOps`, `esl_tx_send_color26`, `esl_tx_step_count`), Task 4 (`esl_ir_init`, `esl_ir_deinit`, `esl_ir_transmit`, `esl_ir_stop`). From Bruce: `bruceConfigPins.irTx`, `checkIrTxPin()`, `drawMainBorderWithTitle`, `displayError`, `displaySuccess`, `progressHandler`, `check(EscPress)`, `returnToMenu`, `delay`.
-- Produces: `void startEslTx(void)` — the menu entry point, expanded in Task 7.
+- Consumes: Task 1 (`esl_proto.h`, `tagtinker_barcode_to_plid`, `tagtinker_barcode_to_profile`, `tagtinker_make_wake_frame`, `TAGTINKER_MAX_FRAME_SIZE`), Task 3 (`ESL_COLOR26_WAKE_REPEATS`, `ESL_FRAME_DELAY_UNITS`), Task 4 (`esl_ir_init`, `esl_ir_deinit`, `esl_ir_transmit`, `esl_ir_stop`). From Bruce: `bruceConfigPins.irTx`, `checkIrTxPin()`, `keyboard()`, `drawMainBorderWithTitle`, `displayError`, `displaySuccess`, `displayTextLine`, `check(EscPress)`, `returnToMenu`, `delay`.
+- Produces: `void startEslTx(void)` — the menu entry point, expanded in Task 7. Also `esl_prompt_target()`, reused unchanged by Task 7.
 
-This task proves the whole chain against the physical tag. It sends a blank (all-ink-clear) image, which RLE-compresses to a single data frame, so a success is unambiguous: the tag visibly refreshes.
+**This is a timing checkpoint, not a feature.** Its purpose is to put a real, correctly-timed frame on the wire so the waveform can be measured. Two fidelity rules bind it:
+
+- **Nothing is hardcoded.** The barcode comes from the same `keyboard()` prompt Task 7 uses, so the real addressing path is exercised from the first run. There must be no compiled-in barcode, PLID, or profile.
+- **No invented features.** Upstream has no "send a blank image" operation, so this task sends *only* the wake frame. Making the tag visibly refresh needs a real image payload, which is Task 7's job and Task 7's gate.
 
 - [ ] **Step 1: Write the header**
 
-Create `src/modules/ir/esl/esl_app.h`:
+Create `src/modules/ir/esl/esl_app.h`. `esl_prompt_target` is declared here because Task 7 reuses it verbatim:
 
 ```cpp
 /* Bruce UI entry point for the ESL infrared transmitter. */
 #pragma once
 
+#include "esl_proto.h"
+
 void startEslTx();
+
+/* Prompts for a tag barcode; fills plid + profile. False if the user's entry
+ * is unusable (wrong length, unknown type, or a segment tag). */
+bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile);
 ```
 
-- [ ] **Step 2: Write the M0 bring-up implementation**
+- [ ] **Step 2: Write the M0 checkpoint implementation**
 
-Create `src/modules/ir/esl/esl_app.cpp`:
+Create `src/modules/ir/esl/esl_app.cpp`. `esl_prompt_target` is written in its final form here because Task 7 reuses it verbatim:
 
 ```cpp
 #include "esl_app.h"
@@ -1454,46 +1545,35 @@ Create `src/modules/ir/esl/esl_app.cpp`:
 #include <Arduino.h>
 #include <globals.h>
 
-/* M0 bring-up target: the project's own SmartTAG Color 2.6. */
-static const char *ESL_M0_BARCODE = "A4165420155216265";
+#define ESL_BARCODE_LEN 17
 
 /* Settle before blasting IR, mirroring the upstream app's pre-TX pause. */
 #define ESL_PRE_TX_SETTLE_MS 500
 
-struct EslUiCtx {
-    bool aborted;
-};
+/* Prompts for the tag barcode and derives its address and profile. The barcode
+ * is always entered by the user — upstream never compiles one in. */
+bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
+    String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
+    entered.trim();
 
-static bool ui_send(void *ctx, const uint8_t *frame, size_t len,
-                    uint16_t repeats, uint8_t delay) {
-    (void)ctx;
-    return esl_ir_transmit(frame, len, repeats, delay);
-}
-
-static void ui_settle(void *ctx, uint32_t ms) {
-    (void)ctx;
-    delay(ms);
-}
-
-static bool ui_aborted(void *ctx) {
-    EslUiCtx *c = (EslUiCtx *)ctx;
-    if (!c->aborted && check(EscPress)) {
-        c->aborted = true;
-        esl_ir_stop();
+    if (entered.length() != ESL_BARCODE_LEN) {
+        displayError("Barcode must be 17 chars", true);
+        return false;
     }
-    return c->aborted;
-}
-
-static void ui_progress(void *ctx, size_t done, size_t total) {
-    (void)ctx;
-    progressHandler((int)done, total, "Sending ESL");
-}
-
-/* A blank plane: every pixel clear. One long RLE run, so a single data frame. */
-static uint8_t blank_pixel(size_t idx, void *ctx) {
-    (void)idx;
-    (void)ctx;
-    return 1U;
+    if (!tagtinker_barcode_to_plid(entered.c_str(), plid)) {
+        displayError("Bad barcode", true);
+        return false;
+    }
+    if (!tagtinker_barcode_to_profile(entered.c_str(), profile)) {
+        displayError("Unknown tag type", true);
+        return false;
+    }
+    /* Segment tags have no image page, matching supports_graphics upstream. */
+    if (profile->kind != TagTinkerTagKindDotMatrix) {
+        displayError("Tag has no image page", true);
+        return false;
+    }
+    return true;
 }
 
 void startEslTx() {
@@ -1501,50 +1581,40 @@ void startEslTx() {
 
     uint8_t plid[4] = {0};
     TagTinkerTagProfile profile;
-    if (!tagtinker_barcode_to_plid(ESL_M0_BARCODE, plid) ||
-        !tagtinker_barcode_to_profile(ESL_M0_BARCODE, &profile)) {
-        displayError("Bad barcode/profile", true);
+    if (!esl_prompt_target(plid, &profile)) {
+        returnToMenu = true;
         return;
     }
 
     checkIrTxPin();
-
-    /* Encode fully into RAM before claiming the IR pin: nothing may touch the
-     * SD card once setup_ir_pin() has run. */
-    TagTinkerImagePayload payload;
-    const size_t total_pixels = (size_t)TAGTINKER_COLOR26_WIRE_W *
-                                TAGTINKER_COLOR26_WIRE_H * 2U;
-    if (!tagtinker_encode_fn_payload(blank_pixel, nullptr, total_pixels,
-                                     TagTinkerCompressionAuto, &payload)) {
-        displayError("Encode failed", true);
-        return;
-    }
-
     if (!esl_ir_init(bruceConfigPins.irTx)) {
-        tagtinker_free_image_payload(&payload);
         displayError("IR init failed", true);
+        returnToMenu = true;
         return;
     }
+
+    drawMainBorderWithTitle("ESL Image");
+    displayTextLine("Wake frames, Esc aborts");
     delay(ESL_PRE_TX_SETTLE_MS);
 
-    EslUiCtx ui = {false};
-    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
-
-    const bool ok = esl_tx_send_color26(&ops, plid, &payload, 0);
+    /* M0 sends only the wake frame, so the waveform can be measured against a
+     * real addressed frame. Image payloads arrive in Task 7. */
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t len = tagtinker_make_wake_frame(frame, plid);
+    const bool ok = esl_ir_transmit(frame, len, ESL_COLOR26_WAKE_REPEATS,
+                                    ESL_FRAME_DELAY_UNITS);
 
     esl_ir_deinit();
-    tagtinker_free_image_payload(&payload);
 
-    if (ui.aborted) {
-        displayWarning("Aborted", true);
-    } else if (ok) {
-        displaySuccess("Sent", true);
+    if (ok) {
+        displaySuccess("Wake sent", true);
     } else {
         displayError("TX failed", true);
     }
     returnToMenu = true;
 }
 ```
+
 
 - [ ] **Step 3: Wire it into the IR menu**
 
@@ -1585,33 +1655,35 @@ Expected: `SUCCESS`.
 
 - [ ] **Step 5: Verify the waveform on a scope or logic analyzer**
 
-Flash the device, probe the IR TX pin (GPIO 2), and run `IR -> ESL Image`.
+Flash the device, probe the IR TX pin (GPIO 2), run `IR -> ESL Image`, and enter the tag's barcode at the prompt.
 
 ```bash
 cd firmware && /tmp/pio-venv/bin/pio run -e lilygo-t-embed-cc1101 -t upload
 ```
 
-Confirm against the golden timing:
+This is the task's exit criterion. Confirm against the golden timing:
 - Carrier inside a burst: **1.25 MHz ± 1%**, duty ~48%.
 - Burst width: **40.3 µs ± 2%**.
 - Gaps take exactly four distinct values: **60.5, 121.0, 181.4, 241.9 µs** (± 2%).
 - The line rests **low** between frames and after the sequence completes.
-- Frame cadence: 401 wake frames, then param, data and refresh.
+- 401 identical wake frames, 500 µs apart.
 
-If the four gap values are not distinct, the dibit ordering is wrong — re-check `test_pp4`. If the carrier is absent, re-check `polarity_active_low`.
+Diagnostics: if the four gap values are not distinct, the dibit ordering is wrong — re-check `test_pp4`. If there is no carrier, re-check `polarity_active_low`. If the line idles high, re-check `eot_level`.
 
-- [ ] **Step 6: Verify on the physical tag**
+The tag will **not** visibly change here — a wake frame alone does not repaint it. That is expected; the tag refresh is Task 7's gate.
 
-With the tag a few centimetres from the IR LED, run `IR -> ESL Image`. Expected: the tag's image page visibly refreshes to blank within roughly 15 seconds. Press the side button mid-send to confirm abort works and the LED parks off.
+- [ ] **Step 6: Verify the error and abort paths**
 
-If the waveform is correct but the tag does not respond, the likely causes in order are: IR LED range (move closer), the page landing on the barcode page (confirm `resolve_page` gave 2), and carrier tolerance (try `ESL_CARRIER_HZ` 1269841 = 80 MHz/63).
+Confirm each leaves the device back at the menu with the IR LED off:
+- Enter a 5-character barcode → `Barcode must be 17 chars`.
+- Enter `A4165420155299995` (valid shape, unknown type) → `Unknown tag type`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 cd firmware
 git add src/modules/ir/esl/esl_app.h src/modules/ir/esl/esl_app.cpp src/core/menu_items/IRMenu.cpp
-git commit -m "feat(esl): add M0 first-light bring-up path and IR menu entry"
+git commit -m "feat(esl): add M0 timing checkpoint and IR menu entry"
 ```
 
 ---
@@ -1625,9 +1697,13 @@ git commit -m "feat(esl): add M0 first-light bring-up path and IR menu entry"
 
 **Interfaces:**
 - Consumes: from Task 1 — `TAGTINKER_COLOR26_WIRE_W/H`, `TAGTINKER_COLOR26_GLASS_W/H`, `tagtinker_color26_proto_to_glass`, `TagTinkerPixelAtFn`.
-- Produces: `EslBmpInfo` (fields `data_offset`, `row_stride`, `width`, `height`, `bpp`, `top_down`), `bool esl_bmp_parse(const uint8_t *file, size_t len, EslBmpInfo *info)`, `uint16_t esl_bmp_map_x(uint16_t out_x, uint16_t tx_w, uint16_t src_w)`, `uint16_t esl_bmp_map_y(uint16_t out_y, uint16_t tx_h, uint16_t src_h)`, `EslColor26BmpCtx` (fields `file`, `file_len`, `info`), and `uint8_t esl_color26_bmp_pixel(size_t idx, void *ctx)` which matches `TagTinkerPixelAtFn`. Task 7 passes `esl_color26_bmp_pixel` straight into `tagtinker_encode_fn_payload`.
+- Produces: `EslBmpInfo` (fields `data_offset`, `row_stride`, `width`, `height`, `bpp`, `top_down`), `bool esl_bmp_parse(const uint8_t *file, size_t len, EslBmpInfo *info)`, `uint16_t esl_bmp_map_x(uint16_t out_x, uint16_t tx_w, uint16_t src_w)`, `uint16_t esl_bmp_map_y(uint16_t out_y, uint16_t tx_h, uint16_t src_h)`, `EslColor26BmpCtx` (fields `file`, `file_len`, `info`) with `uint8_t esl_color26_bmp_pixel(size_t idx, void *ctx)`, and `EslGenericBmpCtx` (fields `file`, `file_len`, `info`, `out_w`, `out_h`, `second_plane`) with `uint8_t esl_generic_bmp_pixel(size_t idx, void *ctx)`. Both callbacks match `TagTinkerPixelAtFn`, so Task 7 passes them straight into `tagtinker_encode_fn_payload`.
 
-Note on the BMP convention used by the web prep tool: `bpp` is a marker, not a bit depth. `bpp = 1` is a single 1-bit plane; `bpp = 2` means **two stacked 1-bit planes** with the same row stride, where the header height is the per-plane height and the accent plane starts at row offset `height`. A BMP bit of `1` means white, which is ESL `0`.
+Two conventions this task must reproduce exactly:
+
+**Plane marker.** `bpp` is a marker, not a bit depth. `bpp = 1` is a single 1-bit plane; `bpp = 2` means **two stacked 1-bit planes** with the *same* row stride, where the header height is the per-plane height and the accent plane starts at row offset `height`. A BMP bit of `1` means white, which is ESL `0`.
+
+**Accepted bpp set.** `esl_bmp_parse` accepts **1, 2, 24 and 32**, exactly as upstream's `tx_bmp_open` does, using upstream's per-bpp strides (`((w+31)/32)*4` for 1 and 2, `((w*3)+3) & ~3` for 24, `w*4` for 32). Rejecting non-1/2 is the *Color 2.6 send path's* job, not the parser's. The faithful consequence: upstream's pixel reader takes one bit per pixel regardless of bpp, so a 24/32-bpp source is accepted by the parser but not meaningfully decoded. That is upstream's behaviour and we reproduce it rather than diverging — the web prep tool always emits 1 or 2, which is the supported flow.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1693,6 +1769,22 @@ static void test_parse(void) {
     CHECK_EQ(info.row_stride, 20); /* (152+31)/32*4 */
     free(f);
 
+    /* 24 and 32 bpp are accepted, with upstream's per-bpp strides. Rejecting
+     * non-1/2 is the Color 2.6 send path's job, not the parser's. */
+    f = make_bmp(100, 10, 24, 0, 1, &len);
+    f[28] = 24;
+    CHECK(esl_bmp_parse(f, len, &info));
+    CHECK_EQ(info.bpp, 24);
+    CHECK_EQ(info.row_stride, 300); /* (100*3 + 3) & ~3 */
+    free(f);
+
+    f = make_bmp(100, 10, 32, 0, 1, &len);
+    f[28] = 32;
+    CHECK(esl_bmp_parse(f, len, &info));
+    CHECK_EQ(info.bpp, 32);
+    CHECK_EQ(info.row_stride, 400); /* 100*4 */
+    free(f);
+
     /* Rejections. Each case is isolated so it can only fail for its own
      * reason: the header is restored to valid between mutations. */
     f = make_bmp(8, 8, 1, 0, 1, &len);
@@ -1702,13 +1794,61 @@ static void test_parse(void) {
     CHECK(!esl_bmp_parse(f, len, &info)); /* bad magic */
     f[0] = 'B';
 
-    f[28] = 24;
-    CHECK(!esl_bmp_parse(f, len, &info)); /* unsupported bpp marker */
+    f[28] = 16;
+    CHECK(!esl_bmp_parse(f, len, &info)); /* bpp outside the accepted set */
     f[28] = 1;
 
     CHECK(!esl_bmp_parse(f, 53, &info)); /* truncated header, bpp valid */
     CHECK(!esl_bmp_parse(NULL, len, &info));
     CHECK(!esl_bmp_parse(f, len, NULL));
+    free(f);
+}
+
+/* Generic profiles: plain nearest-neighbour rescale, no transpose. */
+static void test_generic_pixel(void) {
+    size_t len = 0;
+    /* 8x8 source, top-down, scaled up to a 16x16 output. */
+    uint8_t *f = make_bmp(8, 8, 1, 1, 1, &len);
+    EslBmpInfo info;
+    CHECK(esl_bmp_parse(f, len, &info));
+
+    set_bit(f, &info, 0, 0, 0); /* source (0,0) is white */
+
+    EslGenericBmpCtx ctx = {f, len, &info, 16, 16, false};
+
+    /* Upscale x2: output (0,0), (1,0), (0,1), (1,1) all map to source (0,0). */
+    CHECK_EQ(esl_generic_bmp_pixel(0, &ctx), 0);
+    CHECK_EQ(esl_generic_bmp_pixel(1, &ctx), 0);
+    CHECK_EQ(esl_generic_bmp_pixel(16, &ctx), 0);
+    CHECK_EQ(esl_generic_bmp_pixel(17, &ctx), 0);
+    /* Output (2,0) maps to source (1,0), which is untouched. */
+    CHECK_EQ(esl_generic_bmp_pixel(2, &ctx), 1);
+
+    /* With second_plane on a 1-plane source, the accent plane reads clear. */
+    EslGenericBmpCtx accent_ctx = {f, len, &info, 16, 16, true};
+    CHECK_EQ(esl_generic_bmp_pixel(256, &accent_ctx), 1);
+    CHECK_EQ(esl_generic_bmp_pixel(257, &accent_ctx), 1);
+
+    /* Guards. */
+    CHECK_EQ(esl_generic_bmp_pixel(0, NULL), 1);
+    EslGenericBmpCtx zero_ctx = {f, len, &info, 0, 0, false};
+    CHECK_EQ(esl_generic_bmp_pixel(0, &zero_ctx), 1);
+    free(f);
+}
+
+/* A stacked 2-plane generic source feeds the accent plane. */
+static void test_generic_accent_plane(void) {
+    size_t len = 0;
+    uint8_t *f = make_bmp(8, 8, 2, 1, 2, &len);
+    EslBmpInfo info;
+    CHECK(esl_bmp_parse(f, len, &info));
+
+    set_bit(f, &info, 1, 0, 0); /* accent plane, source (0,0) */
+
+    EslGenericBmpCtx ctx = {f, len, &info, 8, 8, true};
+    CHECK_EQ(esl_generic_bmp_pixel(0, &ctx), 1);  /* primary untouched */
+    CHECK_EQ(esl_generic_bmp_pixel(64, &ctx), 0); /* accent set */
+    CHECK_EQ(esl_generic_bmp_pixel(65, &ctx), 1);
     free(f);
 }
 
@@ -1815,6 +1955,8 @@ int main(void) {
     test_color26_wire_orientation();
     test_color26_accent_plane();
     test_color26_bounds();
+    test_generic_pixel();
+    test_generic_accent_plane();
     TEST_REPORT("test_bmp");
 }
 ```
@@ -1835,9 +1977,9 @@ Create `src/modules/ir/esl/esl_bmp.h`:
 /* BMP reading for ESL image uploads.
  *
  * Consumes the BMPs produced by TagTinker's web image prep tool. Note that bpp
- * is a marker, not a real bit depth: 1 means one 1-bit plane, and 2 means two
- * stacked 1-bit planes (identical row stride) where the header height is the
- * per-plane height and the accent plane begins at row offset height.
+ * is a plane marker, not a real bit depth: 1 means one 1-bit plane, and 2 means
+ * two stacked 1-bit planes (identical row stride) where the header height is
+ * the per-plane height and the accent plane begins at row offset height.
  *
  * Pure logic with no filesystem or hardware dependency: the caller loads the
  * whole file into RAM first, which is also what the encode-then-transmit
@@ -1851,12 +1993,14 @@ typedef struct {
     uint32_t row_stride;
     uint16_t width;
     uint16_t height; /* per-plane height */
-    uint16_t bpp;    /* 1 or 2 (plane-count marker) */
+    uint16_t bpp;    /* 1, 2, 24 or 32 (1/2 are plane-count markers) */
     bool top_down;
 } EslBmpInfo;
 
-/* Parses the 54-byte header. Returns false for anything that is not a 1 or 2
- * marker BMP, or if the buffer is too short. */
+/* Parses the 54-byte header. Accepts bpp 1, 2, 24 and 32 — the same set as
+ * upstream's tx_bmp_open — and computes upstream's per-bpp row stride.
+ * Refusing non-1/2 belongs to the Color 2.6 send path, not here. Returns false
+ * only for a bad magic, an unsupported bpp, or a too-short buffer. */
 bool esl_bmp_parse(const uint8_t *file, size_t len, EslBmpInfo *info);
 
 /* Nearest-neighbour coordinate mapping, clamped to the source extent. */
@@ -1873,6 +2017,21 @@ typedef struct {
  * Handles the wire->glass transpose, source orientation and rescaling.
  * ctx must be an EslColor26BmpCtx*. */
 uint8_t esl_color26_bmp_pixel(size_t idx, void *ctx);
+
+typedef struct {
+    const uint8_t *file;
+    size_t file_len;
+    const EslBmpInfo *info;
+    uint16_t out_w; /* target profile width */
+    uint16_t out_h; /* target profile height */
+    bool second_plane;
+} EslGenericBmpCtx;
+
+/* TagTinkerPixelAtFn for every non-Color-2.6 dot-matrix profile: plain
+ * nearest-neighbour rescale to out_w x out_h, with the accent plane taken from
+ * a stacked 2-plane source or left clear. ctx must be an EslGenericBmpCtx*.
+ * Total pixel count is out_w * out_h * (second_plane ? 2 : 1). */
+uint8_t esl_generic_bmp_pixel(size_t idx, void *ctx);
 ```
 
 - [ ] **Step 4: Write the implementation**
@@ -1897,8 +2056,9 @@ bool esl_bmp_parse(const uint8_t *file, size_t len, EslBmpInfo *info) {
     if (file == NULL || info == NULL || len < ESL_BMP_HEADER_SIZE) return false;
     if (file[0] != 'B' || file[1] != 'M') return false;
 
+    /* Same accepted set as upstream tx_bmp_open. */
     const uint16_t bpp = rd16(&file[28]);
-    if (bpp != 1u && bpp != 2u) return false;
+    if (bpp != 1u && bpp != 2u && bpp != 24u && bpp != 32u) return false;
 
     int32_t h = (int32_t)rd32(&file[22]);
     info->top_down = false;
@@ -1911,8 +2071,16 @@ bool esl_bmp_parse(const uint8_t *file, size_t len, EslBmpInfo *info) {
     info->width = (uint16_t)rd32(&file[18]);
     info->height = (uint16_t)h;
     info->data_offset = rd32(&file[10]);
-    /* Both markers store one bit per pixel, so the stride is the same. */
-    info->row_stride = (((uint32_t)info->width + 31u) / 32u) * 4u;
+
+    /* Upstream's per-bpp strides. Markers 1 and 2 both store one bit per
+     * pixel, so they share a stride. */
+    if (bpp == 1u || bpp == 2u) {
+        info->row_stride = (((uint32_t)info->width + 31u) / 32u) * 4u;
+    } else if (bpp == 24u) {
+        info->row_stride = (((uint32_t)info->width * 3u) + 3u) & ~3u;
+    } else {
+        info->row_stride = (uint32_t)info->width * 4u;
+    }
 
     if (info->width == 0u || info->height == 0u) return false;
     if (info->data_offset >= len) return false;
@@ -1959,11 +2127,12 @@ static void color26_src_xy(const EslBmpInfo *info, uint16_t px, uint16_t py,
     *sy = esl_bmp_map_y(gy, TAGTINKER_COLOR26_GLASS_H, info->height);
 }
 
-/* Returns the ESL bit at source (bx, by) in the given plane.
- * Out-of-range reads return 1 (clear) rather than touching memory. */
-static uint8_t color26_bit(const EslColor26BmpCtx *c, uint16_t bx, uint16_t by,
+/* Returns the ESL bit at source (bx, by) in the given plane. Shared by both
+ * pixel callbacks. Out-of-range reads return 1 (clear) rather than touching
+ * memory. One bit per pixel, matching upstream's bmp_read_pixel. */
+static uint8_t esl_bmp_bit(const uint8_t *file, size_t file_len,
+                           const EslBmpInfo *info, uint16_t bx, uint16_t by,
                            uint8_t plane) {
-    const EslBmpInfo *info = c->info;
     if (info->width == 0u || info->height == 0u) return 1u;
     if (bx >= info->width) bx = (uint16_t)(info->width - 1u);
     if (by >= info->height) by = (uint16_t)(info->height - 1u);
@@ -1974,10 +2143,10 @@ static uint8_t color26_bit(const EslColor26BmpCtx *c, uint16_t bx, uint16_t by,
                    ((uint32_t)row + (uint32_t)plane * (uint32_t)info->height) *
                        info->row_stride;
     off += (uint32_t)bx / 8u;
-    if (off >= c->file_len) return 1u;
+    if (off >= file_len) return 1u;
 
     /* BMP bit 1 is white, which is ESL 0. */
-    const uint8_t bit = (uint8_t)((c->file[off] >> (7u - (bx % 8u))) & 1u);
+    const uint8_t bit = (uint8_t)((file[off] >> (7u - (bx % 8u))) & 1u);
     return bit ? 0u : 1u;
 }
 
@@ -2001,7 +2170,30 @@ uint8_t esl_color26_bmp_pixel(size_t idx, void *ctx) {
     const uint16_t py = (uint16_t)(idx / TAGTINKER_COLOR26_WIRE_W);
     uint16_t bx = 0u, by = 0u;
     color26_src_xy(c->info, px, py, &bx, &by);
-    return color26_bit(c, bx, by, plane);
+    return esl_bmp_bit(c->file, c->file_len, c->info, bx, by, plane);
+}
+
+uint8_t esl_generic_bmp_pixel(size_t idx, void *ctx) {
+    const EslGenericBmpCtx *c = (const EslGenericBmpCtx *)ctx;
+    if (c == NULL || c->file == NULL || c->info == NULL) return 1u;
+    if (c->out_w == 0u || c->out_h == 0u) return 1u;
+
+    const size_t plane_count = (size_t)c->out_w * (size_t)c->out_h;
+    uint8_t plane = 0u;
+    if (idx >= plane_count) {
+        plane = 1u;
+        idx -= plane_count;
+    }
+    if (idx >= plane_count) return 1u;
+
+    /* A 1-plane source has no accent data, so the accent plane reads clear. */
+    if (plane == 1u && c->info->bpp != 2u) return 1u;
+
+    const uint16_t ox = (uint16_t)(idx % c->out_w);
+    const uint16_t oy = (uint16_t)(idx / c->out_w);
+    const uint16_t sx = esl_bmp_map_x(ox, c->out_w, c->info->width);
+    const uint16_t sy = esl_bmp_map_y(oy, c->out_h, c->info->height);
+    return esl_bmp_bit(c->file, c->file_len, c->info, sx, sy, plane);
 }
 ```
 
@@ -2029,12 +2221,17 @@ git commit -m "feat(esl): add host-tested BMP parsing and Color 2.6 pixel mappin
 - Modify: `src/modules/ir/esl/esl_app.cpp` (replace the M0 bring-up body)
 
 **Interfaces:**
-- Consumes: everything produced by Tasks 1, 3, 4 and 6 — in particular `esl_bmp_parse`, `EslColor26BmpCtx`, `esl_color26_bmp_pixel`, `esl_tx_send_color26`, `esl_tx_send_generic`, `tagtinker_barcode_to_plid/profile`, `tagtinker_encode_fn_payload`, `esl_ir_init/deinit/transmit/stop`. From Bruce: `keyboard(const String&, int, const String&, bool) -> String`, `loopSD(FS&, bool, const String&, String) -> String`, `setupSdCard(uint8_t) -> bool`, `displayError/displayWarning/displaySuccess/displayTextLine`, `drawMainBorderWithTitle`, `progressHandler`, `check(EscPress)`, `returnToMenu`, `bruceConfigPins.irTx`, `checkIrTxPin()`, `sdcardMounted`.
-- Produces: the final `void startEslTx(void)` behaviour. No new symbols.
+- Consumes: everything produced by Tasks 1, 3, 4, 5 and 6 — in particular `esl_prompt_target` (written in Task 5, reused unchanged), `esl_bmp_parse`, `EslColor26BmpCtx` + `esl_color26_bmp_pixel`, `EslGenericBmpCtx` + `esl_generic_bmp_pixel`, `esl_tx_send_color26`, `esl_tx_send_generic(..., data_repeats)`, `ESL_GENERIC_DATA_REPEATS`, `tagtinker_profile_needs_wh_swap`, `tagtinker_encode_fn_payload`, `esl_ir_init/deinit/transmit/stop`. From Bruce: `keyboard(const String&, int, const String&, bool) -> String`, `loopSD(FS&, bool, const String&, String) -> String`, `setupSdCard(uint8_t) -> bool`, `loopOptions(options, MENU_TYPE_SUBMENU, title)` with the global `std::vector<Option> options` (`Option(const char*, std::function<void()>)`), `displayError/displayWarning/displaySuccess/displayTextLine`, `drawMainBorderWithTitle`, `progressHandler`, `check(EscPress)`, `returnToMenu`, `bruceConfigPins.irTx`, `checkIrTxPin()`.
+- Produces: the final `void startEslTx(void)` behaviour, plus the file-scope helpers `esl_prompt_page`, `esl_pick_bmp`, `esl_read_file`. No new public symbols.
 
-- [ ] **Step 1: Replace `esl_app.cpp` with the full M1 flow**
+Fidelity requirements specific to this task:
+- **Every dot-matrix profile is supported.** Do not gate the feature to Color 2.6.
+- **The page is user-selectable 0–7**, mirroring `scene_image_options`. Position, compression and frame-repeat stay at upstream's fixed defaults.
+- **Color 2.6 file cap is 24576** (`TX_COLOR26_BMP_MAX`); non-1/2 bpp is refused by the *send path*, matching upstream, not by the parser.
 
-Rewrite `src/modules/ir/esl/esl_app.cpp`:
+- [ ] **Step 1: Extend `esl_app.cpp` to the full M1 flow**
+
+Rewrite `src/modules/ir/esl/esl_app.cpp`. `esl_prompt_target` and the ops callbacks carry over from Task 5 unchanged; the barcode prompt stays the only source of the tag address:
 
 ```cpp
 #include "esl_app.h"
@@ -2056,10 +2253,14 @@ Rewrite `src/modules/ir/esl/esl_app.cpp`:
 #define ESL_BARCODE_LEN 17
 #define ESL_PRE_TX_SETTLE_MS 500
 
-/* Bounds the BMP we are willing to pull into RAM. A 296x152 two-plane source
- * is ~12 KB, so this leaves generous headroom without risking an allocation
- * failure mid-flow. */
-#define ESL_BMP_MAX_BYTES 65536u
+/* Upstream's Color 2.6 file cap (TX_COLOR26_BMP_MAX). Do not raise it. */
+#define ESL_COLOR26_BMP_MAX 24576u
+
+/* Generic profiles have no upstream file cap because upstream streams rows
+ * from SD. The encode-then-transmit rule forces us to hold the file in RAM
+ * instead, so a bound is required: 256 KB clears the largest profile with
+ * headroom (800x480 two-plane 1bpp is ~96 KB). */
+#define ESL_GENERIC_BMP_MAX 262144u
 
 struct EslUiCtx {
     bool aborted;
@@ -2090,8 +2291,7 @@ static void ui_progress(void *ctx, size_t done, size_t total) {
     progressHandler((int)done, total, "Sending ESL");
 }
 
-/* Prompts for the tag barcode and derives its address and profile. */
-static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
+bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
 
@@ -2107,10 +2307,30 @@ static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
         displayError("Unknown tag type", true);
         return false;
     }
+    /* Segment tags have no image page, matching supports_graphics upstream. */
     if (profile->kind != TagTinkerTagKindDotMatrix) {
         displayError("Tag has no image page", true);
         return false;
     }
+    return true;
+}
+
+/* Mirrors scene_image_options, where the page is the only per-image knob.
+ * Position, compression and frame-repeat stay at upstream's defaults. */
+static const char *ESL_PAGE_LABELS[8] = {"Page 0", "Page 1", "Page 2",
+                                         "Page 3", "Page 4", "Page 5",
+                                         "Page 6", "Page 7"};
+
+static bool esl_prompt_page(uint8_t *page) {
+    int chosen = -1;
+    options.clear();
+    for (uint8_t p = 0; p < 8; p++) {
+        options.push_back(
+            Option(ESL_PAGE_LABELS[p], [&chosen, p]() { chosen = (int)p; }));
+    }
+    loopOptions(options, MENU_TYPE_SUBMENU, "Image page");
+    if (chosen < 0) return false; /* user backed out */
+    *page = (uint8_t)chosen;
     return true;
 }
 
@@ -2124,7 +2344,8 @@ static String esl_pick_bmp() {
 }
 
 /* Reads the whole file into PSRAM. Caller frees. */
-static uint8_t *esl_read_file(const String &path, size_t *out_len) {
+static uint8_t *esl_read_file(const String &path, size_t max_bytes,
+                              size_t *out_len) {
     fs::FS *fs = &SD;
     if (!SD.exists(path)) fs = &LittleFS;
 
@@ -2132,7 +2353,7 @@ static uint8_t *esl_read_file(const String &path, size_t *out_len) {
     if (!f) return nullptr;
 
     const size_t len = f.size();
-    if (len < 54u || len > ESL_BMP_MAX_BYTES) {
+    if (len < 54u || len > max_bytes) {
         f.close();
         return nullptr;
     }
@@ -2169,10 +2390,19 @@ void startEslTx() {
         return;
     }
 
+    uint8_t page = 0;
+    if (!esl_prompt_page(&page)) {
+        returnToMenu = true;
+        return;
+    }
+
+    const bool is_color26 = tagtinker_profile_needs_wh_swap(&profile);
+    const size_t cap = is_color26 ? ESL_COLOR26_BMP_MAX : ESL_GENERIC_BMP_MAX;
+
     /* --- Everything that touches the SD card happens before the IR pin is
      * claimed, because setup_ir_pin() may tear down the SD SPI bus. --- */
     size_t file_len = 0;
-    uint8_t *file = esl_read_file(path, &file_len);
+    uint8_t *file = esl_read_file(path, cap, &file_len);
     if (file == nullptr) {
         displayError("Cannot read BMP", true);
         returnToMenu = true;
@@ -2182,31 +2412,43 @@ void startEslTx() {
     EslBmpInfo info;
     if (!esl_bmp_parse(file, file_len, &info)) {
         free(file);
-        displayError("Need 1/2bpp BMP", true);
+        displayError("Unsupported BMP", true);
         returnToMenu = true;
         return;
     }
 
     displayTextLine("Encoding...");
 
-    const bool is_color26 = tagtinker_profile_needs_wh_swap(&profile);
     TagTinkerImagePayload payload;
     bool encoded = false;
+    uint16_t out_w = 0;
+    uint16_t out_h = 0;
 
     if (is_color26) {
+        /* Upstream's Color 2.6 send path is what refuses non-plane sources. */
+        if (info.bpp != 1u && info.bpp != 2u) {
+            free(file);
+            displayError("Need 1/2bpp BMP", true);
+            returnToMenu = true;
+            return;
+        }
         EslColor26BmpCtx ctx = {file, file_len, &info};
         const size_t total = (size_t)TAGTINKER_COLOR26_WIRE_W *
                              TAGTINKER_COLOR26_WIRE_H * 2U;
         encoded = tagtinker_encode_fn_payload(esl_color26_bmp_pixel, &ctx, total,
                                               TagTinkerCompressionAuto, &payload);
     } else {
-        /* Other dot-matrix tags are not the verification target for M1 and the
-         * generic transmit path is untested against real hardware. Refuse
-         * rather than send a payload we cannot vouch for. */
-        free(file);
-        displayError("Only Color 2.6 in M1", true);
-        returnToMenu = true;
-        return;
+        /* Accent plane follows the profile's colour capability, matching
+         * upstream's use_second_plane with color_clear at its default. */
+        out_w = profile.width;
+        out_h = profile.height;
+        const bool second_plane = (profile.color != TagTinkerTagColorMono);
+        EslGenericBmpCtx ctx = {file, file_len, &info, out_w, out_h,
+                                second_plane};
+        const size_t total =
+            (size_t)out_w * out_h * (second_plane ? 2U : 1U);
+        encoded = tagtinker_encode_fn_payload(esl_generic_bmp_pixel, &ctx, total,
+                                              TagTinkerCompressionAuto, &payload);
     }
 
     free(file); /* pixels are now baked into the payload */
@@ -2231,7 +2473,12 @@ void startEslTx() {
 
     EslUiCtx ui = {false};
     EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
-    const bool ok = esl_tx_send_color26(&ops, plid, &payload, 0);
+
+    const bool ok =
+        is_color26
+            ? esl_tx_send_color26(&ops, plid, &payload, page)
+            : esl_tx_send_generic(&ops, plid, &payload, page, out_w, out_h, 0u,
+                                  0u, ESL_GENERIC_DATA_REPEATS);
 
     esl_ir_deinit();
     tagtinker_free_image_payload(&payload);
@@ -2277,11 +2524,14 @@ Flash, then run `IR -> ESL Image`:
 cd firmware && /tmp/pio-venv/bin/pio run -e lilygo-t-embed-cc1101 -t upload
 ```
 
-1. Enter `A4165420155216265` at the barcode prompt.
+1. Enter your tag's barcode at the prompt.
 2. Pick the BMP.
-3. Watch the progress bar advance through wake, param, data frames and refresh.
+3. Choose a page (leave it at `Page 0` to exercise the remap to the image slot).
+4. Watch the progress bar advance through wake, param, data frames and refresh.
 
 Expected: the image appears **upright and correctly oriented** on the tag, not rotated, mirrored, or overlapping the barcode. If it appears rotated 90°, the source-orientation branch in `color26_src_xy` chose the wrong path — check the BMP's actual header dimensions. If it lands on the barcode, check the resolved page is 2.
+
+Then repeat with `Page 3` and confirm the image lands on a different page, proving the picker is wired through rather than ignored.
 
 - [ ] **Step 6: Verify the error and abort paths**
 
@@ -2289,7 +2539,10 @@ Confirm each of these leaves the device usable, back at the menu, with the IR LE
 - Enter a 5-character barcode → `Barcode must be 17 chars`.
 - Enter `A4165420155299995` (valid shape, unknown type) → `Unknown tag type`.
 - Cancel at the file picker → returns to the menu silently.
+- Back out of the page picker → returns to the menu silently.
 - Press Esc mid-send → `Aborted`.
+
+The generic (non-1626) branch cannot be verified here — no such tag is available. It is covered by `test_tx` and `test_bmp` at the sequence and pixel-mapping level; state that limitation in the report rather than implying hardware coverage.
 
 - [ ] **Step 7: Commit**
 
@@ -2321,7 +2574,14 @@ git commit -m "feat(esl): add M1 image transmit UX with barcode entry and BMP pi
 | Color 2.6 transpose + orientation + rescale | Task 6 |
 | Stacked 2-plane accent handling | Task 6 (`test_color26_accent_plane`) |
 | Page remap (image never on barcode page) | Task 3 (`resolve_page`), asserted in `test_tx` |
-| Barcode entry only, no default | Task 7 (`esl_prompt_target`) |
+| Barcode entry only, nothing hardcoded anywhere | Task 5 (`esl_prompt_target`), reused by Task 7 |
+| Page user-selectable 0–7 (`scene_image_options` parity) | Task 7 (`esl_prompt_page`), verified in step 5 |
+| All dot-matrix profiles supported | Task 6 (`esl_generic_bmp_pixel`), Task 7 (generic branch) |
+| Per-family data pacing (50 ms/frame vs 1 ms/32 frames) | Task 3 (`EslTxProfile`), asserted in `test_tx` |
+| bpp 1/2/24/32 accepted with upstream strides | Task 6 (`esl_bmp_parse`, `test_parse`) |
+| Color 2.6 cap 24576; non-1/2 refused at send | Task 7 (`ESL_COLOR26_BMP_MAX`, send-path check) |
+| `data_frame_repeats` threaded, not baked in | Task 3 (`test_generic_honours_data_repeats`) |
+| No chunking in the image path | Not implemented anywhere; Global Constraints forbid it |
 | BMP picker via `loopSD` | Task 7 (`esl_pick_bmp`) |
 | Progress + Esc abort | Tasks 3, 5, 7 |
 | Error handling (bad profile, bpp, size, malloc, abort) | Task 3 (guards), Task 6 (parse rejects), Task 7 (all paths) |
@@ -2331,7 +2591,14 @@ git commit -m "feat(esl): add M1 image transmit UX with barcode entry and BMP pi
 | Build check on `lilygo-t-embed-cc1101` | Tasks 4, 5, 7 |
 | Drop vestigial `signal_mode` / watchdog yields | Not carried over; `esl_tx.h` and `esl_ir_driver.cpp` have no such layer |
 
-Gap found and closed: the spec assumes M1 serves generic dot-matrix tags too, but the generic sequence cannot be verified without such a tag. Rather than ship an unverifiable path silently, Task 3 implements and tests `esl_tx_send_generic` at the sequence level while Task 7 explicitly refuses non-1626 profiles with a clear message. Removing that gate is the first step of the M2 work.
+Gaps found and closed during the 1:1 fidelity review:
+
+- **Hardcoded barcode removed.** M0 previously compiled in a barcode and sent a synthetic blank image — neither exists upstream. Task 5 is now a wake-frame-only timing checkpoint driven by the real barcode prompt.
+- **Generic tags restored.** Task 7 previously refused non-1626 profiles. It now supports every dot-matrix profile via `esl_generic_bmp_pixel`, with the hardware-verification limitation stated rather than enforced as a feature gate.
+- **Page picker added.** Upstream exposes the page; the plan had hardcoded it.
+- **Data pacing split per family.** A single shared 50 ms policy would have given generic tags a gap they never see upstream.
+- **bpp set and caps corrected** to upstream's (1/2/24/32, `TX_COLOR26_BMP_MAX` 24576).
+- **Chunking correctly excluded.** An earlier draft treated it as a missing image-path feature; it is used only by the text path upstream, so it belongs to M2 and is now explicitly forbidden here.
 
 **2. Placeholder scan**
 
