@@ -50,7 +50,10 @@ typedef struct {
 size_t esl_tx_step_count(const TagTinkerImagePayload *payload);
 
 /* SmartTAG Color 2.6 (type 1626): wake -> param(152x296) -> data -> refresh.
- * The page is remapped so the image never lands on the barcode page. */
+ * The caller supplies the final page. Seeding the default with
+ * tagtinker_color26_resolve_page is the caller's job — mirroring upstream,
+ * where the remap is a prepare-time default that an explicit Image Options
+ * pick overrides. */
 bool esl_tx_send_color26(const EslTxOps *ops, const uint8_t plid[4],
                          const TagTinkerImagePayload *payload, uint8_t page);
 

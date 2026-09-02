@@ -96,9 +96,10 @@ static void test_color26_sequence(void) {
     CHECK_EQ(k.rec[0].frame[5], 0x17);
     CHECK_EQ(k.rec[0].len, 34);
 
-    /* Param: MCU 0x05, wire dims 152x296, page 0 resolved to 2, repeats 1. */
+    /* Param: MCU 0x05, wire dims 152x296, page 0 reaches the wire
+     * verbatim (the defect was a second resolve that rewrote 0 to 2). */
     CHECK_EQ(k.rec[1].frame[9], 0x05);
-    CHECK_EQ(k.rec[1].frame[14], 2); /* resolved page */
+    CHECK_EQ(k.rec[1].frame[14], 0); /* explicit page 0 is not remapped */
     CHECK_EQ(k.rec[1].frame[15], 0x00);
     CHECK_EQ(k.rec[1].frame[16], 0x98); /* 152 */
     CHECK_EQ(k.rec[1].frame[17], 0x01);
@@ -143,6 +144,18 @@ static void test_explicit_page_preserved(void) {
 
     CHECK(esl_tx_send_color26(&ops, PLID, &p, 5));
     CHECK_EQ(k.rec[1].frame[14], 5); /* explicit pages 2-7 pass through */
+    free(p.data);
+}
+
+static void test_explicit_page_one_preserved(void) {
+    Fake k;
+    EslTxOps ops;
+    TagTinkerImagePayload p;
+    fake_init(&k, &ops);
+    payload_init(&p, 1);
+
+    CHECK(esl_tx_send_color26(&ops, PLID, &p, 1));
+    CHECK_EQ(k.rec[1].frame[14], 1); /* resolve_page used to rewrite 1 to 2 */
     free(p.data);
 }
 
@@ -260,6 +273,7 @@ static void test_guards(void) {
 int main(void) {
     test_color26_sequence();
     test_explicit_page_preserved();
+    test_explicit_page_one_preserved();
     test_generic_sequence();
     test_generic_honours_data_repeats();
     test_abort_stops_early();
