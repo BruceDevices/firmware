@@ -5,7 +5,9 @@
  * recording fake instead of real hardware. */
 #pragma once
 
-#include "protocol/tagtinker_proto.h"
+/* Via esl_proto.h, never the vendored header directly: that keeps the vendor
+ * symbols' linkage independent of include order in C++ callers. */
+#include "esl_proto.h"
 
 /* Repeat counts are load-bearing: they are what makes a tag latch. Values come
  * from TagTinker PR #53. Remember repeats = N means N+1 transmissions. */
