@@ -122,9 +122,9 @@ nothing is adapted silently.
 |---|---|
 | `TX_COLOR26_BMP_MAX` | 24576 bytes (Color 2.6 BMP file cap) |
 | `tx_bmp_open` accepted bpp | **1, 2, 24, 32** — the Color 2.6 *send* is what rejects non-1/2 |
-| Image page | User-selectable 0–7 via `scene_image_options` |
+| Image page | User-selectable 0–7 via `scene_image_options`. **The `resolve_page` remap is a prepare-time *default*, not a wire invariant:** upstream applies it in `tagtinker_prepare_bmp_tx`, then the picker overwrites `job->page` with the raw index, and the send path transmits it with no second resolve. An explicit pick of page 0 must therefore reach the wire as 0. |
 | Position / compression / frame-repeat in Image Options | Deliberately fixed at defaults (0,0 / auto RLE / ×2). Upstream comment: *"pages are the only knob that meaningfully changes per-image."* |
-| `data_frame_repeats` | Default 2, range 1–10, exposed in Settings |
+| `data_frame_repeats` | Default 2, threaded through as a parameter. The Settings screen exposing the 1–10 range is **M2** scope, so M1 correctly uses the default at the call site. |
 | Data-frame pacing | Per-family, per the table above |
 | Tag coverage | Every dot-matrix profile, not just Color 2.6 |
 | Pre-TX settle | 500 ms before IR blasting for image/text jobs |
@@ -314,9 +314,10 @@ Mirrors upstream's `Set Image` flow: pick tag → pick image → choose page →
      the same pixel selection `tx_stream_bmp_image` performs.
 6. **Transmit:** profile-appropriate sequence via the M0 driver, using the exact repeat
    counts **and the per-family data pacing** pinned above. Color 2.6 uses
-   `wake→param(152×296)→data→refresh` with page remap
-   (`tagtinker_color26_resolve_page`); generic uses `ping→param→data→refresh` with the
-   page passed straight through.
+   `wake→param(152×296)→data→refresh`; generic uses `ping→param→data→refresh`. **Both
+   transmit the caller's page verbatim.** `tagtinker_color26_resolve_page` seeds the
+   picker's *default* for Color 2.6 so the out-of-the-box choice avoids the barcode page —
+   exactly as upstream applies it at prepare time. It never rewrites an explicit pick.
 7. **UI:** `drawMainBorderWithTitle("ESL Image")`, `progressHandler(frame_i, frame_count)`,
    `check(EscPress)` → `esl_ir_stop()`. On success `displaySuccess`, then restore pin/SD.
 
@@ -343,7 +344,8 @@ text/test ┤→ pixel-callback (transpose + NN rescale) → RLE/raw plane encod
 - `malloc`/RMT channel allocation failure → error line, safe teardown.
 - IR pin unset/invalid → reuse Bruce's `checkIrTxPin()` to force selection.
 - User abort (Esc) → `esl_ir_stop()`, carrier off, restore pin/SD.
-- Always restore IR pin to `LED_OFF` and re-enable SD SPI on exit.
+- Always restore the IR pin to `LED_OFF` on exit.
+- **SD remount is a known gap, not a delivered behaviour.** `setup_ir_pin()` calls `sdcardSPI.end()` only when the chosen IR pin conflicts with the SD bus. On the verification board it never fires (IR is GPIO 2; SD is CS 13 plus the shared SPI pins), and every existing Bruce IR feature has the same gap, so M1 does not remount. On a board where the IR pin *does* share the SD bus, one send would leave SD unmounted for the session. Fixing it properly means `closeSdCard()` + `setupSdCard()` after deinit — `setupSdCard()` alone returns early while `sdcardMounted` is still true.
 
 ## Testing / verification
 
