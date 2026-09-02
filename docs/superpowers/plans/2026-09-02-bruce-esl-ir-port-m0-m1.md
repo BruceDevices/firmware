@@ -1295,6 +1295,15 @@ void esl_ir_stop(void);
 
 bool esl_ir_is_busy(void);
 
+/* Abort poll. esl_ir_transmit blocks the calling task for repeats+1 frames —
+ * 401 frames (~10 s) for a wake burst — so without this the caller has no way
+ * to interrupt it and any "Esc aborts" prompt would be a lie. The hook is
+ * polled between repeats, which keeps transmit synchronous on one task (no TX
+ * thread, so the missing re-entry guard stays safe) while still giving the user
+ * upstream's ability to cancel a send. Pass NULL to clear. */
+typedef bool (*EslIrAbortFn)(void *ctx);
+void esl_ir_set_abort_hook(EslIrAbortFn fn, void *ctx);
+
 #ifdef __cplusplus
 }
 #endif
@@ -1333,6 +1342,8 @@ static rmt_encoder_handle_t s_encoder = nullptr;
 static int s_gpio = -1;
 static volatile bool s_stop = false;
 static volatile bool s_busy = false;
+static EslIrAbortFn s_abort_fn = nullptr;
+static void *s_abort_ctx = nullptr;
 
 static EslPp4Symbol s_symbols[ESL_IR_MAX_SYMBOLS];
 static rmt_symbol_word_t s_words[ESL_IR_MAX_SYMBOLS];
@@ -1431,6 +1442,9 @@ bool esl_ir_transmit(const uint8_t *data, size_t len, uint16_t repeats,
     bool ok = true;
 
     for (uint32_t r = 0; r <= reps; r++) {
+        /* Poll the caller's abort hook between repeats so a long burst can be
+         * cancelled without moving TX off this task. */
+        if (s_abort_fn != nullptr && s_abort_fn(s_abort_ctx)) s_stop = true;
         if (s_stop) {
             ok = false;
             break;
@@ -1460,6 +1474,11 @@ bool esl_ir_transmit(const uint8_t *data, size_t len, uint16_t repeats,
 void esl_ir_stop(void) { s_stop = true; }
 
 bool esl_ir_is_busy(void) { return s_busy; }
+
+void esl_ir_set_abort_hook(EslIrAbortFn fn, void *ctx) {
+    s_abort_fn = fn;
+    s_abort_ctx = ctx;
+}
 ```
 
 - [ ] **Step 3: Verify the static buffer bound is consistent**
@@ -1561,11 +1580,28 @@ Create `src/modules/ir/esl/esl_app.cpp`. `esl_prompt_target` is written in its f
 /* Settle before blasting IR, mirroring the upstream app's pre-TX pause. */
 #define ESL_PRE_TX_SETTLE_MS 500
 
+/* Latches once pressed so the outcome can be reported as an abort rather than
+ * a transmit failure. */
+static bool s_ui_aborted = false;
+
+/* Polled by the driver between repeats so a long burst is interruptible while
+ * transmit stays synchronous on this task. */
+static bool ui_abort_poll(void *ctx) {
+    (void)ctx;
+    if (!s_ui_aborted && check(EscPress)) s_ui_aborted = true;
+    return s_ui_aborted;
+}
+
 /* Prompts for the tag barcode and derives its address and profile. The barcode
  * is always entered by the user — upstream never compiles one in. */
 bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
+
+    /* Bruce's keyboard returns ESC when the user backs out. Treat that as a
+     * silent cancel rather than scolding them about a length they never
+     * entered. (ESC is not whitespace, so it survives trim().) */
+    if (entered.length() == 0 || entered == "\x1B") return false;
 
     if (entered.length() != ESL_BARCODE_LEN) {
         displayError("Barcode must be 17 chars", true);
@@ -1604,6 +1640,11 @@ void startEslTx() {
         return;
     }
 
+    /* Install the abort poll before transmitting so the status line below is
+     * truthful: the driver checks this between repeats. */
+    s_ui_aborted = false;
+    esl_ir_set_abort_hook(ui_abort_poll, nullptr);
+
     drawMainBorderWithTitle("ESL Image");
     displayTextLine("Wake frames, Esc aborts");
     delay(ESL_PRE_TX_SETTLE_MS);
@@ -1615,9 +1656,12 @@ void startEslTx() {
     const bool ok = esl_ir_transmit(frame, len, ESL_COLOR26_WAKE_REPEATS,
                                     ESL_FRAME_DELAY_UNITS);
 
+    esl_ir_set_abort_hook(nullptr, nullptr);
     esl_ir_deinit();
 
-    if (ok) {
+    if (s_ui_aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
         displaySuccess("Wake sent", true);
     } else {
         displayError("TX failed", true);
@@ -2298,12 +2342,22 @@ static void ui_settle(void *ctx, uint32_t ms) {
     delay(ms);
 }
 
+/* EslTxOps abort: consulted between frames by the sequencing layer. */
 static bool ui_aborted(void *ctx) {
     EslUiCtx *c = (EslUiCtx *)ctx;
     if (!c->aborted && check(EscPress)) {
         c->aborted = true;
         esl_ir_stop();
     }
+    return c->aborted;
+}
+
+/* Driver abort hook: consulted between *repeats* of a single frame. Needed as
+ * well as ui_aborted because the 401-repeat wake burst happens inside one
+ * esl_ir_transmit call, which the frame-level check cannot interrupt. */
+static bool ui_abort_poll(void *ctx) {
+    EslUiCtx *c = (EslUiCtx *)ctx;
+    if (!c->aborted && check(EscPress)) c->aborted = true;
     return c->aborted;
 }
 
@@ -2315,6 +2369,11 @@ static void ui_progress(void *ctx, size_t done, size_t total) {
 bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
+
+    /* Bruce's keyboard returns ESC when the user backs out. Treat that as a
+     * silent cancel rather than scolding them about a length they never
+     * entered. (ESC is not whitespace, so it survives trim().) */
+    if (entered.length() == 0 || entered == "\x1B") return false;
 
     if (entered.length() != ESL_BARCODE_LEN) {
         displayError("Barcode must be 17 chars", true);
@@ -2495,12 +2554,17 @@ void startEslTx() {
     EslUiCtx ui = {false};
     EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
 
+    /* Both abort paths share the same ui.aborted latch: the driver hook covers
+     * long single-frame bursts, ops.aborted covers frame boundaries. */
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
     const bool ok =
         is_color26
             ? esl_tx_send_color26(&ops, plid, &payload, page)
             : esl_tx_send_generic(&ops, plid, &payload, page, out_w, out_h, 0u,
                                   0u, ESL_GENERIC_DATA_REPEATS);
 
+    esl_ir_set_abort_hook(nullptr, nullptr);
     esl_ir_deinit();
     tagtinker_free_image_payload(&payload);
 
