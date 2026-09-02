@@ -89,6 +89,17 @@ static void test_parse(void) {
     CHECK(!esl_bmp_parse(f, 53, &info)); /* truncated header, bpp valid */
     CHECK(!esl_bmp_parse(NULL, len, &info));
     CHECK(!esl_bmp_parse(f, len, NULL));
+
+    f[18] = 0;
+    f[19] = 0;
+    CHECK(!esl_bmp_parse(f, len, &info)); /* width == 0 */
+    f[18] = 8;
+
+    f[22] = 0;
+    f[23] = 0;
+    f[24] = 0;
+    f[25] = 0;
+    CHECK(!esl_bmp_parse(f, len, &info)); /* height == 0 */
     free(f);
 }
 
@@ -121,6 +132,42 @@ static void test_generic_pixel(void) {
     CHECK_EQ(esl_generic_bmp_pixel(0, NULL), 1);
     EslGenericBmpCtx zero_ctx = {f, len, &info, 0, 0, false};
     CHECK_EQ(esl_generic_bmp_pixel(0, &zero_ctx), 1);
+    free(f);
+}
+
+/* Bottom-up BMPs store file row 0 as the last logical row. Identity output
+ * size so only the flip is under test. */
+static void test_generic_bottom_up_row_flip(void) {
+    size_t len = 0;
+    uint8_t *f = make_bmp(8, 8, 1, 0, 1, &len);
+    EslBmpInfo info;
+    CHECK(esl_bmp_parse(f, len, &info));
+    CHECK(!info.top_down);
+    CHECK_EQ(info.height, 8);
+
+    set_bit(f, &info, 0, 7, 0); /* file row height-1 → logical y = 0 */
+    set_bit(f, &info, 0, 0, 1); /* file row 0 → logical y = height-1 */
+
+    EslGenericBmpCtx ctx = {f, len, &info, 8, 8, false};
+    CHECK_EQ(esl_generic_bmp_pixel(0, &ctx), 0);          /* (0, 0) */
+    CHECK_EQ(esl_generic_bmp_pixel(1, &ctx), 1);          /* (1, 0) clear */
+    CHECK_EQ(esl_generic_bmp_pixel(7u * 8u + 1u, &ctx), 0); /* (1, 7) */
+    CHECK_EQ(esl_generic_bmp_pixel(7u * 8u, &ctx), 1);      /* (0, 7) clear */
+    free(f);
+}
+
+/* Off-diagonal bit on a non-square source: swapping x/y would fail. */
+static void test_generic_no_transpose(void) {
+    size_t len = 0;
+    uint8_t *f = make_bmp(8, 4, 1, 1, 1, &len);
+    EslBmpInfo info;
+    CHECK(esl_bmp_parse(f, len, &info));
+
+    set_bit(f, &info, 0, 0, 1); /* source (1, 0) */
+
+    EslGenericBmpCtx ctx = {f, len, &info, 8, 4, false};
+    CHECK_EQ(esl_generic_bmp_pixel(1, &ctx), 0); /* (1, 0) set */
+    CHECK_EQ(esl_generic_bmp_pixel(8, &ctx), 1); /* (0, 1) clear */
     free(f);
 }
 
@@ -219,20 +266,69 @@ static void test_color26_accent_plane(void) {
     free(f);
 }
 
-/* Reads past the end of the buffer must be clamped, never out of bounds. */
+/* Untrusted file_len must clamp pixel reads; data_offset past EOF is rejected. */
 static void test_color26_bounds(void) {
     size_t len = 0;
     uint8_t *f = make_bmp(152, 296, 1, 1, 1, &len);
     EslBmpInfo info;
     CHECK(esl_bmp_parse(f, len, &info));
 
+    set_bit(f, &info, 0, 0, 0); /* wire (0,0) is white → ESL 0 */
+
+    EslColor26BmpCtx full = {f, len, &info};
+    CHECK_EQ(esl_color26_bmp_pixel(0, &full), 0);
+
+    /* file_len stops at the header: the payload offset is not in-range. */
+    EslColor26BmpCtx trunc = {f, 54, &info};
+    CHECK_EQ(esl_color26_bmp_pixel(0, &trunc), 1);
+    free(f);
+
+    f = make_bmp(8, 8, 1, 1, 1, &len);
+    const uint32_t past = (uint32_t)len + 1u;
+    f[10] = (uint8_t)(past);
+    f[11] = (uint8_t)(past >> 8);
+    f[12] = (uint8_t)(past >> 16);
+    f[13] = (uint8_t)(past >> 24);
+    CHECK(!esl_bmp_parse(f, len, &info));
+    free(f);
+}
+
+/* Neither wire (152x296) nor glass (296x152): transpose then nearest-neighbour. */
+static void test_color26_other_size_rescale(void) {
+    size_t len = 0;
+    const uint16_t src_w = 148;
+    const uint16_t src_h = 76; /* exactly half the glass dimensions */
+    uint8_t *f = make_bmp(src_w, src_h, 1, 1, 1, &len);
+    EslBmpInfo info;
+    CHECK(esl_bmp_parse(f, len, &info));
+
+    const uint16_t sx = 10;
+    const uint16_t sy = 20;
+    set_bit(f, &info, 0, sy, sx);
+
+    /* wire (px,py) → glass (bx,by) = (py, 151-px); glass → source via map. */
+    const uint16_t set_px = 111;
+    const uint16_t set_py = 20;
+    uint16_t gx = 0, gy = 0;
+    tagtinker_color26_proto_to_glass(TAGTINKER_COLOR26_WIRE_W, set_px, set_py,
+                                     &gx, &gy);
+    CHECK_EQ(esl_bmp_map_x(gx, TAGTINKER_COLOR26_GLASS_W, src_w), sx);
+    CHECK_EQ(esl_bmp_map_y(gy, TAGTINKER_COLOR26_GLASS_H, src_h), sy);
+
     EslColor26BmpCtx ctx = {f, len, &info};
-    const size_t total = (size_t)TAGTINKER_COLOR26_WIRE_W *
-                         TAGTINKER_COLOR26_WIRE_H * 2U;
-    for (size_t i = 0; i < total; i += 997) {
-        uint8_t v = esl_color26_bmp_pixel(i, &ctx);
-        CHECK(v == 0u || v == 1u);
-    }
+    const size_t set_idx =
+        (size_t)set_py * TAGTINKER_COLOR26_WIRE_W + set_px;
+    CHECK_EQ(esl_color26_bmp_pixel(set_idx, &ctx), 0);
+
+    const uint16_t clear_px = 112;
+    const uint16_t clear_py = 20;
+    tagtinker_color26_proto_to_glass(TAGTINKER_COLOR26_WIRE_W, clear_px,
+                                     clear_py, &gx, &gy);
+    CHECK(esl_bmp_map_x(gx, TAGTINKER_COLOR26_GLASS_W, src_w) != sx ||
+          esl_bmp_map_y(gy, TAGTINKER_COLOR26_GLASS_H, src_h) != sy);
+    const size_t clear_idx =
+        (size_t)clear_py * TAGTINKER_COLOR26_WIRE_W + clear_px;
+    CHECK_EQ(esl_color26_bmp_pixel(clear_idx, &ctx), 1);
     free(f);
 }
 
@@ -243,7 +339,10 @@ int main(void) {
     test_color26_wire_orientation();
     test_color26_accent_plane();
     test_color26_bounds();
+    test_color26_other_size_rescale();
     test_generic_pixel();
     test_generic_accent_plane();
+    test_generic_bottom_up_row_flip();
+    test_generic_no_transpose();
     TEST_REPORT("test_bmp");
 }
