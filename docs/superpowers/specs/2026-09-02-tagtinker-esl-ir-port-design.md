@@ -111,21 +111,30 @@ In every case `delay = 1` (500 µs between repeats of the same frame), and
 
 ```
 firmware/src/modules/ir/esl/
-  esl_compat.h         # shim: COUNT_OF, fixed-width type includes so vendored C compiles unchanged
-  tagtinker_proto.c    # VENDORED verbatim from PR #53 (CRC, RLE, profiles, color26 helpers, encode_fn)
-  tagtinker_proto.h    # VENDORED verbatim from PR #53
-  esl_ir_driver.h      # C-callable API mirroring tagtinker_ir.h (init/deinit/transmit/stop/is_busy)
-  esl_ir_driver.cpp    # NEW ESP32 RMT PP4 driver
-  esl_bmp.h/.cpp       # BMP header parse + pixel-callbacks (ported from PR #53 scene_transmit paths)
-  esl_font.h           # VENDORED tagtinker_font.h (used from M2 for text)
-  esl_app.h/.cpp       # Bruce UI + orchestration (replaces the Flipper scenes)
+  tagtinker_app.h            # compat shim: COUNT_OF (satisfies proto.c's ../tagtinker_app.h)
+  protocol/tagtinker_proto.c # VENDORED verbatim from PR #53 (CRC, RLE, profiles, color26, encode_fn)
+  protocol/tagtinker_proto.h # VENDORED verbatim from PR #53
+  esl_proto.h                # extern "C" wrapper for C++ consumers
+  esl_pp4.h/.c               # pure PP4 symbol builder (host-tested)
+  esl_tx.h/.c                # frame sequences w/ injectable ops (host-tested)
+  esl_bmp.h/.c               # BMP header parse + pixel-callbacks (host-tested)
+  esl_ir_driver.h/.cpp       # NEW ESP32 RMT PP4 driver (hardware shim)
+  esl_font.h                 # VENDORED tagtinker_font.h (used from M2 for text)
+  esl_app.h/.cpp             # Bruce UI + orchestration (replaces the Flipper scenes)
 firmware/src/core/menu_items/IRMenu.cpp   # +1 entry: {"ESL Image", startEslTx}
+firmware/tools/esl_host_tests/            # host test suite (outside src/, never compiled in)
 ```
 
-`tagtinker_proto.c` currently `#include "../tagtinker_app.h"` and uses `COUNT_OF`.
-`esl_compat.h` supplies `COUNT_OF` and any small typedefs so the file compiles inside
-Bruce with zero edits to its logic. Keeping it edit-free is a hard requirement: it is
-the proof that Bruce speaks the exact wire format already validated on hardware.
+The vendored files **must** live in an `esl/protocol/` subdirectory: `tagtinker_proto.c`
+contains `#include "../tagtinker_app.h"`, so that path has to resolve to our shim at
+`esl/tagtinker_app.h`. The shim supplies only `COUNT_OF`, which is all the protocol code
+needs. Keeping the vendored files edit-free is a hard requirement: it is the proof that
+Bruce speaks the exact wire format already validated on hardware. (Confirmed by
+compiling them unmodified on the host with `-Wall -Wextra`.)
+
+Pure logic (`esl_pp4`, `esl_tx`, `esl_bmp`) is plain C with no hardware dependencies so
+it can be unit-tested with `cc` on the host; only `esl_ir_driver` and `esl_app` are C++
+and hardware-bound.
 
 ### C / C++ linkage (must not be overlooked)
 
@@ -174,8 +183,10 @@ void esl_ir_stop(void);
   maximum-length 255-byte frame (255×4 + 1 = 1021 symbols) streams without a size cap.
 - Symbol build: one `rmt_symbol_word_t` per PP4 dibit —
   `{level0=1, duration0=burst_ticks, level1=0, duration1=gap_ticks[dibit]}` (LSB-first),
-  then a final closing-burst symbol. At 80 MHz: burst ≈ 3226 tk; gaps ≈
-  {4840, 19352, 9676, 14512} tk — all < 32767 (fits the 15-bit field).
+  then a final closing-burst symbol. **Derive ticks at compile time from the 64 MHz
+  cycle counts** (`cycles * resolution_hz / 64000000`) rather than hardcoding converted
+  numbers. At 80 MHz that yields burst **3226** tk and gaps
+  **{4838, 19353, 9676, 14515}** tk — all < 32767 (fits the 15-bit field).
 - **Idle level must be LOW.** Set `rmt_transmit_config_t.flags.eot_level = 0` and
   explicitly `digitalWrite(irTx, LED_OFF)` on teardown. With `LED_ON = HIGH`, a
   default-high idle would leave the IR LED energised between frames and after TX.
