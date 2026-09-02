@@ -14,11 +14,28 @@
 /* Settle before blasting IR, mirroring the upstream app's pre-TX pause. */
 #define ESL_PRE_TX_SETTLE_MS 500
 
+/* Latches once pressed so the outcome can be reported as an abort rather than
+ * a transmit failure. */
+static bool s_ui_aborted = false;
+
+/* Polled by the driver between repeats so a long burst is interruptible while
+ * transmit stays synchronous on this task. */
+static bool ui_abort_poll(void *ctx) {
+    (void)ctx;
+    if (!s_ui_aborted && check(EscPress)) s_ui_aborted = true;
+    return s_ui_aborted;
+}
+
 /* Prompts for the tag barcode and derives its address and profile. The barcode
  * is always entered by the user — upstream never compiles one in. */
 bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
+
+    /* Bruce's keyboard returns ESC when the user backs out. Treat that as a
+     * silent cancel rather than scolding them about a length they never
+     * entered. (ESC is not whitespace, so it survives trim().) */
+    if (entered.length() == 0 || entered == "\x1B") return false;
 
     if (entered.length() != ESL_BARCODE_LEN) {
         displayError("Barcode must be 17 chars", true);
@@ -57,6 +74,11 @@ void startEslTx() {
         return;
     }
 
+    /* Install the abort poll before transmitting so the status line below is
+     * truthful: the driver checks this between repeats. */
+    s_ui_aborted = false;
+    esl_ir_set_abort_hook(ui_abort_poll, nullptr);
+
     drawMainBorderWithTitle("ESL Image");
     displayTextLine("Wake frames, Esc aborts");
     delay(ESL_PRE_TX_SETTLE_MS);
@@ -68,9 +90,12 @@ void startEslTx() {
     const bool ok = esl_ir_transmit(frame, len, ESL_COLOR26_WAKE_REPEATS,
                                     ESL_FRAME_DELAY_UNITS);
 
+    esl_ir_set_abort_hook(nullptr, nullptr);
     esl_ir_deinit();
 
-    if (ok) {
+    if (s_ui_aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
         displaySuccess("Wake sent", true);
     } else {
         displayError("TX failed", true);

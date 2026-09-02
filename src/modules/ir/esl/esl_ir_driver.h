@@ -36,6 +36,15 @@ void esl_ir_stop(void);
 
 bool esl_ir_is_busy(void);
 
+/* Abort poll. esl_ir_transmit blocks the calling task for repeats+1 frames —
+ * 401 frames (~10 s) for a wake burst — so without this the caller has no way
+ * to interrupt it and any "Esc aborts" prompt would be a lie. The hook is
+ * polled between repeats, which keeps transmit synchronous on one task (no TX
+ * thread, so the missing re-entry guard stays safe) while still giving the user
+ * upstream's ability to cancel a send. Pass NULL to clear. */
+typedef bool (*EslIrAbortFn)(void *ctx);
+void esl_ir_set_abort_hook(EslIrAbortFn fn, void *ctx);
+
 #ifdef __cplusplus
 }
 #endif
