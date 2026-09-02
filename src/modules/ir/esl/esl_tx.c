@@ -113,12 +113,11 @@ bool esl_tx_send_color26(const EslTxOps *ops, const uint8_t plid[4],
         .data_pace_ms = ESL_COLOR26_DATA_PACE_MS,
     };
 
-    /* resolve_page is idempotent for 2..7, so resolving here is safe even if
-     * the caller already resolved it. */
-    return tx_payload_stages(
-        ops, plid, payload, tagtinker_color26_resolve_page(page),
-        TAGTINKER_COLOR26_WIRE_W, TAGTINKER_COLOR26_WIRE_H, 0u, 0u, &prof,
-        &done, total);
+    /* Page arrives already-resolved-as-a-default from the caller. An explicit
+     * user pick must reach the wire unmodified — do not resolve again. */
+    return tx_payload_stages(ops, plid, payload, page, TAGTINKER_COLOR26_WIRE_W,
+                             TAGTINKER_COLOR26_WIRE_H, 0u, 0u, &prof, &done,
+                             total);
 }
 
 bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],

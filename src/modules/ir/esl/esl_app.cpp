@@ -107,7 +107,9 @@ static bool esl_prompt_page(uint8_t *page) {
         options.push_back(
             Option(ESL_PAGE_LABELS[p], [&chosen, p]() { chosen = (int)p; }));
     }
-    loopOptions(options, MENU_TYPE_SUBMENU, "Image page");
+    /* Start on the caller's default (resolved page 2 for Color 2.6, else 0)
+     * but keep the full 0–7 range so an explicit pick wins verbatim. */
+    loopOptions(options, MENU_TYPE_SUBMENU, "Image page", (int)*page);
     if (chosen < 0) return false; /* user backed out */
     *page = (uint8_t)chosen;
     return true;
@@ -173,13 +175,15 @@ void startEslTx() {
         return;
     }
 
-    uint8_t page = 0;
+    const bool is_color26 = tagtinker_profile_needs_wh_swap(&profile);
+    /* Color 2.6 default is resolve_page(0) so the picker starts off the
+     * barcode page; generic stays on 0. The user's subsequent pick is raw. */
+    uint8_t page = is_color26 ? tagtinker_color26_resolve_page(0) : 0;
     if (!esl_prompt_page(&page)) {
         returnToMenu = true;
         return;
     }
 
-    const bool is_color26 = tagtinker_profile_needs_wh_swap(&profile);
     const size_t cap = is_color26 ? ESL_COLOR26_BMP_MAX : ESL_GENERIC_BMP_MAX;
 
     /* --- Everything that touches the SD card happens before the IR pin is
