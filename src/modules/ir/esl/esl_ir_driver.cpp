@@ -30,6 +30,8 @@ static rmt_encoder_handle_t s_encoder = nullptr;
 static int s_gpio = -1;
 static volatile bool s_stop = false;
 static volatile bool s_busy = false;
+static EslIrAbortFn s_abort_fn = nullptr;
+static void *s_abort_ctx = nullptr;
 
 static EslPp4Symbol s_symbols[ESL_IR_MAX_SYMBOLS];
 static rmt_symbol_word_t s_words[ESL_IR_MAX_SYMBOLS];
@@ -128,6 +130,9 @@ bool esl_ir_transmit(const uint8_t *data, size_t len, uint16_t repeats,
     bool ok = true;
 
     for (uint32_t r = 0; r <= reps; r++) {
+        /* Poll the caller's abort hook between repeats so a long burst can be
+         * cancelled without moving TX off this task. */
+        if (s_abort_fn != nullptr && s_abort_fn(s_abort_ctx)) s_stop = true;
         if (s_stop) {
             ok = false;
             break;
@@ -155,5 +160,10 @@ bool esl_ir_transmit(const uint8_t *data, size_t len, uint16_t repeats,
 }
 
 void esl_ir_stop(void) { s_stop = true; }
+
+void esl_ir_set_abort_hook(EslIrAbortFn fn, void *ctx) {
+    s_abort_fn = fn;
+    s_abort_ctx = ctx;
+}
 
 bool esl_ir_is_busy(void) { return s_busy; }
