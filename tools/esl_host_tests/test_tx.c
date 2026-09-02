@@ -154,7 +154,7 @@ static void test_generic_sequence(void) {
     /* 40 data frames so the every-32nd pacing rule is actually exercised. */
     payload_init(&p, 40);
 
-    CHECK(esl_tx_send_generic(&ops, PLID, &p, 3, 296, 128, 0, 0,
+    CHECK(esl_tx_send_generic(&ops, PLID, &p, 0, 296, 128, 0, 0,
                               ESL_GENERIC_DATA_REPEATS));
 
     /* ping + param + 40 data + refresh */
@@ -165,12 +165,17 @@ static void test_generic_sequence(void) {
     CHECK_EQ(k.rec[1].frame[9], 0x05); /* param */
     CHECK_EQ(k.rec[1].repeats, ESL_GENERIC_PARAM_REPEATS);
     CHECK_EQ(k.rec[1].repeats, 15);
-    CHECK_EQ(k.rec[1].frame[14], 3); /* generic path does not remap the page */
+    /* Page 0 is remapping-sensitive (resolve_page would emit 2). */
+    CHECK_EQ(k.rec[1].frame[14], 0);
     CHECK_EQ(k.rec[2].repeats, ESL_GENERIC_DATA_REPEATS);
     CHECK_EQ(k.rec[2].repeats, 2);
     CHECK_EQ(k.rec[42].frame[9], 0x01); /* refresh */
     CHECK_EQ(k.rec[42].repeats, ESL_GENERIC_REFRESH_REPEATS);
     CHECK_EQ(k.rec[42].repeats, 20);
+
+    /* Every frame uses the 500 us inter-repeat delay unit. */
+    for (size_t i = 0; i < k.count; i++)
+        CHECK_EQ(k.rec[i].delay, ESL_FRAME_DELAY_UNITS);
 
     /* Generic pacing is NOT the Color 2.6 policy: 50 ms after ping, 50 ms
      * after param, a single 1 ms pause after the 32nd data frame, then 50 ms
@@ -222,6 +227,11 @@ static void test_send_failure_propagates(void) {
     k.fail_at = 3;
 
     CHECK(!esl_tx_send_color26(&ops, PLID, &p, 0));
+    /* fake_send returns false at count==fail_at before incrementing, so
+     * wake + param + first data are recorded and the second data send fails. */
+    CHECK_EQ(k.count, 3);
+    /* Refresh (MCU 0x01) was never recorded as a successful final frame. */
+    CHECK(k.rec[2].frame[9] != 0x01);
     free(p.data);
 }
 
