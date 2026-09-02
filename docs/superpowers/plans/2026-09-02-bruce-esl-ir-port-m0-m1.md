@@ -2687,7 +2687,7 @@ Gaps found and closed during the 1:1 fidelity review:
 
 **2. Placeholder scan**
 
-No `TBD`, `TODO`, "implement later", or "similar to Task N". Every code step carries complete code; every command has an expected result. The one deliberate deferral (generic tags) is an explicit, tested refusal rather than an unwritten branch.
+No `TBD`, `TODO`, "implement later", or "similar to Task N". Every code step carries complete code; every command has an expected result. Generic dot-matrix tags are fully implemented and unit-tested; the only deferral there is *hardware* verification, since no non-1626 tag exists in this project — a stated limitation, not a feature gate.
 
 **3. Type consistency**
 
