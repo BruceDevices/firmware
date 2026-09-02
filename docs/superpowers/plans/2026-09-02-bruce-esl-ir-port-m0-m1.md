@@ -1188,6 +1188,8 @@ Create `src/modules/ir/esl/esl_ir_driver.h`:
  * driver here keeps the static symbol buffers small. */
 #define ESL_IR_MAX_FRAME_LEN 96
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1691,14 +1693,20 @@ static void test_parse(void) {
     CHECK_EQ(info.row_stride, 20); /* (152+31)/32*4 */
     free(f);
 
-    /* Rejections. */
+    /* Rejections. Each case is isolated so it can only fail for its own
+     * reason: the header is restored to valid between mutations. */
     f = make_bmp(8, 8, 1, 0, 1, &len);
+    CHECK(esl_bmp_parse(f, len, &info)); /* valid baseline */
+
     f[0] = 'X';
     CHECK(!esl_bmp_parse(f, len, &info)); /* bad magic */
     f[0] = 'B';
+
     f[28] = 24;
     CHECK(!esl_bmp_parse(f, len, &info)); /* unsupported bpp marker */
-    CHECK(!esl_bmp_parse(f, 53, &info));  /* truncated header */
+    f[28] = 1;
+
+    CHECK(!esl_bmp_parse(f, 53, &info)); /* truncated header, bpp valid */
     CHECK(!esl_bmp_parse(NULL, len, &info));
     CHECK(!esl_bmp_parse(f, len, NULL));
     free(f);
