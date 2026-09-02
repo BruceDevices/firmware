@@ -78,16 +78,27 @@ In every case `delay = 1` (500 µs between repeats of the same frame), and
 | — | | | | 50 ms settle |
 | Refresh | `make_refresh_frame` (MCU `0x01`) | 1 | 2 | |
 
-### Generic dot-matrix tags (`tx_send_full_payload`)
+### Generic dot-matrix tags (`tx_send_full_payload` → `tx_send_payload_frames`)
 
-| Stage | Frame | `repeats` | Sends |
-|-------|-------|----------:|------:|
-| Ping | `make_ping_frame` (cmd `0x97`) | 80 | 81 |
-| Param | `make_image_param_frame` (MCU `0x05`) | 15 | 16 |
-| Data | `make_image_data_frame` × N | `data_frame_repeats` (default 2) | 3 each |
-| Refresh | `make_refresh_frame` (MCU `0x01`) | 20 | 21 |
+| Stage | Frame | `repeats` | Sends | Notes |
+|-------|-------|----------:|------:|-------|
+| Ping | `make_ping_frame` (cmd `0x97`) | 80 | 81 | |
+| — | | | | 50 ms settle |
+| Param | `make_image_param_frame` (MCU `0x05`) | 15 | 16 | via `tx_send_image_start` |
+| — | | | | 50 ms settle |
+| Data | `make_image_data_frame` × N | `data_frame_repeats` (default 2) | 3 each | **1 ms delay every 32 frames**, not between each |
+| — | | | | 50 ms settle |
+| Refresh | `make_refresh_frame` (MCU `0x01`) | 20 | 21 | |
 
-50 ms settles between stages, as upstream.
+**The two families pace data frames differently and must not share one policy:**
+
+| | Color 2.6 | Generic |
+|---|---|---|
+| Data `repeats` | `1` (fixed) | `data_frame_repeats` (default 2) |
+| Between data frames | **50 ms after every frame** | **1 ms after every 32nd frame** |
+
+Conflating these is a fidelity bug: a generic tag would receive a 50 ms gap it
+never sees upstream, and a Color 2.6 tag would lose the pacing it needs.
 
 ### Port simplifications (safe to drop)
 
@@ -96,6 +107,44 @@ In every case `delay = 1` (500 µs between repeats of the same frame), and
 - TagTinker's "yield to the OS every 5 repeats" watchdog workaround is unnecessary:
   `rmt_tx_wait_all_done` blocks on a semaphore and yields to FreeRTOS naturally.
   Do not re-introduce it.
+
+## Port fidelity: this is a 1:1 port
+
+The governing rule: **Bruce must behave as TagTinker behaves.** Where upstream
+has a constant, a threshold, a user-facing option, or a timing policy, the port
+reproduces it rather than substituting a cleaner-looking choice. Anything that
+cannot be reproduced identically is listed below as an explicit adaptation —
+nothing is adapted silently.
+
+### Reproduce exactly (no substitutions)
+
+| Upstream | Value / behaviour |
+|---|---|
+| `TX_COLOR26_BMP_MAX` | 24576 bytes (Color 2.6 BMP file cap) |
+| `tx_bmp_open` accepted bpp | **1, 2, 24, 32** — the Color 2.6 *send* is what rejects non-1/2 |
+| Image page | User-selectable 0–7 via `scene_image_options` |
+| Position / compression / frame-repeat in Image Options | Deliberately fixed at defaults (0,0 / auto RLE / ×2). Upstream comment: *"pages are the only knob that meaningfully changes per-image."* |
+| `data_frame_repeats` | Default 2, range 1–10, exposed in Settings |
+| Data-frame pacing | Per-family, per the table above |
+| Tag coverage | Every dot-matrix profile, not just Color 2.6 |
+| Pre-TX settle | 500 ms before IR blasting for image/text jobs |
+
+### Deliberate adaptations (platform-forced, behaviour-preserving)
+
+| Adaptation | Why it does not change behaviour |
+|---|---|
+| Drop `tx_apply_signal_mode()` | Literally `return repeats & 0x7FFF` upstream; `TagTinkerSignalPP4` is the only mode |
+| Drop the "yield every 5 repeats" watchdog workaround | RMT is hardware-timed and `rmt_tx_wait_all_done` yields on a semaphore |
+| `EslTxOps` callbacks instead of Flipper scenes/threads | UI plumbing only; frame bytes and ordering unchanged |
+| Generic path loads the BMP into RAM instead of streaming it from SD in two passes | Forced by the encode-then-transmit rule (SD may not be read after the IR pin is claimed). Produces a byte-identical payload; PSRAM makes the buffer cheap. Color 2.6 already loads the whole file upstream, so that path is unchanged. |
+
+### Not image-path concerns (belongs to M2, text)
+
+Chunked streaming — `tx_should_send_full_job` (`TX_FULL_JOB_PIXEL_LIMIT`
+49152), `tx_pick_chunk_height` (8 KB/plane budget, 8-row alignment) and
+`tx_chunk_settle_delay_ms` (clamp(500 + px/20, 800, 2000)) — is used **only** by
+`tx_send_full_text_image` / `tx_stream_text_image`. `tx_stream_bmp_image` never
+chunks. Do not add chunking to the image path; port it with text in M2.
 
 ## Architectural decisions (approved)
 
@@ -217,43 +266,65 @@ the shared SPI pins while IR is GPIO 2 — but the encode-first rule keeps the d
 board-agnostic, which the "any IR-capable board" goal requires.
 
 ### M0 scope and exit criteria
-- Hardcode the owner's PLID (from barcode `A4165420155216265`) and profile (type `1626`).
-- Emit the Color 2.6 sequence exactly as pinned in "Frame sequences and repeat counts"
-  above: `wake (repeats 400) → param(152×296, repeats 1) → data (repeats 1 each, 50 ms
-  apart) → refresh (repeats 1)`, 50 ms settles between stages. Frame builders come from
-  the vendored proto (`tagtinker_make_wake_frame` = cmd `0x17` + 22×`0x01`).
-- Exit criteria:
-  1. Logic analyzer / scope on the IR pin shows carrier ≈1.25 MHz and burst/gap
-     durations matching the µs table above (within a few %).
-  2. The physical SmartTAG Color 2.6 visibly refreshes.
+
+M0 is a **timing checkpoint, not a feature**. It introduces no behaviour that
+TagTinker does not have, and **nothing is hardcoded** — the barcode comes from
+the same user prompt M1 uses, so the real addressing path is exercised from the
+first run.
+
+- Prompt for the tag barcode (Bruce `keyboard()`), derive PLID + profile with
+  `tagtinker_barcode_to_plid` / `tagtinker_barcode_to_profile`.
+- Emit **only the wake frame** (`tagtinker_make_wake_frame`, cmd `0x17` + 22×`0x01`,
+  repeats 400). No image payload: upstream has no "send a blank image" feature and the
+  port must not invent one.
+- Exit criterion: logic analyzer / scope on the IR pin shows carrier ≈1.25 MHz,
+  burst 40.3 µs, and the four distinct gaps {60.5, 121.0, 181.4, 241.9} µs (within a
+  few %), with the line resting low between frames.
+
+Making the tag visibly refresh is **M1's** gate, because that requires a real image
+payload — which is M1's job, not a synthetic stand-in.
 
 ## M1 — Image TX (real UX)
 
 ### User flow
+
+Mirrors upstream's `Set Image` flow: pick tag → pick image → choose page → send.
+
 1. `IRMenu → "ESL Image"` → `startEslTx()`.
-2. **Barcode entry only** (no pre-filled default): Bruce `keyboard()` collects the
-   17-char barcode; `tagtinker_barcode_to_plid` + `tagtinker_barcode_to_profile` derive
-   PLID + profile. Unknown/invalid → error line, return. The active target lives in RAM
-   for the session (persistent multi-tag storage is M3).
+2. **Barcode entry** (no pre-filled default, nothing hardcoded): Bruce `keyboard()`
+   collects the 17-char barcode; `tagtinker_barcode_to_plid` +
+   `tagtinker_barcode_to_profile` derive PLID + profile. Unknown/invalid → error line,
+   return. Segment-kind profiles are rejected (no image page), matching
+   `tagtinker_target_supports_graphics`. The active target lives in RAM for the session
+   (persistent multi-tag storage is M3).
 3. **BMP pick:** `loopSD(fs, true, "BMP", "/")`. Empty return = user cancelled.
-4. **Load + encode:** read BMP fully into RAM (bounded per profile; e.g. Color 2.6 cap
-   24576 bytes as in PR #53). Parse the BMP header (`esl_bmp`). Encode with the vendored
-   `tagtinker_encode_fn_payload` and the correct pixel callback:
+4. **Page pick:** a 0–7 page selector then "Send", mirroring `scene_image_options`.
+   Position, compression and frame-repeat stay at upstream's fixed defaults (0,0 /
+   auto RLE / ×2).
+5. **Load + encode:** read the BMP into RAM (Color 2.6 capped at **24576** bytes, as
+   upstream). Parse the header, accepting bpp **1, 2, 24, 32**. Encode with the vendored
+   `tagtinker_encode_fn_payload` and the profile-appropriate pixel callback:
    - **Color 2.6 (type 1626):** transpose callback — iterate wire space (152×296), map
      each wire pixel to glass via `tagtinker_color26_proto_to_glass` (`bx=py`,
      `by=proto_w-1-px`), then map glass → source (identity for 152×296 wire or 296×152
-     glass BMPs, else nearest-neighbour rescale), 1bpp or stacked-2bpp planes.
-   - **Generic DM tags:** the streaming NN-rescale path from `tx_stream_bmp_image`.
-5. **Transmit:** profile-appropriate sequence via the M0 driver, using the exact repeat
-   counts pinned above — Color 2.6 uses `wake→param→data→refresh`; generic DM uses
-   `ping→param→data→refresh`. Page remap honored (`tagtinker_color26_resolve_page`:
-   store tags keep the barcode on page 1, image → page 2).
-6. **UI:** `drawMainBorderWithTitle("ESL Image")`, `progressHandler(frame_i, frame_count)`,
+     glass BMPs, else nearest-neighbour rescale), 1bpp or stacked-2bpp planes. Rejects
+     bpp other than 1/2, as upstream does at send time.
+   - **All other dot-matrix profiles:** nearest-neighbour rescale to the profile's
+     dimensions, with the accent plane driven by the profile's colour capability —
+     the same pixel selection `tx_stream_bmp_image` performs.
+6. **Transmit:** profile-appropriate sequence via the M0 driver, using the exact repeat
+   counts **and the per-family data pacing** pinned above. Color 2.6 uses
+   `wake→param(152×296)→data→refresh` with page remap
+   (`tagtinker_color26_resolve_page`); generic uses `ping→param→data→refresh` with the
+   page passed straight through.
+7. **UI:** `drawMainBorderWithTitle("ESL Image")`, `progressHandler(frame_i, frame_count)`,
    `check(EscPress)` → `esl_ir_stop()`. On success `displaySuccess`, then restore pin/SD.
 
 ### M1 exit criterion
 A web-image-prep BMP renders upright and correct on the physical Color 2.6 tag,
-end-to-end from the Bruce menu.
+end-to-end from the Bruce menu, on a user-chosen page. The generic path compiles and
+is unit-tested at the sequence and pixel-mapping level, but stays unverified on
+hardware until a non-1626 tag is available — a limitation to state, not to hide.
 
 ## Data flow
 
@@ -301,7 +372,10 @@ text/test ┤→ pixel-callback (transpose + NN rescale) → RLE/raw plane encod
 ## Roadmap beyond M1 (approved, specced when reached)
 
 - **M2 — Text + test patterns** on-device (vendored `esl_font.h`, `render_text_region_ex`,
-  Color 2.6 text transpose path from PR #53).
+  Color 2.6 text transpose path from PR #53). **Includes the chunked streaming path**
+  (`tx_should_send_full_job` / `tx_pick_chunk_height` / `tx_chunk_settle_delay_ms` /
+  `tx_send_image_chunk`), which upstream uses only for text — plus the Settings screen
+  exposing `data_frame_repeats` (1–10).
 - **M3 — Tag identify:** persistent saved targets; reuse Bruce NFC (PN532) to scan a
   tag's PLID/profile (TagTinker decodes Mifare Ultralight NDEF → 17-char barcode).
 - **M4 — Broadcast payloads** (page change / diagnostic; PLID = 0 frames).
