@@ -113,22 +113,26 @@ static bool esl_prompt_page(uint8_t *page) {
     return true;
 }
 
-/* Picks a BMP from the SD card, falling back to LittleFS. */
-static String esl_pick_bmp() {
+/* Picks a BMP from the SD card, falling back to LittleFS. The chosen
+ * filesystem is returned with the path so the reader does not guess. */
+struct EslPickedBmp {
+    String path;
+    fs::FS *fs;
+};
+
+static EslPickedBmp esl_pick_bmp() {
     if (setupSdCard()) {
         String path = loopSD(SD, true, "BMP", "/");
-        if (path != "") return path;
+        if (path != "") return {path, &SD};
     }
-    return loopSD(LittleFS, true, "BMP", "/");
+    return {loopSD(LittleFS, true, "BMP", "/"), &LittleFS};
 }
 
-/* Reads the whole file into PSRAM. Caller frees. */
-static uint8_t *esl_read_file(const String &path, size_t max_bytes,
+/* Reads the whole file into PSRAM from the filesystem the picker chose.
+ * Caller frees. */
+static uint8_t *esl_read_file(fs::FS &fs, const String &path, size_t max_bytes,
                               size_t *out_len) {
-    fs::FS *fs = &SD;
-    if (!SD.exists(path)) fs = &LittleFS;
-
-    File f = fs->open(path, FILE_READ);
+    File f = fs.open(path, FILE_READ);
     if (!f) return nullptr;
 
     const size_t len = f.size();
@@ -163,8 +167,8 @@ void startEslTx() {
         return;
     }
 
-    const String path = esl_pick_bmp();
-    if (path == "") { /* user cancelled */
+    const EslPickedBmp picked = esl_pick_bmp();
+    if (picked.path == "") { /* user cancelled */
         returnToMenu = true;
         return;
     }
@@ -181,7 +185,7 @@ void startEslTx() {
     /* --- Everything that touches the SD card happens before the IR pin is
      * claimed, because setup_ir_pin() may tear down the SD SPI bus. --- */
     size_t file_len = 0;
-    uint8_t *file = esl_read_file(path, cap, &file_len);
+    uint8_t *file = esl_read_file(*picked.fs, picked.path, cap, &file_len);
     if (file == nullptr) {
         displayError("Cannot read BMP", true);
         returnToMenu = true;
