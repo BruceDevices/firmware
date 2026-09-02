@@ -15,6 +15,7 @@
 - `src/modules/ir/esl/protocol/tagtinker_proto.{c,h}` are **VENDORED — never edit**. They must stay byte-identical to `git show pr-53:protocol/tagtinker_proto.c` in the TagTinker clone at `../TagTinker`.
 - The vendored `tagtinker_proto.c` contains `#include "../tagtinker_app.h"`. That path **must** resolve to our shim, which is why the vendored files live in an `esl/protocol/` subdirectory with the shim at `esl/tagtinker_app.h`.
 - C++ translation units must include the vendored header through `esl_proto.h`, which wraps it in `extern "C"`. Including `protocol/tagtinker_proto.h` directly from C++ will fail to link.
+- **Every C header we author under `esl/` carries its own `extern "C"` guard** — `esl_pp4.h`, `esl_tx.h`, `esl_bmp.h`, `esl_ir_driver.h`. Their `.c` files compile as C while `esl_ir_driver.cpp` and `esl_app.cpp` compile as C++; without the guard the C++ side mangles the names and the link fails. Only the *vendored* header is exempt, because it must not be edited — that one is wrapped externally by `esl_proto.h`.
 - **Do not call** `tagtinker_make_mcu_frame`, `tagtinker_rle_compress`, or `tagtinker_build_image_sequence`. They are declared in the vendored header but have no implementation in PR #53 — calling them is a link error.
 - PP4 tick values are **derived at compile time** from the Flipper's 64 MHz cycle counts via `ESL_PP4_TICKS`. Never hardcode converted tick numbers.
 - Carrier: `frequency_hz = 1250000`, `duty_cycle = 0.49f`, `flags.polarity_active_low = false`, `flags.always_on = false`.
@@ -1475,7 +1476,16 @@ static_assert(ESL_IR_MAX_FRAME_LEN >= TAGTINKER_MAX_FRAME_SIZE,
 PlatformIO is not on `PATH` and the bundled virtualenv at `~/.platformio/penv` is broken (`bad interpreter`). Establish a working build first:
 
 ```bash
-python3 -m venv /tmp/pio-venv && /tmp/pio-venv/bin/pip install -q platformio && /tmp/pio-venv/bin/pio --version
+/opt/homebrew/bin/python3.12 -m venv /tmp/pio-venv && /tmp/pio-venv/bin/pip install -q platformio && /tmp/pio-venv/bin/pio --version
+```
+
+**Use Python 3.12 explicitly.** The default `python3` on this machine is 3.14, which PlatformIO's library installer rejects.
+
+Known first-build trap: Bruce's `patch.py` renames `libnet80211.a` to `.old`, and if the Xtensa toolchain package is not yet installed its `objcopy` step silently fails while still writing `.patched`, so it never retries. The link then fails with `cannot find -lnet80211`. Repair the *installed framework package* (never the repo) using the toolchain's own objcopy:
+
+```bash
+xtensa-esp32s3-elf-objcopy --weaken-symbol=ieee80211_raw_frame_sanity_check \
+  <framework>/esp32s3/lib/libnet80211.a.old <framework>/esp32s3/lib/libnet80211.a
 ```
 
 Then build:
