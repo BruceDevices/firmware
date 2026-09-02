@@ -27,6 +27,10 @@
 #define ESL_GENERIC_DATA_PACE_EVERY 32u
 #define ESL_GENERIC_DATA_PACE_MS 1u
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     /* Required. Sends one frame, repeated repeats+1 times. */
     bool (*send)(void *ctx, const uint8_t *frame, size_t len, uint16_t repeats,
@@ -56,3 +60,7 @@ bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
                          const TagTinkerImagePayload *payload, uint8_t page,
                          uint16_t width, uint16_t height, uint16_t pos_x,
                          uint16_t pos_y, uint16_t data_repeats);
+
+#ifdef __cplusplus
+}
+#endif
