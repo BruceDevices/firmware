@@ -16,6 +16,7 @@
 - The vendored `tagtinker_proto.c` contains `#include "../tagtinker_app.h"`. That path **must** resolve to our shim, which is why the vendored files live in an `esl/protocol/` subdirectory with the shim at `esl/tagtinker_app.h`.
 - C++ translation units must include the vendored header through `esl_proto.h`, which wraps it in `extern "C"`. Including `protocol/tagtinker_proto.h` directly from C++ will fail to link.
 - **Every C header we author under `esl/` carries its own `extern "C"` guard** — `esl_pp4.h`, `esl_tx.h`, `esl_bmp.h`, `esl_ir_driver.h`. Their `.c` files compile as C while `esl_ir_driver.cpp` and `esl_app.cpp` compile as C++; without the guard the C++ side mangles the names and the link fails. Only the *vendored* header is exempt, because it must not be edited — that one is wrapped externally by `esl_proto.h`.
+- **Authored headers reach protocol symbols via `esl_proto.h`, never `protocol/tagtinker_proto.h` directly.** Because the vendored header has `#pragma once`, whichever include wins first fixes its linkage for the whole translation unit. If an authored header pulls in the vendored header raw and a C++ file includes that header before `esl_proto.h`, the wrapper becomes a no-op and the vendor symbols get C++ linkage — a link failure that depends on include order. Routing every authored header through `esl_proto.h` makes linkage order-independent. `esl_proto.h` is safe to include from C, where its guards collapse to a plain include.
 - **Do not call** `tagtinker_make_mcu_frame`, `tagtinker_rle_compress`, or `tagtinker_build_image_sequence`. They are declared in the vendored header but have no implementation in PR #53 — calling them is a link error.
 - PP4 tick values are **derived at compile time** from the Flipper's 64 MHz cycle counts via `ESL_PP4_TICKS`. Never hardcode converted tick numbers.
 - Carrier: `frequency_hz = 1250000`, `duty_cycle = 0.49f`, `flags.polarity_active_low = false`, `flags.always_on = false`.
@@ -1996,7 +1997,13 @@ Create `src/modules/ir/esl/esl_bmp.h`:
  * ordering rule requires. */
 #pragma once
 
-#include "protocol/tagtinker_proto.h"
+/* Via esl_proto.h, never the vendored header directly: that keeps the vendor
+ * symbols' linkage independent of include order in C++ callers. */
+#include "esl_proto.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
     uint32_t data_offset;
@@ -2042,6 +2049,10 @@ typedef struct {
  * a stacked 2-plane source or left clear. ctx must be an EslGenericBmpCtx*.
  * Total pixel count is out_w * out_h * (second_plane ? 2 : 1). */
 uint8_t esl_generic_bmp_pixel(size_t idx, void *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 ```
 
 - [ ] **Step 4: Write the implementation**
