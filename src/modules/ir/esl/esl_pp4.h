@@ -6,6 +6,10 @@
  * so it can be unit-tested on the host. */
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -38,3 +42,7 @@ size_t esl_pp4_symbol_count(size_t frame_len);
  * invalid argument or insufficient out_cap. */
 size_t esl_pp4_encode(const uint8_t *frame, size_t len, uint32_t resolution_hz,
                       EslPp4Symbol *out, size_t out_cap);
+
+#ifdef __cplusplus
+}
+#endif
