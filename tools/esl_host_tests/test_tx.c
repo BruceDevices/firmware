@@ -325,6 +325,73 @@ static void test_led_test_abort_after_first(void) {
     CHECK_EQ(k.count, 1); /* blink not sent */
 }
 
+static void test_broadcast_page_golden(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+
+    uint8_t want[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t want_len =
+        tagtinker_build_broadcast_page_frame(want, 3, true, 15);
+
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t len =
+        tagtinker_build_broadcast_page_frame(frame, 3, true, 15);
+
+    CHECK(esl_tx_send_raw(&ops, frame, len, 200, false));
+    CHECK_EQ(k.count, 1); /* spam=false sends once */
+    CHECK_EQ(k.rec[0].repeats, 200);
+    CHECK_EQ(k.rec[0].len, want_len);
+    CHECK_MEM(k.rec[0].frame, want, want_len);
+    CHECK_EQ(k.rec[0].delay, ESL_FRAME_DELAY_UNITS);
+    CHECK_EQ(k.settle_calls, 0);
+}
+
+static void test_broadcast_debug_golden(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+
+    uint8_t want[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t want_len = tagtinker_build_broadcast_debug_frame(want);
+
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t len = tagtinker_build_broadcast_debug_frame(frame);
+
+    CHECK(esl_tx_send_raw(&ops, frame, len, 200, false));
+    CHECK_EQ(k.count, 1);
+    CHECK_EQ(k.rec[0].repeats, 200);
+    CHECK_EQ(k.rec[0].len, want_len);
+    CHECK_MEM(k.rec[0].frame, want, want_len);
+}
+
+static void test_send_raw_spam_stops_on_abort(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+    k.abort_after = 2; /* abort after two recorded sends */
+
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t len = tagtinker_build_broadcast_debug_frame(frame);
+
+    CHECK(!esl_tx_send_raw(&ops, frame, len, 200, true));
+    CHECK_EQ(k.count, 2);
+}
+
+static void test_send_raw_guards(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t len = tagtinker_build_broadcast_debug_frame(frame);
+
+    CHECK(!esl_tx_send_raw(NULL, frame, len, 200, false));
+    CHECK(!esl_tx_send_raw(&ops, NULL, len, 200, false));
+    CHECK(!esl_tx_send_raw(&ops, frame, 0, 200, false));
+    CHECK_EQ(k.count, 0);
+}
+
 int main(void) {
     test_color26_sequence();
     test_explicit_page_preserved();
@@ -337,5 +404,9 @@ int main(void) {
     test_led_test_sequence();
     test_led_test_guards();
     test_led_test_abort_after_first();
+    test_broadcast_page_golden();
+    test_broadcast_debug_golden();
+    test_send_raw_spam_stops_on_abort();
+    test_send_raw_guards();
     TEST_REPORT("test_tx");
 }

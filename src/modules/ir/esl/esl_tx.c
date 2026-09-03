@@ -165,3 +165,13 @@ bool esl_tx_send_led_test(const EslTxOps *ops, const uint8_t plid[4]) {
     tx_step(ops, &done, total);
     return true;
 }
+
+bool esl_tx_send_raw(const EslTxOps *ops, const uint8_t *frame, size_t len,
+                     uint16_t repeats, bool spam) {
+    if (!tx_ok(ops) || frame == NULL || len == 0u) return false;
+
+    do {
+        if (!tx_frame(ops, frame, len, repeats)) return false;
+    } while (spam);
+    return true;
+}

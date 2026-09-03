@@ -466,6 +466,130 @@ static const char *const ESL_WARNING_LINES[][2] = {
 
 static void esl_noop(void) {}
 
+typedef struct {
+    uint8_t page;
+    uint16_t duration;
+    bool forever;
+    uint16_t repeats;
+    bool spam;
+} EslBroadcastKnobs;
+
+static const uint16_t ESL_BCAST_DURATIONS[] = {2, 5, 10, 15, 30, 60, 120};
+static const char *const ESL_BCAST_DURATION_LBLS[] = {
+    "2s", "5s", "10s", "15s", "30s", "60s", "120s"};
+#define ESL_BCAST_DURATION_N ((int)(sizeof(ESL_BCAST_DURATIONS) / sizeof(ESL_BCAST_DURATIONS[0])))
+static const uint16_t ESL_BCAST_REPEATS[] = {50, 100, 200, 400, 800};
+#define ESL_BCAST_REPEATS_N ((int)(sizeof(ESL_BCAST_REPEATS) / sizeof(ESL_BCAST_REPEATS[0])))
+
+static int esl_u16_index(const uint16_t *vals, int n, uint16_t want, int fallback) {
+    for (int i = 0; i < n; i++) {
+        if (vals[i] == want) return i;
+    }
+    return fallback;
+}
+
+static void esl_pick_bcast_page(uint8_t *page) {
+    options.clear();
+    for (uint8_t p = 0; p < 8; p++) {
+        options.push_back({String((unsigned)p), [page, p]() { *page = p; }});
+    }
+    loopOptions(options, MENU_TYPE_SUBMENU, "Page", (int)*page);
+}
+
+static void esl_pick_bcast_duration(uint16_t *duration) {
+    options.clear();
+    for (int i = 0; i < ESL_BCAST_DURATION_N; i++) {
+        uint16_t d = ESL_BCAST_DURATIONS[i];
+        options.push_back(
+            {ESL_BCAST_DURATION_LBLS[i], [duration, d]() { *duration = d; }});
+    }
+    int cur = esl_u16_index(ESL_BCAST_DURATIONS, ESL_BCAST_DURATION_N, *duration, 3);
+    loopOptions(options, MENU_TYPE_SUBMENU, "Duration", cur);
+}
+
+static void esl_pick_bcast_repeats(uint16_t *repeats) {
+    options.clear();
+    for (int i = 0; i < ESL_BCAST_REPEATS_N; i++) {
+        uint16_t r = ESL_BCAST_REPEATS[i];
+        options.push_back({String((unsigned)r), [repeats, r]() { *repeats = r; }});
+    }
+    int cur = esl_u16_index(ESL_BCAST_REPEATS, ESL_BCAST_REPEATS_N, *repeats, 2);
+    loopOptions(options, MENU_TYPE_SUBMENU, "Repeats", cur);
+}
+
+static void esl_pick_on_off(bool *val, const char *title) {
+    options = {
+        {"Off", [val]() { *val = false; }},
+        {"On", [val]() { *val = true; }},
+    };
+    loopOptions(options, MENU_TYPE_SUBMENU, title, *val ? 1 : 0);
+}
+
+/* Same IR chrome as LED Test: pin check, init, Tag Tinker title, Esc abort. */
+static void esl_broadcast_transmit(const uint8_t *frame, size_t len,
+                                   uint16_t repeats, bool spam) {
+    checkIrTxPin();
+    if (!esl_ir_init(bruceConfigPins.irTx)) {
+        displayError("IR init failed", true);
+        return;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Sending, Esc aborts");
+    delay(ESL_PRE_TX_SETTLE_MS);
+
+    EslUiCtx ui = {false};
+    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
+    const bool ok = esl_tx_send_raw(&ops, frame, len, repeats, spam);
+
+    esl_ir_set_abort_hook(nullptr, nullptr);
+    esl_ir_deinit();
+
+    if (ui.aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
+        displaySuccess("Sent", true);
+    } else {
+        displayError("TX failed", true);
+    }
+}
+
+static void esl_broadcast_knob_screen(EslBroadcastKnobs *k, bool change_page) {
+    while (true) {
+        bool tx = false;
+        options.clear();
+        if (change_page) {
+            options.push_back({String("Page  ") + String((unsigned)k->page),
+                               [k]() { esl_pick_bcast_page(&k->page); }});
+            options.push_back({String("Duration  ") + String((unsigned)k->duration) + "s",
+                               [k]() { esl_pick_bcast_duration(&k->duration); }});
+            options.push_back({String("Forever  ") + (k->forever ? "On" : "Off"),
+                               [k]() { esl_pick_on_off(&k->forever, "Forever"); }});
+        }
+        options.push_back({String("Repeats  ") + String((unsigned)k->repeats),
+                           [k]() { esl_pick_bcast_repeats(&k->repeats); }});
+        options.push_back({String("Repeat  ") + (k->spam ? "On" : "Off"),
+                           [k]() { esl_pick_on_off(&k->spam, "Repeat"); }});
+        options.push_back({ESL_TRANSMIT, [&]() { tx = true; }});
+
+        const char *title =
+            change_page ? ESL_BROADCAST_ITEMS[0] : ESL_BROADCAST_ITEMS[1];
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, title);
+        if (sel < 0) return;
+        if (!tx) continue;
+
+        uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+        size_t len =
+            change_page
+                ? tagtinker_build_broadcast_page_frame(frame, k->page, k->forever,
+                                                       k->duration)
+                : tagtinker_build_broadcast_debug_frame(frame);
+        esl_broadcast_transmit(frame, len, k->repeats, k->spam);
+    }
+}
+
 static bool esl_warning_pages(void) {
     const int last = (int)(sizeof(ESL_WARNING_TITLES) / sizeof(ESL_WARNING_TITLES[0])) - 1;
     int page = 0;
@@ -496,10 +620,13 @@ static bool esl_warning_pages(void) {
 }
 
 static void esl_broadcast_menu(void) {
+    EslBroadcastKnobs knobs = {0, 15, false, 200, false};
     while (true) {
         options = {
-            {ESL_BROADCAST_ITEMS[0], esl_noop},
-            {ESL_BROADCAST_ITEMS[1], esl_noop},
+            {ESL_BROADCAST_ITEMS[0],
+             [&]() { esl_broadcast_knob_screen(&knobs, true); }},
+            {ESL_BROADCAST_ITEMS[1],
+             [&]() { esl_broadcast_knob_screen(&knobs, false); }},
         };
         int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_MAIN_ITEMS[0]);
         if (sel < 0) return;
