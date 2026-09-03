@@ -94,3 +94,56 @@ bool esl_nfc_decode_ul_pages(const uint8_t pages[][4], unsigned pages_read,
 
     return esl_nfc_decode_tag10(last_slash + 1, barcode);
 }
+
+unsigned esl_nfc_parse_ul_dump(const char *dump, uint8_t pages[][4],
+                               unsigned cap) {
+    unsigned highest = 0;
+    bool any = false;
+    const char *p;
+
+    if (dump == NULL || pages == NULL || cap == 0u) return 0;
+
+    p = dump;
+    while (*p != '\0') {
+        const char *eol = p;
+        char line[96];
+        size_t linelen;
+        char *s;
+        char *e;
+        unsigned n = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0;
+        int consumed = 0;
+
+        while (*eol != '\0' && *eol != '\n' && *eol != '\r') eol++;
+        linelen = (size_t)(eol - p);
+        if (linelen >= sizeof(line)) linelen = sizeof(line) - 1u;
+        memcpy(line, p, linelen);
+        line[linelen] = '\0';
+
+        s = line;
+        while (*s == ' ' || *s == '\t') s++;
+        e = s + strlen(s);
+        while (e > s && (e[-1] == ' ' || e[-1] == '\t')) {
+            e--;
+            *e = '\0';
+        }
+
+        if (sscanf(s, "Page %u: %x %x %x %x%n", &n, &b0, &b1, &b2, &b3,
+                   &consumed) == 5) {
+            const char *rest = s + consumed;
+            while (*rest == ' ' || *rest == '\t') rest++;
+            if (*rest == '\0' && n < cap) {
+                pages[n][0] = (uint8_t)b0;
+                pages[n][1] = (uint8_t)b1;
+                pages[n][2] = (uint8_t)b2;
+                pages[n][3] = (uint8_t)b3;
+                if (!any || n + 1u > highest) highest = n + 1u;
+                any = true;
+            }
+        }
+
+        p = eol;
+        while (*p == '\n' || *p == '\r') p++;
+    }
+
+    return any ? highest : 0;
+}

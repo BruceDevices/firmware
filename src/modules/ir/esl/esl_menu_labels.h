@@ -13,9 +13,13 @@ static const char *const ESL_TARGET_ACTIONS_GRAPHICS[] = {
 static const char *const ESL_TARGET_ACTIONS_TAIL[] = {
     "LED Test", "Delete Tag"};
 static const char *const ESL_SETTINGS_ITEMS[] = {
-    "Startup Warning", "Frame Repeat", "Clear Recents"};
+    "Frame Repeat", "Clear Recents"};
 static const char *const ESL_ABOUT_LINES[] = {
-    "Tag Tinker", "Ported by I12BP8", "Research by furrtek", "NFC by 7h30th3r0n3"};
+    "Tag Tinker",
+    "Send images and text to infrared electronic shelf labels.",
+    "",
+    "Developed by I12BP8", "Ported by sosnek", "Research by furrtek",
+    "NFC by 7h30th3r0n3"};
 static const char *const ESL_WARNING_TITLES[] = {
     "RESEARCH TOOL:", "PERMISSION:", "CAUTION:", "RESPONSIBILITY:"};
 static const char *const ESL_SET_IMAGE_EMPTY[] = {

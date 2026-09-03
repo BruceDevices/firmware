@@ -33,6 +33,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* IR → Tag Tinker → Targeted → tag → WiFi Plugins → wifiConnectMenu.
+ * Default loopTask is 8 KB; WiFi.mode() then Cache/MMU-faults. This is
+ * the Arduino hook (not a Bruce-core edit). HTTPS still runs off-loop. */
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+
 #define ESL_BARCODE_LEN 17
 #define ESL_PRE_TX_SETTLE_MS 500
 #define TAGTINKER_MAX_SYNCED_IMAGES 24
@@ -852,13 +857,6 @@ static void esl_set_text(EslSession *sess, const EslTarget *target) {
     }
 }
 
-static const char *const ESL_WARNING_LINES[][2] = {
-    {"Educational tool for", "infrared ESL study."},
-    {"Use only on tags", "you own or may test."},
-    {"Unauthorized use", "may be illegal."},
-    {"You are responsible", "for your actions."},
-};
-
 static void esl_noop(void) {}
 
 typedef struct {
@@ -982,35 +980,6 @@ static void esl_broadcast_knob_screen(EslBroadcastKnobs *k, bool change_page) {
                                                        k->duration)
                 : tagtinker_build_broadcast_debug_frame(frame);
         esl_broadcast_transmit(frame, len, k->repeats, k->spam);
-    }
-}
-
-static bool esl_warning_pages(void) {
-    const int last = (int)(sizeof(ESL_WARNING_TITLES) / sizeof(ESL_WARNING_TITLES[0])) - 1;
-    int page = 0;
-
-    while (true) {
-        bool cont = false;
-        int next_page = page;
-
-        options.clear();
-        options.push_back(Option(ESL_WARNING_LINES[page][0], esl_noop, false, nullptr,
-                                 nullptr, false, false));
-        options.push_back(Option(ESL_WARNING_LINES[page][1], esl_noop, false, nullptr,
-                                 nullptr, false, false));
-        if (page > 0) {
-            options.push_back({"Prev", [&]() { next_page = page - 1; }});
-        }
-        if (page < last) {
-            options.push_back({"Next", [&]() { next_page = page + 1; }});
-        } else {
-            options.push_back({"Continue", [&]() { cont = true; }});
-        }
-
-        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_WARNING_TITLES[page]);
-        if (sel < 0) return false;
-        if (cont) return true;
-        page = next_page;
     }
 }
 
@@ -1416,39 +1385,62 @@ static void esl_free_rfid(RFIDInterface *rfid) {
     releaseI2CBus();
 }
 
-/* UL dump lines only: "Page N: AA BB CC DD". Classic 16-byte "Page N:"
- * lines and T4T NDEF text must not count as a finished Ultralight dump. */
-static unsigned esl_parse_ul_pages(const String &dump, uint8_t pages[][4],
-                                   unsigned cap) {
-    unsigned highest = 0;
-    bool any = false;
-    int start = 0;
-    while (start < (int)dump.length()) {
-        int nl = dump.indexOf('\n', start);
-        if (nl < 0) nl = (int)dump.length();
-        String line = dump.substring(start, nl);
-        line.trim();
-        start = nl + 1;
-        if (line.length() == 0) continue;
+#define ESL_NFC_PAGE_CAP 16u
 
-        unsigned n = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0;
-        int consumed = 0;
-        if (sscanf(line.c_str(), "Page %u: %x %x %x %x%n", &n, &b0, &b1, &b2,
-                   &b3, &consumed) != 5) {
-            continue;
-        }
-        const char *rest = line.c_str() + consumed;
-        while (*rest == ' ' || *rest == '\t') rest++;
-        if (*rest != '\0') continue;
-        if (n >= cap) continue;
-        pages[n][0] = (uint8_t)b0;
-        pages[n][1] = (uint8_t)b1;
-        pages[n][2] = (uint8_t)b2;
-        pages[n][3] = (uint8_t)b3;
-        if (!any || n + 1u > highest) highest = n + 1u;
-        any = true;
+static bool esl_rfid_is_pn532(void) {
+    switch (bruceConfigPins.rfidModule) {
+        case PN532_I2C_MODULE:
+        case PN532_SPI_MODULE:
+#ifdef M5STICK
+        case PN532_I2C_SPI_MODULE:
+#endif
+            return true;
+        default: return false;
     }
-    return any ? highest : 0;
+}
+
+/* Type-2 prefix only: detect + pages 0–11. ESL NDEF lives in 3–10. A full
+ * PN532::read() dump is 45–231 pages on the same I2C bus as the T-Embed PMU
+ * and is what crashed Scan NFC. */
+static bool esl_pn532_try_ul_prefix(PN532 *pn, uint8_t pages[][4], unsigned cap,
+                                    unsigned *out_n) {
+    uint8_t buf[16];
+    unsigned got = 0;
+    unsigned need;
+    unsigned page;
+
+    *out_n = 0;
+    if (pn == nullptr || pages == nullptr || cap == 0u) return false;
+    memset(pages, 0, cap * 4u);
+
+    if (!pn->nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A)) {
+        return false;
+    }
+    if (!pn->nfc.readDetectedPassiveTargetID()) return false;
+    if (pn->nfc.targetUid.sak & 0x20) {
+        pn->nfc.inRelease(0);
+        return false;
+    }
+
+    need = cap < 12u ? cap : 12u;
+    for (page = 0; page < need; page += 4) {
+        unsigned o;
+        if (!pn->nfc.ntag2xx_ReadPage((uint8_t)page, buf)) break;
+        for (o = 0; o < 4 && page + o < cap; o++) {
+            memcpy(pages[page + o], buf + 4 * o, 4);
+            got = page + o + 1;
+        }
+    }
+    pn->nfc.inRelease(0);
+    *out_n = got;
+    return got >= 11u;
+}
+
+static void esl_draw_scan_prompt(void) {
+    drawMainBorderWithTitle("Scan NFC Tag");
+    setPadCursor(1, 1);
+    padprintln("Hold ESL tag");
+    padprintln("to the NFC reader");
 }
 
 static void esl_nfc_popup(const char *header, const char *body) {
@@ -1473,35 +1465,38 @@ static void esl_scan_nfc(EslSession *s) {
         return;
     }
 
-    drawMainBorderWithTitle("Scan NFC Tag");
-    setPadCursor(1, 1);
-    padprintln("Hold ESL tag");
-    padprintln("to the NFC reader");
+    esl_draw_scan_prompt();
 
     bool cancelled = false;
-    uint8_t pages[64][4];
+    uint8_t pages[ESL_NFC_PAGE_CAP][4];
     unsigned pages_read = 0;
+    PN532 *pn = esl_rfid_is_pn532() ? static_cast<PN532 *>(rfid) : nullptr;
     memset(pages, 0, sizeof(pages));
 
     while (true) {
+        bool ready = false;
+
         if (check(EscPress)) {
             cancelled = true;
             break;
         }
-        /* PN532::read() returns SUCCESS on ISO14443A detect even when
-         * read_data_blocks() failed (pageReadSuccess false). Keep polling
-         * until a complete Ultralight dump is in hand, like Flipper. */
-        if (rfid->read() != RFIDInterface::SUCCESS || !rfid->pageReadSuccess) {
-            delay(100);
-            continue;
-        }
+
         memset(pages, 0, sizeof(pages));
-        pages_read = esl_parse_ul_pages(rfid->strAllPages, pages, 64);
-        if (pages_read < 11) {
-            delay(100);
-            continue;
+        pages_read = 0;
+        if (pn != nullptr) {
+            ready = esl_pn532_try_ul_prefix(pn, pages, ESL_NFC_PAGE_CAP,
+                                            &pages_read);
+        } else if (rfid->read() == RFIDInterface::SUCCESS) {
+            /* Do not wait for pageReadSuccess: a later Classic/NTAG page
+             * failure still leaves pages 0–10 in strAllPages. */
+            pages_read = esl_nfc_parse_ul_dump(rfid->strAllPages.c_str(), pages,
+                                               ESL_NFC_PAGE_CAP);
+            ready = pages_read >= 11u;
+            if (!ready) esl_draw_scan_prompt();
         }
-        break;
+
+        if (ready) break;
+        delay(100);
     }
 
     esl_free_rfid(rfid);
@@ -1561,16 +1556,6 @@ static void esl_targeted_menu(EslSession *s) {
     }
 }
 
-static void esl_pick_startup_warning(EslSession *s) {
-    options = {
-        {"Off", [&]() { s->settings.show_startup_warning = false; }},
-        {"On",  [&]() { s->settings.show_startup_warning = true; } },
-    };
-    int cur = s->settings.show_startup_warning ? 1 : 0;
-    int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_SETTINGS_ITEMS[0], cur);
-    if (sel >= 0) esl_fs_save_settings(s);
-}
-
 static void esl_pick_frame_repeat(EslSession *s) {
     options.clear();
     for (uint8_t i = 1; i <= 10; i++) {
@@ -1579,20 +1564,17 @@ static void esl_pick_frame_repeat(EslSession *s) {
     int cur = (int)s->settings.data_frame_repeats - 1;
     if (cur < 0) cur = 0;
     if (cur > 9) cur = 9;
-    int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_SETTINGS_ITEMS[1], cur);
+    int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_SETTINGS_ITEMS[0], cur);
     if (sel >= 0) esl_fs_save_settings(s);
 }
 
 static void esl_settings_menu(EslSession *s) {
     while (true) {
-        String warn = String(ESL_SETTINGS_ITEMS[0]) + "  " +
-                      (s->settings.show_startup_warning ? "On" : "Off");
-        String rep = String(ESL_SETTINGS_ITEMS[1]) + "  " +
+        String rep = String(ESL_SETTINGS_ITEMS[0]) + "  " +
                      String((unsigned)s->settings.data_frame_repeats);
         options = {
-            {warn,                  [&]() { esl_pick_startup_warning(s); }},
             {rep,                   [&]() { esl_pick_frame_repeat(s); }   },
-            {ESL_SETTINGS_ITEMS[2], [&]() {
+            {ESL_SETTINGS_ITEMS[1], [&]() {
                  s->recent_count = 0;
                  esl_fs_save_recents(s);
                  displayTextLine("Cleared!", true);
@@ -1624,16 +1606,10 @@ static void esl_main_menu(EslSession *s) {
 }
 
 void startTagTinker(void) {
-    EslSession sess;
+    /* Session stays static: even with a 16 KB loopTask, a 1.7 KB local
+     * plus nested loopOptions and PN532 I2C blew the 8 KB canary. */
+    static EslSession sess;
     esl_fs_load_session(&sess);
-
-    if (sess.settings.show_startup_warning) {
-        if (!esl_warning_pages()) {
-            returnToMenu = true;
-            return;
-        }
-    }
-
     esl_main_menu(&sess);
     returnToMenu = true;
 }

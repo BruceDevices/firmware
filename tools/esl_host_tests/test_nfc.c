@@ -131,10 +131,78 @@ static void test_decode_ul_pages_accepts_synthetic(void) {
     CHECK_STR(barcode, ESL_NFC_BARCODE);
 }
 
+/* Bruce PN532 UL lines are "Page N: AA BB CC DD". A full-chip dump is
+ * 45–231 pages; ESL only needs 0–10. The scan path must treat a prefix
+ * dump as finished so it does not hammer I2C for the rest of the chip. */
+static void fill_synthetic_ul_pages(uint8_t pages[11][4]) {
+    const char *tag = ESL_NFC_TAG10;
+
+    memset(pages, 0, 11 * 4);
+    pages[3][0] = 0xE1;
+    pages[4][0] = 0x03;
+    pages[4][1] = 15;
+    pages[5][2] = '/';
+    pages[5][3] = (uint8_t)tag[0];
+    pages[6][0] = (uint8_t)tag[1];
+    pages[6][1] = (uint8_t)tag[2];
+    pages[6][2] = (uint8_t)tag[3];
+    pages[6][3] = (uint8_t)tag[4];
+    pages[7][0] = (uint8_t)tag[5];
+    pages[7][1] = (uint8_t)tag[6];
+    pages[7][2] = (uint8_t)tag[7];
+    pages[7][3] = (uint8_t)tag[8];
+    pages[8][0] = (uint8_t)tag[9];
+}
+
+static void test_parse_ul_dump_prefix_is_enough(void) {
+    uint8_t expect[11][4];
+    uint8_t got[16][4];
+    char barcode[18];
+    char dump[512];
+    char *p;
+    unsigned i;
+    unsigned n;
+
+    fill_synthetic_ul_pages(expect);
+    p = dump;
+    for (i = 0; i < 11; i++) {
+        int w = sprintf(p, "Page %u: %02X %02X %02X %02X\n", i,
+                        expect[i][0], expect[i][1], expect[i][2], expect[i][3]);
+        CHECK(w > 0);
+        p += w;
+    }
+
+    memset(got, 0xA5, sizeof(got));
+    n = esl_nfc_parse_ul_dump(dump, got, 16);
+    CHECK(n >= 11);
+    CHECK(memcmp(got[3], expect[3], 4) == 0);
+    CHECK(memcmp(got[4], expect[4], 4) == 0);
+    CHECK(memcmp(got[8], expect[8], 4) == 0);
+
+    memset(barcode, 0, sizeof(barcode));
+    CHECK(esl_nfc_decode_ul_pages(got, n, barcode));
+    CHECK_STR(barcode, ESL_NFC_BARCODE);
+}
+
+static void test_parse_ul_dump_rejects_classic_and_t4t(void) {
+    uint8_t pages[16][4];
+
+    memset(pages, 0x5A, sizeof(pages));
+    CHECK(esl_nfc_parse_ul_dump(
+              "Page 0: 04 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF\n",
+              pages, 16) == 0);
+    CHECK(esl_nfc_parse_ul_dump("NDEF T4T\nNDEF len: 32\nNDEF: 00 01\n",
+                               pages, 16) == 0);
+    CHECK(esl_nfc_parse_ul_dump("", pages, 16) == 0);
+    CHECK(esl_nfc_parse_ul_dump(NULL, pages, 16) == 0);
+}
+
 int main(void) {
     test_decode_tag10_rejects();
     test_decode_ul_pages_rejects();
     test_decode_tag10_accepts_pinned();
     test_decode_ul_pages_accepts_synthetic();
+    test_parse_ul_dump_prefix_is_enough();
+    test_parse_ul_dump_rejects_classic_and_t4t();
     TEST_REPORT("test_nfc");
 }
