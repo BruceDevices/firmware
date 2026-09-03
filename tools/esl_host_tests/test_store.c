@@ -66,6 +66,56 @@ static void test_targets_parse_save_crud(void) {
     CHECK_STR(out, "A4165420155216265|cat\nA4165420155216265|tag2\n");
 }
 
+static void test_rename_then_format(void) {
+    EslSession sess;
+    esl_store_session_init(&sess);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), 0);
+    strncpy(sess.targets[0].name, "shelf", sizeof(sess.targets[0].name) - 1u);
+    sess.targets[0].name[sizeof(sess.targets[0].name) - 1u] = '\0';
+    char out[256];
+    CHECK(esl_store_targets_format(&sess, out, sizeof(out)));
+    CHECK_STR(out, "A4165420155216265|shelf\n");
+}
+
+static void test_delete_shifts_remaining(void) {
+    EslSession sess;
+    esl_store_session_init(&sess);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), 0);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4000000000012065"), 1);
+    sess.selected_target = 0;
+    CHECK(esl_store_delete_target(&sess, 0));
+    CHECK_EQ(sess.target_count, 1u);
+    CHECK_STR(sess.targets[0].barcode, "A4000000000012065");
+    CHECK_EQ(sess.selected_target, -1);
+    CHECK(!esl_store_delete_target(&sess, 1));
+}
+
+static void test_kind_color_supports_graphics(void) {
+    CHECK_STR(esl_store_profile_kind_label(TagTinkerTagKindDotMatrix), "Graphic");
+    CHECK_STR(esl_store_profile_kind_label(TagTinkerTagKindSegment), "Segment");
+    CHECK_STR(esl_store_profile_kind_label(TagTinkerTagKindUnknown), "Unknown");
+    CHECK_STR(esl_store_profile_kind_label((TagTinkerTagKind)99), "Unknown");
+
+    CHECK_STR(esl_store_profile_color_label(TagTinkerTagColorMono), "Mono");
+    CHECK_STR(esl_store_profile_color_label(TagTinkerTagColorRed), "Red");
+    CHECK_STR(esl_store_profile_color_label(TagTinkerTagColorYellow), "Yellow");
+    CHECK_STR(esl_store_profile_color_label((TagTinkerTagColor)99), "Unknown");
+
+    EslSession sess;
+    esl_store_session_init(&sess);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), 0);
+    CHECK(esl_store_target_supports_graphics(&sess.targets[0]));
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4000000000012065"), 1);
+    CHECK_EQ(sess.targets[1].profile.kind, TagTinkerTagKindSegment);
+    CHECK(!esl_store_target_supports_graphics(&sess.targets[1]));
+    CHECK(!esl_store_target_supports_graphics(NULL));
+
+    EslTarget unknown;
+    memset(&unknown, 0, sizeof(unknown));
+    unknown.profile.kind = TagTinkerTagKindUnknown;
+    CHECK(esl_store_target_supports_graphics(&unknown));
+}
+
 static void test_target_cap(void) {
     EslSession sess;
     esl_store_session_init(&sess);
@@ -119,6 +169,9 @@ static void test_recents_parse_add(void) {
 int main(void) {
     test_settings_defaults_and_roundtrip();
     test_targets_parse_save_crud();
+    test_rename_then_format();
+    test_delete_shifts_remaining();
+    test_kind_color_supports_graphics();
     test_target_cap();
     test_recents_parse_add();
     TEST_REPORT("test_store");
