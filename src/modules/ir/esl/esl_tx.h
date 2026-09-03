@@ -72,6 +72,12 @@ bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
  * between the two frames (Flipper queues both, then transmits). */
 bool esl_tx_send_led_test(const EslTxOps *ops, const uint8_t plid[4]);
 
+/* Single pre-built frame. `repeats` is Flipper app->repeats (N → N+1
+ * transmissions via the existing send contract). If spam, loop send until
+ * ops->aborted. NULL ops/frame or len 0 → false. */
+bool esl_tx_send_raw(const EslTxOps *ops, const uint8_t *frame, size_t len,
+                     uint16_t repeats, bool spam);
+
 #ifdef __cplusplus
 }
 #endif
