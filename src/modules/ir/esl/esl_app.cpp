@@ -482,38 +482,6 @@ static uint8_t esl_text_tx_page(uint8_t img_page) {
     return page;
 }
 
-typedef struct {
-    const uint8_t *primary;
-    const uint8_t *secondary; /* NULL → plane 1 is clear (1) */
-} EslTextColor26Ctx;
-
-/* Wire idx → glass via the same proto_to_glass map as esl_color26_bmp_pixel. */
-static uint8_t esl_text_color26_pixel(size_t idx, void *ctx) {
-    const EslTextColor26Ctx *c = (const EslTextColor26Ctx *)ctx;
-    if (c == NULL || c->primary == NULL) return 1u;
-
-    const size_t plane_count = (size_t)TAGTINKER_COLOR26_WIRE_W *
-                               (size_t)TAGTINKER_COLOR26_WIRE_H;
-    uint8_t plane = 0u;
-    if (idx >= plane_count) {
-        plane = 1u;
-        idx -= plane_count;
-    }
-    if (idx >= plane_count) return 1u;
-
-    const uint16_t px = (uint16_t)(idx % TAGTINKER_COLOR26_WIRE_W);
-    const uint16_t py = (uint16_t)(idx / TAGTINKER_COLOR26_WIRE_W);
-    uint16_t gx = 0u, gy = 0u;
-    tagtinker_color26_proto_to_glass(TAGTINKER_COLOR26_WIRE_W, px, py, &gx, &gy);
-    if (gx >= TAGTINKER_COLOR26_GLASS_W || gy >= TAGTINKER_COLOR26_GLASS_H) {
-        return 1u;
-    }
-
-    const uint8_t *src = (plane == 0u) ? c->primary : c->secondary;
-    if (src == NULL) return 1u;
-    return src[(size_t)gy * TAGTINKER_COLOR26_GLASS_W + gx];
-}
-
 static void esl_text_render_full(uint8_t *primary, uint8_t *secondary, uint16_t w,
                                  uint16_t h, const char *text,
                                  const EslSession *sess,
