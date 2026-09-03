@@ -740,7 +740,8 @@ static void esl_free_rfid(RFIDInterface *rfid) {
     releaseI2CBus();
 }
 
-/* "Page N: AA BB CC DD" (and longer Classic lines; first four bytes win). */
+/* UL dump lines only: "Page N: AA BB CC DD". Classic 16-byte "Page N:"
+ * lines and T4T NDEF text must not count as a finished Ultralight dump. */
 static unsigned esl_parse_ul_pages(const String &dump, uint8_t pages[][4],
                                    unsigned cap) {
     unsigned highest = 0;
@@ -755,10 +756,14 @@ static unsigned esl_parse_ul_pages(const String &dump, uint8_t pages[][4],
         if (line.length() == 0) continue;
 
         unsigned n = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0;
-        if (sscanf(line.c_str(), "Page %u: %x %x %x %x", &n, &b0, &b1, &b2,
-                   &b3) != 5) {
+        int consumed = 0;
+        if (sscanf(line.c_str(), "Page %u: %x %x %x %x%n", &n, &b0, &b1, &b2,
+                   &b3, &consumed) != 5) {
             continue;
         }
+        const char *rest = line.c_str() + consumed;
+        while (*rest == ' ' || *rest == '\t') rest++;
+        if (*rest != '\0') continue;
         if (n >= cap) continue;
         pages[n][0] = (uint8_t)b0;
         pages[n][1] = (uint8_t)b1;
@@ -798,7 +803,6 @@ static void esl_scan_nfc(EslSession *s) {
     padprintln("to the NFC reader");
 
     bool cancelled = false;
-    bool got_tag = false;
     uint8_t pages[64][4];
     unsigned pages_read = 0;
     memset(pages, 0, sizeof(pages));
@@ -808,12 +812,19 @@ static void esl_scan_nfc(EslSession *s) {
             cancelled = true;
             break;
         }
-        if (rfid->read() != RFIDInterface::SUCCESS) {
+        /* PN532::read() returns SUCCESS on ISO14443A detect even when
+         * read_data_blocks() failed (pageReadSuccess false). Keep polling
+         * until a complete Ultralight dump is in hand, like Flipper. */
+        if (rfid->read() != RFIDInterface::SUCCESS || !rfid->pageReadSuccess) {
             delay(100);
             continue;
         }
-        got_tag = true;
+        memset(pages, 0, sizeof(pages));
         pages_read = esl_parse_ul_pages(rfid->strAllPages, pages, 64);
+        if (pages_read < 11) {
+            delay(100);
+            continue;
+        }
         break;
     }
 
@@ -823,7 +834,7 @@ static void esl_scan_nfc(EslSession *s) {
 
     char barcode[18];
     memset(barcode, 0, sizeof(barcode));
-    if (!got_tag || !esl_nfc_decode_ul_pages(pages, pages_read, barcode)) {
+    if (!esl_nfc_decode_ul_pages(pages, pages_read, barcode)) {
         esl_nfc_popup("Not an ESL tag", "Tag detected but\nno valid ESL data");
         return;
     }
