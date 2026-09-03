@@ -74,11 +74,11 @@ size_t ScrollableTextArea::getMaxLines() { return linesBuffer.size(); }
 void ScrollableTextArea::show(bool force) {
     draw(force);
 
-    while (check(SelPress)) {
+    while (check(SelPress) || check(EscPress)) {
         update(force);
         yield();
     }
-    while (!check(SelPress)) {
+    while (!check(SelPress) && !check(EscPress)) {
         update(force);
         yield();
     }
