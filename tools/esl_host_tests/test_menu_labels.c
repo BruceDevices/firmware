@@ -44,9 +44,12 @@ static void test_menu_tables_count_and_order(void) {
         "Set Text", "Set Image", "WiFi Plugins"};
     static const char *const want_actions_tail[] = {"LED Test", "Delete Tag"};
     static const char *const want_settings[] = {
-        "Startup Warning", "Frame Repeat", "Clear Recents"};
+        "Frame Repeat", "Clear Recents"};
     static const char *const want_about[] = {
-        "Tag Tinker", "Ported by I12BP8", "Research by furrtek",
+        "Tag Tinker",
+        "Send images and text to infrared electronic shelf labels.",
+        "",
+        "Developed by I12BP8", "Ported by sosnek", "Research by furrtek",
         "NFC by 7h30th3r0n3"};
     static const char *const want_warning[] = {
         "RESEARCH TOOL:", "PERMISSION:", "CAUTION:", "RESPONSIBILITY:"};
