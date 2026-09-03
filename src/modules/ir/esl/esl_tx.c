@@ -146,3 +146,22 @@ bool esl_tx_send_generic(const EslTxOps *ops, const uint8_t plid[4],
     return tx_payload_stages(ops, plid, payload, page, width, height, pos_x,
                              pos_y, &prof, &done, total);
 }
+
+bool esl_tx_send_led_test(const EslTxOps *ops, const uint8_t plid[4]) {
+    if (!tx_ok(ops) || plid == NULL) return false;
+
+    const size_t total = 2u;
+    size_t done = 0u;
+    uint8_t frame[TAGTINKER_MAX_FRAME_SIZE];
+
+    size_t len = tagtinker_make_ping_frame(frame, plid);
+    if (!tx_frame(ops, frame, len, ESL_LED_PING_REPEATS)) return false;
+    tx_step(ops, &done, total);
+
+    /* 0x06 command, 0x49 payload (LED flash, page 1, no forever), 0x0005 duration */
+    const uint8_t blink[6] = {0x06, 0x49, 0x00, 0x00, 0x00, 0x05};
+    len = tagtinker_make_addressed_frame(frame, plid, blink, sizeof(blink));
+    if (!tx_frame(ops, frame, len, ESL_LED_BLINK_REPEATS)) return false;
+    tx_step(ops, &done, total);
+    return true;
+}
