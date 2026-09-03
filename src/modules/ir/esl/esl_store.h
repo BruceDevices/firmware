@@ -60,6 +60,9 @@ void esl_store_set_default_name(EslSession *s, EslTarget *t);
 bool esl_store_recents_parse(const char *text, EslSession *s);
 bool esl_store_recents_format(const EslSession *s, char *out, size_t cap);
 void esl_store_recents_add(EslSession *s, const char *text);
+const char *esl_store_profile_kind_label(TagTinkerTagKind kind);
+const char *esl_store_profile_color_label(TagTinkerTagColor color);
+bool esl_store_target_supports_graphics(const EslTarget *t);
 
 #ifdef __cplusplus
 }

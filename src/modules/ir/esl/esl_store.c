@@ -269,3 +269,32 @@ void esl_store_recents_add(EslSession *s, const char *text) {
     strncpy(s->recents[0].text, text, ESL_STORE_TEXT_LEN - 1u);
     s->recents[0].text[ESL_STORE_TEXT_LEN - 1u] = '\0';
 }
+
+const char *esl_store_profile_kind_label(TagTinkerTagKind kind) {
+    switch (kind) {
+    case TagTinkerTagKindDotMatrix:
+        return "Graphic";
+    case TagTinkerTagKindSegment:
+        return "Segment";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *esl_store_profile_color_label(TagTinkerTagColor color) {
+    switch (color) {
+    case TagTinkerTagColorMono:
+        return "Mono";
+    case TagTinkerTagColorRed:
+        return "Red";
+    case TagTinkerTagColorYellow:
+        return "Yellow";
+    default:
+        return "Unknown";
+    }
+}
+
+bool esl_store_target_supports_graphics(const EslTarget *t) {
+    if (t == NULL) return false;
+    return t->profile.kind != TagTinkerTagKindSegment;
+}
