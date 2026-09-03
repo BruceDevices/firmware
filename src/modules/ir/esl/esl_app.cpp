@@ -8,12 +8,15 @@
 #include "esl_proto.h"
 #include "esl_text.h"
 #include "esl_tx.h"
+#include "esl_wifi.h"
+#include "esl_wifi_client.h"
 #include "font/tagtinker_font.h"
 #include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/scrollableTextArea.h"
 #include "core/sd_functions.h"
+#include "core/wifi/wifi_common.h"
 #include "modules/ir/TV-B-Gone.h"
 #if !defined(LITE_VERSION)
 #include "modules/rfid/ST25R3916.h"
@@ -1025,6 +1028,293 @@ static void esl_broadcast_menu(void) {
     }
 }
 
+/* Packed worker planes as a top-down 1/2 bpp BMP-like source (same stride
+ * as esl_bmp). Color 2.6 uses the existing glass/wire callback. */
+static void esl_wifi_planes_as_bmp(const EslWifiRenderHeader *hdr, EslBmpInfo *info) {
+    info->data_offset = 0;
+    info->row_stride = hdr->row_stride;
+    info->width = hdr->width;
+    info->height = hdr->height;
+    info->bpp = hdr->planes;
+    info->top_down = true;
+}
+
+static void esl_send_wifi_planes(EslSession *sess, const EslTarget *target,
+                                 const uint8_t *planes, size_t plane_len,
+                                 const EslWifiRenderHeader *hdr, uint8_t page) {
+    EslBmpInfo info;
+    esl_wifi_planes_as_bmp(hdr, &info);
+
+    const bool is_color26 = tagtinker_profile_needs_wh_swap(&target->profile);
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Encoding...");
+
+    TagTinkerImagePayload payload;
+    bool encoded = false;
+    uint16_t out_w = 0;
+    uint16_t out_h = 0;
+
+    if (is_color26) {
+        EslColor26BmpCtx ctx = {planes, plane_len, &info};
+        const size_t total = (size_t)TAGTINKER_COLOR26_WIRE_W *
+                             TAGTINKER_COLOR26_WIRE_H * 2U;
+        encoded = tagtinker_encode_fn_payload(esl_color26_bmp_pixel, &ctx, total,
+                                              TagTinkerCompressionAuto, &payload);
+    } else {
+        out_w = target->profile.width;
+        out_h = target->profile.height;
+        const bool second_plane = (target->profile.color != TagTinkerTagColorMono);
+        EslGenericBmpCtx ctx = {planes, plane_len, &info, out_w, out_h,
+                                second_plane};
+        const size_t total =
+            (size_t)out_w * out_h * (second_plane ? 2U : 1U);
+        encoded = tagtinker_encode_fn_payload(esl_generic_bmp_pixel, &ctx, total,
+                                              TagTinkerCompressionAuto, &payload);
+    }
+
+    if (!encoded) {
+        displayError("Encode failed", true);
+        return;
+    }
+
+    checkIrTxPin();
+    if (!esl_ir_init(bruceConfigPins.irTx)) {
+        tagtinker_free_image_payload(&payload);
+        displayError("IR init failed", true);
+        return;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Sending, Esc aborts");
+    delay(ESL_PRE_TX_SETTLE_MS);
+
+    EslUiCtx ui = {false};
+    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
+    const bool ok =
+        is_color26 ? esl_tx_send_color26(&ops, target->plid, &payload, page)
+                   : esl_tx_send_generic(&ops, target->plid, &payload, page,
+                                         out_w, out_h, 0u, 0u,
+                                         sess->settings.data_frame_repeats);
+
+    esl_ir_set_abort_hook(nullptr, nullptr);
+    esl_ir_deinit();
+    tagtinker_free_image_payload(&payload);
+
+    if (ui.aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
+        displaySuccess("Sent", true);
+    } else {
+        displayError("TX failed", true);
+    }
+}
+
+static bool esl_wifi_prompt_params(const EslWifiPlugin *plugin,
+                                   char values[ESL_WIFI_MAX_PARAMS][64]) {
+    for (uint8_t i = 0; i < plugin->param_count; i++) {
+        const EslWifiParam *sp = &plugin->params[i];
+        strncpy(values[i], sp->default_value, 63);
+        values[i][63] = '\0';
+
+        if (sp->type == ESL_WIFI_PARAM_ENUM) {
+            if (sp->option_count == 0) continue;
+            int chosen = -1;
+            int cur = 0;
+            options.clear();
+            for (uint8_t j = 0; j < sp->option_count; j++) {
+                if (strcmp(values[i], sp->options[j]) == 0) cur = (int)j;
+                options.push_back(
+                    {sp->options[j], [j, &chosen]() { chosen = (int)j; }});
+            }
+            int sel = loopOptions(options, MENU_TYPE_SUBMENU, sp->label, cur);
+            if (sel < 0) return false;
+            if (chosen >= 0) {
+                strncpy(values[i], sp->options[chosen], 63);
+                values[i][63] = '\0';
+            }
+        } else if (sp->type == ESL_WIFI_PARAM_BOOL) {
+            bool on = (values[i][0] == '1');
+            options = {
+                {"Off", [&]() { on = false; }},
+                {"On", [&]() { on = true; }},
+            };
+            int sel = loopOptions(options, MENU_TYPE_SUBMENU, sp->label, on ? 1 : 0);
+            if (sel < 0) return false;
+            strcpy(values[i], on ? "1" : "0");
+        } else if (sp->type == ESL_WIFI_PARAM_INT) {
+            int32_t minv = sp->int_min;
+            int32_t maxv = sp->int_max;
+            if (maxv < minv) {
+                int32_t tmp = minv;
+                minv = maxv;
+                maxv = tmp;
+            }
+            int32_t cur = atoi(values[i]);
+            if (cur < minv) cur = minv;
+            if (cur > maxv) cur = maxv;
+            const int32_t range = maxv - minv + 1;
+            if (range > 0 && range <= 32) {
+                int32_t chosen = cur;
+                options.clear();
+                for (int32_t v = minv; v <= maxv; v++) {
+                    options.push_back(
+                        {String((int)v), [v, &chosen]() { chosen = v; }});
+                }
+                int sel = loopOptions(options, MENU_TYPE_SUBMENU, sp->label,
+                                      (int)(cur - minv));
+                if (sel < 0) return false;
+                snprintf(values[i], 64, "%ld", (long)chosen);
+            } else {
+                String entered = num_keyboard(String((int)cur), 11, sp->label);
+                if (entered == "\x1B") return false;
+                int32_t v = entered.toInt();
+                if (v < minv) v = minv;
+                if (v > maxv) v = maxv;
+                snprintf(values[i], 64, "%ld", (long)v);
+            }
+        } else {
+            String entered = keyboard(values[i], 63, sp->label);
+            if (entered == "\x1B") return false;
+            strncpy(values[i], entered.c_str(), 63);
+            values[i][63] = '\0';
+        }
+    }
+    return true;
+}
+
+static uint8_t esl_wifi_accent_for(const EslTarget *target) {
+    if (target->profile.color == TagTinkerTagColorYellow) return 2;
+    if (target->profile.color == TagTinkerTagColorRed) return 1;
+    return 0;
+}
+
+static void esl_wifi_run_plugin(EslSession *sess, const EslTarget *target,
+                                const EslWifiPlugin *plugin) {
+    char values[ESL_WIFI_MAX_PARAMS][64];
+    memset(values, 0, sizeof values);
+    if (!esl_wifi_prompt_params(plugin, values)) return;
+
+    const char *keys[ESL_WIFI_MAX_PARAMS];
+    const char *vals[ESL_WIFI_MAX_PARAMS];
+    for (uint8_t i = 0; i < plugin->param_count; i++) {
+        keys[i] = plugin->params[i].key;
+        vals[i] = values[i];
+    }
+
+    uint16_t tw = target->profile.width;
+    uint16_t th = target->profile.height;
+    if (tagtinker_profile_needs_wh_swap(&target->profile)) {
+        tw = TAGTINKER_COLOR26_GLASS_W;
+        th = TAGTINKER_COLOR26_GLASS_H;
+    }
+
+    drawMainBorderWithTitle(plugin->name[0] ? plugin->name : "WiFi Plugins");
+    displayTextLine("Loading...");
+
+    EslWifiRenderHeader hdr;
+    uint8_t *body = nullptr;
+    size_t body_len = 0;
+    if (!esl_wifi_client_fetch_render(plugin->id, tw, th, esl_wifi_accent_for(target),
+                                      keys, vals, plugin->param_count, &hdr, &body,
+                                      &body_len)) {
+        return;
+    }
+
+    uint8_t page = tagtinker_profile_needs_wh_swap(&target->profile)
+                       ? tagtinker_color26_resolve_page(0)
+                       : 0;
+    while (true) {
+        bool tx = false;
+        char page_lbl[16];
+        snprintf(page_lbl, sizeof page_lbl, "Page %u", (unsigned)page);
+        options.clear();
+        options.push_back({page_lbl, [&]() {
+                               uint8_t p = page;
+                               if (esl_prompt_page(&p)) page = p;
+                           }});
+        options.push_back({ESL_TRANSMIT, [&]() { tx = true; }});
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU,
+                              plugin->name[0] ? plugin->name : "WiFi Plugins");
+        if (sel < 0) {
+            free(body);
+            return;
+        }
+        if (tx) {
+            esl_send_wifi_planes(sess, target, body, body_len, &hdr, page);
+            free(body);
+            return;
+        }
+    }
+}
+
+static void esl_wifi_plugins(EslSession *sess, const EslTarget *target) {
+    EslWifiManifest *manifest =
+        (EslWifiManifest *)ps_malloc(sizeof(EslWifiManifest));
+    if (manifest == nullptr) manifest = (EslWifiManifest *)malloc(sizeof(EslWifiManifest));
+    if (manifest == nullptr) {
+        displayError("plugin fetch failed", true);
+        return;
+    }
+    memset(manifest, 0, sizeof *manifest);
+
+    auto refresh = [&]() {
+        drawMainBorderWithTitle("WiFi Plugins");
+        displayTextLine("Loading plugins...");
+        if (!esl_wifi_client_fetch_plugins(manifest)) {
+            memset(manifest, 0, sizeof *manifest);
+        }
+    };
+    refresh();
+
+    while (true) {
+        int plugin_idx = -1;
+        bool do_setup = false;
+        bool do_forget = false;
+        bool do_refresh = false;
+
+        char title[40];
+        snprintf(title, sizeof title, "WiFi Plugins [%s]",
+                 wifiConnected ? "OK" : "off");
+
+        options.clear();
+        if (manifest->count == 0) {
+            options.push_back({"(no plugins yet)", [&]() { do_refresh = true; }});
+        } else {
+            for (uint8_t i = 0; i < manifest->count; i++) {
+                options.push_back({manifest->plugins[i].name,
+                                   [i, &plugin_idx]() { plugin_idx = (int)i; }});
+            }
+        }
+        options.push_back({"WiFi Setup", [&]() { do_setup = true; }});
+        options.push_back({"Forget WiFi", [&]() { do_forget = true; }});
+        options.push_back({"Refresh Plugins", [&]() { do_refresh = true; }});
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, title);
+        if (sel < 0) {
+            free(manifest);
+            return;
+        }
+        if (do_setup) {
+            wifiConnectMenu();
+            continue;
+        }
+        if (do_forget) {
+            wifiDisconnect();
+            continue;
+        }
+        if (do_refresh) {
+            refresh();
+            continue;
+        }
+        if (plugin_idx >= 0 && (uint8_t)plugin_idx < manifest->count) {
+            esl_wifi_run_plugin(sess, target, &manifest->plugins[plugin_idx]);
+        }
+    }
+}
+
 static void esl_show_tag_info(const EslTarget *t) {
     char buf[256];
     snprintf(buf, sizeof(buf),
@@ -1091,7 +1381,8 @@ static void esl_target_actions(EslSession *s, uint8_t idx) {
                                [s, t]() { esl_set_text(s, t); }});
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[1],
                                [s, t]() { esl_set_image(s, t); }});
-            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2], esl_noop});
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2],
+                               [s, t]() { esl_wifi_plugins(s, t); }});
         }
         options.push_back({ESL_TARGET_ACTIONS_TAIL[0], [t]() { esl_led_test(t); }});
         options.push_back({ESL_TARGET_ACTIONS_TAIL[1], [&]() {
