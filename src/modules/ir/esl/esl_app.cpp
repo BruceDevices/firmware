@@ -1,11 +1,14 @@
 #include "esl_app.h"
 
 #include "esl_bmp.h"
+#include "esl_fs.h"
 #include "esl_ir_driver.h"
+#include "esl_menu_labels.h"
 #include "esl_proto.h"
 #include "esl_tx.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/scrollableTextArea.h"
 #include "core/sd_functions.h"
 #include "modules/ir/TV-B-Gone.h"
 #include <Arduino.h>
@@ -65,7 +68,7 @@ static void ui_progress(void *ctx, size_t done, size_t total) {
     progressHandler((int)done, total, "Sending ESL");
 }
 
-bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
+static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
 
@@ -159,8 +162,11 @@ static uint8_t *esl_read_file(fs::FS &fs, const String &path, size_t max_bytes,
     return buf;
 }
 
-void startEslTx() {
-    drawMainBorderWithTitle("ESL Image");
+/* Task 4 rehomes this into Set Image. Kept file-static so the encode/send
+ * path is not deleted; it is not the Infrared entry anymore. */
+static void esl_image_tx_from_prompts(void) __attribute__((unused));
+static void esl_image_tx_from_prompts(void) {
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
 
     uint8_t plid[4] = {0};
     TagTinkerTagProfile profile;
@@ -254,7 +260,7 @@ void startEslTx() {
         return;
     }
 
-    drawMainBorderWithTitle("ESL Image");
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
     displayTextLine("Sending, Esc aborts");
     delay(ESL_PRE_TX_SETTLE_MS);
 
@@ -282,5 +288,146 @@ void startEslTx() {
     } else {
         displayError("TX failed", true);
     }
+    returnToMenu = true;
+}
+
+static const char *const ESL_WARNING_LINES[][2] = {
+    {"Educational tool for", "infrared ESL study."},
+    {"Use only on tags", "you own or may test."},
+    {"Unauthorized use", "may be illegal."},
+    {"You are responsible", "for your actions."},
+};
+
+static void esl_noop(void) {}
+
+static bool esl_warning_pages(void) {
+    const int last = (int)(sizeof(ESL_WARNING_TITLES) / sizeof(ESL_WARNING_TITLES[0])) - 1;
+    int page = 0;
+
+    while (true) {
+        bool cont = false;
+        int next_page = page;
+
+        options.clear();
+        options.push_back(Option(ESL_WARNING_LINES[page][0], esl_noop, false, nullptr,
+                                 nullptr, false, false));
+        options.push_back(Option(ESL_WARNING_LINES[page][1], esl_noop, false, nullptr,
+                                 nullptr, false, false));
+        if (page > 0) {
+            options.push_back({"Prev", [&]() { next_page = page - 1; }});
+        }
+        if (page < last) {
+            options.push_back({"Next", [&]() { next_page = page + 1; }});
+        } else {
+            options.push_back({"Continue", [&]() { cont = true; }});
+        }
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_WARNING_TITLES[page]);
+        if (sel < 0) return false;
+        if (cont) return true;
+        page = next_page;
+    }
+}
+
+static void esl_broadcast_menu(void) {
+    while (true) {
+        options = {
+            {ESL_BROADCAST_ITEMS[0], esl_noop},
+            {ESL_BROADCAST_ITEMS[1], esl_noop},
+        };
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_MAIN_ITEMS[0]);
+        if (sel < 0) return;
+    }
+}
+
+static void esl_targeted_menu(EslSession *s) {
+    while (true) {
+        options.clear();
+        options.push_back({ESL_TARGET_MENU_PREFIX[0], esl_noop});
+        options.push_back({ESL_TARGET_MENU_PREFIX[1], esl_noop});
+        for (uint8_t i = 0; i < s->target_count; i++) {
+            const char *label =
+                s->targets[i].name[0] ? s->targets[i].name : s->targets[i].barcode;
+            options.push_back({label, esl_noop});
+        }
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_MAIN_ITEMS[1]);
+        if (sel < 0) return;
+    }
+}
+
+static void esl_pick_startup_warning(EslSession *s) {
+    options = {
+        {"Off", [&]() { s->settings.show_startup_warning = false; }},
+        {"On",  [&]() { s->settings.show_startup_warning = true; } },
+    };
+    int cur = s->settings.show_startup_warning ? 1 : 0;
+    int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_SETTINGS_ITEMS[0], cur);
+    if (sel >= 0) esl_fs_save_settings(s);
+}
+
+static void esl_pick_frame_repeat(EslSession *s) {
+    options.clear();
+    for (uint8_t i = 1; i <= 10; i++) {
+        options.push_back({String((int)i), [s, i]() { s->settings.data_frame_repeats = i; }});
+    }
+    int cur = (int)s->settings.data_frame_repeats - 1;
+    if (cur < 0) cur = 0;
+    if (cur > 9) cur = 9;
+    int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_SETTINGS_ITEMS[1], cur);
+    if (sel >= 0) esl_fs_save_settings(s);
+}
+
+static void esl_settings_menu(EslSession *s) {
+    while (true) {
+        String warn = String(ESL_SETTINGS_ITEMS[0]) + "  " +
+                      (s->settings.show_startup_warning ? "On" : "Off");
+        String rep = String(ESL_SETTINGS_ITEMS[1]) + "  " +
+                     String((unsigned)s->settings.data_frame_repeats);
+        options = {
+            {warn,                  [&]() { esl_pick_startup_warning(s); }},
+            {rep,                   [&]() { esl_pick_frame_repeat(s); }   },
+            {ESL_SETTINGS_ITEMS[2], [&]() {
+                 s->recent_count = 0;
+                 esl_fs_save_recents(s);
+                 displayTextLine("Cleared!", true);
+             }},
+        };
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_MAIN_ITEMS[2]);
+        if (sel < 0) return;
+    }
+}
+
+static void esl_about(void) {
+    ScrollableTextArea area = ScrollableTextArea(ESL_UI_APP_NAME);
+    const size_t n = sizeof(ESL_ABOUT_LINES) / sizeof(ESL_ABOUT_LINES[0]);
+    for (size_t i = 0; i < n; i++) area.addLine(ESL_ABOUT_LINES[i]);
+    area.show();
+}
+
+static void esl_main_menu(EslSession *s) {
+    while (true) {
+        options = {
+            {ESL_MAIN_ITEMS[0], [&]() { esl_broadcast_menu(); }},
+            {ESL_MAIN_ITEMS[1], [&]() { esl_targeted_menu(s); }},
+            {ESL_MAIN_ITEMS[2], [&]() { esl_settings_menu(s); }},
+            {ESL_MAIN_ITEMS[3], [&]() { esl_about(); }         },
+        };
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_UI_APP_NAME);
+        if (sel < 0) return;
+    }
+}
+
+void startTagTinker(void) {
+    EslSession sess;
+    esl_fs_load_session(&sess);
+
+    if (sess.settings.show_startup_warning) {
+        if (!esl_warning_pages()) {
+            returnToMenu = true;
+            return;
+        }
+    }
+
+    esl_main_menu(&sess);
     returnToMenu = true;
 }

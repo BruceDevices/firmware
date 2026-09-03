@@ -17,7 +17,7 @@ void IRMenu::optionsMenu() {
         {"TV-B-Gone", StartTvBGone              },
         {"Custom IR", otherIRcodes              },
         {"IR Read",   [=]() { IrRead(); }       },
-        {"ESL Image", startEslTx                },
+        {"Tag Tinker", startTagTinker           },
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
 #endif
