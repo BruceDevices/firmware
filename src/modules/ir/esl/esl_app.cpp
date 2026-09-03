@@ -364,6 +364,37 @@ static void esl_send_bmp(EslSession *sess, const EslTarget *target, FS &fs,
     }
 }
 
+/* Same IR chrome as esl_send_bmp: pin check, init, progress, Esc abort, deinit.
+ * No encode or file read — two queued frames only. */
+static void esl_led_test(const EslTarget *target) {
+    checkIrTxPin();
+    if (!esl_ir_init(bruceConfigPins.irTx)) {
+        displayError("IR init failed", true);
+        return;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Sending, Esc aborts");
+    delay(ESL_PRE_TX_SETTLE_MS);
+
+    EslUiCtx ui = {false};
+    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
+    const bool ok = esl_tx_send_led_test(&ops, target->plid);
+
+    esl_ir_set_abort_hook(nullptr, nullptr);
+    esl_ir_deinit();
+
+    if (ui.aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
+        displaySuccess("Sent", true);
+    } else {
+        displayError("TX failed", true);
+    }
+}
+
 static void esl_image_options(EslSession *sess, const EslTarget *target, FS &fs,
                               const String &path, uint8_t page) {
     while (true) {
@@ -542,7 +573,7 @@ static void esl_target_actions(EslSession *s, uint8_t idx) {
                                [s, t]() { esl_set_image(s, t); }});
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2], esl_noop});
         }
-        options.push_back({ESL_TARGET_ACTIONS_TAIL[0], esl_noop});
+        options.push_back({ESL_TARGET_ACTIONS_TAIL[0], [t]() { esl_led_test(t); }});
         options.push_back({ESL_TARGET_ACTIONS_TAIL[1], [&]() {
                                if (esl_delete_tag(s, idx)) deleted = true;
                            }});
