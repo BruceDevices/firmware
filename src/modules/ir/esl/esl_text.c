@@ -1,6 +1,33 @@
 #include "esl_text.h"
+#include "esl_proto.h"
 
 #include <stddef.h>
+
+uint8_t esl_text_color26_pixel(size_t idx, void *ctx) {
+    const EslTextColor26Ctx *c = (const EslTextColor26Ctx *)ctx;
+    if (c == NULL || c->primary == NULL) return 0u;
+
+    const size_t plane_count = (size_t)TAGTINKER_COLOR26_WIRE_W *
+                               (size_t)TAGTINKER_COLOR26_WIRE_H;
+    uint8_t plane = 0u;
+    if (idx >= plane_count) {
+        plane = 1u;
+        idx -= plane_count;
+    }
+    if (idx >= plane_count) return 0u;
+
+    const uint16_t px = (uint16_t)(idx % TAGTINKER_COLOR26_WIRE_W);
+    const uint16_t py = (uint16_t)(idx / TAGTINKER_COLOR26_WIRE_W);
+    uint16_t gx = 0u, gy = 0u;
+    tagtinker_color26_proto_to_glass(TAGTINKER_COLOR26_WIRE_W, px, py, &gx, &gy);
+    if (gx >= TAGTINKER_COLOR26_GLASS_W || gy >= TAGTINKER_COLOR26_GLASS_H) {
+        return 0u;
+    }
+
+    const uint8_t *src = (plane == 0u) ? c->primary : c->secondary;
+    if (src == NULL) return 0u;
+    return src[(size_t)gy * TAGTINKER_COLOR26_GLASS_W + gx] ? 0u : 1u;
+}
 
 bool esl_text_should_send_full(uint16_t width, uint16_t height, bool second_plane) {
     size_t pixel_count = (size_t)width * height;

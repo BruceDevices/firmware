@@ -1,7 +1,9 @@
+#include "esl_proto.h"
 #include "esl_text.h"
 #include "font/tagtinker_font.h"
 #include "test_util.h"
 #include <stdint.h>
+#include <string.h>
 
 static void test_should_send_full(void) {
     /* 208×112×2 = 46592 ≤ 49152 (most common color DM). */
@@ -40,10 +42,37 @@ static void test_render_short_string(void) {
     CHECK_EQ(buf[1 * 32 + 10], 1u); /* gy=0 of 'A' is empty (0x7e) */
 }
 
+/* Color 2.6 encoder: font 1 (clear) → wire 0; font 0 (ink) → wire 1.
+ * glass (py, proto_w-1-px): glass (0,0) ↔ wire px=151, py=0, idx=151. */
+static void test_color26_text_pixel_invert(void) {
+    static uint8_t glass[TAGTINKER_COLOR26_GLASS_W * TAGTINKER_COLOR26_GLASS_H];
+    memset(glass, 1, sizeof glass);
+
+    EslTextColor26Ctx ctx = {glass, NULL};
+    const size_t plane = (size_t)TAGTINKER_COLOR26_WIRE_W *
+                         (size_t)TAGTINKER_COLOR26_WIRE_H;
+
+    for (size_t idx = 0; idx < plane; idx += 137u) {
+        CHECK_EQ(esl_text_color26_pixel(idx, &ctx), 0u);
+    }
+    CHECK_EQ(esl_text_color26_pixel(0, &ctx), 0u);
+    CHECK_EQ(esl_text_color26_pixel(151, &ctx), 0u);
+    CHECK_EQ(esl_text_color26_pixel(plane - 1u, &ctx), 0u);
+
+    glass[0] = 0; /* ink at glass (0,0) */
+    CHECK_EQ(esl_text_color26_pixel(151, &ctx), 1u);
+
+    /* Secondary NULL / out-of-range stay encoder-clear 0 after invert. */
+    CHECK_EQ(esl_text_color26_pixel(plane, &ctx), 0u);
+    CHECK_EQ(esl_text_color26_pixel(plane + 151u, &ctx), 0u);
+    CHECK_EQ(esl_text_color26_pixel(plane * 2u, &ctx), 0u);
+}
+
 int main(void) {
     test_should_send_full();
     test_chunk_height();
     test_chunk_settle();
     test_render_short_string();
+    test_color26_text_pixel_invert();
     TEST_REPORT("test_text");
 }
