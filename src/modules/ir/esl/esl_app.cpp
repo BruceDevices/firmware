@@ -6,7 +6,9 @@
 #include "esl_menu_labels.h"
 #include "esl_nfc.h"
 #include "esl_proto.h"
+#include "esl_text.h"
 #include "esl_tx.h"
+#include "font/tagtinker_font.h"
 #include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -25,6 +27,7 @@
 #include <SD.h>
 #include <globals.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define ESL_BARCODE_LEN 17
@@ -465,6 +468,419 @@ static void esl_set_image(EslSession *sess, const EslTarget *target) {
     }
 }
 
+/* Flipper text_page_to_index: displayed Page 1–8 stored as img_page. */
+static uint8_t esl_text_page_to_index(uint8_t page) {
+    if (page == 0U) return 0U;
+    if (page > 8U) return 7U;
+    return (uint8_t)(page - 1U);
+}
+
+/* Flipper tagtinker_prepare_text_tx: page = img_page-1, clamp 0–7. */
+static uint8_t esl_text_tx_page(uint8_t img_page) {
+    uint8_t page = (img_page > 0U) ? (uint8_t)(img_page - 1U) : 0U;
+    if (page > 7U) page = 7U;
+    return page;
+}
+
+typedef struct {
+    const uint8_t *primary;
+    const uint8_t *secondary; /* NULL → plane 1 is clear (1) */
+} EslTextColor26Ctx;
+
+/* Wire idx → glass via the same proto_to_glass map as esl_color26_bmp_pixel. */
+static uint8_t esl_text_color26_pixel(size_t idx, void *ctx) {
+    const EslTextColor26Ctx *c = (const EslTextColor26Ctx *)ctx;
+    if (c == NULL || c->primary == NULL) return 1u;
+
+    const size_t plane_count = (size_t)TAGTINKER_COLOR26_WIRE_W *
+                               (size_t)TAGTINKER_COLOR26_WIRE_H;
+    uint8_t plane = 0u;
+    if (idx >= plane_count) {
+        plane = 1u;
+        idx -= plane_count;
+    }
+    if (idx >= plane_count) return 1u;
+
+    const uint16_t px = (uint16_t)(idx % TAGTINKER_COLOR26_WIRE_W);
+    const uint16_t py = (uint16_t)(idx / TAGTINKER_COLOR26_WIRE_W);
+    uint16_t gx = 0u, gy = 0u;
+    tagtinker_color26_proto_to_glass(TAGTINKER_COLOR26_WIRE_W, px, py, &gx, &gy);
+    if (gx >= TAGTINKER_COLOR26_GLASS_W || gy >= TAGTINKER_COLOR26_GLASS_H) {
+        return 1u;
+    }
+
+    const uint8_t *src = (plane == 0u) ? c->primary : c->secondary;
+    if (src == NULL) return 1u;
+    return src[(size_t)gy * TAGTINKER_COLOR26_GLASS_W + gx];
+}
+
+static void esl_text_render_full(uint8_t *primary, uint8_t *secondary, uint16_t w,
+                                 uint16_t h, const char *text,
+                                 const EslSession *sess,
+                                 TagTinkerTagColor color) {
+    const bool accent_capable = (color != TagTinkerTagColorMono);
+    const bool accent_text = accent_capable && sess->color_clear;
+    const size_t pixel_count = (size_t)w * h;
+
+    if (accent_text) {
+        uint8_t bg_primary = sess->invert_text ? 0 : 1;
+        uint8_t fg_primary = (color == TagTinkerTagColorYellow) ? 0 : 1;
+        render_text_ex(primary, w, h, text, bg_primary, fg_primary,
+                       sess->text_padding_pct);
+        render_text_ex(secondary, w, h, text, 1, 0, sess->text_padding_pct);
+    } else {
+        render_text_ex(primary, w, h, text, sess->invert_text ? 0 : 1,
+                       sess->invert_text ? 1 : 0, sess->text_padding_pct);
+        if (secondary) memset(secondary, 1, pixel_count);
+    }
+}
+
+static void esl_text_render_region(uint8_t *primary, uint8_t *secondary,
+                                   uint16_t w, uint16_t h, uint16_t y,
+                                   uint16_t actual_h, const char *text,
+                                   const EslSession *sess,
+                                   TagTinkerTagColor color) {
+    const bool accent_capable = (color != TagTinkerTagColorMono);
+    const bool accent_text = accent_capable && sess->color_clear;
+
+    if (accent_text) {
+        uint8_t bg_primary = sess->invert_text ? 0 : 1;
+        uint8_t fg_primary = (color == TagTinkerTagColorYellow) ? 0 : 1;
+        render_text_region_ex(primary, w, h, y, actual_h, text, bg_primary,
+                              fg_primary, sess->text_padding_pct);
+        render_text_region_ex(secondary, w, h, y, actual_h, text, 1, 0,
+                              sess->text_padding_pct);
+    } else {
+        render_text_region_ex(primary, w, h, y, actual_h, text,
+                              sess->invert_text ? 0 : 1,
+                              sess->invert_text ? 1 : 0, sess->text_padding_pct);
+        if (secondary) memset(secondary, 1, (size_t)w * actual_h);
+    }
+}
+
+static bool esl_text_run_ir(EslSession *sess, const EslTarget *target,
+                            const TagTinkerImagePayload *payload, bool color26,
+                            uint16_t w, uint16_t h, uint16_t pos_y) {
+    checkIrTxPin();
+    if (!esl_ir_init(bruceConfigPins.irTx)) {
+        displayError("IR init failed", true);
+        return false;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Sending, Esc aborts");
+    delay(ESL_PRE_TX_SETTLE_MS);
+
+    EslUiCtx ui = {false};
+    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
+    const uint8_t page = esl_text_tx_page(sess->img_page);
+    const bool ok =
+        color26 ? esl_tx_send_color26(&ops, target->plid, payload, page)
+                : esl_tx_send_generic(&ops, target->plid, payload, page, w, h,
+                                      0u, pos_y, sess->settings.data_frame_repeats);
+
+    esl_ir_set_abort_hook(nullptr, nullptr);
+    esl_ir_deinit();
+
+    if (ui.aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
+        displaySuccess("Sent", true);
+    } else {
+        displayError("TX failed", true);
+    }
+    return ok;
+}
+
+static void esl_send_text_color26(EslSession *sess, const EslTarget *target,
+                                  const char *text) {
+    const uint16_t gw = TAGTINKER_COLOR26_GLASS_W;
+    const uint16_t gh = TAGTINKER_COLOR26_GLASS_H;
+    const size_t pixel_count = (size_t)gw * gh;
+    const bool accent_capable =
+        (target->profile.color != TagTinkerTagColorMono);
+    const bool accent_text = accent_capable && sess->color_clear;
+
+    uint8_t *primary = (uint8_t *)ps_malloc(pixel_count);
+    uint8_t *secondary =
+        accent_text ? (uint8_t *)ps_malloc(pixel_count) : nullptr;
+    if (primary == nullptr || (accent_text && secondary == nullptr)) {
+        free(primary);
+        free(secondary);
+        displayError("Encode failed", true);
+        return;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Encoding...");
+    esl_text_render_full(primary, secondary, gw, gh, text, sess,
+                         target->profile.color);
+
+    EslTextColor26Ctx ctx = {primary, secondary};
+    const size_t total = (size_t)TAGTINKER_COLOR26_WIRE_W *
+                         TAGTINKER_COLOR26_WIRE_H * 2U;
+    TagTinkerImagePayload payload;
+    const bool encoded = tagtinker_encode_fn_payload(
+        esl_text_color26_pixel, &ctx, total, TagTinkerCompressionAuto, &payload);
+    free(primary);
+    free(secondary);
+    if (!encoded) {
+        displayError("Encode failed", true);
+        return;
+    }
+
+    esl_text_run_ir(sess, target, &payload, true, 0, 0, 0);
+    tagtinker_free_image_payload(&payload);
+}
+
+static bool esl_send_text_generic_full(EslSession *sess, const EslTarget *target,
+                                       const char *text, uint16_t w, uint16_t h,
+                                       bool use_second_plane) {
+    const size_t pixel_count = (size_t)w * h;
+    uint8_t *primary = (uint8_t *)ps_malloc(pixel_count);
+    uint8_t *secondary =
+        use_second_plane ? (uint8_t *)ps_malloc(pixel_count) : nullptr;
+    if (primary == nullptr || (use_second_plane && secondary == nullptr)) {
+        free(primary);
+        free(secondary);
+        return false;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Encoding...");
+    esl_text_render_full(primary, secondary, w, h, text, sess,
+                         target->profile.color);
+
+    TagTinkerImagePayload payload;
+    const bool encoded = tagtinker_encode_planes_payload(
+        primary, secondary, pixel_count, TagTinkerCompressionAuto, &payload);
+    free(primary);
+    free(secondary);
+    if (!encoded) return false;
+
+    esl_text_run_ir(sess, target, &payload, false, w, h, 0);
+    tagtinker_free_image_payload(&payload);
+    return true;
+}
+
+static void esl_send_text_generic_chunks(EslSession *sess,
+                                         const EslTarget *target,
+                                         const char *text, uint16_t w,
+                                         uint16_t h, bool use_second_plane) {
+    const uint16_t chunk_h = esl_text_chunk_height(w, h, use_second_plane);
+    uint8_t *primary = (uint8_t *)malloc((size_t)w * chunk_h);
+    uint8_t *secondary =
+        use_second_plane ? (uint8_t *)malloc((size_t)w * chunk_h) : nullptr;
+    if (primary == nullptr || (use_second_plane && secondary == nullptr)) {
+        free(primary);
+        free(secondary);
+        displayError("Encode failed", true);
+        return;
+    }
+
+    checkIrTxPin();
+    if (!esl_ir_init(bruceConfigPins.irTx)) {
+        free(primary);
+        free(secondary);
+        displayError("IR init failed", true);
+        return;
+    }
+
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+    displayTextLine("Sending, Esc aborts");
+    delay(ESL_PRE_TX_SETTLE_MS);
+
+    EslUiCtx ui = {false};
+    EslTxOps ops = {ui_send, ui_settle, ui_aborted, ui_progress, &ui};
+    esl_ir_set_abort_hook(ui_abort_poll, &ui);
+
+    const uint8_t page = esl_text_tx_page(sess->img_page);
+    bool ok = true;
+    for (uint16_t y = 0; ok && y < h; y = (uint16_t)(y + chunk_h)) {
+        uint16_t actual_h = (uint16_t)(h - y);
+        if (actual_h > chunk_h) actual_h = chunk_h;
+
+        esl_text_render_region(primary, secondary, w, h, y, actual_h, text, sess,
+                               target->profile.color);
+
+        TagTinkerImagePayload payload;
+        ok = tagtinker_encode_planes_payload(primary, secondary,
+                                             (size_t)w * actual_h,
+                                             TagTinkerCompressionAuto, &payload);
+        if (ok) {
+            ok = esl_tx_send_generic(&ops, target->plid, &payload, page, w,
+                                     actual_h, 0u, y,
+                                     sess->settings.data_frame_repeats);
+            tagtinker_free_image_payload(&payload);
+        }
+        if (ok && (uint16_t)(y + actual_h) < h) {
+            delay(esl_text_chunk_settle_ms(w, actual_h, sess->color_clear));
+        }
+    }
+
+    esl_ir_set_abort_hook(nullptr, nullptr);
+    esl_ir_deinit();
+    free(primary);
+    free(secondary);
+
+    if (ui.aborted) {
+        displayWarning("Aborted", true);
+    } else if (ok) {
+        displaySuccess("Sent", true);
+    } else {
+        displayError("TX failed", true);
+    }
+}
+
+static void esl_send_text(EslSession *sess, const EslTarget *target,
+                          const char *text) {
+    if (sess == nullptr || target == nullptr || text == nullptr ||
+        text[0] == '\0') {
+        return;
+    }
+
+    if (tagtinker_profile_needs_wh_swap(&target->profile)) {
+        esl_send_text_color26(sess, target, text);
+        return;
+    }
+
+    const uint16_t w = target->profile.width;
+    const uint16_t h = target->profile.height;
+    const bool accent_capable =
+        (target->profile.color != TagTinkerTagColorMono);
+    const bool use_second_plane = accent_capable || sess->color_clear;
+
+    if (esl_text_should_send_full(w, h, use_second_plane)) {
+        if (!esl_send_text_generic_full(sess, target, text, w, h,
+                                        use_second_plane)) {
+            displayError("Encode failed", true);
+        }
+        return;
+    }
+
+    esl_send_text_generic_chunks(sess, target, text, w, h, use_second_plane);
+}
+
+static void esl_pick_text_page(uint8_t *img_page) {
+    options.clear();
+    for (uint8_t p = 1; p <= 8; p++) {
+        options.push_back({String((unsigned)p), [img_page, p]() { *img_page = p; }});
+    }
+    loopOptions(options, MENU_TYPE_SUBMENU, "Page",
+                (int)esl_text_page_to_index(*img_page));
+}
+
+static void esl_pick_text_polarity(EslSession *sess) {
+    options = {
+        {"B on W", [sess]() { sess->invert_text = false; }},
+        {"W on B", [sess]() { sess->invert_text = true; }},
+    };
+    loopOptions(options, MENU_TYPE_SUBMENU, "Polarity",
+                sess->invert_text ? 1 : 0);
+}
+
+static void esl_pick_text_padding(EslSession *sess) {
+    options.clear();
+    for (uint8_t i = 0; i < 9; i++) {
+        uint8_t pct = (uint8_t)(i * 5);
+        options.push_back({String((unsigned)pct) + "%",
+                           [sess, pct]() { sess->text_padding_pct = pct; }});
+    }
+    uint8_t idx = sess->text_padding_pct / 5;
+    if (idx > 8) idx = 8;
+    loopOptions(options, MENU_TYPE_SUBMENU, "Padding", (int)idx);
+}
+
+static void esl_text_size_picker(EslSession *sess, const EslTarget *target,
+                                 const char *text) {
+    if (sess->img_page == 0U) sess->img_page = 1U;
+    if (sess->img_page > 8U) sess->img_page = 8U;
+
+    while (true) {
+        bool tx = false;
+        options.clear();
+        options.push_back({String("Page  ") + String((unsigned)sess->img_page),
+                           [sess]() { esl_pick_text_page(&sess->img_page); }});
+        options.push_back({String("Polarity  ") +
+                               (sess->invert_text ? "W on B" : "B on W"),
+                           [sess]() { esl_pick_text_polarity(sess); }});
+        options.push_back({String("Padding  ") +
+                               String((unsigned)sess->text_padding_pct) + "%",
+                           [sess]() { esl_pick_text_padding(sess); }});
+        options.push_back({ESL_TRANSMIT, [&]() { tx = true; }});
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU,
+                              ESL_TARGET_ACTIONS_GRAPHICS[0]);
+        if (sel < 0) return;
+        if (!tx) continue;
+
+        sess->esl_width = target->profile.width;
+        sess->esl_height = target->profile.height;
+        esl_store_recents_add(sess, text);
+        esl_fs_save_recents(sess);
+        esl_send_text(sess, target, text);
+        return;
+    }
+}
+
+static void esl_set_text(EslSession *sess, const EslTarget *target) {
+    while (true) {
+        bool add_new = false;
+        int recent_idx = -1;
+
+        options.clear();
+        options.push_back({ESL_RECENT_NEW, [&]() { add_new = true; }});
+        for (uint8_t i = 0; i < sess->recent_count; i++) {
+            if (target->profile.width > 0 && target->profile.height > 0) {
+                if (sess->recents[i].width != target->profile.width ||
+                    sess->recents[i].height != target->profile.height) {
+                    continue;
+                }
+            }
+            char label[ESL_STORE_TEXT_LEN + 4];
+            snprintf(label, sizeof(label), "\"%s\"", sess->recents[i].text);
+            options.push_back({label, [i, &recent_idx]() { recent_idx = (int)i; }});
+        }
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, "Recent Pushes");
+        if (sel < 0) return;
+
+        if (add_new) {
+            String entered = keyboard("", ESL_STORE_TEXT_LEN, "Text to display:");
+            if (entered.length() == 0 || entered == "\x1B") continue;
+            char text[ESL_STORE_TEXT_LEN + 1];
+            memset(text, 0, sizeof(text));
+            strncpy(text, entered.c_str(), ESL_STORE_TEXT_LEN);
+            text[ESL_STORE_TEXT_LEN] = '\0';
+            esl_text_size_picker(sess, target, text);
+            continue;
+        }
+
+        if (recent_idx < 0 || (uint8_t)recent_idx >= sess->recent_count) {
+            continue;
+        }
+
+        const EslRecent *r = &sess->recents[recent_idx];
+        sess->esl_width = r->width;
+        sess->esl_height = r->height;
+        sess->img_page = r->page;
+        sess->invert_text = r->invert;
+        sess->color_clear = r->color_clear;
+        sess->text_padding_pct = r->padding;
+
+        char text[ESL_STORE_TEXT_LEN + 1];
+        memset(text, 0, sizeof(text));
+        memcpy(text, r->text, ESL_STORE_TEXT_LEN);
+        text[ESL_STORE_TEXT_LEN] = '\0';
+
+        esl_store_recents_add(sess, text);
+        esl_fs_save_recents(sess);
+        esl_send_text(sess, target, text);
+    }
+}
+
 static const char *const ESL_WARNING_LINES[][2] = {
     {"Educational tool for", "infrared ESL study."},
     {"Use only on tags", "you own or may test."},
@@ -703,7 +1119,8 @@ static void esl_target_actions(EslSession *s, uint8_t idx) {
         options.push_back({ESL_TARGET_ACTIONS_ALWAYS[0], [t]() { esl_show_tag_info(t); }});
         options.push_back({ESL_TARGET_ACTIONS_ALWAYS[1], [s, idx]() { esl_rename_tag(s, idx); }});
         if (esl_store_target_supports_graphics(t)) {
-            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[0], esl_noop});
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[0],
+                               [s, t]() { esl_set_text(s, t); }});
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[1],
                                [s, t]() { esl_set_image(s, t); }});
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2], esl_noop});
