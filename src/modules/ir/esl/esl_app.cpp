@@ -202,16 +202,6 @@ static bool esl_already_listed(const std::vector<EslBmpChoice> &out,
     return false;
 }
 
-static bool esl_should_skip_dir(const String &path, const String &skip) {
-    if (skip.length() > 0 && (path == skip || path.startsWith(skip + "/"))) {
-        return true;
-    }
-    String base = esl_basename(path);
-    if (base.length() == 0 || base[0] == '.') return true;
-    if (base == "System Volume Information" || base == "LOST.DIR") return true;
-    return false;
-}
-
 static void esl_add_bmp_choice(const String &path, uint16_t tw, uint16_t th,
                                std::vector<EslBmpChoice> &out) {
     if (out.size() >= TAGTINKER_MAX_SYNCED_IMAGES) return;
@@ -238,10 +228,12 @@ static void esl_add_bmp_choice(const String &path, uint16_t tw, uint16_t th,
     out.push_back(e);
 }
 
-static void esl_collect_bmp_dir(FS &fs, const String &dir, bool recurse,
-                                const String &skip_dir, int depth, uint16_t tw,
+/* Non-recursive: files in `dir` only. Depth-8 / whole-volume walks froze Set
+ * Image on a typical Bruce card; dropped/ then SD-root still finds the spec
+ * example `296x152_cat.bmp`. */
+static void esl_collect_bmp_dir(FS &fs, const String &dir, uint16_t tw,
                                 uint16_t th, std::vector<EslBmpChoice> &out) {
-    if (depth > 8 || out.size() >= TAGTINKER_MAX_SYNCED_IMAGES) return;
+    if (out.size() >= TAGTINKER_MAX_SYNCED_IMAGES) return;
 
     File root = fs.open(dir);
     if (!root || !root.isDirectory()) {
@@ -249,7 +241,6 @@ static void esl_collect_bmp_dir(FS &fs, const String &dir, bool recurse,
         return;
     }
 
-    std::vector<String> subdirs;
     while (out.size() < TAGTINKER_MAX_SYNCED_IMAGES) {
         bool isDir = false;
         String full = root.getNextFileName(&isDir);
@@ -259,28 +250,18 @@ static void esl_collect_bmp_dir(FS &fs, const String &dir, bool recurse,
         }
         String base = esl_basename(full);
         if (full == dir || base == "." || base == "..") continue;
-        if (isDir) {
-            if (recurse && !esl_should_skip_dir(full, skip_dir)) {
-                subdirs.push_back(full);
-            }
-            continue;
-        }
+        if (isDir) continue;
         esl_add_bmp_choice(full, tw, th, out);
     }
     root.close();
-
-    for (size_t i = 0; i < subdirs.size(); i++) {
-        esl_collect_bmp_dir(fs, subdirs[i], true, skip_dir, depth + 1, tw, th,
-                            out);
-    }
 }
 
 static void esl_collect_images(FS &fs, const EslTarget *target,
                                std::vector<EslBmpChoice> &out) {
     const uint16_t tw = target->profile.width;
     const uint16_t th = target->profile.height;
-    esl_collect_bmp_dir(fs, ESL_DROPPED_DIR, false, "", 0, tw, th, out);
-    esl_collect_bmp_dir(fs, "/", true, ESL_DROPPED_DIR, 0, tw, th, out);
+    esl_collect_bmp_dir(fs, ESL_DROPPED_DIR, tw, th, out);
+    esl_collect_bmp_dir(fs, "/", tw, th, out);
 }
 
 /* Encode the chosen file, then claim IR. Page is sent verbatim. */
@@ -409,11 +390,12 @@ static void esl_image_options(EslSession *sess, const EslTarget *target, FS &fs,
 
 static void esl_set_image(EslSession *sess, const EslTarget *target) {
     FS *fs = esl_active_fs();
+    /* Collect once. Empty-list helper rows are no-ops and must not walk the
+     * FS again; Esc still leaves Set Image. */
+    std::vector<EslBmpChoice> images;
+    if (fs != nullptr) esl_collect_images(*fs, target, images);
 
     while (true) {
-        std::vector<EslBmpChoice> images;
-        if (fs != nullptr) esl_collect_images(*fs, target, images);
-
         int picked = -1;
         options.clear();
         if (images.empty()) {
