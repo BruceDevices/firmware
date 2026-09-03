@@ -1517,7 +1517,12 @@ static void esl_scan_nfc(EslSession *s) {
 
     int idx = esl_store_ensure_target(s, barcode);
     if (idx < 0) {
-        esl_nfc_popup("Decode Error", "Tag read but\nbarcode invalid");
+        /* Decode already succeeded. Cap 16 is not a Flipper "barcode invalid". */
+        if (s->target_count >= ESL_STORE_MAX_TARGETS) {
+            displayError("Target list full", true);
+        } else {
+            esl_nfc_popup("Decode Error", "Tag read but\nbarcode invalid");
+        }
         return;
     }
     esl_fs_save_targets(s);
@@ -1533,7 +1538,11 @@ static void esl_type_barcode(EslSession *s) {
     if (!esl_parse_typed_barcode(entered, plid, &profile)) return;
 
     int idx = esl_store_ensure_target(s, entered.c_str());
-    if (idx < 0) return;
+    if (idx < 0) {
+        /* Typed barcode already passed esl_parse_typed_barcode; -1 is cap 16. */
+        displayError("Target list full", true);
+        return;
+    }
     esl_fs_save_targets(s);
     esl_target_actions(s, (uint8_t)idx);
 }

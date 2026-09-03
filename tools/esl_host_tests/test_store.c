@@ -119,8 +119,12 @@ static void test_kind_color_supports_graphics(void) {
 static void test_target_cap(void) {
     EslSession sess;
     esl_store_session_init(&sess);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), 0);
     sess.target_count = ESL_STORE_MAX_TARGETS;
-    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), -1);
+    /* Already stored: still the same index. A new valid barcode does not add. */
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4165420155216265"), 0);
+    CHECK_EQ(esl_store_ensure_target(&sess, "A4000000000012065"), -1);
+    CHECK_EQ(sess.target_count, ESL_STORE_MAX_TARGETS);
 }
 
 static void test_recents_parse_add(void) {
