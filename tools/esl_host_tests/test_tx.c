@@ -270,6 +270,61 @@ static void test_guards(void) {
     free(p.data);
 }
 
+static void test_led_test_sequence(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+
+    uint8_t want_ping[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t ping_len = tagtinker_make_ping_frame(want_ping, PLID);
+    const uint8_t blink[6] = {0x06, 0x49, 0x00, 0x00, 0x00, 0x05};
+    uint8_t want_blink[TAGTINKER_MAX_FRAME_SIZE];
+    const size_t blink_len =
+        tagtinker_make_addressed_frame(want_blink, PLID, blink, sizeof(blink));
+
+    CHECK(esl_tx_send_led_test(&ops, PLID));
+    CHECK_EQ(k.count, 2);
+
+    CHECK_EQ(k.rec[0].repeats, ESL_LED_PING_REPEATS);
+    CHECK_EQ(k.rec[0].repeats, 160);
+    CHECK_EQ(k.rec[0].len, ping_len);
+    CHECK_MEM(k.rec[0].frame, want_ping, ping_len);
+
+    CHECK_EQ(k.rec[1].repeats, ESL_LED_BLINK_REPEATS);
+    CHECK_EQ(k.rec[1].repeats, 80);
+    CHECK_EQ(k.rec[1].len, blink_len);
+    CHECK_MEM(k.rec[1].frame, want_blink, blink_len);
+
+    for (size_t i = 0; i < k.count; i++)
+        CHECK_EQ(k.rec[i].delay, ESL_FRAME_DELAY_UNITS);
+
+    /* Flipper queues both frames then transmits — no inter-frame settle. */
+    CHECK_EQ(k.settle_calls, 0);
+    CHECK_EQ(k.progress_calls, 2);
+    CHECK_EQ(k.last_done, 2);
+    CHECK_EQ(k.last_total, 2);
+}
+
+static void test_led_test_guards(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+
+    CHECK(!esl_tx_send_led_test(NULL, PLID));
+    CHECK(!esl_tx_send_led_test(&ops, NULL));
+    CHECK_EQ(k.count, 0);
+}
+
+static void test_led_test_abort_after_first(void) {
+    Fake k;
+    EslTxOps ops;
+    fake_init(&k, &ops);
+    k.abort_after = 1; /* abort once ping is out */
+
+    CHECK(!esl_tx_send_led_test(&ops, PLID));
+    CHECK_EQ(k.count, 1); /* blink not sent */
+}
+
 int main(void) {
     test_color26_sequence();
     test_explicit_page_preserved();
@@ -279,5 +334,8 @@ int main(void) {
     test_abort_stops_early();
     test_send_failure_propagates();
     test_guards();
+    test_led_test_sequence();
+    test_led_test_guards();
+    test_led_test_abort_after_first();
     TEST_REPORT("test_tx");
 }
