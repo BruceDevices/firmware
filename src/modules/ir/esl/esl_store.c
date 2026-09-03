@@ -298,3 +298,49 @@ bool esl_store_target_supports_graphics(const EslTarget *t) {
     if (t == NULL) return false;
     return t->profile.kind != TagTinkerTagKindSegment;
 }
+
+bool esl_parse_dropped_filename(const char *name, uint16_t target_w,
+                                uint16_t target_h, char *job_id, size_t job_cap,
+                                uint8_t *page, bool *resampled) {
+    if (name == NULL || page == NULL || resampled == NULL) return false;
+
+    size_t name_len = strlen(name);
+    if (name_len < 5U) return false;
+    const char *ext = name + name_len - 4U;
+    if (!((ext[0] == '.') && (ext[1] == 'b' || ext[1] == 'B') &&
+          (ext[2] == 'm' || ext[2] == 'M') &&
+          (ext[3] == 'p' || ext[3] == 'P'))) {
+        return false;
+    }
+
+    unsigned parsed_page = 1U;
+    int consumed = 0;
+    unsigned w_hint = 0U, h_hint = 0U;
+    bool has_hint = false;
+    if (sscanf(name, "%ux%u%n", &w_hint, &h_hint, &consumed) >= 2) {
+        has_hint = true;
+        if ((size_t)consumed < name_len && name[consumed] == '_' &&
+            name[consumed + 1] == 'p') {
+            unsigned p = 0U;
+            if (sscanf(name + consumed + 2, "%u", &p) == 1 && p <= 7U) {
+                parsed_page = p;
+            }
+        }
+    }
+
+    *page = (uint8_t)parsed_page;
+    if (has_hint) {
+        *resampled = (w_hint != target_w) || (h_hint != target_h);
+    } else {
+        *resampled = true;
+    }
+
+    if (job_id != NULL && job_cap > 0U) {
+        size_t id_len = name_len - 4U;
+        if (id_len > ESL_STORE_JOB_ID_LEN) id_len = ESL_STORE_JOB_ID_LEN;
+        if (id_len >= job_cap) id_len = job_cap - 1U;
+        memcpy(job_id, name, id_len);
+        job_id[id_len] = '\0';
+    }
+    return true;
+}

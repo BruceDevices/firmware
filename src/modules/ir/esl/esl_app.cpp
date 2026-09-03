@@ -21,6 +21,8 @@
 
 #define ESL_BARCODE_LEN 17
 #define ESL_PRE_TX_SETTLE_MS 500
+#define TAGTINKER_MAX_SYNCED_IMAGES 24
+#define ESL_DROPPED_DIR "/tagtinker/dropped"
 
 /* Upstream's Color 2.6 file cap (TX_COLOR26_BMP_MAX). Do not raise it. */
 #define ESL_COLOR26_BMP_MAX 24576u
@@ -67,15 +69,14 @@ static bool ui_abort_poll(void *ctx) {
 
 static void ui_progress(void *ctx, size_t done, size_t total) {
     (void)ctx;
-    progressHandler((int)done, total, "Sending ESL");
+    progressHandler((int)done, total, "Sending");
 }
 
 static const char *esl_target_label(const EslTarget *t) {
     return t->name[0] ? t->name : t->barcode;
 }
 
-/* Shared by + Type Barcode and the leftover BMP prompt. Segment tags are
- * valid here; image TX still refuses them after this returns. */
+/* + Type Barcode. Segment tags are valid here; graphics actions omit them. */
 static bool esl_parse_typed_barcode(const String &entered, uint8_t plid[4],
                                     TagTinkerTagProfile *profile) {
     /* Bruce's keyboard returns ESC when the user backs out. Treat that as a
@@ -98,18 +99,6 @@ static bool esl_parse_typed_barcode(const String &entered, uint8_t plid[4],
     return true;
 }
 
-static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
-    String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
-    entered.trim();
-    if (!esl_parse_typed_barcode(entered, plid, profile)) return false;
-    /* Segment tags have no image page, matching supports_graphics upstream. */
-    if (profile->kind != TagTinkerTagKindDotMatrix) {
-        displayError("Tag has no image page", true);
-        return false;
-    }
-    return true;
-}
-
 /* Mirrors scene_image_options, where the page is the only per-image knob.
  * Position, compression and frame-repeat stay at upstream's defaults. */
 static const char *ESL_PAGE_LABELS[8] = {"Page 0", "Page 1", "Page 2",
@@ -125,29 +114,15 @@ static bool esl_prompt_page(uint8_t *page) {
     }
     /* Start on the caller's default (resolved page 2 for Color 2.6, else 0)
      * but keep the full 0–7 range so an explicit pick wins verbatim. */
-    loopOptions(options, MENU_TYPE_SUBMENU, "Image page", (int)*page);
+    loopOptions(options, MENU_TYPE_SUBMENU, "Page", (int)*page);
     if (chosen < 0) return false; /* user backed out */
     *page = (uint8_t)chosen;
     return true;
 }
 
-/* Picks a BMP from the SD card, falling back to LittleFS. The chosen
- * filesystem is returned with the path so the reader does not guess. */
-struct EslPickedBmp {
-    String path;
-    fs::FS *fs;
-};
+static void esl_noop(void);
 
-static EslPickedBmp esl_pick_bmp() {
-    if (setupSdCard()) {
-        String path = loopSD(SD, true, "BMP", "/");
-        if (path != "") return {path, &SD};
-    }
-    return {loopSD(LittleFS, true, "BMP", "/"), &LittleFS};
-}
-
-/* Reads the whole file into PSRAM from the filesystem the picker chose.
- * Caller frees. */
+/* Reads the whole file into PSRAM. Caller frees. */
 static uint8_t *esl_read_file(fs::FS &fs, const String &path, size_t max_bytes,
                               size_t *out_len) {
     File f = fs.open(path, FILE_READ);
@@ -175,43 +150,151 @@ static uint8_t *esl_read_file(fs::FS &fs, const String &path, size_t max_bytes,
     return buf;
 }
 
-/* Task 4 rehomes this into Set Image. Kept file-static so the encode/send
- * path is not deleted; it is not the Infrared entry anymore. */
-static void esl_image_tx_from_prompts(void) __attribute__((unused));
-static void esl_image_tx_from_prompts(void) {
-    drawMainBorderWithTitle(ESL_UI_APP_NAME);
+static bool esl_filename_gave_page(const char *name) {
+    if (name == NULL) return false;
+    size_t name_len = strlen(name);
+    int consumed = 0;
+    unsigned w = 0, h = 0;
+    if (sscanf(name, "%ux%u%n", &w, &h, &consumed) < 2) return false;
+    if ((size_t)consumed >= name_len || name[consumed] != '_' ||
+        name[consumed + 1] != 'p') {
+        return false;
+    }
+    unsigned p = 0;
+    return sscanf(name + consumed + 2, "%u", &p) == 1 && p <= 7U;
+}
 
-    uint8_t plid[4] = {0};
-    TagTinkerTagProfile profile;
-    if (!esl_prompt_target(plid, &profile)) {
-        returnToMenu = true;
+static uint8_t esl_seed_image_page(const EslTarget *target, const char *name,
+                                   uint8_t parsed_page) {
+    if (esl_filename_gave_page(name)) return parsed_page;
+    if (tagtinker_profile_needs_wh_swap(&target->profile)) {
+        return tagtinker_color26_resolve_page(0);
+    }
+    return 0;
+}
+
+static String esl_basename(const String &path) {
+    int slash = path.lastIndexOf('/');
+    return slash >= 0 ? path.substring(slash + 1) : path;
+}
+
+struct EslBmpChoice {
+    String path;
+    char job_id[ESL_STORE_JOB_ID_LEN + 1];
+    uint8_t page;
+    bool resampled;
+};
+
+static FS *esl_active_fs(void) {
+    setupSdCard();
+    FS *fs = nullptr;
+    if (!getFsStorage(fs) || fs == nullptr) return nullptr;
+    if (!fs->exists("/tagtinker")) fs->mkdir("/tagtinker");
+    if (!fs->exists(ESL_DROPPED_DIR)) fs->mkdir(ESL_DROPPED_DIR);
+    return fs;
+}
+
+static bool esl_already_listed(const std::vector<EslBmpChoice> &out,
+                               const String &path) {
+    for (size_t i = 0; i < out.size(); i++) {
+        if (out[i].path == path) return true;
+    }
+    return false;
+}
+
+static bool esl_should_skip_dir(const String &path, const String &skip) {
+    if (skip.length() > 0 && (path == skip || path.startsWith(skip + "/"))) {
+        return true;
+    }
+    String base = esl_basename(path);
+    if (base.length() == 0 || base[0] == '.') return true;
+    if (base == "System Volume Information" || base == "LOST.DIR") return true;
+    return false;
+}
+
+static void esl_add_bmp_choice(const String &path, uint16_t tw, uint16_t th,
+                               std::vector<EslBmpChoice> &out) {
+    if (out.size() >= TAGTINKER_MAX_SYNCED_IMAGES) return;
+
+    String base = esl_basename(path);
+    if (base.length() == 0 || base[0] == '.') return;
+
+    char job[ESL_STORE_JOB_ID_LEN + 1];
+    uint8_t page = 1;
+    bool resampled = true;
+    if (!esl_parse_dropped_filename(base.c_str(), tw, th, job, sizeof(job),
+                                    &page, &resampled)) {
+        return;
+    }
+    if (esl_already_listed(out, path)) return;
+
+    EslBmpChoice e;
+    e.path = path;
+    memset(e.job_id, 0, sizeof(e.job_id));
+    strncpy(e.job_id, job, ESL_STORE_JOB_ID_LEN);
+    e.job_id[ESL_STORE_JOB_ID_LEN] = '\0';
+    e.page = page;
+    e.resampled = resampled;
+    out.push_back(e);
+}
+
+static void esl_collect_bmp_dir(FS &fs, const String &dir, bool recurse,
+                                const String &skip_dir, int depth, uint16_t tw,
+                                uint16_t th, std::vector<EslBmpChoice> &out) {
+    if (depth > 8 || out.size() >= TAGTINKER_MAX_SYNCED_IMAGES) return;
+
+    File root = fs.open(dir);
+    if (!root || !root.isDirectory()) {
+        if (root) root.close();
         return;
     }
 
-    const EslPickedBmp picked = esl_pick_bmp();
-    if (picked.path == "") { /* user cancelled */
-        returnToMenu = true;
-        return;
+    std::vector<String> subdirs;
+    while (out.size() < TAGTINKER_MAX_SYNCED_IMAGES) {
+        bool isDir = false;
+        String full = root.getNextFileName(&isDir);
+        if (full.length() == 0) break;
+        if (!full.startsWith("/")) {
+            full = (dir == "/") ? ("/" + full) : (dir + "/" + full);
+        }
+        String base = esl_basename(full);
+        if (full == dir || base == "." || base == "..") continue;
+        if (isDir) {
+            if (recurse && !esl_should_skip_dir(full, skip_dir)) {
+                subdirs.push_back(full);
+            }
+            continue;
+        }
+        esl_add_bmp_choice(full, tw, th, out);
     }
+    root.close();
 
-    const bool is_color26 = tagtinker_profile_needs_wh_swap(&profile);
-    /* Color 2.6 default is resolve_page(0) so the picker starts off the
-     * barcode page; generic stays on 0. The user's subsequent pick is raw. */
-    uint8_t page = is_color26 ? tagtinker_color26_resolve_page(0) : 0;
-    if (!esl_prompt_page(&page)) {
-        returnToMenu = true;
-        return;
+    for (size_t i = 0; i < subdirs.size(); i++) {
+        esl_collect_bmp_dir(fs, subdirs[i], true, skip_dir, depth + 1, tw, th,
+                            out);
     }
+}
 
+static void esl_collect_images(FS &fs, const EslTarget *target,
+                               std::vector<EslBmpChoice> &out) {
+    const uint16_t tw = target->profile.width;
+    const uint16_t th = target->profile.height;
+    esl_collect_bmp_dir(fs, ESL_DROPPED_DIR, false, "", 0, tw, th, out);
+    esl_collect_bmp_dir(fs, "/", true, ESL_DROPPED_DIR, 0, tw, th, out);
+}
+
+/* Encode the chosen file, then claim IR. Page is sent verbatim. */
+static void esl_send_bmp(EslSession *sess, const EslTarget *target, FS &fs,
+                         const String &path, uint8_t page) {
+    const bool is_color26 = tagtinker_profile_needs_wh_swap(&target->profile);
     const size_t cap = is_color26 ? ESL_COLOR26_BMP_MAX : ESL_GENERIC_BMP_MAX;
 
-    /* --- Everything that touches the SD card happens before the IR pin is
-     * claimed, because setup_ir_pin() may tear down the SD SPI bus. --- */
+    /* Everything that touches the card happens before the IR pin is claimed,
+     * because setup_ir_pin() may tear down the SD SPI bus. */
     size_t file_len = 0;
-    uint8_t *file = esl_read_file(*picked.fs, picked.path, cap, &file_len);
+    uint8_t *file = esl_read_file(fs, path, cap, &file_len);
     if (file == nullptr) {
         displayError("Cannot read BMP", true);
-        returnToMenu = true;
         return;
     }
 
@@ -219,10 +302,10 @@ static void esl_image_tx_from_prompts(void) {
     if (!esl_bmp_parse(file, file_len, &info)) {
         free(file);
         displayError("Unsupported BMP", true);
-        returnToMenu = true;
         return;
     }
 
+    drawMainBorderWithTitle(ESL_UI_APP_NAME);
     displayTextLine("Encoding...");
 
     TagTinkerImagePayload payload;
@@ -235,7 +318,6 @@ static void esl_image_tx_from_prompts(void) {
         if (info.bpp != 1u && info.bpp != 2u) {
             free(file);
             displayError("Need 1/2bpp BMP", true);
-            returnToMenu = true;
             return;
         }
         EslColor26BmpCtx ctx = {file, file_len, &info};
@@ -246,9 +328,9 @@ static void esl_image_tx_from_prompts(void) {
     } else {
         /* Accent plane follows the profile's colour capability, matching
          * upstream's use_second_plane with color_clear at its default. */
-        out_w = profile.width;
-        out_h = profile.height;
-        const bool second_plane = (profile.color != TagTinkerTagColorMono);
+        out_w = target->profile.width;
+        out_h = target->profile.height;
+        const bool second_plane = (target->profile.color != TagTinkerTagColorMono);
         EslGenericBmpCtx ctx = {file, file_len, &info, out_w, out_h,
                                 second_plane};
         const size_t total =
@@ -261,7 +343,6 @@ static void esl_image_tx_from_prompts(void) {
 
     if (!encoded) {
         displayError("Encode failed", true);
-        returnToMenu = true;
         return;
     }
 
@@ -269,7 +350,6 @@ static void esl_image_tx_from_prompts(void) {
     if (!esl_ir_init(bruceConfigPins.irTx)) {
         tagtinker_free_image_payload(&payload);
         displayError("IR init failed", true);
-        returnToMenu = true;
         return;
     }
 
@@ -285,10 +365,10 @@ static void esl_image_tx_from_prompts(void) {
     esl_ir_set_abort_hook(ui_abort_poll, &ui);
 
     const bool ok =
-        is_color26
-            ? esl_tx_send_color26(&ops, plid, &payload, page)
-            : esl_tx_send_generic(&ops, plid, &payload, page, out_w, out_h, 0u,
-                                  0u, ESL_GENERIC_DATA_REPEATS);
+        is_color26 ? esl_tx_send_color26(&ops, target->plid, &payload, page)
+                   : esl_tx_send_generic(&ops, target->plid, &payload, page,
+                                         out_w, out_h, 0u, 0u,
+                                         sess->settings.data_frame_repeats);
 
     esl_ir_set_abort_hook(nullptr, nullptr);
     esl_ir_deinit();
@@ -301,7 +381,67 @@ static void esl_image_tx_from_prompts(void) {
     } else {
         displayError("TX failed", true);
     }
-    returnToMenu = true;
+}
+
+static void esl_image_options(EslSession *sess, const EslTarget *target, FS &fs,
+                              const String &path, uint8_t page) {
+    while (true) {
+        bool send = false;
+        char page_lbl[16];
+        snprintf(page_lbl, sizeof(page_lbl), "Page %u", (unsigned)page);
+
+        options.clear();
+        options.push_back({page_lbl, [&]() {
+                               uint8_t p = page;
+                               if (esl_prompt_page(&p)) page = p;
+                           }});
+        options.push_back({ESL_SEND_BMP, [&]() { send = true; }});
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU,
+                              ESL_TARGET_ACTIONS_GRAPHICS[1]);
+        if (sel < 0) return;
+        if (send) {
+            esl_send_bmp(sess, target, fs, path, page);
+            return;
+        }
+    }
+}
+
+static void esl_set_image(EslSession *sess, const EslTarget *target) {
+    FS *fs = esl_active_fs();
+
+    while (true) {
+        std::vector<EslBmpChoice> images;
+        if (fs != nullptr) esl_collect_images(*fs, target, images);
+
+        int picked = -1;
+        options.clear();
+        if (images.empty()) {
+            const size_t n =
+                sizeof(ESL_SET_IMAGE_EMPTY) / sizeof(ESL_SET_IMAGE_EMPTY[0]);
+            for (size_t i = 0; i < n; i++) {
+                options.push_back({ESL_SET_IMAGE_EMPTY[i], esl_noop});
+            }
+        } else {
+            for (int i = (int)images.size() - 1; i >= 0; i--) {
+                const EslBmpChoice &e = images[(size_t)i];
+                char label[64];
+                snprintf(label, sizeof(label), "%sP%u %s",
+                         e.resampled ? "~ " : "", (unsigned)e.page, e.job_id);
+                options.push_back({label, [&picked, i]() { picked = i; }});
+            }
+        }
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU,
+                              ESL_TARGET_ACTIONS_GRAPHICS[1]);
+        if (sel < 0) return;
+        if (picked >= 0 && fs != nullptr) {
+            const EslBmpChoice &e = images[(size_t)picked];
+            String base = esl_basename(e.path);
+            uint8_t page = esl_seed_image_page(target, base.c_str(), e.page);
+            esl_image_options(sess, target, *fs, e.path, page);
+        }
+    }
 }
 
 static const char *const ESL_WARNING_LINES[][2] = {
@@ -416,7 +556,8 @@ static void esl_target_actions(EslSession *s, uint8_t idx) {
         options.push_back({ESL_TARGET_ACTIONS_ALWAYS[1], [s, idx]() { esl_rename_tag(s, idx); }});
         if (esl_store_target_supports_graphics(t)) {
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[0], esl_noop});
-            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[1], esl_noop});
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[1],
+                               [s, t]() { esl_set_image(s, t); }});
             options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2], esl_noop});
         }
         options.push_back({ESL_TARGET_ACTIONS_TAIL[0], esl_noop});
