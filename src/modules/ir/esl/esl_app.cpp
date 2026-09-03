@@ -16,6 +16,8 @@
 #include <LittleFS.h>
 #include <SD.h>
 #include <globals.h>
+#include <stdio.h>
+#include <string.h>
 
 #define ESL_BARCODE_LEN 17
 #define ESL_PRE_TX_SETTLE_MS 500
@@ -68,10 +70,14 @@ static void ui_progress(void *ctx, size_t done, size_t total) {
     progressHandler((int)done, total, "Sending ESL");
 }
 
-static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
-    String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
-    entered.trim();
+static const char *esl_target_label(const EslTarget *t) {
+    return t->name[0] ? t->name : t->barcode;
+}
 
+/* Shared by + Type Barcode and the leftover BMP prompt. Segment tags are
+ * valid here; image TX still refuses them after this returns. */
+static bool esl_parse_typed_barcode(const String &entered, uint8_t plid[4],
+                                    TagTinkerTagProfile *profile) {
     /* Bruce's keyboard returns ESC when the user backs out. Treat that as a
      * silent cancel rather than scolding them about a length they never
      * entered. (ESC is not whitespace, so it survives trim().) */
@@ -89,6 +95,13 @@ static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
         displayError("Unknown tag type", true);
         return false;
     }
+    return true;
+}
+
+static bool esl_prompt_target(uint8_t plid[4], TagTinkerTagProfile *profile) {
+    String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
+    entered.trim();
+    if (!esl_parse_typed_barcode(entered, plid, profile)) return false;
     /* Segment tags have no image page, matching supports_graphics upstream. */
     if (profile->kind != TagTinkerTagKindDotMatrix) {
         displayError("Tag has no image page", true);
@@ -340,15 +353,104 @@ static void esl_broadcast_menu(void) {
     }
 }
 
+static void esl_show_tag_info(const EslTarget *t) {
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+             "--- Tag Info ---\n"
+             "Model: %s\n"
+             "Type: %u (%s)\n"
+             "Size: %ux%u\n"
+             "Color: %s\n"
+             "Barcode:\n"
+             "%s",
+             t->profile.model_name ? t->profile.model_name : "Unknown",
+             (unsigned)t->profile.type_code,
+             esl_store_profile_kind_label(t->profile.kind),
+             (unsigned)t->profile.width, (unsigned)t->profile.height,
+             esl_store_profile_color_label(t->profile.color), t->barcode);
+
+    ScrollableTextArea area = ScrollableTextArea(ESL_UI_APP_NAME);
+    area.fromString(buf);
+    area.show();
+}
+
+static void esl_rename_tag(EslSession *s, uint8_t idx) {
+    EslTarget *t = &s->targets[idx];
+    String entered = keyboard(t->name, ESL_STORE_NAME_LEN, "Target name:");
+    if (entered == "\x1B") return;
+
+    for (size_t i = 0; i < (size_t)entered.length(); i++) {
+        char c = entered[i];
+        if (c == '|' || c == '\r' || c == '\n') entered.setCharAt((unsigned)i, ' ');
+    }
+
+    if (entered.length() == 0) {
+        esl_store_set_default_name(s, t);
+    } else {
+        strncpy(t->name, entered.c_str(), ESL_STORE_NAME_LEN);
+        t->name[ESL_STORE_NAME_LEN] = '\0';
+    }
+    esl_fs_save_targets(s);
+}
+
+static bool esl_delete_tag(EslSession *s, uint8_t idx) {
+    char body[96];
+    snprintf(body, sizeof(body), "Delete %s and its\nsaved images?",
+             esl_target_label(&s->targets[idx]));
+    drawMainBorder(true);
+    if (displayMessage(body, "Back", nullptr, "Delete", TFT_RED) != 1) return false;
+    if (!esl_store_delete_target(s, idx)) return false;
+    esl_fs_save_targets(s);
+    return true;
+}
+
+static void esl_target_actions(EslSession *s, uint8_t idx) {
+    s->selected_target = (int8_t)idx;
+    while (true) {
+        if (idx >= s->target_count) return;
+        EslTarget *t = &s->targets[idx];
+        bool deleted = false;
+
+        options.clear();
+        options.push_back({ESL_TARGET_ACTIONS_ALWAYS[0], [t]() { esl_show_tag_info(t); }});
+        options.push_back({ESL_TARGET_ACTIONS_ALWAYS[1], [s, idx]() { esl_rename_tag(s, idx); }});
+        if (esl_store_target_supports_graphics(t)) {
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[0], esl_noop});
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[1], esl_noop});
+            options.push_back({ESL_TARGET_ACTIONS_GRAPHICS[2], esl_noop});
+        }
+        options.push_back({ESL_TARGET_ACTIONS_TAIL[0], esl_noop});
+        options.push_back({ESL_TARGET_ACTIONS_TAIL[1], [&]() {
+                               if (esl_delete_tag(s, idx)) deleted = true;
+                           }});
+
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, esl_target_label(t));
+        if (sel < 0 || deleted) return;
+    }
+}
+
+static void esl_type_barcode(EslSession *s) {
+    String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
+    entered.trim();
+
+    uint8_t plid[4] = {0};
+    TagTinkerTagProfile profile;
+    if (!esl_parse_typed_barcode(entered, plid, &profile)) return;
+
+    int idx = esl_store_ensure_target(s, entered.c_str());
+    if (idx < 0) return;
+    esl_fs_save_targets(s);
+    esl_target_actions(s, (uint8_t)idx);
+}
+
 static void esl_targeted_menu(EslSession *s) {
     while (true) {
         options.clear();
         options.push_back({ESL_TARGET_MENU_PREFIX[0], esl_noop});
-        options.push_back({ESL_TARGET_MENU_PREFIX[1], esl_noop});
+        options.push_back({ESL_TARGET_MENU_PREFIX[1], [s]() { esl_type_barcode(s); }});
         for (uint8_t i = 0; i < s->target_count; i++) {
-            const char *label =
-                s->targets[i].name[0] ? s->targets[i].name : s->targets[i].barcode;
-            options.push_back({label, esl_noop});
+            options.push_back({esl_target_label(&s->targets[i]),
+                               [s, i]() { esl_target_actions(s, i); }});
         }
         int sel = loopOptions(options, MENU_TYPE_SUBMENU, ESL_MAIN_ITEMS[1]);
         if (sel < 0) return;
