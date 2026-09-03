@@ -14,6 +14,7 @@ extern "C" {
 #define ESL_STORE_MAX_RECENTS 6
 #define ESL_STORE_TEXT_LEN 32
 #define ESL_STORE_BC_LEN 17
+#define ESL_STORE_JOB_ID_LEN 32
 
 typedef struct {
     bool show_startup_warning;
@@ -63,6 +64,9 @@ void esl_store_recents_add(EslSession *s, const char *text);
 const char *esl_store_profile_kind_label(TagTinkerTagKind kind);
 const char *esl_store_profile_color_label(TagTinkerTagColor color);
 bool esl_store_target_supports_graphics(const EslTarget *t);
+bool esl_parse_dropped_filename(const char *name, uint16_t target_w,
+                                uint16_t target_h, char *job_id, size_t job_cap,
+                                uint8_t *page, bool *resampled);
 
 #ifdef __cplusplus
 }

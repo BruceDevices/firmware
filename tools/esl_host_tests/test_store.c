@@ -166,6 +166,60 @@ static void test_recents_parse_add(void) {
     CHECK(strstr(out, "world") != NULL);
 }
 
+static void test_parse_dropped_filename(void) {
+    char job[ESL_STORE_JOB_ID_LEN + 1];
+    uint8_t page = 99;
+    bool resampled = false;
+
+    /* Color 2.6 wire size is 152x296; a 296x152 glass-named file is foreign. */
+    CHECK(esl_parse_dropped_filename("296x152_cat.bmp", 152, 296, job, sizeof(job),
+                                     &page, &resampled));
+    CHECK_EQ(page, 1u);
+    CHECK(resampled);
+    CHECK_STR(job, "296x152_cat");
+
+    CHECK(esl_parse_dropped_filename("296x152_p3_cat.bmp", 152, 296, job,
+                                     sizeof(job), &page, &resampled));
+    CHECK_EQ(page, 3u);
+    CHECK(resampled);
+    CHECK_STR(job, "296x152_p3_cat");
+
+    CHECK(esl_parse_dropped_filename("152x296_p2_cat.bmp", 152, 296, job,
+                                     sizeof(job), &page, &resampled));
+    CHECK_EQ(page, 2u);
+    CHECK(!resampled);
+    CHECK_STR(job, "152x296_p2_cat");
+
+    CHECK(esl_parse_dropped_filename("cat.bmp", 200, 80, job, sizeof(job), &page,
+                                     &resampled));
+    CHECK_EQ(page, 1u);
+    CHECK(resampled);
+    CHECK_STR(job, "cat");
+
+    CHECK(!esl_parse_dropped_filename("readme.txt", 152, 296, job, sizeof(job),
+                                      &page, &resampled));
+
+    /* Flipper: extension is case-insensitive; page only from _pN after WxH
+     * and only when N<=7. */
+    CHECK(esl_parse_dropped_filename("CAT.BMP", 152, 296, job, sizeof(job),
+                                     &page, &resampled));
+    CHECK_EQ(page, 1u);
+    CHECK(resampled);
+    CHECK_STR(job, "CAT");
+
+    CHECK(esl_parse_dropped_filename("296x152_p8_cat.bmp", 152, 296, job,
+                                     sizeof(job), &page, &resampled));
+    CHECK_EQ(page, 1u);
+
+    CHECK(esl_parse_dropped_filename("cat_p3.bmp", 152, 296, job, sizeof(job),
+                                     &page, &resampled));
+    CHECK_EQ(page, 1u);
+    CHECK(resampled);
+
+    CHECK(!esl_parse_dropped_filename(NULL, 152, 296, job, sizeof(job), &page,
+                                      &resampled));
+}
+
 int main(void) {
     test_settings_defaults_and_roundtrip();
     test_targets_parse_save_crud();
@@ -174,5 +228,6 @@ int main(void) {
     test_kind_color_supports_graphics();
     test_target_cap();
     test_recents_parse_add();
+    test_parse_dropped_filename();
     TEST_REPORT("test_store");
 }
