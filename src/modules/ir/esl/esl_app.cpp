@@ -4,13 +4,21 @@
 #include "esl_fs.h"
 #include "esl_ir_driver.h"
 #include "esl_menu_labels.h"
+#include "esl_nfc.h"
 #include "esl_proto.h"
 #include "esl_tx.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/scrollableTextArea.h"
 #include "core/sd_functions.h"
 #include "modules/ir/TV-B-Gone.h"
+#if !defined(LITE_VERSION)
+#include "modules/rfid/ST25R3916.h"
+#endif
+#include "modules/rfid/PN532.h"
+#include "modules/rfid/RFID2.h"
+#include "modules/rfid/RFIDInterface.h"
 #include <Arduino.h>
 #include <FS.h>
 #include <LittleFS.h>
@@ -710,6 +718,125 @@ static void esl_target_actions(EslSession *s, uint8_t idx) {
     }
 }
 
+static RFIDInterface *esl_new_rfid(void) {
+    switch (bruceConfigPins.rfidModule) {
+        case PN532_I2C_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C);
+#ifdef M5STICK
+        case PN532_I2C_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C_SPI);
+#endif
+        case PN532_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::SPI);
+        case RC522_SPI_MODULE: return new RFID2(false);
+#if !defined(LITE_VERSION)
+        case ST25R3916_SPI_MODULE: return new ST25R3916(ST25R3916::SPI_MODE);
+        case ST25R3916_I2C_MODULE: return new ST25R3916(ST25R3916::I2C_MODE);
+#endif
+        case M5_RFID2_MODULE:
+        default: return new RFID2();
+    }
+}
+
+static void esl_free_rfid(RFIDInterface *rfid) {
+    delete rfid;
+    releaseI2CBus();
+}
+
+/* "Page N: AA BB CC DD" (and longer Classic lines; first four bytes win). */
+static unsigned esl_parse_ul_pages(const String &dump, uint8_t pages[][4],
+                                   unsigned cap) {
+    unsigned highest = 0;
+    bool any = false;
+    int start = 0;
+    while (start < (int)dump.length()) {
+        int nl = dump.indexOf('\n', start);
+        if (nl < 0) nl = (int)dump.length();
+        String line = dump.substring(start, nl);
+        line.trim();
+        start = nl + 1;
+        if (line.length() == 0) continue;
+
+        unsigned n = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0;
+        if (sscanf(line.c_str(), "Page %u: %x %x %x %x", &n, &b0, &b1, &b2,
+                   &b3) != 5) {
+            continue;
+        }
+        if (n >= cap) continue;
+        pages[n][0] = (uint8_t)b0;
+        pages[n][1] = (uint8_t)b1;
+        pages[n][2] = (uint8_t)b2;
+        pages[n][3] = (uint8_t)b3;
+        if (!any || n + 1u > highest) highest = n + 1u;
+        any = true;
+    }
+    return any ? highest : 0;
+}
+
+static void esl_nfc_popup(const char *header, const char *body) {
+    drawMainBorderWithTitle(header);
+    setPadCursor(1, 1);
+    String rest = body;
+    int start = 0;
+    while (start < (int)rest.length()) {
+        int nl = rest.indexOf('\n', start);
+        if (nl < 0) nl = (int)rest.length();
+        padprintln(rest.substring(start, nl));
+        start = nl + 1;
+    }
+    while (!check(AnyKeyPress)) delay(10);
+}
+
+static void esl_scan_nfc(EslSession *s) {
+    RFIDInterface *rfid = esl_new_rfid();
+    if (!rfid->begin()) {
+        displayError("RFID module not found!", true);
+        esl_free_rfid(rfid);
+        return;
+    }
+
+    drawMainBorderWithTitle("Scan NFC Tag");
+    setPadCursor(1, 1);
+    padprintln("Hold ESL tag");
+    padprintln("to the NFC reader");
+
+    bool cancelled = false;
+    bool got_tag = false;
+    uint8_t pages[64][4];
+    unsigned pages_read = 0;
+    memset(pages, 0, sizeof(pages));
+
+    while (true) {
+        if (check(EscPress)) {
+            cancelled = true;
+            break;
+        }
+        if (rfid->read() != RFIDInterface::SUCCESS) {
+            delay(100);
+            continue;
+        }
+        got_tag = true;
+        pages_read = esl_parse_ul_pages(rfid->strAllPages, pages, 64);
+        break;
+    }
+
+    esl_free_rfid(rfid);
+
+    if (cancelled) return;
+
+    char barcode[18];
+    memset(barcode, 0, sizeof(barcode));
+    if (!got_tag || !esl_nfc_decode_ul_pages(pages, pages_read, barcode)) {
+        esl_nfc_popup("Not an ESL tag", "Tag detected but\nno valid ESL data");
+        return;
+    }
+
+    int idx = esl_store_ensure_target(s, barcode);
+    if (idx < 0) {
+        esl_nfc_popup("Decode Error", "Tag read but\nbarcode invalid");
+        return;
+    }
+    esl_fs_save_targets(s);
+    esl_target_actions(s, (uint8_t)idx);
+}
+
 static void esl_type_barcode(EslSession *s) {
     String entered = keyboard("", ESL_BARCODE_LEN, "Tag barcode (17 chars):");
     entered.trim();
@@ -727,7 +854,7 @@ static void esl_type_barcode(EslSession *s) {
 static void esl_targeted_menu(EslSession *s) {
     while (true) {
         options.clear();
-        options.push_back({ESL_TARGET_MENU_PREFIX[0], esl_noop});
+        options.push_back({ESL_TARGET_MENU_PREFIX[0], [s]() { esl_scan_nfc(s); }});
         options.push_back({ESL_TARGET_MENU_PREFIX[1], [s]() { esl_type_barcode(s); }});
         for (uint8_t i = 0; i < s->target_count; i++) {
             options.push_back({esl_target_label(&s->targets[i]),
