@@ -29,10 +29,10 @@ bool check(int key);
 // BLE Scan Constants
 //=============================================================================
 
-#define ACTIVE_SCAN_TIME 8
+#define ACTIVE_SCAN_TIME 10
 #define PASSIVE_SCAN_TIME 8
-#define SCAN_INT 100
-#define SCAN_WINDOW 99
+#define SCAN_INT 97
+#define SCAN_WINDOW 67
 
 //=============================================================================
 // Enums
@@ -345,6 +345,8 @@ struct FastPairModelInfo {
     const char *deviceType;
 };
 
+extern const FastPairModelInfo fastpair_models[];
+
 extern const char *SAMSUNG_MAC_OUIS[];
 extern const int SAMSUNG_MAC_OUIS_COUNT;
 bool isSamsungDevice(const NimBLEAddress &address);
@@ -619,21 +621,26 @@ private:
     struct MirageInstance {
         String address;
         String name;
+        String originalName;
         uint32_t modelId;
         uint32_t startTime;
         bool active;
         NimBLEAdvertising *advertising;
     };
     std::vector<MirageInstance> instances;
+    std::map<String, String> knownDeviceNames;
+
+    String generatePlausibleName(const String &address);
 
 public:
     BLEMirage();
     ~BLEMirage();
-    bool spawnMirage(const String &targetAddress, const String &spoofName);
+    bool spawnMirage(const String &targetAddress, const String &targetName);
     void createMirageNetwork(int count);
     void stopMirage(const String &address);
     void stopAll();
     bool isMirageActive(const String &address);
+    void updateKnownName(const String &address, const String &name);
 };
 
 //=============================================================================
