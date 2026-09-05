@@ -172,9 +172,9 @@ static const uint8_t LP_TX = 11;
 
 #define USE_IO_EXPANDER
 #define IO_EXPANDER_AW9523
+
 #define IO_EXP_NRF 12
-/// CS
-#define IO_EXP_BAD 13
+#define IO_EXP_UART 13
 #define IO_EXP_NFC 7
 
 #define EXPANDER_INT_PIN 28
