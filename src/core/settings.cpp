@@ -90,14 +90,14 @@ int gsetRotation(bool set) {
     if (result & 0b01) { // if 1 or 3
         tftWidth = TFT_HEIGHT;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_WIDTH - 20;
+        tftHeight = TFT_WIDTH - TOUCH_FOOTER_HEIGHT;
 #else
         tftHeight = TFT_WIDTH;
 #endif
     } else { // if 2 or 0
         tftWidth = TFT_WIDTH;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_HEIGHT - 20;
+        tftHeight = TFT_HEIGHT - TOUCH_FOOTER_HEIGHT;
 #else
         tftHeight = TFT_HEIGHT;
 #endif
@@ -259,6 +259,24 @@ void setUIColor() {
         int selectedOption = loopOptions(options, idx);
         if (selectedOption == -1 || selectedOption == options.size() - 1) return;
     }
+}
+
+/*********************************************************************
+**  Function: setMainMenuStyleMenu
+**  Choose how the main menu presents the modules
+**********************************************************************/
+void setMainMenuStyleMenu() {
+    options = {
+        {"Carousel",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_CAROUSEL); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_CAROUSEL},
+        {"Grid",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_GRID); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_GRID    },
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, bruceConfig.mainMenuStyle);
 }
 
 uint16_t alterOneColorChannel565(uint16_t color, int newR, int newG, int newB) {
@@ -1014,7 +1032,7 @@ void runClockLoop(bool showMenuHint) {
 
             // "OK to show menu" hint management
             if (hintVisible && (millis() - hintStartTime < 5000)) {
-                tft.setTextSize(1);
+                tft.setTextSize(FP);
                 tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
             } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
                 // Clear hint after 5 seconds

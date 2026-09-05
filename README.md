@@ -4,7 +4,7 @@
 
 Bruce is a versatile ESP32 firmware packed with offensive-security tools, built to make Red Team operations fast and portable.
 
-It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
+It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) , [RockBase IoT](https://www.rockbaseiot.com) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
 
 ## :zap: Get Our Official DevKit!
 
@@ -245,6 +245,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 | [Bruce RF Reaper](https://www.elecrow.com/bruce-pcb-rf-reaper.html)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: but w/ ST25R3916 | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
 | [Elecrow 24B](https://www.elecrow.com/2-4inch-esp32-miner-lcd-display-2pcs-cryptocurrency-solo-miner-with-1000kh-s-hashrate.html)                                                            |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
 | [Elecrow 3.5"](https://www.elecrow.com/esp-terminal-with-esp32-3-5-inch-parallel-480x320-tft-capacitive-touch-display-rgb-by-chip-ili9488.html)                                                                                                                                                        |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
+| [NM-CYD-C5 + RF HAT](https://https://rockbase.shop/products/nm-cyd-c5-colorful)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
 ² CYD have a LITE_VERSION version for Launcher Compatibility
 ¹ Core, CYD and StickCs Bad-USB: [here](https://wiki.bruce.computer/features/others/#badusb)
 
@@ -258,6 +259,7 @@ Bruce stems from a keen observation within the community focused on devices like
 ![Bruce on M5Core](./media/pictures/core.png)
 ![Bruce on Stick](./media/pictures/stick.png)
 ![Bruce on CYD](./media/pictures/cyd.png)
+![Bruce on CYD with NM-RF-HAT](./media/pictures/bruce-cyd.png)
 
 Other media can be [found here](./media/).
 

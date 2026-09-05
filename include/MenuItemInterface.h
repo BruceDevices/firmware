@@ -4,6 +4,10 @@
 #include "core/display.h"
 #include <globals.h>
 
+// Pixel span a menu icon covers when drawn at scale 1. Lower it to render the icons
+// bigger inside the same box, raise it if the widest ones start touching their label.
+#define ICON_SCALE_REFERENCE 80.0f
+
 class MenuItemInterface {
 public:
     virtual ~MenuItemInterface() = default;
@@ -40,6 +44,40 @@ public:
             if (bruceConfig.theme.label) drawTitle(scale); // Makes sure to draw over the image
         }
         drawStatusBar();
+    }
+
+    // Renders drawIcon() inside an arbitrary box instead of the full screen icon area,
+    // used by the grid main menu. The icons paint straight to `tft` using the member
+    // coordinates and read their colors from bruceConfig, so both are swapped for the
+    // call and put back afterwards.
+    void drawIconInBox(int centerX, int centerY, int box, uint16_t fgColor, uint16_t bgColor) {
+        int oldCenterX = iconCenterX, oldCenterY = iconCenterY;
+        int oldAreaX = iconAreaX, oldAreaY = iconAreaY;
+        int oldAreaW = iconAreaW, oldAreaH = iconAreaH;
+        uint16_t oldPriColor = bruceConfig.priColor;
+        uint16_t oldBgColor = bruceConfig.bgColor;
+
+        iconCenterX = centerX;
+        iconCenterY = centerY;
+        iconAreaW = box;
+        iconAreaH = box;
+        iconAreaX = centerX - box / 2;
+        iconAreaY = centerY - box / 2;
+        bruceConfig.priColor = fgColor;
+        bruceConfig.bgColor = bgColor;
+
+        // The widest icon spans about ICON_SCALE_REFERENCE px at scale 1, so dividing by it
+        // keeps every icon inside `box` and stops it bleeding into the neighbouring cells.
+        drawIcon((float)box / ICON_SCALE_REFERENCE);
+
+        bruceConfig.priColor = oldPriColor;
+        bruceConfig.bgColor = oldBgColor;
+        iconCenterX = oldCenterX;
+        iconCenterY = oldCenterY;
+        iconAreaX = oldAreaX;
+        iconAreaY = oldAreaY;
+        iconAreaW = oldAreaW;
+        iconAreaH = oldAreaH;
     }
 
     void drawArrows(float scale = 1) {

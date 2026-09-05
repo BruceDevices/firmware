@@ -63,8 +63,8 @@ void ensureWifiPlatform();
 /**
  * @brief Connects to wifiNetwork
  */
-bool _wifiConnect(const String &ssid, int encryption);
-bool _connectToWifiNetwork(const String &ssid, const String &pwd);
+bool _wifiConnect(const String &ssid, int encryption, int32_t channel = 0, const uint8_t* bssid = nullptr);
+bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channel = 0, const uint8_t* bssid = nullptr);
 
 /**
  * @brief sets up wifi in AP mode

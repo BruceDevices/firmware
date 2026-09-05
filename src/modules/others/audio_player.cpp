@@ -122,7 +122,7 @@ void drawVectorIcon(int x, int y, int size, IconType icon, uint16_t color) {
             // Arrow tip to indicate loop
             tft.fillTriangle(cx + r - 3, cy - 3, cx + r + 3, cy - 3, cx + r, cy + 3, color);
             tft.setTextColor(color);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
             tft.setCursor(cx - 2, cy - 3);
             tft.print("1");
             break;
@@ -134,7 +134,7 @@ void drawVectorIcon(int x, int y, int size, IconType icon, uint16_t color) {
             // Arrow tip to indicate loop direction
             tft.fillTriangle(cx + r - 3, cy - 3, cx + r + 3, cy - 3, cx + r, cy + 3, TFT_DARKGREY);
             tft.setTextColor(TFT_DARKGREY);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
             tft.setCursor(cx - 2, cy - 3);
             tft.print("1");
             break;
@@ -221,7 +221,7 @@ bool showVolumeControl(uint8_t &currentVolume) {
 
         // Volume percentage text
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.setTextSize(1);
+        tft.setTextSize(FP);
         tft.setCursor(BAR_X + 10, BAR_Y + BAR_HEIGHT - 15);
         tft.printf("%3d%%", tempVolume);
     };
@@ -323,12 +323,12 @@ void musicPlayerUI(FS *fs, const String &filepath) {
         int boxSize = iconSize + 45; // Wider box towards right
         tft.drawRoundRect(ui.MARGIN_X, y + 2, boxSize, iconSize, 4, TFT_DARKGREY);
         tft.setTextColor(TFT_WHITE);
-        tft.setTextSize(2);
+        tft.setTextSize(FM);
 
         // Center "AUDIO" text in box
-        String AudioFormatLabel = "AUDIO";              // TODO: Use file extension
-        int textWidth = AudioFormatLabel.length() * 12; // textSize(2): 6 pixel base * 2 = 12 pixel per char
-        int textHeight = 16;                            // textSize(2): 8 pixel base * 2 = 16 pixel
+        String AudioFormatLabel = "AUDIO"; // TODO: Use file extension
+        int textWidth = AudioFormatLabel.length() * LW * FM;
+        int textHeight = LH * FM;
         int centerX = ui.MARGIN_X + (boxSize - textWidth) / 2 + 2; // Offset 5
         int centerY = y + 2 + (iconSize - textHeight) / 2;
         tft.setCursor(centerX, centerY);

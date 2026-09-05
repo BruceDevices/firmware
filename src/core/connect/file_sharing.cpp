@@ -1,4 +1,5 @@
-#if !defined(LITE_VERSION)
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
+#if !defined(LITE_VERSION) && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "file_sharing.h"
 #include "core/display.h"
 #include <SD.h>
@@ -174,4 +175,14 @@ void FileSharing::createFilename(FS *fs, FileSharing::Message fileMessage) {
 
     recvFileName = messageFilepath + "/" + filename + ext;
 }
+#elif !defined(LITE_VERSION)
+// ESP-NOW file transfer is unavailable on ESP32-P4 (no esp_now_* API). Stub the entry
+// points so the menus keep working and just tell the user it is unsupported here.
+#include "file_sharing.h"
+#include "core/display.h"
+
+FileSharing::FileSharing() {}
+
+void FileSharing::sendFile() { displayWarning("Not available on this device", true); }
+void FileSharing::receiveFile() { displayWarning("Not available on this device", true); }
 #endif

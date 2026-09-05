@@ -3,8 +3,8 @@
 #include "sd_functions.h"
 #include <globals.h>
 String getMacAddress() {
-    uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_BASE);
 
     char macStr[18];
     snprintf(
@@ -212,7 +212,8 @@ void BruceConfigPins::fromJson(JsonObject obj) {
     //     log_e("Fail");
     // }
     if (!root["i2c_bus"].isNull()) {
-#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0
+#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0 &&                 \
+    !defined(BRUCE_BOARD_HAS_SOFTWARE_I2C)
         log_e("I2C Pins cannot be changed on this board, using default values");
         i2c_bus = sys_i2c;
 #else

@@ -10,6 +10,16 @@
 
 #define MAX_MENU_SIZE (int)(tftHeight / 25)
 
+uint8_t mainMenuGridColumns = 0;
+bool (*gridPageTapHandler)(int x, int y, int currentIndex, int &newIndex) = nullptr;
+
+#if defined(HAS_TOUCH)
+static bool s_pageUpVisible = false, s_pageDownVisible = false;
+static int s_pageUpX = 0, s_pageUpY = 0, s_pageUpW = 0, s_pageUpH = 0;
+static int s_pageDownX = 0, s_pageDownY = 0, s_pageDownW = 0, s_pageDownH = 0;
+static int s_pageUpTargetIndex = 0, s_pageDownTargetIndex = 0;
+#endif
+
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
 #if defined(ST7789_2_DRIVER) || defined(ST7789_DRIVER)
@@ -66,12 +76,19 @@ void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight) 
 ***************************************************************************************/
 void TouchFooter(uint16_t color) {
 #if defined(HAS_TOUCH)
-    tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
+    tft.drawRoundRect(
+        BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 3,
+        tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+        TOUCH_FOOTER_HEIGHT - BORDER_OFFSET_FROM_SCREEN_EDGE + 3,
+        FP + 4,
+        color
+    );
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
 #endif
 }
 /***************************************************************************************
@@ -79,12 +96,19 @@ void TouchFooter(uint16_t color) {
 ** Description:   Draw touch screen footer
 ***************************************************************************************/
 void MegaFooter(uint16_t color) {
-    tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
+    tft.drawRoundRect(
+        BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 3,
+        tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+        TOUCH_FOOTER_HEIGHT - BORDER_OFFSET_FROM_SCREEN_EDGE + 3,
+        FP + 4,
+        color
+    );
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("Exit", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("UP", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("DOWN", 5 * tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString("Exit", tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString("UP", tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString("DOWN", 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
 }
 
 /***************************************************************************************
@@ -174,12 +198,11 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
 
     // Calculate max chars per line based on font size
-    int maxCharsFM = (tftWidth - 20) / (LW * FM);
-    int maxCharsFP = (tftWidth - 20) / (LW * FP);
+    int maxCharsFM = (tftWidth - 2 * BORDER_PAD_X) / (LW * FM);
+    int maxCharsFP = (tftWidth - 2 * BORDER_PAD_X) / (LW * FP);
 
     // Determine if we need to wrap the text
     std::vector<String> wrappedLines;
-    int boxHeight = 26; // Default height for single line
 
     if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) {
         // Text fits with FM font
@@ -191,16 +214,18 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
         wrappedLines = wrapText(text, maxCharsFP);
     }
 
-    // Adjust box height based on number of lines
-    if (wrappedLines.size() > 1) { boxHeight = 13 + (wrappedLines.size() * (size == FM ? 8 : 10)); }
+    // Line pitch must fit the actual glyph height at this size, or wrapped lines overlap.
+    int lineHeight = LH * size + 2;
+    int boxHeight = wrappedLines.size() * lineHeight + 8;
 
     tft.drawPixel(0, 0, 0);
-    tft.fillRoundRect(10, tftHeight / 2 - boxHeight / 2, tftWidth - 20, boxHeight, 7, bgcolor);
+    tft.fillRoundRect(
+        BORDER_PAD_X, tftHeight / 2 - boxHeight / 2, tftWidth - 2 * BORDER_PAD_X, boxHeight, 7, bgcolor
+    );
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(size);
 
     // Draw each line centered
-    int lineHeight = size == FM ? 8 : 10;
     int startY = tftHeight / 2 - (wrappedLines.size() * lineHeight) / 2;
     for (size_t i = 0; i < wrappedLines.size(); i++) {
         tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + i * lineHeight);
@@ -240,16 +265,16 @@ int8_t displayMessage(
 
     while (end != -1) {
         tft.drawString(msg.substring(start, end), tftWidth / 2, y);
-        y += FM * 8;
+        y += FM * LH;
         start = end + 1;
         end = msg.indexOf('\n', start);
     }
     tft.drawString(msg.substring(start), tftWidth / 2, y);
 
     tft.setTextDatum(BC_DATUM);
-    int16_t buttonHeight = 20;
-    int16_t buttonY = tftHeight - buttonHeight - 5;
-    int16_t buttonWidth = tftWidth / 3 - 10;
+    int16_t buttonHeight = LH * FM + 4;
+    int16_t buttonY = tftHeight - buttonHeight - BORDER_OFFSET_FROM_SCREEN_EDGE;
+    int16_t buttonWidth = tftWidth / 3 - BORDER_PAD_X;
 
     int8_t totalButtons = (leftButton ? 1 : 0) + (centerButton ? 1 : 0) + (rightButton ? 1 : 0);
     int8_t selected = 0; // Start at first available button
@@ -271,13 +296,21 @@ int8_t displayMessage(
 
         if (redraw) {
             if (leftButton) {
-                drawButton(5, buttonY, buttonWidth, buttonHeight, color, leftButton, selected == index);
+                drawButton(
+                    BORDER_OFFSET_FROM_SCREEN_EDGE,
+                    buttonY,
+                    buttonWidth,
+                    buttonHeight,
+                    color,
+                    leftButton,
+                    selected == index
+                );
                 index++;
             }
 
             if (centerButton) {
                 drawButton(
-                    tftWidth / 3 + 5,
+                    tftWidth / 3 + BORDER_OFFSET_FROM_SCREEN_EDGE,
                     buttonY,
                     buttonWidth,
                     buttonHeight,
@@ -290,7 +323,7 @@ int8_t displayMessage(
 
             if (rightButton) {
                 drawButton(
-                    tftWidth * 2 / 3 + 5,
+                    tftWidth * 2 / 3 + BORDER_OFFSET_FROM_SCREEN_EDGE,
                     buttonY,
                     buttonWidth,
                     buttonHeight,
@@ -512,9 +545,20 @@ void padprintln(double n, int digits, int16_t padx) {
 **  Where you choose among the options in menu
 **********************************************************************/
 int loopOptions(
-    std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter
+    std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter,
+    bool letterShortcuts, uint16_t pageJumpSize, bool border
 ) {
     if (options.empty()) return -1;
+
+    bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
+                          (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
+    if (menuType == MENU_TYPE_SUBMENU) {
+        useTapToSelect = false;
+        touchZoneOutsideFooterEnabled = true;
+    }
+
+    bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
+    if (useTapToSelect) touchZoneOutsideFooterEnabled = false;
 
     auto findFirstEnabled = [&]() -> int {
         for (size_t i = 0; i < options.size(); i++) {
@@ -548,19 +592,37 @@ int loopOptions(
     int devModeCounter = 0;
     static unsigned long _clock_bat_timer = millis();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
-    if (index > 0)
-        tft.fillRoundRect(
-            tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
-            tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
-            5,
-            bruceConfig.bgColor
-        );
+    if (index > 0) {
+        if (border)
+            tft.fillRoundRect(
+                tftWidth * 0.10,
+                tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
+                tftWidth * 0.8,
+                (FM * 8 + 4) * menuSize + 10,
+                5,
+                bruceConfig.bgColor
+            );
+        else
+            tft.fillRoundRect(
+                BORDER_OFFSET_FROM_SCREEN_EDGE,
+                BORDER_OFFSET_FROM_SCREEN_EDGE,
+                tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+                tftHeight - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+                5,
+                bruceConfig.bgColor
+            );
+    }
     if (index >= options.size()) index = 0;
     bool firstRender = true;
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
+#if defined(HAS_TOUCH)
+    bool showEscButton = useTapToSelect && menuType == MENU_TYPE_REGULAR;
+    const int escW = 5 * LW * FM + 4;
+    const int escH = LH * FM + 4;
+    const int escX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW;
+    const int escY = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
+#endif
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -597,7 +659,8 @@ int loopOptions(
                         bruceConfig.priColor,
                         bruceConfig.secColor,
                         bruceConfig.bgColor,
-                        firstRender
+                        firstRender,
+                        border
                     );
             }
             if (firstRender) menuOpenTs = millis();
@@ -605,29 +668,127 @@ int loopOptions(
             redraw = false;
         }
 
+#if defined(HAS_TOUCH)
+        // Tap the "[ x ]" close button to fire EscPress, same as the top-left zone used to.
+        if (showEscButton && touchPoint.pressed && touchPoint.x >= escX && touchPoint.x < escX + escW &&
+            touchPoint.y >= escY && touchPoint.y < escY + escH) {
+            EscPress = true;
+            touchPoint.pressed = false;
+        }
+        // Grid page-up/page-down tap zone (right edge strip) — needed because tap-to-select can
+        // only ever reach cells that are actually on screen, unlike Prev/Next which auto-scroll.
+        if (useTapToSelect && touchPoint.pressed && menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
+            gridPageTapHandler) {
+            int newIndex;
+            if (gridPageTapHandler(touchPoint.x, touchPoint.y, index, newIndex)) {
+                index = newIndex;
+                redraw = true;
+                touchPoint.pressed = false;
+            }
+        }
+        if (touchPoint.pressed) {
+            if (s_pageUpVisible && touchPoint.x >= s_pageUpX && touchPoint.x < s_pageUpX + s_pageUpW &&
+                touchPoint.y >= s_pageUpY && touchPoint.y < s_pageUpY + s_pageUpH) {
+                index = s_pageUpTargetIndex;
+                redraw = true;
+                touchPoint.pressed = false;
+            } else if (
+                s_pageDownVisible && touchPoint.x >= s_pageDownX &&
+                touchPoint.x < s_pageDownX + s_pageDownW && touchPoint.y >= s_pageDownY &&
+                touchPoint.y < s_pageDownY + s_pageDownH
+            ) {
+                index = s_pageDownTargetIndex;
+                redraw = true;
+                touchPoint.pressed = false;
+            }
+        }
+        // Tap-to-select: a tap on a different item just selects it (redraw); a second tap on the
+        // item that's already selected fires SelPress to execute it, same as the physical button.
+        if (useTapToSelect && touchPoint.pressed) {
+            for (size_t i = 0; i < options.size(); i++) {
+                if (options[i].enabled && options[i].contain(touchPoint.x, touchPoint.y)) {
+                    if (static_cast<int>(i) == index) SelPress = true;
+                    else {
+                        index = static_cast<int>(i);
+                        redraw = true;
+                    }
+                    break;
+                }
+            }
+            touchPoint.pressed = false;
+        }
+#endif
+
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
-        // Only process shortcuts on the main menu; the menuType check must short-circuit
-        // checkShortcutPress() so a held key can't re-fire inside the submenu it just opened.
-        // Break so the caller rebuilds the menu, since the shortcut refilled the shared global
-        // `options` (like selecting an option does) rather than repainting stale options.
         if (menuType == MENU_TYPE_MAIN && checkShortcutPress()) break;
+
+        if (letterShortcuts) {
+            char pressed_letter = checkLetterShortcutPress();
+            if (pressed_letter > 0) {
+                char pl = tolower(pressed_letter);
+                int size = static_cast<int>(options.size());
+                // start right after the current item so repeated presses cycle through duplicates
+                int start = (tolower(options[index].label.c_str()[0]) == pl) ? index + 1 : 0;
+                for (int i = 0; i < size; i++) {
+                    int idx = (start + i) % size;
+                    if (options[idx].enabled && tolower(options[idx].label.c_str()[0]) == pl) {
+                        index = idx;
+                        redraw = true;
+                        break;
+                    }
+                }
+            }
+        }
 #endif
+
+        if (pageJumpSize > 0) {
+            if (check(NextPagePress)) {
+                index += pageJumpSize;
+                if (index >= static_cast<int>(options.size())) index = static_cast<int>(options.size()) - 1;
+                redraw = true;
+            }
+            if (check(PrevPagePress)) {
+                index -= pageJumpSize;
+                if (index < 0) index = 0;
+                redraw = true;
+            }
+        }
 
         if (menuType == MENU_TYPE_REGULAR) {
             String txt = options[index].label;
             displayScrollingText(txt, coord, true);
         }
-
-// Checks ESC Press first, to not exit after PrevPress is processed
-// PrevPress condition is a StickCPlus workaround, as it uses the same button for Prev and Esc
-// Same happens to Core and some other boards
 #ifdef HAS_3_BUTTONS
         if (EscPress && PrevPress) EscPress = false;
 #endif
         if (menuType != MENU_TYPE_MAIN && check(EscPress)) {
             index = -1;
             break;
+        }
+        if (menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
+            mainMenuGridColumns < static_cast<int>(options.size())) {
+            int rowStep = 0;
+            if (check(UpPress)) rowStep = -1;
+            else if (check(DownPress)) rowStep = 1;
+
+            if (rowStep != 0) {
+                int size = static_cast<int>(options.size());
+                int cols = mainMenuGridColumns;
+                int rows = (size + cols - 1) / cols;
+                int col = index % cols;
+                int row = index / cols + rowStep;
+
+                if (row < 0) row = rows - 1;
+                else if (row >= rows) row = 0;
+
+                int idx = row * cols + col;
+                if (idx >= size) idx = size - 1; // the last row can be shorter than the others
+                if (options[idx].enabled) index = idx;
+
+                devModeCounter = 0;
+                redraw = true;
+            }
         }
 
 #ifdef HAS_ENCODER
@@ -739,6 +900,7 @@ int loopOptions(
     }
 
     RotaryNetSteps = 0; // reset rotary steps to avoid unexpected jumps in the next menu
+    touchZoneOutsideFooterEnabled = prevTouchZoneOutsideFooterEnabled;
     return index;
 }
 
@@ -748,13 +910,23 @@ int loopOptions(
 ** Dependencia: prog_handler =>>    0 - Flash, 1 - LittleFS
 ***************************************************************************************/
 void progressHandler(int progress, size_t total, const String &message) {
-    int barWidth = map(progress, 0, total, 0, tftWidth - 40);
+    int barHeight = LH * FP + 5;
+    int barY = tftHeight - barHeight - BORDER_PAD_Y;
+    int barWidth = map(progress, 0, total, 0, tftWidth - 4 * BORDER_PAD_X);
     if (barWidth < 3) {
-        tft.fillRect(6, 27, tftWidth - 12, tftHeight - 33, bruceConfig.bgColor);
-        tft.drawRect(18, tftHeight - 47, tftWidth - 36, 17, bruceConfig.priColor);
+        tft.fillRect(
+            BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+            STATUS_BAR_HEIGHT - 3,
+            tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+            tftHeight - STATUS_BAR_HEIGHT - BORDER_OFFSET_FROM_SCREEN_EDGE,
+            bruceConfig.bgColor
+        );
+        tft.drawRect(
+            2 * BORDER_PAD_X, barY - 2, tftWidth - 4 * BORDER_PAD_X, barHeight + 4, bruceConfig.priColor
+        );
         displayRedStripe(message, TFT_WHITE, bruceConfig.priColor);
     }
-    tft.fillRect(20, tftHeight - 45, barWidth, 13, bruceConfig.priColor);
+    tft.fillRect(2 * BORDER_PAD_X, barY, barWidth, barHeight, bruceConfig.priColor);
 }
 
 /***************************************************************************************
@@ -763,65 +935,152 @@ void progressHandler(int progress, size_t total, const String &message) {
 ***************************************************************************************/
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
-    bool firstRender
+    bool firstRender, bool border
 ) {
     static int last_index = 0;
+    static int last_init = -1;
 
     Opt_Coord coord;
-    int menuSize = options.size();
-    if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
+
+    int rowHeightPx = FM * LH + 4;
+    int32_t margin = 10; // matches Launcher's tftHeight-20 (10px top+bottom) for both border states
+    int fitRows = (tftHeight - 2 * margin) / rowHeightPx;
+    if (fitRows < 1) fitRows = 1;
+
+    int arraySize = static_cast<int>(options.size());
+    bool needsPaging = arraySize > fitRows;
+#if defined(HAS_TOUCH)
+    bool touchPaging = needsPaging;
+#else
+    bool touchPaging = false;
+#endif
+
+    struct SubmenuPage {
+        int start;
+        int count;
+        bool pageUp;
+        bool pageDown;
+    };
+    std::vector<SubmenuPage> pages;
+    int maxRowsAcrossPages = 0;
+    if (needsPaging) {
+        int remaining = arraySize;
+        int pageStart = 0;
+        while (remaining > 0) {
+            bool hasUp = touchPaging && !pages.empty();
+            int maxOptions = fitRows - (hasUp ? 1 : 0);
+            if (maxOptions < 1) maxOptions = 1;
+            int count = remaining < maxOptions ? remaining : maxOptions;
+            bool hasDown = false;
+            if (touchPaging) {
+                hasDown = remaining > count;
+                if (hasDown) {
+                    int maxWithDown = fitRows - (hasUp ? 1 : 0) - 1;
+                    if (maxWithDown < 1) maxWithDown = 1;
+                    count = count < maxWithDown ? count : maxWithDown;
+                    if (count >= remaining) hasDown = false;
+                }
+            }
+            pages.push_back({pageStart, count, hasUp, hasDown});
+            int rowsForThisPage = count + (hasUp ? 1 : 0) + (hasDown ? 1 : 0);
+            if (rowsForThisPage > maxRowsAcrossPages) maxRowsAcrossPages = rowsForThisPage;
+            pageStart += count;
+            remaining -= count;
+        }
+    }
+    if (pages.empty()) pages.push_back({0, arraySize < fitRows ? arraySize : fitRows, false, false});
+
+    int currentPage = 0;
+    for (size_t p = 0; p < pages.size(); ++p) {
+        currentPage = static_cast<int>(p);
+        if (index >= pages[p].start && index < pages[p].start + pages[p].count) break;
+    }
+    int init = pages[currentPage].start;
+    int menuSize = pages[currentPage].count;
+    if (menuSize < 1) menuSize = 1;
+    bool showPageUp = pages[currentPage].pageUp;
+    bool showPageDown = pages[currentPage].pageDown;
+
+#if defined(HAS_TOUCH)
+    s_pageUpVisible = false;
+    s_pageDownVisible = false;
+    if (showPageUp) s_pageUpTargetIndex = pages[currentPage - 1].start;
+    if (showPageDown) s_pageDownTargetIndex = pages[currentPage + 1].start;
+#endif
+
+    int totalRows = needsPaging ? maxRowsAcrossPages : menuSize;
+    if (totalRows < 1) totalRows = 1;
+    int32_t boxX = border ? tftWidth * 0.10 : BORDER_OFFSET_FROM_SCREEN_EDGE;
+    int32_t boxW = border ? tftWidth * 0.8 : tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE;
+    int32_t contentTopY = border ? tftHeight / 2 - totalRows * rowHeightPx / 2 : margin;
+    int32_t boxTopY = border ? contentTopY - BORDER_OFFSET_FROM_SCREEN_EDGE : BORDER_OFFSET_FROM_SCREEN_EDGE;
+    int32_t boxH = border ? rowHeightPx * totalRows + 10 : tftHeight - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE;
 
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
     if (firstRender) {
-        tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 8 + 4) * menuSize + 10, 5, bgcolor
-        );
-        tft.drawRoundRect(
-            tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
-            tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
-            5,
-            fgcolor
-        );
+        tft.fillRoundRect(boxX, boxTopY, boxW, boxH, 5, bgcolor);
+        tft.drawRoundRect(boxX, boxTopY, boxW, boxH, 5, fgcolor);
+    } else if (init != last_init) {
+        tft.fillRect(boxX + 2, contentTopY, boxW - 4, totalRows * rowHeightPx, bgcolor);
     }
+    last_init = init;
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
-    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
+    tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, contentTopY);
 
     int i = 0;
-    int init = 0;
     int cont = 1;
 
-    if (index >= MAX_MENU_SIZE) init = index - MAX_MENU_SIZE + 1;
     // check if cycling from last item to first
     if (abs(index - last_index) >= menuSize) {
         if (index > last_index) last_index = init; // from first to last
         else last_index = menuSize - 1;            // from last to first
     }
 
+    // Scrolled-out items keep a stale tap rect otherwise; clear before repopulating the visible ones.
+    for (auto &opt : options) {
+        opt.w = 0;
+        opt.h = 0;
+    }
+
+#if defined(HAS_TOUCH)
+    if (showPageUp) {
+        int16_t cursorY = tft.getCursorY();
+        tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
+        tft.setTextColor(getColorVariation(fgcolor), bgcolor);
+        tft.drawCentreString("-- Page Up --", boxX + boxW / 2, cursorY + 4, 1);
+        s_pageUpVisible = true;
+        s_pageUpX = boxX;
+        s_pageUpY = cursorY;
+        s_pageUpW = boxW;
+        s_pageUpH = FM * LH + 4;
+        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + FM * LH + 4);
+        tft.setTextColor(fgcolor, bgcolor);
+    }
+#endif
+
     cont = 1;
     for (i = 0; i < options.size(); i++) {
         if (i >= init) {
             int16_t cursorY = tft.getCursorY();
+            options[i].x = boxX;
+            options[i].y = cursorY;
+            options[i].w = boxW;
+            options[i].h = FM * LH + 4;
             // Erase previously highlited element,
             if (i == last_index) {
-                tft.fillRoundRect(
-                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, FM * LH + 2, 3, bruceConfig.bgColor
-                );
+                tft.fillRoundRect(boxX + 2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bruceConfig.bgColor);
             }
-            // Draw selection highlight bar
             if (i == index) {
-                tft.fillRoundRect(
-                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, FM * LH + 2, 3, bruceConfig.priColor
-                );
+                uint16_t highlightColor = options[i].hasColor ? options[i].color : bruceConfig.priColor;
+                tft.fillRoundRect(boxX + 2, cursorY + 2, boxW - 4, FM * LH + 2, 3, highlightColor);
             }
 
             if (options[i].selected) tft.setTextColor(selcolor, bgcolor); // if selected, change Text color
+            else if (options[i].hasColor) tft.setTextColor(options[i].color, bgcolor);
             else tft.setTextColor(fgcolor, bgcolor);
             if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
 
@@ -834,17 +1093,20 @@ Opt_Coord drawOptions(
             String text = "";
             if (i == index) {
                 text += ">";
-                coord.x = tftWidth * 0.10 + 5 + FM * LW;
+                coord.x = boxX + BORDER_OFFSET_FROM_SCREEN_EDGE + FM * LW;
                 coord.y = tft.getCursorY() + 4;
                 coord.size = maxChars;
-                coord.fgcolor = fgcolor;
+                coord.fgcolor = options[i].hasColor ? options[i].color : fgcolor;
                 coord.bgcolor = bgcolor;
             } else text += " ";
-            text += String(options[i].label) + "              ";
-            tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 4);
+            text += String(options[i].label) + "                                                      ";
+            tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, tft.getCursorY() + 4);
 
             // Draw text with appropriate colors for selection
-            if (i == index) { tft.setTextColor(bgcolor, bruceConfig.priColor); }
+            if (i == index) {
+                uint16_t highlightColor = options[i].hasColor ? options[i].color : bruceConfig.priColor;
+                tft.setTextColor(bgcolor, highlightColor);
+            }
             tft.println(text.substring(0, maxChars));
 
             // Reset text color for next item
@@ -868,11 +1130,36 @@ Opt_Coord drawOptions(
 
             cont++;
         }
-        if (cont > MAX_MENU_SIZE) break;
+        if (cont > menuSize) break;
+    }
+#if defined(HAS_TOUCH)
+    if (showPageDown) {
+        int16_t cursorY = tft.getCursorY();
+        tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
+        tft.setTextColor(getColorVariation(fgcolor), bgcolor);
+        tft.drawCentreString("-- Page Down --", boxX + boxW / 2, cursorY + 4, 1);
+        s_pageDownVisible = true;
+        s_pageDownX = boxX;
+        s_pageDownY = cursorY;
+        s_pageDownW = boxW;
+        s_pageDownH = FM * LH + 4;
+        tft.setTextColor(fgcolor, bgcolor);
+    }
+#endif
+    int rowsDrawnThisPage = menuSize + (showPageUp ? 1 : 0) + (showPageDown ? 1 : 0);
+    for (int r = rowsDrawnThisPage; r < totalRows; r++) {
+        int16_t cursorY = tft.getCursorY();
+        tft.fillRect(boxX + 2, cursorY, boxW - 4, rowHeightPx, bgcolor);
+        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + rowHeightPx);
     }
     // update history
     last_index = index;
 #if defined(HAS_TOUCH)
+    int escW = 5 * LW * FM + 4;
+    int escX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW;
+    tft.setTextColor(getColorVariation(bruceConfig.priColor), bgcolor);
+    tft.setTextSize(FM);
+    tft.drawString("[ x ]", escX, BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1);
     TouchFooter();
 #endif
     return coord;
@@ -888,54 +1175,116 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawPixel(0, 0, 0);
-    tft.fillRect(6, 30, tftWidth - 12, 8 * FP, bruceConfig.bgColor);
-    tft.drawString(title, 12, 30);
+    tft.fillRect(
+        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+        STATUS_BAR_HEIGHT,
+        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+        LH * FP,
+        bruceConfig.bgColor
+    );
+    tft.drawString(title, BORDER_PAD_X, STATUS_BAR_HEIGHT);
 
-    // middle of the drawing area
-    int middle = 25 /*status*/ + (tftHeight - 30 /*status + bottom margin*/) / 2;
-    // drawCentreString uses TC_DATUM, so we need to adjust the Y position
-    // 42 ensures that title isnt touched( 30 + 8 (LH) + 4(Margin))
-    int middle_up = middle - (tftHeight - 42) / 3 - FM * LH / 2 + 4;
-    int middle_down = middle + (tftHeight - 42) / 3 - FM * LH / 2;
+    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
+    int selectedTextH = selectedTextSize * LH;
+    int neighborTextH = FM * LH;
+    int rowGap = FP * (LH / 2);
+    int rowPitch = FG * LH + rowGap;
+    int rowClearH = FG * LH + rowGap;
+
+    // Keep the title row intact and center the selected option in the remaining content area.
+    int contentTop = STATUS_BAR_HEIGHT + LH * FP + 4;
+    int contentBottom = tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - 1;
+    int middle = contentTop + (contentBottom - contentTop) / 2;
+
+    tft.fillRect(
+        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+        contentTop,
+        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+        contentBottom - contentTop,
+        bruceConfig.bgColor
+    );
+
+    int spaceAbove = middle - contentTop - neighborTextH / 2;
+    int spaceBelow = contentBottom - middle - neighborTextH / 2;
+    int neighborSpaceEachSide = spaceAbove < spaceBelow ? spaceAbove : spaceBelow;
+    int maxNeighbors = neighborSpaceEachSide > 0 ? neighborSpaceEachSide / rowPitch : 0;
+    int maxByList = (menuSize - 1) / 2;
+    int neighbors = maxNeighbors < maxByList ? maxNeighbors : maxByList;
+    if (neighbors < 0) neighbors = 0;
 
     tft.setTextSize(FM);
-#if defined(HAS_TOUCH)
-    tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
-#endif
-    // Previous item
-    int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
-    const char *firstOption = options[firstIndex].label.c_str();
-    tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
+    for (int k = neighbors; k >= 1; k--) {
+        int idx = ((index - k) % menuSize + menuSize) % menuSize;
+        int itemCenterY = middle - k * rowPitch;
+        int y = itemCenterY - neighborTextH / 2;
+        tft.setTextColor(options[idx].enabled ? bruceConfig.secColor : TFT_DARKGREY);
+        tft.fillRect(
+            BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+            itemCenterY - rowClearH / 2,
+            tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+            rowClearH,
+            bruceConfig.bgColor
+        );
+        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
+    }
 
     // Selected item
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
     tft.setTextSize(selectedTextSize);
     tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+    tft.fillRect(
+        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+        middle - rowClearH / 2,
+        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+        rowClearH,
+        bruceConfig.bgColor
+    );
+    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextH / 2, SMOOTH_FONT);
     tft.drawFastHLine(
         tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
-        middle + selectedTextSize * LH / 2 + 1,
+        middle + selectedTextH / 2 + 1,
         strlen(options[index].label.c_str()) * selectedTextSize * LW,
         bruceConfig.priColor
     );
-    // Next Item
-    int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
-    const char *thirdOption = options[thirdIndex].label.c_str();
-    tft.setTextSize(FM);
-    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
-    tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
-    tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
+    tft.setTextSize(FM);
+    for (int k = 1; k <= neighbors; k++) {
+        int idx = (index + k) % menuSize;
+        int itemCenterY = middle + k * rowPitch;
+        int y = itemCenterY - neighborTextH / 2;
+        tft.setTextColor(options[idx].enabled ? bruceConfig.secColor : TFT_DARKGREY);
+        tft.fillRect(
+            BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
+            itemCenterY - rowClearH / 2,
+            tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
+            rowClearH,
+            bruceConfig.bgColor
+        );
+        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
+    }
+
+    tft.fillRect(
+        tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE,
+        0,
+        BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight,
+        bruceConfig.bgColor
+    );
+    tft.fillRect(
+        tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE,
+        index * tftHeight / menuSize,
+        BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight / menuSize,
+        bruceConfig.priColor
+    );
 
 #if defined(HAS_TOUCH)
-    tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawString("[ x ]", 7, 7, 1);
+    // Top-right, matching the "[ x ]" loopOptions()/drawOptions() draw for regular lists, and matching
+    // where touchHeatMap() (utils.cpp) now maps the EscPress zone.
+    int escW = 5 * LW * FM + 4;
+    tft.drawString(
+        "[ x ]", tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW, BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1
+    );
     TouchFooter();
 #endif
 }
@@ -945,13 +1294,26 @@ void drawStatusBar() {
     if (bat > 0) drawBatteryStatus(bat);
 
     if (bruceConfig.theme.border) {
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-        tft.drawLine(5, 25, tftWidth - 6, 25, bruceConfig.priColor);
+        tft.drawRoundRect(
+            BORDER_OFFSET_FROM_SCREEN_EDGE,
+            BORDER_OFFSET_FROM_SCREEN_EDGE,
+            tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+            tftHeight - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE,
+            5,
+            bruceConfig.priColor
+        );
+        tft.drawLine(
+            BORDER_OFFSET_FROM_SCREEN_EDGE,
+            STATUS_BAR_HEIGHT - 5,
+            tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 1,
+            STATUS_BAR_HEIGHT - 5,
+            bruceConfig.priColor
+        );
     }
 
     if (clock_set) {
-        setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
-        tft.fillRect(12, 12, 60, LH, bruceConfig.bgColor);
+        setTftDisplay(BORDER_PAD_X, BORDER_PAD_X, bruceConfig.priColor, FP, bruceConfig.bgColor);
+        tft.fillRect(BORDER_PAD_X, BORDER_PAD_X, LW * FP * 10, LH * FP, bruceConfig.bgColor);
 #if defined(HAS_RTC)
         updateTimeStr(_rtc.getTimeStruct());
 #else
@@ -959,14 +1321,18 @@ void drawStatusBar() {
 #endif
         tft.print(timeStr);
     } else {
-        setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
+        setTftDisplay(BORDER_PAD_X, BORDER_PAD_X, bruceConfig.priColor, FP, bruceConfig.bgColor);
         tft.print("BRUCE " + String(BRUCE_VERSION));
     }
 
     int iconCount = 0;
     bool showSD = sdcardMounted;
     bool showGPS = gpsConnected;
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    bool showWifi = WiFi.isConnected() || WiFi.AP.started();
+#else
     bool showWifi = (WiFi.getMode() != 0);
+#endif
     bool showWeb = isWebUIActive;
     bool showBLE = BLEConnected;
     bool showWG = isConnectedWireguard;
@@ -978,12 +1344,14 @@ void drawStatusBar() {
     if (showWG) iconCount++;
 
     if (iconCount > 0) {
+        // Icon glyphs are fixed-size bitmaps (not text), so they don't scale with FP/FM/FG;
+        // only their position within the status bar is kept relative.
         const int IW = 16;
         const int IH = 16;
         const int GAP = 6;
         int totalW = iconCount * IW + (iconCount - 1) * GAP;
         int sx = (tftWidth - totalW) / 2;
-        int iy = 7;
+        int iy = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
         int idx = 0;
 
         if (showSD) {
@@ -1030,7 +1398,7 @@ void drawMainBorder(bool clear) {
         tft.drawPixel(0, 0, 0);
         tft.fillScreen(bruceConfig.bgColor);
     }
-    setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
+    setTftDisplay(BORDER_PAD_X, BORDER_PAD_X, bruceConfig.priColor, FP, bruceConfig.bgColor);
     tft.setTextDatum(0);
 
     // if(wifiConnected) {tft.print(timeStr);} else {tft.print("BRUCE 1.0b");}
@@ -1088,7 +1456,13 @@ void printFootnote(const String &text) {
 }
 
 void printCenterFootnote(const String &text) {
-    tft.fillRect(10, tftHeight - BORDER_PAD_X - FP * LH, tftWidth - 20, FP * LH, bruceConfig.bgColor);
+    tft.fillRect(
+        BORDER_PAD_X,
+        tftHeight - BORDER_PAD_X - FP * LH,
+        tftWidth - 2 * BORDER_PAD_X,
+        FP * LH,
+        bruceConfig.bgColor
+    );
     tft.setTextSize(FP);
     tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
 }
@@ -1102,19 +1476,45 @@ void drawBatteryStatus(uint8_t bat) {
     uint16_t barcolor = bruceConfig.priColor;
     if (bat < 16) barcolor = color = TFT_RED;
 
-    tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, color);
+    const int battH = STATUS_BAR_HEIGHT - (5 + BORDER_OFFSET_FROM_SCREEN_EDGE + FP * 2);
+    const int battW = 2 * battH;
+    const int battY = BORDER_OFFSET_FROM_SCREEN_EDGE + FP;
+    const int battX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - battW - FP;
+    const int insetX = FP;
+    const int insetY = FP;
+    const int barW = battW - 2 * insetX;
+    const int barH = battH - 2 * insetY;
+    const int textGap = FP + 3;
+    const int textClearW = 4 * LW * FP + 4; // fits "100%" / "CHG"
+
+    tft.fillRect(battX - textGap - textClearW, battY, textClearW, battH + 1, bruceConfig.bgColor);
+    int textY = BORDER_PAD_X; // top-align with the clock/version text drawn at BORDER_PAD_X
+
     tft.setTextSize(FP);
-    tft.fillRect(tftWidth - 85, 7, 42, 18, bruceConfig.bgColor);
     if (charging) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawRightString("CHG", tftWidth - 44, 12, 1);
+        tft.drawRightString("CHG", battX - textGap, textY, 1);
     } else {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 44, 12, 1);
+        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", battX - textGap, textY, 1);
     }
-    tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
-    tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, bruceConfig.bgColor);
-    tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, bruceConfig.bgColor);
+
+    tft.drawRoundRect(battX, battY, battW, battH, 2, color);
+    tft.fillRoundRect(battX + insetX, battY + insetY, barW * bat / 100, barH, 1, barcolor);
+    tft.drawLine(
+        battX + insetX + barW / 3,
+        battY + insetY,
+        battX + insetX + barW / 3,
+        battY + insetY + barH,
+        bruceConfig.bgColor
+    );
+    tft.drawLine(
+        battX + insetX + 2 * barW / 3,
+        battY + insetY,
+        battX + insetX + 2 * barW / 3,
+        battY + insetY + barH,
+        bruceConfig.bgColor
+    );
 }
 
 void drawWireguardStatus(int x, int y) {
@@ -1126,55 +1526,6 @@ void drawWireguardStatus(int x, int y) {
         tft.drawRoundRect(x + 4, y + 2, 8, 8, 3, bruceConfig.priColor);
         tft.drawRoundRect(x + 3, y + 7, 10, 7, 1, bruceConfig.priColor);
     }
-}
-
-/***************************************************************************************
-** Function name: listFiles
-** Description:   Função para desenhar e mostrar o menu principal
-***************************************************************************************/
-#define MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
-Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
-    Opt_Coord coord;
-    tft.drawPixel(0, 0, bruceConfig.bgColor);
-    if (index == 0) {
-        tft.fillScreen(bruceConfig.bgColor);
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-    }
-    tft.setCursor(10, 10);
-    tft.setTextSize(FM);
-    int i = 0;
-    int arraySize = fileList.size();
-    int start = 0;
-    if (index >= MAX_ITEMS) {
-        start = index - MAX_ITEMS + 1;
-        if (start < 0) start = 0;
-    }
-    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
-    String txt = ">";
-    while (i < arraySize) {
-        if (i >= start) {
-            tft.setCursor(10, tft.getCursorY());
-            if (fileList[i].folder == true)
-                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
-            else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
-
-            if (index == i) {
-                txt = ">";
-                coord.x = 10 + FM * LW;
-                coord.y = tft.getCursorY();
-                coord.size = nchars;
-                coord.fgcolor =
-                    fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
-                coord.bgcolor = bruceConfig.bgColor;
-            } else txt = " ";
-            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
-        }
-        i++;
-        if (i == (start + MAX_ITEMS) || i == arraySize) break;
-    }
-    return coord;
 }
 
 // desenhos do menu principal, sprite "draw" com 80x80 pixels
@@ -1783,6 +2134,31 @@ void drawLockIcon(int x, int y, bool locked, uint16_t color) {
         tft.drawFastHLine(x + 3, y, 4, color);
         tft.drawFastVLine(x + 6, y, 5, color);
         tft.drawPixel(x + 2, y + 1, color);
+    }
+}
+
+uint16_t blendColors(uint16_t a, uint16_t b, uint8_t t) {
+    int ar = (a >> 11) & 0x1f, ag = (a >> 5) & 0x3f, ab = a & 0x1f;
+    int br = (b >> 11) & 0x1f, bg = (b >> 5) & 0x3f, bb = b & 0x1f;
+    int r = ar + (br - ar) * t / 255;
+    int g = ag + (bg - ag) * t / 255;
+    int bl = ab + (bb - ab) * t / 255;
+    return (uint16_t)((r << 11) | (g << 5) | bl);
+}
+
+void buildHeatPalette(uint16_t *lut, uint8_t n) {
+    if (!lut || n < 2) return;
+    uint16_t bg = bruceConfig.bgColor;
+    uint16_t pri = bruceConfig.priColor;
+    uint16_t hot = blendColors(pri, TFT_WHITE, 150);
+
+    lut[0] = bg;
+    for (uint8_t i = 1; i < n; i++) {
+        int t = i * 255 / (n - 1);
+        // ramp to the primary for the lower two thirds, then burn toward the
+        // highlight so strong signals stay readable against a busy plot
+        lut[i] = (t < 170) ? blendColors(bg, pri, 55 + t * 200 / 255)
+                           : blendColors(pri, hot, (t - 170) * 255 / 85);
     }
 }
 
