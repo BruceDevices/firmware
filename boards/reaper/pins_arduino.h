@@ -107,7 +107,7 @@ static const uint8_t SCK = SPI_SCK_PIN;
 #define HAS_RGB_LED 1
 #define RGB_LED 45
 #define LED_TYPE WS2812B
-#define LED_ORDER RGB
+#define LED_ORDER GRB
 #define LED_TYPE_IS_RGBW 0
 #define LED_COUNT 16
 
