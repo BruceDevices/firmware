@@ -15,6 +15,7 @@
 #include "settingsColor.h"
 #include "utils.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
+#include <cctype>
 #include <globals.h>
 
 int currentScreenBrightness = -1;
@@ -1367,6 +1368,19 @@ void setNetworkCredsMenu() {
     addOptionToMainMenu();
 
     loopOptions(options);
+}
+
+void setWifiHostnameMenu() {
+    String hostname = keyboard(bruceConfig.wifiHostname, 32, "Device hostname:");
+    if (hostname == "\x1B") return;
+    if (hostname.isEmpty()) {
+        displayError("Name cannot be empty", true);
+        return;
+    }
+
+    bruceConfig.setWifiHostname(hostname);
+    if (WiFi.getMode() != WIFI_MODE_NULL) wifiDisconnect();
+    displayInfo("Device name: " + hostname, true);
 }
 
 /*********************************************************************
