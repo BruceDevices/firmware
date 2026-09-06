@@ -152,8 +152,13 @@ void BLE_Sniffer() {
                     packet.payloadHex = payloadToHex(packet.payload);
                     packet.channel = 37 + (i % 3);
 
+                    static const size_t MAX_SNIFFER_PACKETS = 50;
+                    while (snifferPackets.size() >= MAX_SNIFFER_PACKETS) {
+                        snifferPackets.erase(snifferPackets.begin());
+                    }
+
                     snifferPackets.push_back(packet);
-                    snifferPacketCount++;
+                    snifferPacketCount = snifferPackets.size();
                 }
 
                 pSnifferScan->stop();
