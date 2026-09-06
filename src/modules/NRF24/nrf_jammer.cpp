@@ -198,7 +198,11 @@ void nrf_jammer() {
             }
         }
 
-        if (CHECK_NRF_SPI(mode)) NRFradio.stopConstCarrier();
+ if (CHECK_NRF_SPI(mode)) {
+            NRFradio.stopConstCarrier();
+            digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+
+        }
         if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) { NRFSerial.println("OFF"); }
 
     } else {

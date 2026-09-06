@@ -38,6 +38,9 @@
 #ifndef IO_EXP_NFC // Used in T-LoraPager
 #define IO_EXP_NFC -1
 #endif
+#ifndef IO_EXP_UART // Used in MAKO
+#define IO_EXP_UART -1
+#endif
 
 // Button pins (likely inputs on the expander)
 #ifndef IO_EXP_UP
@@ -99,8 +102,13 @@ public:
         output(IO_EXP_CC_RX, LOW); // SMOOCHIE||REAPER
         output(IO_EXP_CC_TX, LOW); // SMOOCHIE||REAPER
         output(IO_EXP_LOGO, HIGH); // BRUCE LOGO LED ON REAPER
-        output(IO_EXP_NRF, HIGH);  // NRF ON BY DEFAULT FOR C5
-        output(IO_EXP_NFC, HIGH);  // ST25R NFC chip power on Lilygo T-LoraPager
+        output(
+            IO_EXP_NRF, HIGH
+        ); // NRF ON BY DEFAULT FOR Mako need a separate setTings FOR MAKO to be able to use a the header
+        output(
+            IO_EXP_UART, HIGH
+        ); // UART ON BY DEFAULT need a separate settings FOR MAKO if high no connecion on header pins
+        output(IO_EXP_NFC, LOW); // ST25R NFC chip power on Lilygo T-LoraPager||MAKO
 
         // Set button pins as inputs
         button(IO_EXP_UP);
