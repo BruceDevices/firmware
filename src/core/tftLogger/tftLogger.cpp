@@ -290,6 +290,11 @@ void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, 
             }
         }
     }
+    if (imageSlot == 0xFF) {
+        imageSlot = 0;
+        strncpy(images[0], file.c_str(), sizeof(images[0]) - 1);
+        images[0][sizeof(images[0]) - 1] = 0;
+    }
 
     // Use image path as identifier in log.data
     uint8_t buffer[MAX_LOG_SIZE];

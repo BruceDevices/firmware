@@ -235,6 +235,7 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
     if (!path.startsWith("/")) path = "/" + path;
     File dest = to.open(path, FILE_WRITE);
     if (!dest) {
+        source.close();
         Serial.println("Fail creating destination file");
         return false;
     }
@@ -243,6 +244,8 @@ bool copyToFs(FS from, FS to, String path, bool draw) {
     int prog = 0;
 
     if (&to == &LittleFS && (LittleFS.totalBytes() - LittleFS.usedBytes()) < tot) {
+        source.close();
+        dest.close();
         displayError("Not enought space", true);
         return false;
     }

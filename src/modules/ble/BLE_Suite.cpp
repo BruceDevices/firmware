@@ -116,6 +116,19 @@ void ScannerData::addDevice(
             if (deviceAddresses[i] == address) {
                 isDuplicate = true;
                 if (rssi > deviceRssi[i]) deviceRssi[i] = rssi;
+                if ((deviceNames[i] == address || deviceNames[i] == "Unknown" || deviceNames[i] == "<no name>" ||
+                     deviceNames[i].isEmpty()) &&
+                    !name.isEmpty() && name != address && name != "Unknown" && name != "<no name>") {
+                    deviceNames[i] = name;
+                    dataVersion++;
+                    if (snapshotCache) {
+                        delete snapshotCache;
+                        snapshotCache = nullptr;
+                    }
+                }
+                if (fastPair) deviceFastPair[i] = true;
+                if (hasHFP) deviceHasHFP[i] = true;
+                deviceTypes[i] |= type;
                 break;
             }
         }
@@ -4225,7 +4238,7 @@ String selectTargetFromScan(const char *title) {
             if (!device) continue;
 
             String address = String(device->getAddress().toString().c_str());
-            String name = String(device->getName().c_str());
+            String name = resolveBleDeviceName(device);
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 // name = "Unknown";
                 name = address;
@@ -4264,7 +4277,7 @@ String selectTargetFromScan(const char *title) {
             if (!device) continue;
 
             String address = String(device->getAddress().toString().c_str());
-            String name = String(device->getName().c_str());
+            String name = resolveBleDeviceName(device);
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 // name = "Unknown";
                 name = address;
