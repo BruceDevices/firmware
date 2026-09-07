@@ -11,6 +11,7 @@
 #include "../rf_utils.h" // setup_rf_rx, find_pulse_index, crc64_ecma, RMT defines
 #include "rf_config.h"   // RF_DBG
 #include "rf_registry.h"
+#include "rf_registry_ext.h"
 #include <globals.h>
 
 // --- Decode tuning (mirrors the classic OOK receiver) ----------------------
@@ -362,6 +363,16 @@ static bool rf_decode_chamberlain_9bit(const std::vector<int> &durations, RfCode
 }
 
 bool rf_decode_ook(const std::vector<int> &durations, RfCodes &out) {
+    // Try callback-based extended decoders first. Each walks the full
+    // duration vector independently looking for its own preamble pattern.
+    const int extCount = rf_protocol_ext_count();
+    for (int p = 0; p < extCount; p++) {
+        const RfProtocolDef *ext = rf_protocol_ext_at(p);
+        if (ext->decode && ext->decode(durations, out)) {
+            return true;
+        }
+    }
+
     if (rf_decode_chamberlain_9bit(durations, out)) return true;
 
     unsigned int timings[RF_MAX_CHANGES];
