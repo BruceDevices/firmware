@@ -292,7 +292,6 @@ void wifi_atk_menu() {
             int encryptionType = WiFi.encryptionType(i);
             int32_t rssi = WiFi.RSSI(i);
             int32_t ch = WiFi.channel(i);
-            String encryptionPrefix = (encryptionType == WIFI_AUTH_OPEN) ? "" : "#";
             String encryptionTypeStr;
             switch (encryptionType) {
                 case WIFI_AUTH_OPEN: encryptionTypeStr = "Open"; break;
@@ -309,17 +308,17 @@ void wifi_atk_menu() {
             String displaySSID = ssid;
             if (displaySSID.length() == 0) { displaySSID = "<Hidden SSID> " + WiFi.BSSIDstr(i); }
 
-            String optionText = encryptionPrefix + displaySSID + " (" + String(rssi) + "|" +
-                                encryptionTypeStr + "|ch." + String(ch) + ")";
+            String optionText = displaySSID + " (" + encryptionTypeStr + "|ch." + String(ch) + ")";
 
-            options.push_back({optionText.c_str(), [=]() {
-                                   ap_record = ap_records[i];
-                                   target_atk_menu(
-                                       WiFi.SSID(i).c_str(),
-                                       WiFi.BSSIDstr(i),
-                                       static_cast<uint8_t>(WiFi.channel(i))
-                                   );
-                               }});
+            Option opt(optionText.c_str(), [=]() {
+                ap_record = ap_records[i];
+                target_atk_menu(
+                    WiFi.SSID(i).c_str(), WiFi.BSSIDstr(i), static_cast<uint8_t>(WiFi.channel(i))
+                );
+            });
+            opt.iconRssi = rssi;
+            opt.iconLock = (encryptionType == WIFI_AUTH_OPEN) ? 2 : 1;
+            options.push_back(opt);
         }
 
         addOptionToMainMenu();

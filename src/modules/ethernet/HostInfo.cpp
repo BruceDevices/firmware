@@ -94,8 +94,7 @@ void HostInfo::setup(const Host &host) {
     };
     const int portCount = sizeof(portNumbers) / sizeof(portNumbers[0]);
 
-    // Initialize display
-    drawMainBorder();
+    // Initialize display — ScrollableTextArea draws its own titled frame.
     tft.setTextSize(FP);
 
     ScrollableTextArea area = ScrollableTextArea("HOST INFO");

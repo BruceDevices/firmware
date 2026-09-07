@@ -66,33 +66,28 @@ void ReverseShell() {
     };
 
     // ── Setup ──────────────────────────────────────────────────
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.drawCentreString("Reverse Shell", tftWidth / 2, 10, 1);
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.setCursor(15, 33);
-    tft.println("Developed by Fourier & Ninja-jr");
-    tft.println("Starting reverse shell server...");
+    drawMainBorderWithTitle("REVERSE SHELL");
+    printSubtitle("by Fourier & Ninja-jr");
+    padprintln("");
+    padprintln("Starting reverse shell server...");
 
     WiFi.mode(WIFI_AP);
     if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
-        tft.println("Failed to configure AP");
+        padprintln("Failed to configure AP");
         return;
     }
 
     // ── AP Password: bruce ─────────────────────────────────────
     if (!WiFi.softAP("BruceShell", "bruce")) {
-        tft.println("Failed to start AP");
+        padprintln("Failed to start AP");
         return;
     }
 
-    tft.println("Wi-Fi AP Started: BruceShell (pass: bruce)");
-    tft.println("IP: " + apGateway.toString());
+    padprintln("Wi-Fi AP Started: BruceShell (pass: bruce)");
+    padprintln("IP: " + apGateway.toString());
 
     tcpServer.begin();
-    tft.println("TCP server started on port 23.");
+    padprintln("TCP server started on port 23.");
 
     // ── Web Interface ──────────────────────────────────────────
     ws.onEvent(onWsEvent);
@@ -162,8 +157,8 @@ void ReverseShell() {
     });
 
     webServer.begin();
-    tft.println("Web server started on port 80!");
-    tft.println("WebSocket server started on /ws");
+    padprintln("Web server started on port 80!");
+    padprintln("WebSocket server started on /ws");
 
     dnsServer.start(53, "*", apGateway);
 
@@ -175,7 +170,7 @@ void ReverseShell() {
         if (!shellConnected) {
             tcpClient = tcpServer.accept();
             if (tcpClient) {
-                tft.println("Client connected.");
+                padprintln("Client connected.");
                 tcpClient.println("~Welcome to BruceShell.");
                 tcpClient.println("~Developed by Fourier & Ninja-jr");
                 tcpClient.println("~Type 'help' for available commands");
@@ -184,13 +179,13 @@ void ReverseShell() {
         }
 
         if (shellConnected && !tcpClient.connected()) {
-            tft.println("Client disconnected.");
+            padprintln("Client disconnected.");
             shellConnected = false;
             tcpClient.stop();
         }
 
         if (check(EscPress)) {
-            tft.println("Exiting reverse shell server...");
+            padprintln("Exiting reverse shell server...");
             tcpServer.stop();
             ws.closeAll();
             webServer.end();

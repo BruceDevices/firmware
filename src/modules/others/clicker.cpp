@@ -131,7 +131,7 @@ void drawMenuItem(
 
     // Draw selection border (green when editing, white when selected)
     if (isSelected && itemIndex != ITEM_START) {
-        uint16_t borderColor = isEdit ? TFT_GREEN : bruceConfig.priColor;
+        uint16_t borderColor = isEdit ? getColorVariation(bruceConfig.priColor, 8, 1) : bruceConfig.priColor;
         int borderWidth = isEdit ? 2 : 1;
 
         for (int i = 0; i < borderWidth; i++) {
@@ -164,7 +164,7 @@ void drawMenuItem(
             int numWidth = strlen(delayStr) * 6 * layout.text_size_large;
 
             tft.setCursor(unitX - numWidth - 12, contentY);
-            if (isEdit && isSelected) tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+            if (isEdit && isSelected) tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
             tft.print(delayStr);
 
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -182,7 +182,7 @@ void drawMenuItem(
             int textWidth = strlen(btnName) * 6 * layout.text_size_large;
 
             tft.setCursor(unitX - textWidth, contentY);
-            if (isEdit && isSelected) tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+            if (isEdit && isSelected) tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
             tft.print(btnName);
             break;
         }
@@ -198,14 +198,14 @@ void drawMenuItem(
                 const char *customText = "Custom";
                 int textWidth = strlen(customText) * 6 * layout.text_size_large;
                 tft.setCursor(unitX - textWidth, contentY);
-                if (isEdit && isSelected) tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                if (isEdit && isSelected) tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
                 tft.print(customText);
             } else if (config.max_clicks == 0) {
                 // Show "Infinite" or "INF" for unlimited clicks
                 const char *infText = (tftWidth > 200) ? "Infinite" : "INF";
                 int textWidth = strlen(infText) * 6 * layout.text_size_large;
                 tft.setCursor(unitX - textWidth, contentY);
-                if (isEdit && isSelected) tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                if (isEdit && isSelected) tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
                 tft.print(infText);
             } else {
                 // Show numeric value
@@ -213,7 +213,7 @@ void drawMenuItem(
                 snprintf(clicksStr, sizeof(clicksStr), "%d", config.max_clicks);
                 int numWidth = strlen(clicksStr) * 6 * layout.text_size_large;
                 tft.setCursor(unitX - numWidth, contentY);
-                if (isEdit && isSelected) tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                if (isEdit && isSelected) tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
                 tft.print(clicksStr);
             }
             break;
@@ -221,13 +221,13 @@ void drawMenuItem(
 
         case ITEM_START: {
             // Draw styled button
-            uint16_t btnColor = isSelected ? TFT_DARKGREEN : TFT_DARKGREY;
+            uint16_t btnColor = isSelected ? bruceConfig.priColor : getColorVariation(bruceConfig.priColor, 8, -1);
             tft.fillRoundRect(
                 layout.margin, yPos, tftWidth - 2 * layout.margin, layout.button_height, 8, btnColor
             );
 
             // Centered text
-            tft.setTextColor(TFT_WHITE, btnColor);
+            tft.setTextColor(bruceConfig.bgColor, btnColor);
             const char *btnText = (tftWidth > 200) ? "START CLICK" : "START";
             int textWidth = strlen(btnText) * 6 * layout.text_size_large;
             tft.setCursor(
@@ -276,9 +276,9 @@ void drawClickingScreen(const LayoutConfig &layout, const char *buttonName) {
 
     // Animated header to show active state
     const int headerHeight = (tftHeight > 200) ? 40 : 30;
-    tft.fillRect(0, 0, tftWidth, headerHeight, TFT_DARKGREEN);
+    tft.fillRect(0, 0, tftWidth, headerHeight, bruceConfig.priColor);
     tft.setTextSize((tftWidth > 200) ? 2 : 1);
-    tft.setTextColor(TFT_WHITE, TFT_DARKGREEN);
+    tft.setTextColor(bruceConfig.bgColor, bruceConfig.priColor);
 
     const char *headerText = (tftWidth > 200) ? "-> CLICKING <-" : "-> CLICK <-";
     int headerWidth = strlen(headerText) * 6 * ((tftWidth > 200) ? 2 : 1);
@@ -328,7 +328,7 @@ void updateCPSDisplay(const LayoutConfig &layout, int currentCPS, unsigned long 
     char cpsStr[16];
     snprintf(cpsStr, sizeof(cpsStr), "%d", currentCPS);
     tft.setTextSize(cpsSize);
-    tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+    tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
     int cpsWidth = strlen(cpsStr) * 6 * cpsSize;
     tft.setCursor((tftWidth - cpsWidth) / 2, cpsY);
     tft.print(cpsStr);
@@ -376,9 +376,9 @@ void drawSummaryScreen(
     tft.fillScreen(bruceConfig.bgColor);
 
     // Header shows completion status
-    uint16_t headerColor = completed ? TFT_DARKGREEN : TFT_DARKGREY;
+    uint16_t headerColor = completed ? bruceConfig.priColor : getColorVariation(bruceConfig.priColor, 8, -1);
     tft.fillRect(0, 0, tftWidth, layout.header_height, headerColor);
-    tft.setTextColor(TFT_WHITE, headerColor);
+    tft.setTextColor(bruceConfig.bgColor, headerColor);
     tft.setTextSize(layout.text_size_large);
 
     const char *statusText = completed ? "COMPLETED" : "STOPPED";
@@ -425,9 +425,9 @@ void drawUSBInitScreen(const LayoutConfig &layout) {
 
     // Header
     const int headerHeight = (tftHeight > 200) ? 40 : 30;
-    tft.fillRect(0, 0, tftWidth, headerHeight, TFT_ORANGE);
+    tft.fillRect(0, 0, tftWidth, headerHeight, bruceConfig.priColor);
     tft.setTextSize((tftWidth > 200) ? 2 : 1);
-    tft.setTextColor(TFT_WHITE, TFT_ORANGE);
+    tft.setTextColor(bruceConfig.bgColor, bruceConfig.priColor);
 
     const char *headerText = "USB INIT";
     int headerWidth = strlen(headerText) * 6 * ((tftWidth > 200) ? 2 : 1);
@@ -451,7 +451,7 @@ void drawUSBInitScreen(const LayoutConfig &layout) {
 
     // Countdown animation (3 seconds)
     tft.setTextSize((tftWidth > 200) ? 3 : 2);
-    tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+    tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, 1), bruceConfig.bgColor);
 
     for (int i = 3; i > 0; i--) {
         // Clear previous number
@@ -830,7 +830,7 @@ void clicker_setup() {
     delay(2000);
 
     // Show restart/exit prompt
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(layout.text_size_small);
     int promptY = tftHeight - 20;
     tft.fillRect(0, promptY - 5, tftWidth, 25, bruceConfig.bgColor);
