@@ -674,6 +674,8 @@ String BruceConfig::getWifiPassword(const String &ssid) const {
     return "";
 }
 
+bool BruceConfig::hasWifiCredential(const String &ssid) const { return wifi.find(ssid) != wifi.end(); }
+
 void BruceConfig::addEvilWifiName(String value) {
     evilWifiNames.insert(value);
     saveFile();

@@ -169,6 +169,7 @@ public:
     void addQrCodeEntry(const String &menuName, const String &content);
     void removeQrCodeEntry(const String &menuName);
     String getWifiPassword(const String &ssid) const;
+    bool hasWifiCredential(const String &ssid) const;
     void addEvilWifiName(String value);
     void removeEvilWifiName(String value);
     void setEvilEndpointCreds(String value);
