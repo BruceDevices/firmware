@@ -10,7 +10,6 @@ MainMenu::MainMenu() {
         &rfMenu,
         &nrf24Menu,
         &rfidMenu,
-        &fileMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
 #endif
