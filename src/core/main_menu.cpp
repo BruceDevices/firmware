@@ -10,7 +10,6 @@ MainMenu::MainMenu() {
         &rfMenu,
         &nrf24Menu,
         &rfidMenu,
-        &othersMenu,
         &configMenu,
     };
 
