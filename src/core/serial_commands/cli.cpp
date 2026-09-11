@@ -3,7 +3,6 @@
 #include "core/sd_functions.h"
 #include "crypto_commands.h"
 #include "gpio_commands.h"
-#include "interpreter_commands.h"
 #include "power_commands.h"
 #include "rf_commands.h"
 #include "rfid_commands.h"
@@ -45,9 +44,6 @@ void SerialCli::setup() {
 
 #ifdef USB_as_HID
     createBadUsbCommands(&_cli);
-#endif
-#ifndef LITE_VERSION
-    createInterpreterCommands(&_cli);
 #endif
 #ifdef HAS_SCREEN
     createScreenCommands(&_cli);

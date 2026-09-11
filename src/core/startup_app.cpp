@@ -8,11 +8,9 @@
 
 #include "startup_app.h"
 
-#include "core/menu_items/ScriptsMenu.h"
 #include "core/settings.h" // clock
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
-#include "modules/bjs_interpreter/interpreter.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/rf/rf_send.h"
 #include "modules/rfid/PN532KillerTools.h"
@@ -34,14 +32,6 @@ StartupApp::StartupApp() {
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-    _startupApps["JS Interpreter"] = []() {
-        FS *fs = nullptr;
-        getScriptsFolder(fs);
-        if (fs == nullptr) return;
-        run_bjs_script_headless(*fs, bruceConfig.startupAppJSInterpreterFile);
-    };
-#endif
 }
 
 bool StartupApp::startApp(const String &appName) const {

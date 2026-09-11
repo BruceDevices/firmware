@@ -2,7 +2,6 @@
 #include "bus_HAL.h"
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
-#include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/audio.h"
 #if defined(HAS_NS4168_SPKR)
 #include "modules/others/audio_player.h"
@@ -843,15 +842,6 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                              if (readSubFile(&fs, filepath, data))
                                                                  txSubFile(data);
                                                          }});
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-                    if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
-                        options.insert(options.begin(), {"JS Script Run", [&]() {
-                                                             delay(200);
-                                                             run_bjs_script_headless(fs, filepath);
-                                                             exit = true;
-                                                         }});
-                    }
-#endif
 #if defined(USB_as_HID)
                     if (filepath.endsWith(".txt")) {
                         options.push_back({"BadUSB Run", [&]() {
