@@ -179,18 +179,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 
-    if (!root["LoRa_Pins"].isNull()) {
-        SPIPins def = LoRa_bus;
-        LoRa_bus.fromJson(root["LoRa_Pins"].as<JsonObject>());
-        if (LoRa_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
-            LoRa_bus = def;
-            count++;
-        }
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!root["ST25R_Pins"].isNull()) {
         SPIPins def = ST25R_bus;
         ST25R_bus.fromJson(root["ST25R_Pins"].as<JsonObject>());
@@ -272,9 +260,6 @@ void BruceConfigPins::toJson(JsonObject obj) const {
 #if !defined(LITE_VERSION)
     JsonObject _W5500 = root["W5500_Pins"].to<JsonObject>();
     W5500_bus.toJson(_W5500);
-
-    JsonObject _LoRa = root["LoRa_Pins"].to<JsonObject>();
-    LoRa_bus.toJson(_LoRa);
 
     JsonObject _ST25R = root["ST25R_Pins"].to<JsonObject>();
     ST25R_bus.toJson(_ST25R);
@@ -391,7 +376,6 @@ void BruceConfigPins::validateConfig() {
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
     validateSpiPins(ST25R_bus);
-    validateSpiPins(LoRa_bus);
     validateSpiPins(W5500_bus);
 #endif
     validateSpiPins(CC1101_bus);
@@ -404,13 +388,8 @@ void BruceConfigPins::validateConfig() {
     validateUARTPins(gps_bus);
 }
 #if !defined(LITE_VERSION)
-void BruceConfigPins::setLoRaPins(SPIPins value) {
-    LoRa_bus = value;
-    validateSpiPins(LoRa_bus);
-    saveFile();
-}
 void BruceConfigPins::setW5500Pins(SPIPins value) {
-    LoRa_bus = value;
+    W5500_bus = value;
     validateSpiPins(W5500_bus);
     saveFile();
 }

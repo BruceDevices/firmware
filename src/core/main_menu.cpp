@@ -9,9 +9,6 @@ MainMenu::MainMenu() {
         &bleMenu,
         &rfMenu,
         &nrf24Menu,
-#if !defined(LITE_VERSION)
-        &loraMenu,
-#endif
         &irMenu,
 #if !defined(LITE_VERSION)
         &ethernetMenu,

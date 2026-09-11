@@ -499,7 +499,6 @@ void Wardriving::releasePins() {
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #if !defined(LITE_VERSION)
         bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-        bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
         // T-Embed CC1101 and T-Display S3 Touch ties this pin to the NRF24 CS;
@@ -533,7 +532,6 @@ void Wardriving::restorePins() {
             bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #if !defined(LITE_VERSION)
             bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-            bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
             // Restore the original board state after leaving the GPS app s

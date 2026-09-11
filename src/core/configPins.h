@@ -195,18 +195,6 @@ public:
     SPIPins W5500_bus;
 #endif
 
-#ifdef LORA_SCK
-    SPIPins LoRa_bus = {
-        (gpio_num_t)LORA_SCK,
-        (gpio_num_t)LORA_MISO,
-        (gpio_num_t)LORA_MOSI,
-        (gpio_num_t)LORA_CS,
-        (gpio_num_t)LORA_RST,
-        (gpio_num_t)LORA_DIO0
-    };
-#else
-    SPIPins LoRa_bus;
-#endif
 #endif
     I2CPins sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
     I2CPins i2c_bus = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
@@ -264,7 +252,6 @@ public:
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
     void setSR25RPins(SPIPins value);
-    void setLoRaPins(SPIPins value);
     void setW5500Pins(SPIPins value);
 #endif
     void setSpiPins(SPIPins value);
