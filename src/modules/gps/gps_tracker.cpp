@@ -243,9 +243,6 @@ void GPSTracker::releasePins() {
     rxPinReleased = false;
     if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-#if !defined(LITE_VERSION)
-        bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-#endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
         // T-Embed CC1101 and T-Display S3 Touch ties this pin to the NRF24 CS; switch it to input so the GPS
         // UART can drive it.
@@ -258,19 +255,12 @@ void GPSTracker::restorePins() {
     if (rxPinReleased) {
         if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-#if !defined(LITE_VERSION)
-            bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-#endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
             // Restore the original board state after leaving the GPS app s
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
             if (bruceConfigPins.gps_bus.rx == bruceConfigPins.CC1101_bus.cs ||
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.NRF24_bus.cs ||
-#if !defined(LITE_VERSION)
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-#endif
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.SDCARD_bus.cs) {
                 // If it is conflicting to an SPI CS pin, keep it HIGH
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);

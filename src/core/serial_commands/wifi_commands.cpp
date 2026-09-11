@@ -7,7 +7,6 @@
 #include "esp_netif_net_stack.h"
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/tcp_utils.h"
-#include <modules/ethernet/ARPScanner.h>
 // #include "modules/wifi/responder.h"
 #endif
 uint32_t wifiCallback(cmd *c) {
@@ -72,7 +71,6 @@ uint32_t scanHostsCallback(cmd *c) {
         return false;
     }
 
-    ARPScanner{esp_netinterface};
 
     return true;
 }

@@ -182,18 +182,6 @@ public:
 #endif
 
 #if !defined(LITE_VERSION)
-#if defined(W5500_SCK_PIN)
-    SPIPins W5500_bus = {
-        (gpio_num_t)W5500_SCK_PIN,
-        (gpio_num_t)W5500_MISO_PIN,
-        (gpio_num_t)W5500_MOSI_PIN,
-        (gpio_num_t)W5500_SS_PIN,
-        (gpio_num_t)W5500_INT_PIN,
-        (gpio_num_t)W5500_RST_PIN,
-    };
-#else
-    SPIPins W5500_bus;
-#endif
 
 #endif
     I2CPins sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
@@ -252,7 +240,6 @@ public:
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
     void setSR25RPins(SPIPins value);
-    void setW5500Pins(SPIPins value);
 #endif
     void setSpiPins(SPIPins value);
     void setI2CPins(I2CPins value);

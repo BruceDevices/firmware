@@ -172,13 +172,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 #if !defined(LITE_VERSION)
-    if (!root["W5500_Pins"].isNull()) {
-        W5500_bus.fromJson(root["W5500_Pins"].as<JsonObject>());
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!root["ST25R_Pins"].isNull()) {
         SPIPins def = ST25R_bus;
         ST25R_bus.fromJson(root["ST25R_Pins"].as<JsonObject>());
@@ -258,9 +251,6 @@ void BruceConfigPins::toJson(JsonObject obj) const {
     SDCARD_bus.toJson(_SD);
 
 #if !defined(LITE_VERSION)
-    JsonObject _W5500 = root["W5500_Pins"].to<JsonObject>();
-    W5500_bus.toJson(_W5500);
-
     JsonObject _ST25R = root["ST25R_Pins"].to<JsonObject>();
     ST25R_bus.toJson(_ST25R);
 #endif
@@ -376,7 +366,6 @@ void BruceConfigPins::validateConfig() {
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
     validateSpiPins(ST25R_bus);
-    validateSpiPins(W5500_bus);
 #endif
     validateSpiPins(CC1101_bus);
     validateSpiPins(NRF24_bus);
@@ -388,11 +377,6 @@ void BruceConfigPins::validateConfig() {
     validateUARTPins(gps_bus);
 }
 #if !defined(LITE_VERSION)
-void BruceConfigPins::setW5500Pins(SPIPins value) {
-    W5500_bus = value;
-    validateSpiPins(W5500_bus);
-    saveFile();
-}
 void BruceConfigPins::setSR25RPins(SPIPins value) {
     ST25R_bus = value;
     validateSpiPins(ST25R_bus);
