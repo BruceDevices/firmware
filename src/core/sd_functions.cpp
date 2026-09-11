@@ -3,8 +3,6 @@
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
-#include "modules/gps/wdgwars.h"
-#include "modules/gps/wigle.h"
 #include "modules/others/audio.h"
 #if defined(HAS_NS4168_SPKR)
 #include "modules/others/audio_player.h"
@@ -845,28 +843,6 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                              if (readSubFile(&fs, filepath, data))
                                                                  txSubFile(data);
                                                          }});
-                    if (filepath.endsWith(".csv")) {
-                        options.insert(options.begin(), {"Wigle Upload", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"Wigle Up All", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload_all(&fs, Folder);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Upload", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Up All", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload_all(&fs, Folder);
-                                                         }});
-                    }
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
                     if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
                         options.insert(options.begin(), {"JS Script Run", [&]() {

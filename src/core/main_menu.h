@@ -8,7 +8,6 @@
 #include "menu_items/ConfigMenu.h"
 #include "menu_items/ConnectMenu.h"
 #include "menu_items/FileMenu.h"
-#include "menu_items/GpsMenu.h"
 #include "menu_items/NRF24.h"
 #include "menu_items/OthersMenu.h"
 #include "menu_items/RFIDMenu.h"
@@ -22,7 +21,6 @@ public:
     ClockMenu clockMenu;
     ConnectMenu connectMenu;
     ConfigMenu configMenu;
-    GpsMenu gpsMenu;
     NRF24Menu nrf24Menu;
     OthersMenu othersMenu;
     RFIDMenu rfidMenu;
