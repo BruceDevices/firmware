@@ -12,9 +12,6 @@ MainMenu::MainMenu() {
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
-#if defined(FM_SI4713) && !defined(LITE_VERSION)
-        &fmMenu,
-#endif
         &irMenu,
 #if !defined(LITE_VERSION)
         &ethernetMenu,
