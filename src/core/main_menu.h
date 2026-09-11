@@ -4,7 +4,6 @@
 #include <MenuItemInterface.h>
 
 #include "menu_items/BleMenu.h"
-#include "menu_items/ClockMenu.h"
 #include "menu_items/ConfigMenu.h"
 #include "menu_items/ConnectMenu.h"
 #include "menu_items/FileMenu.h"
@@ -18,7 +17,6 @@ class MainMenu {
 public:
     FileMenu fileMenu;
     BleMenu bleMenu;
-    ClockMenu clockMenu;
     ConnectMenu connectMenu;
     ConfigMenu configMenu;
     NRF24Menu nrf24Menu;
