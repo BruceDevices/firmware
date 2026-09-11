@@ -4,7 +4,6 @@
 #include "crypto_commands.h"
 #include "gpio_commands.h"
 #include "interpreter_commands.h"
-#include "ir_commands.h"
 #include "power_commands.h"
 #include "rf_commands.h"
 #include "rfid_commands.h"
@@ -36,7 +35,6 @@ void SerialCli::setup() {
 
     createCryptoCommands(&_cli);
     createGpioCommands(&_cli);
-    createIrCommands(&_cli);
     createPowerCommands(&_cli);
     createRfCommands(&_cli);
     createRfidCommands(&_cli);

@@ -9,7 +9,6 @@ MainMenu::MainMenu() {
         &bleMenu,
         &rfMenu,
         &nrf24Menu,
-        &irMenu,
         &gpsMenu,
         &rfidMenu,
         &fileMenu,

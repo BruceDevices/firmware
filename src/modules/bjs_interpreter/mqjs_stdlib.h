@@ -9,7 +9,6 @@
 #include "globals_js.h"
 #include "gpio_js.h"
 #include "i2c_js.h"
-#include "ir_js.h"
 #include "keyboard_js.h"
 #include "led_js.h"
 #include "math_js.h"
@@ -5533,18 +5532,6 @@ static const JSCFunctionDef js_c_function_table[] = {
   { { .generic = native_i2c_write_read },
     JS_ROM_VALUE(1230) /* writeRead */,
     JS_CFUNC_generic, 4, 0 },
-  { { .generic = native_irRead },
-    JS_ROM_VALUE(1227) /* read */,
-    JS_CFUNC_generic, 1, 0 },
-  { { .generic = native_irReadRaw },
-    JS_ROM_VALUE(1236) /* readRaw */,
-    JS_CFUNC_generic, 1, 0 },
-  { { .generic = native_irTransmitFile },
-    JS_ROM_VALUE(1239) /* transmitFile */,
-    JS_CFUNC_generic, 1, 0 },
-  { { .generic = native_irTransmit },
-    JS_ROM_VALUE(1244) /* transmit */,
-    JS_CFUNC_generic, 3, 0 },
   { { .generic = native_keyboard },
     JS_ROM_VALUE(1248) /* keyboard */,
     JS_CFUNC_generic, 4, 0 },
@@ -5943,4 +5930,3 @@ const JSSTDLibraryDef js_stdlib = {
   4333,
   JS_CLASS_COUNT,
 };
-

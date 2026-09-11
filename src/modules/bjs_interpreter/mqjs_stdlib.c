@@ -391,10 +391,6 @@ const JSClassDef js_badusb_obj = JS_OBJECT_DEF("BadUSB", js_badusb);
 
 /* IR module */
 static const JSPropDef js_ir[] = {
-    JS_CFUNC_DEF("read", 1, native_irRead),
-    JS_CFUNC_DEF("readRaw", 1, native_irReadRaw),
-    JS_CFUNC_DEF("transmitFile", 1, native_irTransmitFile),
-    JS_CFUNC_DEF("transmit", 3, native_irTransmit),
     JS_PROP_END,
 };
 
