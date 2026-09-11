@@ -15,6 +15,9 @@ public:
 
 private:
     void configMenu(void);
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    void gpsModuleMenu(void);
+#endif
 };
 
 #endif

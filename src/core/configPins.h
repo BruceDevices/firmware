@@ -24,6 +24,14 @@ enum RFModules {
     CC1101_SPI_MODULE = 1,
 };
 
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+enum GPSModules {
+    GPS_MODULE_LORA_CAP = 0,   // pins 15/13, baud 115200
+    GPS_MODULE_GROVE_PORT = 1, // pins 2/1, baud 9600
+    GPS_MODULE_CUSTOM = 2,     // user-defined pins
+};
+#endif
+
 class BruceConfigPins {
 public:
     struct UARTPins {
@@ -241,6 +249,11 @@ public:
     // GPS
     int gpsBaudrate = 9600;
 
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    // GPS Module Selector (Cardputer-specific)
+    GPSModules gpsModule = GPS_MODULE_CUSTOM;
+#endif
+
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
@@ -305,4 +318,11 @@ public:
     // GPS
     void setGpsBaudrate(int value);
     void validateGpsBaudrateValue();
+
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    // GPS Module Selector
+    void setGpsModule(GPSModules value);
+    void validateGpsModuleValue();
+    void applyGpsModulePreset();
+#endif
 };

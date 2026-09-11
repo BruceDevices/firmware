@@ -129,9 +129,21 @@ void _post_setup_gpio() {
     bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
     bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
 
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    // GPS pins are managed by the gpsModule config selector (GPS > Config > GPS Module).
+    // Only apply the LoRa cap preset if the module has not been explicitly configured yet.
+    // This prevents the config from being overwritten on every boot (fixes GPS pin reset bug).
+    if (bruceConfigPins.gpsModule == GPS_MODULE_CUSTOM &&
+        bruceConfigPins.gps_bus.rx == GPIO_NUM_NC) {
+        // First boot with new firmware: preserve old default (LoRa cap behavior)
+        bruceConfigPins.gpsModule = GPS_MODULE_LORA_CAP;
+        bruceConfigPins.applyGpsModulePreset();
+    }
+#else
     bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
+#endif
 
     bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;

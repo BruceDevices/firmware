@@ -125,6 +125,15 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    if (!root["gpsModule"].isNull()) {
+        gpsModule = (GPSModules)root["gpsModule"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+#endif
+
     if (!root["CC1101_Pins"].isNull()) {
         SPIPins def = CC1101_bus;
         CC1101_bus.fromJson(root["CC1101_Pins"].as<JsonObject>());
@@ -256,6 +265,10 @@ void BruceConfigPins::toJson(JsonObject obj) const {
     root["rfidModule"] = rfidModule;
     root["gpsBaudrate"] = gpsBaudrate;
     root["iButton"] = iButton;
+
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    root["gpsModule"] = (int)gpsModule;
+#endif
 
     JsonObject _CC1101 = root["CC1101_Pins"].to<JsonObject>();
     CC1101_bus.toJson(_CC1101);
@@ -389,6 +402,9 @@ void BruceConfigPins::validateConfig() {
     validateRfModuleValue();
     validateRfidModuleValue();
     validateGpsBaudrateValue();
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+    validateGpsModuleValue();
+#endif
 #if !defined(LITE_VERSION)
     validateSpiPins(ST25R_bus);
     validateSpiPins(LoRa_bus);
@@ -584,3 +600,37 @@ void BruceConfigPins::validateGpsBaudrateValue() {
         gpsBaudrate != 115200)
         gpsBaudrate = 9600;
 }
+
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+void BruceConfigPins::setGpsModule(GPSModules value) {
+    gpsModule = value;
+    validateGpsModuleValue();
+    applyGpsModulePreset();
+    saveFile();
+}
+
+void BruceConfigPins::validateGpsModuleValue() {
+    if (gpsModule != GPS_MODULE_LORA_CAP && gpsModule != GPS_MODULE_GROVE_PORT &&
+        gpsModule != GPS_MODULE_CUSTOM) {
+        gpsModule = GPS_MODULE_CUSTOM;
+    }
+}
+
+void BruceConfigPins::applyGpsModulePreset() {
+    switch (gpsModule) {
+        case GPS_MODULE_LORA_CAP:
+            gps_bus.rx = (gpio_num_t)15;
+            gps_bus.tx = (gpio_num_t)13;
+            gpsBaudrate = 115200;
+            break;
+        case GPS_MODULE_GROVE_PORT:
+            gps_bus.rx = (gpio_num_t)2;
+            gps_bus.tx = (gpio_num_t)1;
+            gpsBaudrate = 9600;
+            break;
+        case GPS_MODULE_CUSTOM:
+            // Preserve whatever the user has set
+            break;
+    }
+}
+#endif

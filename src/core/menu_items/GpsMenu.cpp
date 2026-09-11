@@ -32,13 +32,38 @@ void GpsMenu::wardrivingMenu() {
 }
 void GpsMenu::configMenu() {
     options = {
-        {"Baudrate", setGpsBaudrateMenu                                 },
-        {"GPS Pins", [=]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }},
-        {"Back",     [this]() { optionsMenu(); }                        },
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+        {"GPS Module", [this]() { gpsModuleMenu(); }                    },
+#endif
+        {"Baudrate",   setGpsBaudrateMenu                               },
+        {"GPS Pins",   [=]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }},
+        {"Back",       [this]() { optionsMenu(); }                      },
     };
 
     loopOptions(options, MENU_TYPE_SUBMENU, "GPS Config");
 }
+
+#ifdef CARDPUTER_GPS_MODULE_SELECT
+void GpsMenu::gpsModuleMenu() {
+    options = {
+        {"LoRa Cap (15/13)", [this]() {
+             bruceConfigPins.setGpsModule(GPS_MODULE_LORA_CAP);
+             configMenu();
+         }},
+        {"Grove Port (2/1)", [this]() {
+             bruceConfigPins.setGpsModule(GPS_MODULE_GROVE_PORT);
+             configMenu();
+         }},
+        {"Custom",           [this]() {
+             bruceConfigPins.setGpsModule(GPS_MODULE_CUSTOM);
+             configMenu();
+         }},
+        {"Back",             [this]() { configMenu(); }},
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "GPS Module");
+}
+#endif
 
 void GpsMenu::drawIcon(float scale) {
     clearIconArea();
