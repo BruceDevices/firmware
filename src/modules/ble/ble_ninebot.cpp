@@ -185,6 +185,7 @@ void BLENinebot::loop() {
                      loopOptions(deviceSelection);
                  }}
             );
+            deviceSelection.back().iconRssi = adv->getRSSI();
         }
 
         bool returnToMenu = false;
