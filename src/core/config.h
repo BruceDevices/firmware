@@ -41,6 +41,7 @@ public:
 
     //  Settings
     int dimmerSet = 60;
+    int autoDeepSleepSet = 0; // seconds of inactivity before deep sleep, 0 = disabled
     int bright = 100;
     bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;
@@ -131,6 +132,8 @@ public:
     // Settings
     void setDimmer(int value);
     void validateDimmerValue();
+    void setAutoDeepSleep(int value);
+    void validateAutoDeepSleepValue();
     void setBright(uint8_t value);
     void validateBrightValue();
     void setAutomaticTimeUpdateViaNTP(bool value);

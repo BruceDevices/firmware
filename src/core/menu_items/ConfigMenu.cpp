@@ -65,6 +65,7 @@ void ConfigMenu::displayUIMenu() {
         std::vector<Option> localOptions = {
             {"Brightness",  [this]() { setBrightnessMenu(); }               },
             {"Dim Time",    [this]() { setDimmerTimeMenu(); }               },
+            {"Deep Sleep Time", [this]() { setAutoDeepSleepMenu(); }        },
             {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
             {"Menu Layout", [this]() { setMainMenuStyleMenu(); }            },
             {"UI Color",    [this]() { setUIColor(); }                      },
