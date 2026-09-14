@@ -14,6 +14,7 @@ void NRF24Menu::optionsMenu() {
     options.push_back({"MouseJack", nrf_mousejack});
     #endif
     options.push_back({"NRF Jammer", nrf_jammer});
+    options.push_back({"CH hopper", nrf_channel_hopper});
 
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
     options.push_back({"Config pins", [this]() { configMenu(); }});
