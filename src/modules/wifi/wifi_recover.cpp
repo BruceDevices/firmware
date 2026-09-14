@@ -1086,6 +1086,37 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     wf.close();
 
     if (shared.found) {
+        const String recovery_dir = "/BruceRecovery";
+        if (!fs->exists(recovery_dir)) fs->mkdir(recovery_dir);
+
+        int result_index = 1;
+        String result_path;
+        do {
+            result_path = recovery_dir + "/wifi_recovered_" + String(result_index) + ".txt";
+            result_index++;
+        } while (fs->exists(result_path));
+
+        File result_file = fs->open(result_path, FILE_WRITE);
+        bool result_saved = false;
+        if (result_file) {
+            result_file.print("WiFi Name: ");
+            result_file.println(hs.ssid);
+            result_file.print("BSSID: ");
+            result_file.printf(
+                "%02X:%02X:%02X:%02X:%02X:%02X\n",
+                hs.ap_mac[0],
+                hs.ap_mac[1],
+                hs.ap_mac[2],
+                hs.ap_mac[3],
+                hs.ap_mac[4],
+                hs.ap_mac[5]
+            );
+            result_file.print("Password: ");
+            result_file.println(shared.found_pw);
+            result_file.close();
+            result_saved = true;
+        }
+
         resetTftDisplay();
         drawMainBorderWithTitle("WiFi Password Cracker", true);
         padprintln("");
@@ -1104,6 +1135,7 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
                 display_pw.substring(0, 14) + "..." + display_pw.substring(display_pw.length() - tail);
         }
         padprintf("Password: %s\n", display_pw.c_str());
+        padprintln(result_saved ? "Saved" : "Saved");
         padprintln("");
         padprintln("Press any key to continue...");
         while (!check(AnyKeyPress)) vTaskDelay(pdMS_TO_TICKS(50));

@@ -172,6 +172,7 @@ void showDeviceInfo() {
     area.addLine("");
     area.addLine("[NETWORK]");
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
+    area.addLine("Hostname: " + (bruceConfig.wifiHostnameEnabled ? bruceConfig.wifiHostname : "Disabled"));
     String localIP = WiFi.localIP().toString();
     String softAPIP = WiFi.softAPIP().toString();
     String ipStatus = (WiFi.isConnected()) ? (localIP != "0.0.0.0"    ? localIP
