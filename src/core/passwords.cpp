@@ -172,6 +172,44 @@ String encryptString(String &plaintext, const String &password_str) {
     return out;
 }
 
+String encryptFileHeader() {
+    // Same header encryptString() writes, up to (and including) the "Data: " prefix.
+    // The hex payload that follows may be appended incrementally across chunks.
+    String out = "Filetype: Bruce Encrypted File\nVersion: 1\n";
+    out += "Algo: XOR\n";
+    out += "KeyDerivationAlgo: MD5\n";
+    out += "KeyDerivationPasses: 10\n";
+    out += "Data: ";
+    return out;
+}
+
+String encryptChunkToHex(const uint8_t *data, size_t len, const String &password_str, size_t streamOffset) {
+    // Derive the same 16-byte key xorEncryptDecryptMD5() uses (MD5 of the password, 10
+    // passes), so a chunk-encrypted file decrypts identically to a single-shot one.
+    MD5Builder md5;
+    String hash = password_str;
+    for (int i = 0; i < 10; i++) {
+        md5.begin();
+        md5.add(hash);
+        md5.calculate();
+    }
+    uint8_t md5Hash[16];
+    md5.getBytes(md5Hash);
+
+    // Fixed-width "XX " per byte: the reader parses the Data line in 3-char groups, so
+    // every byte must be two uppercase hex digits followed by a separator.
+    static const char hexDigits[] = "0123456789ABCDEF";
+    String out;
+    out.reserve(len * 3);
+    for (size_t i = 0; i < len; i++) {
+        uint8_t b = data[i] ^ md5Hash[(streamOffset + i) % 16];
+        out += hexDigits[(b >> 4) & 0x0F];
+        out += hexDigits[b & 0x0F];
+        out += ' ';
+    }
+    return out;
+}
+
 /* OLD:
 String decryptString(String& cypertext, const String& password_str)
 
