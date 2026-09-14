@@ -1,8 +1,8 @@
 /*
   Bruce Enhanced Karma attack module v2
   Author: Ninja-Jr. (@Ninja-jr)
-  Version: 2.0
-  Last updated: 27/08/2026
+  Version: 2.1.1
+  Last updated: 14/09/2026
 */
 
 #ifndef KARMA_ATTACK_H
@@ -24,6 +24,25 @@ enum AttackTier {
     TIER_MEDIUM = 2, // Standard priority targets
     TIER_HIGH = 3,   // High-value targets
     TIER_CLONE = 4   // Clone network attacks
+};
+
+// SSID database region tags
+// Only NA, EU, and GL are used. GL is always broadcast in every region.
+enum SSIDRegion : uint8_t {
+    REGION_GL = 0,   // Global / universal — always broadcast
+    REGION_NA = 1,   // North America
+    REGION_EU = 2,   // Europe
+    REGION_COUNT = 3,
+    REGION_ALL = 255 // No filter — broadcast everything
+};
+
+// SSID database operation result
+enum SSIDDBResult : uint8_t {
+    SSIDDB_OK = 0,
+    SSIDDB_NO_FS,       // Neither SD nor LittleFS available
+    SSIDDB_NO_FILE,     // /ssid_list.txt missing
+    SSIDDB_EMPTY,       // Filter produced zero lines
+    SSIDDB_WRITE_FAIL   // Filtered file couldn't be written
 };
 
 // Broadcast attack configuration
@@ -327,8 +346,11 @@ private:
 // SSID Database class
 class SSIDDatabase {
 private:
-    static String currentFilename;
+    static String currentFilename;    // File currently being read (raw or filtered)
+    static String originalFilename;   // The raw, untagged file (never overwritten)
+    static String filteredFilename;   // The region-filtered working file
     static bool useLittleFS;
+    static SSIDRegion activeRegion;
     static std::vector<String> currentBatch;
     static size_t currentBatchStart;
     static std::map<String, size_t> lruCache;
@@ -355,6 +377,13 @@ public:
     static bool isLoaded();
     static String getSourceFile();
     static size_t getCacheSize();
+
+    // Region support
+    static SSIDDBResult setActiveRegion(SSIDRegion region);
+    static SSIDRegion getActiveRegion();
+    static String getRegionName(SSIDRegion r);
+    static size_t countRegion(const String &srcFile, bool useLFS, SSIDRegion r);
+    static String getOriginalFile();
 };
 
 // Operation modes for Karma
