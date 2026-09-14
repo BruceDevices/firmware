@@ -37,6 +37,7 @@
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "modules/wifi/socks4_proxy.h"
 #include "modules/wifi/tcp_utils.h"
+#include "modules/wifi/wifi_analyzer.h"
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
 bool showHiddenNetworks = false;
@@ -95,6 +96,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
+    options.push_back({"WiFi Analyzer", wifiAnalyzerMenu});
     options.push_back({"Config", [this]() { configMenu(); }});
 
     addOptionToMainMenu();
