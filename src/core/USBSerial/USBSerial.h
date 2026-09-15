@@ -18,6 +18,7 @@ public:
     void flush() override { out->flush(); }
     int available() override { return out->available(); }
     size_t write(uint8_t *str, size_t size) override { return out->write(str, size); }
+    int read() override { return out->read(); }
     void setSerialOutput(Stream *in) { out = in; }
     Stream *getSerialOutput() { return out; }
     USBSerial(Stream *in = &Serial) { out = in; }

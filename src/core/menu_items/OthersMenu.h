@@ -14,7 +14,7 @@ public:
     void drawIcon(float scale);
 
     bool hasTheme() { return bruceConfig.theme.others; }
-    String themePath() { return bruceConfig.theme.paths.others; }
+    const String& themePath() override { return bruceConfig.theme.paths.others; }
 };
 
 #endif

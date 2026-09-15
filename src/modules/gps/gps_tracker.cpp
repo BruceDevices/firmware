@@ -40,6 +40,7 @@ void GPSTracker::setup() {
 
 bool GPSTracker::begin_gps() {
     releasePins();
+    pinMode(bruceConfigPins.gps_bus.rx, INPUT);
     GPSserial.begin(
         bruceConfigPins.gpsBaudrate, SERIAL_8N1, bruceConfigPins.gps_bus.rx, bruceConfigPins.gps_bus.tx
     );
@@ -103,7 +104,9 @@ void GPSTracker::loop() {
         int tmp = millis();
         while (millis() - tmp < MAX_WAIT && !gps.location.isUpdated()) {
             if (check(EscPress) || returnToMenu) return end();
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

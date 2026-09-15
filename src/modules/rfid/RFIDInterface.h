@@ -10,6 +10,7 @@
 #define __RFID_INTERFACE_H__
 
 #include <globals.h>
+#include <vector>
 
 class RFIDInterface {
 public:
@@ -71,7 +72,11 @@ public:
     Uid uid;
     PrintableUID printableUID;
     NdefMessage ndefMessage;
+    std::vector<uint8_t> rawNdefRecord;
     String strAllPages = "";
+    // Optional forced emulation mode set by the CLI (e.g. "t4t", "felica").
+    // Empty = auto-detect from the loaded tag. Honored by drivers that support it.
+    String emuMode = "";
     int totalPages = 0;
     int dataPages = 0;
     bool pageReadSuccess = false;
@@ -94,7 +99,27 @@ public:
     virtual int write_ndef() = 0;
     virtual int emulate() { return NOT_IMPLEMENTED; }
     virtual int load() = 0;
-    virtual int save(String filename) = 0;
+    // Load + parse a dump file by path (shared by the GUI and the serial CLI so
+    // their behavior never diverges). The base class provides a generic Bruce
+    // .rfid parser; drivers may override it for richer handling (e.g. MIFARE
+    // Classic blocks/keys, NTAG version/signature/counters in ST25R3916).
+    virtual int loadFromFile(const String &filepath);
+    virtual int save(const String &filename) = 0;
+    virtual int saveFlipper(const String &filename) { return NOT_IMPLEMENTED; }
+
+    // One-line warning shown before emulation starts if the driver can't
+    // fully reproduce the loaded tag. Empty = nothing to warn about.
+    virtual String emulationCaveat() const { return ""; }
+
+    // Build `ndefMessage` from a type ("url"/"text") and value. Shared by the
+    // serial `rfid ndef` and `rfid emulate t4t` paths so the encoding is
+    // identical regardless of entry point.
+    void buildNdefMessage(const String &type, const String &value);
+
+    // Build `rawNdefRecord` as an NFC Forum Wi-Fi Simple Config MIME record
+    // ("application/vnd.wfa.wsc") that phones recognize for the "connect to
+    // this network" prompt
+    void buildWifiNdef(const String &ssid, const String &password);
 
     String statusMessage(int status) const {
         switch (status) {

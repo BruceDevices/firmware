@@ -31,11 +31,12 @@ typedef struct {
 } pwngrid_peer;
 
 void initPwngrid();
-esp_err_t pwngridAdvertise(uint8_t channel, String face);
+esp_err_t pwngridAdvertise(uint8_t channel, const String &face);
 std::vector<pwngrid_peer> getPwngridPeers();
 uint8_t getPwngridRunTotalPeers();
 uint8_t getPwngridTotalPeers();
 String getPwngridLastFriendName();
 signed int getPwngridClosestRssi();
 void checkPwngridGoneFriends();
+void clearPwngridPeers();
 #endif

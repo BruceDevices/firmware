@@ -6,6 +6,7 @@
  * @date 2026-01-01
  */
 #include "srix_tool.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/settings.h"
@@ -23,20 +24,19 @@ SRIXTool::SRIXTool() {
     setup();
 }
 
-SRIXTool::~SRIXTool() { delete nfc; }
+SRIXTool::~SRIXTool() {
+    delete nfc;
+    releaseI2CBus();
+}
 
 void SRIXTool::setup() {
-    // Use I2C pins from global config
-    int sda_pin = bruceConfigPins.i2c_bus.sda;
-    int scl_pin = bruceConfigPins.i2c_bus.scl;
-
     drawMainBorderWithTitle("SRIX TOOL");
     padprintln("");
     padprintln("Initializing I2C...");
 
     // Init I2C
-    Wire.begin(sda_pin, scl_pin);
-    Wire.setClock(100000);
+    TwoWire *Wire = acquireI2CBus();
+    Wire->setClock(100000);
 
     padprintln("Initializing PN532...");
 
@@ -50,6 +50,7 @@ void SRIXTool::setup() {
     nfc = new Arduino_PN532_SRIX(-1, -1);
     padprintln("I2C-only mode");
 #endif
+    nfc->setWire(Wire);
 
     if (!nfc->init()) {
         displayError("PN532 not found!", true);
@@ -707,7 +708,7 @@ void SRIXTool::load_file() {
     loopOptions(options);
 }
 
-void SRIXTool::load_file_data(FS *fs, String filepath) {
+void SRIXTool::load_file_data(FS *fs, const String &filepath) {
 
     if (_screen_drawn) {
         delay(50);
@@ -855,13 +856,12 @@ SRIXTool::SRIXTool(bool headless_mode) {
     memset(_dump, 0, sizeof(_dump));
     memset(_uid, 0, sizeof(_uid));
 
-    int sda_pin = bruceConfigPins.i2c_bus.sda;
-    int scl_pin = bruceConfigPins.i2c_bus.scl;
+    SRIX_LOG(
+        "[SRIX] I2C pins: SDA=%d, SCL=%d", bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl
+    );
 
-    SRIX_LOG("[SRIX] I2C pins: SDA=%d, SCL=%d", sda_pin, scl_pin);
-
-    Wire.begin(sda_pin, scl_pin);
-    Wire.setClock(100000);
+    TwoWire *Wire = acquireI2CBus();
+    Wire->setClock(100000);
 
 #if defined(PN532_IRQ) && defined(PN532_RF_REST)
     SRIX_LOG("[SRIX] Using HW IRQ: %d, RST: %d", PN532_IRQ, PN532_RF_REST);
@@ -872,6 +872,7 @@ SRIXTool::SRIXTool(bool headless_mode) {
 #endif
 
     if (nfc) {
+        nfc->setWire(Wire);
         SRIX_LOG("[SRIX] NFC object created. Initializing...");
         if (nfc->init()) {
             SRIX_LOG("[SRIX] Init OK. Configuring...");
@@ -1052,7 +1053,7 @@ int SRIXTool::write_tag_headless(int timeout_seconds) {
     return blocks_verified; // WRITE OK, VERIFY partial / skipped
 }
 
-String SRIXTool::save_file_headless(String filename) {
+String SRIXTool::save_file_headless(const String &filename) {
     if (!_dump_valid_from_read && !_dump_valid_from_load) return ""; // No data
 
     FS *fs;
@@ -1113,7 +1114,7 @@ String SRIXTool::save_file_headless(String filename) {
     return filepath;
 }
 
-int SRIXTool::load_file_headless(String filename) {
+int SRIXTool::load_file_headless(const String &filename) {
     if (!nfc) return -1;
 
     FS *fs;

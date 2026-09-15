@@ -75,7 +75,7 @@ String readDecryptedFile(FS &fs, String filepath) {
 
     if (cachedPassword.length() == 0) {
         cachedPassword = keyboard("", 32, "Password:", true);
-        if (cachedPassword.length() == 0) return ""; // cancelled
+        if (cachedPassword.length() == 0 || cachedPassword == "\x1B") return ""; // cancelled
     }
 
     File cyphertextFile = fs.open(filepath, FILE_READ);

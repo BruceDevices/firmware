@@ -13,7 +13,7 @@
       "-mfix-esp32-psram-cache-strategy=memw"
     ],
     "f_cpu": "240000000L",
-    "f_flash": "40000000L",
+    "f_flash": "80000000L",
     "flash_mode": "dio",
     "mcu": "esp32",
     "variant": "pinouts"

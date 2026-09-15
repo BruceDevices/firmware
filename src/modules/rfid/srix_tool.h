@@ -54,8 +54,8 @@ public:
     // Headless method for JS
     String read_tag_headless(int timeout_seconds);
     int write_tag_headless(int timeout_seconds);
-    String save_file_headless(String filename);
-    int load_file_headless(String filename);
+    String save_file_headless(const String &filename);
+    int load_file_headless(const String &filename);
     int write_single_block_headless(uint8_t block_num, const uint8_t *block_data);
     bool waitForTagHeadless(uint32_t timeout_ms);
 
@@ -103,7 +103,7 @@ private:
     void show_main_menu();
     void save_file();
     void load_file();
-    void load_file_data(FS *fs, String filepath);
+    void load_file_data(FS *fs, const String &filepath);
 };
 
 void PN532_SRIX();

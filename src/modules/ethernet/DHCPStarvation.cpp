@@ -52,6 +52,7 @@ void DHCPStarvation::loop() {
     while (true) {
         send_DHCP_packet();
         if (check(AnyKeyPress)) { break; }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

@@ -2,6 +2,7 @@
 #include "core/display.h"    // using displayRedStripe as error msg
 #include "core/mykeyboard.h" // using keyboard when calling rename
 #include "core/passwords.h"
+#include "core/ram_profile.h"
 #include "core/sd_functions.h" // using sd functions called to rename and manage sd files
 #include "core/serialcmds.h"
 #include "core/settings.h"
@@ -60,9 +61,7 @@ void stopWebUi() {
 **********************************************************************/
 void cleanlyStopWebUiForWiFiFeature() {
     // Only proceed if WebUI is active
-    if (!isWebUIActive && !server) {
-        return;
-    }
+    if (!isWebUIActive && !server) { return; }
 
     // Brief notification (non-blocking)
     Serial.println("Stopping WebUI for WiFi feature...");
@@ -125,7 +124,7 @@ String humanReadableSize(uint64_t bytes) {
 **  Function: listFiles
 **  list all of the files, if ishtml=true, return html rather than simple text
 **********************************************************************/
-String listFiles(FS &fs, String folder) {
+String listFiles(FS &fs, const String &folder) {
     // log_i("Listfiles Start");
     String returnText = "pa:" + folder + ":0\n";
     // Serial.println("Listing files stored on SD");
@@ -157,7 +156,7 @@ String listFiles(FS &fs, String folder) {
                 }
             }
         } else break;
-        esp_task_wdt_reset();
+        delay(1);
     }
     root.close();
     // log_i("ListFiles End");
@@ -194,7 +193,7 @@ bool checkUserWebAuth(AsyncWebServerRequest *request, bool onFailureReturnLoginP
 **  Function: createDirRecursive
 ** Create folders recursivelly
 **********************************************************************/
-void createDirRecursive(String path, FS fs) {
+void createDirRecursive(const String &path, FS fs) {
     String currentPath = "";
     int startIndex = 0;
     // Serial.print("Verifying folder: ");
@@ -274,34 +273,42 @@ void notFound(AsyncWebServerRequest *request) { request->send(404, "text/plain",
 **  Draw information on screen of WebUI.
 **********************************************************************/
 void drawWebUiScreen(bool mode_ap) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, ALCOLOR);
-    if (mode_ap) {
-        setTftDisplay(0, 0, bruceConfig.bgColor, FM);
-        tft.drawCentreString("BruceNet/brucenet", tftWidth / 2, 7, 1);
-    }
-    setTftDisplay(0, 0, ALCOLOR, FM);
-    tft.drawCentreString("BRUCE WebUI", tftWidth / 2, 27, 1);
+    drawMainBorderWithTitle("WebUI", true);
+
     String txt;
     if (!mode_ap) txt = WiFi.localIP().toString();
     else txt = WiFi.softAPIP().toString();
-    tft.setTextColor(bruceConfig.priColor);
 
-    tft.drawCentreString("http://bruce.local", tftWidth / 2, 45, 1);
-    setTftDisplay(7, 67);
+    int padX = 14;
+    int currentY = 55;
 
-    tft.setTextSize(FM);
-    tft.print("IP: ");
-    tft.println(txt);
-    tft.setCursor(7, tft.getCursorY());
-    tft.println("Usr: " + String(bruceConfig.webUI.user));
-    tft.setCursor(7, tft.getCursorY());
-    tft.println("Pwd: " + String(bruceConfig.webUI.pwd));
-    tft.setCursor(7, tft.getCursorY());
-    tft.setTextColor(TFT_RED);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP, 1);
+
+    if (mode_ap) {
+        tft.setCursor(padX, currentY);
+        tft.print("Net: BruceNet/brucenet");
+        currentY += LH * FP + 6;
+    }
+
+    tft.setCursor(padX, currentY);
+    if (mdnsRunning) tft.print("Url: http://bruce.local");
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("IP:  " + txt);
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("Usr: " + String(bruceConfig.webUI.user));
+    currentY += LH * FP + 6;
+
+    tft.setCursor(padX, currentY);
+    tft.print("Pwd: " + String(bruceConfig.webUI.pwd));
+
+    tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP - 5, 1);
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -332,11 +339,11 @@ String color565ToWebHex(uint16_t color565) {
 **  Function: serveWebUIFile
 **  serves files for WebUI and checks for custom WebUI files
 **********************************************************************/
-void serveWebUIFile(AsyncWebServerRequest *request, String filename, const char *contentType) {
+void serveWebUIFile(AsyncWebServerRequest *request, const String &filename, const char *contentType) {
     serveWebUIFile(request, filename, contentType, false, nullptr, 0);
 }
 void serveWebUIFile(
-    AsyncWebServerRequest *request, String filename, const char *contentType, bool gzip,
+    AsyncWebServerRequest *request, const String &filename, const char *contentType, bool gzip,
     const uint8_t *originaFile, uint32_t originalFileSize
 ) {
     AsyncWebServerResponse *response = nullptr;
@@ -370,22 +377,15 @@ void serveWebUIFile(
 **  Try to start mDNS only if there is enough internal heap available
 **********************************************************************/
 static bool startMdnsResponder() {
-    constexpr size_t kMinInternalHeap = 20 * 1024; // bytes reserved for mDNS buffers
-    size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    if (freeInternalHeap < kMinInternalHeap) {
-        log_e(
-            "Skipping mDNS responder. Only %lu bytes of internal heap available (need %lu).\n",
-            static_cast<unsigned long>(freeInternalHeap),
-            static_cast<unsigned long>(kMinInternalHeap)
-        );
-        return false;
-    }
+    RAM_LOG("before MDNS");
 
     if (!MDNS.begin(host)) {
-        log_e("Error setting up MDNS responder!");
+        RAM_LOG("MDNS failed");
+        Serial.printf("Error setting up MDNS responder!\n");
         return false;
     }
 
+    RAM_LOG("after MDNS");
     return true;
 }
 
@@ -465,8 +465,9 @@ void configureWebServer() {
             uint64_t LittleFSUsedBytes = LittleFS.usedBytes();
             uint64_t SDTotalBytes = SD.totalBytes();
             uint64_t SDUsedBytes = SD.usedBytes();
-            sprintf(
+            snprintf(
                 response_body,
+                sizeof(response_body),
                 "{\"%s\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
                 "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"}}",
                 "BRUCE_VERSION",
@@ -746,7 +747,7 @@ void configureWebServer() {
 **********************************************************************/
 void startWebUi(bool mode_ap) {
     bool keepWifiConnected = false;
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) {
         if (mode_ap) wifiConnectMenu(WIFI_AP);
         else wifiConnectMenu(WIFI_STA);
     } else {

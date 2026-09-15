@@ -18,11 +18,11 @@ bool CYD28_TouchC::begin(void)
     // Initialize I2C
     if (_sda != -1 && _scl != -1)
     {
-        Wire.begin(_sda, _scl);
+        _wire->begin(_sda, _scl);
     }
     else
     {
-        Wire.begin();
+        _wire->begin();
     }
 
     // Int Pin Configuration
@@ -75,36 +75,36 @@ uint8_t CYD28_TouchC::i2c_read(uint8_t addr)
     uint8_t rdDataCount;
     do
     {
-        Wire.beginTransmission(CYD28_I2C_ADDR);
-        Wire.write(addr);
-        Wire.endTransmission(false); // Restart
-        rdDataCount = Wire.requestFrom(CYD28_I2C_ADDR, 1);
+        _wire->beginTransmission(CYD28_I2C_ADDR);
+        _wire->write(addr);
+        _wire->endTransmission(false); // Restart
+        rdDataCount = _wire->requestFrom(CYD28_I2C_ADDR, 1);
     } while (rdDataCount == 0);
-    while (Wire.available())
+    while (_wire->available())
     {
-        rdData = Wire.read();
+        rdData = _wire->read();
     }
     return rdData;
 }
 
 uint8_t CYD28_TouchC::i2c_read_continuous(uint8_t addr, uint8_t *data, uint32_t length)
 {
-  Wire.beginTransmission(CYD28_I2C_ADDR);
-  Wire.write(addr);
-  if ( Wire.endTransmission(true))return -1;
-  Wire.requestFrom(CYD28_I2C_ADDR, length);
+  _wire->beginTransmission(CYD28_I2C_ADDR);
+  _wire->write(addr);
+  if ( _wire->endTransmission(true))return -1;
+  _wire->requestFrom(CYD28_I2C_ADDR, length);
   for (int i = 0; i < length; i++) {
-    *data++ = Wire.read();
+    *data++ = _wire->read();
   }
   return 0;
 }
 
 void CYD28_TouchC::i2c_write(uint8_t addr, uint8_t data)
 {
-    Wire.beginTransmission(CYD28_I2C_ADDR);
-    Wire.write(addr);
-    Wire.write(data);
-    Wire.endTransmission();
+    _wire->beginTransmission(CYD28_I2C_ADDR);
+    _wire->write(addr);
+    _wire->write(data);
+    _wire->endTransmission();
 }
 
 CYD28_TS_Point CYD28_TouchC::convertRawXY(int16_t x, int16_t y) {

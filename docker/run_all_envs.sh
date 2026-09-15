@@ -40,8 +40,17 @@ DEFAULT_ENVS=(
   lilygo-t-display-s3-touch-mmc
   lilygo-t-display-S3-pro
   lilygo-t-display-ttgo
+  lilygo-t4
   lilygo-t-hmi
   lilygo-t-lora-pager
+  elecrow-24B
+  elecrow-28B
+  elecrow-35B
+  elecrow-35Bv2_2
+  elecrow-advance-35-s3
+  LAUNCHER_elecrow-24B
+  LAUNCHER_elecrow-28B
+  LAUNCHER_elecrow-35B
   smoochiee-board
   Phantom_S024R
   LAUNCHER_Phantom_S024R
@@ -94,7 +103,7 @@ for ((i = 0; i < ${#ENVS[@]}; i += JOBS)); do
   done
 done
 
-if (( ${#failed[@]} > 0 )); then
+if ((${#failed[@]} > 0)); then
   echo "Build failures: ${failed[*]}" >&2
   exit 1
 fi

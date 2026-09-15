@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION)
 #include "LoRaRF.h"
 #include "WString.h"
+#include "core/bus_HAL.h"
 #include "core/config.h"
 #include "core/configPins.h"
 #include <Arduino.h>
@@ -33,7 +34,7 @@ const int maxMessages = 19;
 int contentWidth = tftWidth - 20;
 int yStart = 35;
 int yPos = yStart;
-int ySpacing = 10;
+int ySpacing = LH * FP + 2;
 int rightColumnX = tftWidth / 2 + 10;
 SPIClass *loraSpi = nullptr;
 Module *loraModule = nullptr;
@@ -43,6 +44,16 @@ volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+
+#ifndef DEFAULT_LORA_RADIO
+#define DEFAULT_LORA_RADIO "SX1276"
+#endif
+
+#ifndef DEFAULT_LORA_FREQUENCY
+#define DEFAULT_LORA_FREQUENCY "434500000.00"
+#endif
+
+bool __attribute__((weak)) prepareBoardLoRaRadio() { return true; }
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -84,34 +95,14 @@ void onLoraPacket() {
 }
 
 SPIClass *selectLoraSPIBus() {
-    SPIClass *selectedSPI = &SPI;
-    if (bruceConfigPins.LoRa_bus.mosi == TFT_MOSI) {
-#if TFT_MOSI > 0
-        selectedSPI = &tft.getSPIinstance();
-#endif
-        Serial.println("Using TFT SPI for LoRa");
-    } else if (bruceConfigPins.SDCARD_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
-        selectedSPI = &sdcardSPI;
-        Serial.println("Using SDCard SPI for LoRa");
-    } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.LoRa_bus.mosi ||
-               bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
-        selectedSPI = &CC_NRF_SPI;
-        CC_NRF_SPI.begin(
-            (int8_t)bruceConfigPins.LoRa_bus.sck,
-            (int8_t)bruceConfigPins.LoRa_bus.miso,
-            (int8_t)bruceConfigPins.LoRa_bus.mosi
-        );
-        Serial.println("Using CC/NRF SPI for LoRa");
-    } else {
-        SPI.begin(
-            bruceConfigPins.LoRa_bus.sck,
-            bruceConfigPins.LoRa_bus.miso,
-            bruceConfigPins.LoRa_bus.mosi,
-            bruceConfigPins.LoRa_bus.cs
-        );
-        Serial.println("Using dedicated SPI for LoRa");
+    SPIClass *bus = acquireSPIBus(
+        bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi
+    );
+    if (!bus) {
+        Serial.println("No hardware SPI bus available for LoRa, falling back to default SPI");
+        return &SPI;
     }
-    return selectedSPI;
+    return bus;
 }
 
 bool startLoraRadio(float bandMHz) {
@@ -128,6 +119,12 @@ bool startLoraRadio(float bandMHz) {
     if (irqPin == GPIO_NUM_NC) {
         Serial.println("LoRa IRQ pin not configured!");
         displayError("LoRa IRQ pin not configured!", true);
+        return false;
+    }
+
+    if (!prepareBoardLoRaRadio()) {
+        Serial.println("Preparing LoRa frontend failed!");
+        displayError("LoRa Init Failed", true);
         return false;
     }
 
@@ -226,7 +223,7 @@ void reciveMessage() {
 
 void render() {
     if (!update) return;
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(0x6DFC);
     if (!intlora) { tft.drawString("Lora Init Failed", 10, 13); }
@@ -267,8 +264,8 @@ void sendmsg() {
         tft.setTextColor(bruceConfig.priColor);
 
         tft.setTextColor(TFT_RED);
-        tft.setTextSize(2);
-        tft.setCursor(10, tftHeight / 2 - 10);
+        tft.setTextSize(FM);
+        tft.setCursor(BORDER_PAD_X, tftHeight / 2 - BORDER_PAD_X);
         tft.print("LoRa not init!");
 
         tft.drawCentreString("LoRa not initialized!", tftWidth / 2, tftHeight / 2, 2);
@@ -277,6 +274,7 @@ void sendmsg() {
         return;
     }
     msg = keyboard(msg, 256, "Message:");
+    if (msg == "\x1B") return;
     msg = String(displayName) + ": " + msg;
     if (msg == "") return;
     Serial.println(msg);
@@ -312,7 +310,7 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
-    String stored = doc["LoRa_Radio"] | "SX1276";
+    String stored = doc["LoRa_Radio"] | DEFAULT_LORA_RADIO;
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
@@ -406,9 +404,9 @@ void lorachat() {
         Serial.println("creating lora settings .json file");
         JsonDocument doc;
         File file = LittleFS.open("/lora_settings.json", "w");
-        doc["LoRa_Frequency"] = "434500000.00";
+        doc["LoRa_Frequency"] = DEFAULT_LORA_FREQUENCY;
         doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] = DEFAULT_LORA_RADIO;
         serializeJson(doc, file);
         file.close();
     }
@@ -451,7 +449,7 @@ void lorachat() {
 void changeusername() {
     tft.fillScreen(TFT_BLACK);
     String username = keyboard(username, 64, "");
-    if (username == "") return;
+    if (username == "" || username == "\x1B") return;
     File file = LittleFS.open("/lora_settings.json", "r");
     JsonDocument doc;
     deserializeJson(doc, file);
@@ -475,7 +473,7 @@ void chfreq() {
     snprintf(buf, sizeof(buf), "%.3f", dfreq);
     String freq = num_keyboard(buf, 12, "in Mhz");
     dfreq = freq.toDouble();
-    if (dfreq == 0) {
+    if (dfreq == 0 || freq == "\x1B") {
         displayError("Invalid value");
         return;
     } else if (dfreq > 1000) {

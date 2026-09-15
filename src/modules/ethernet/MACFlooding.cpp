@@ -53,6 +53,7 @@ void MACFlooding::loop() {
     while (true) {
         send_packet();
         if (check(AnyKeyPress)) { break; }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 

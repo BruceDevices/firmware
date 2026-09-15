@@ -82,6 +82,7 @@ void RFID125::loop() {
             //     break;
             case SAVE_MODE: save_file(); break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -128,7 +129,7 @@ void RFID125::set_state(RFID125_State state) {
 
 void RFID125::cls() {
     drawMainBorder();
-    tft.setCursor(10, 28);
+    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 }
 
@@ -232,6 +233,7 @@ void RFID125::save_file() {
     String data = _printable_data;
     data.replace(" ", "");
     String filename = keyboard(data, 30, "File name:");
+    if (filename == "\x1B") return;
 
     display_banner();
 
@@ -244,18 +246,19 @@ void RFID125::save_file() {
     set_state(READ_MODE);
 }
 
-bool RFID125::write_file(String filename) {
+bool RFID125::write_file(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return false;
 
+    String fname = filename;
     if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
-    if ((*fs).exists("/BruceRFID/" + filename + ".rfidlf")) {
+    if ((*fs).exists("/BruceRFID/" + fname + ".rfidlf")) {
         int i = 1;
-        filename += "_";
-        while ((*fs).exists("/BruceRFID/" + filename + String(i) + ".rfidlf")) i++;
-        filename += String(i);
+        fname += "_";
+        while ((*fs).exists("/BruceRFID/" + fname + String(i) + ".rfidlf")) i++;
+        fname += String(i);
     }
-    File file = (*fs).open("/BruceRFID/" + filename + ".rfidlf", FILE_WRITE);
+    File file = (*fs).open("/BruceRFID/" + fname + ".rfidlf", FILE_WRITE);
 
     if (!file) { return false; }
 

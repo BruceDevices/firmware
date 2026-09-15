@@ -61,9 +61,12 @@ public:
     bool SRIX_write_block(uint8_t address, uint8_t *block);
     bool SRIX_get_uid(uint8_t *buffer);
 
+    void setWire(TwoWire *wire) { _wire = wire; }
+
 private:
     uint8_t _irq, _reset;
     uint8_t _packetbuffer[64];
+    TwoWire *_wire = &Wire;
 
     // Low-level I2C functions (reimplemented from original)
     bool SAMConfig();

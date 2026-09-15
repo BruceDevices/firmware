@@ -249,24 +249,38 @@ void ledEffectTask(void *pvParameters) {
             }
 #endif
 
-        } else if (ledEffect == LED_EFFECT_FIRE) {
-            for (int i = 0; i < LED_COUNT; i++) {
-                uint8_t flicker = random(150, 255);
-                uint8_t isRed = random(0, 2);
-                if (isRed) {
-                    leds[i] = CRGB(flicker, random(0, flicker / 3), 0);
-                } else {
-                    leds[i] = CRGB(255, random(flicker / 2, flicker), 0);
+        } else if (ledEffect == LED_EFFECT_DISCO) {
+            uint8_t cycleFrames = 11 - ledEffectSpeed;
+#ifdef HAS_ENCODER_LED
+            if ((ledEffectSpeed == 11 && EncoderLedChange != 0) ||
+                (ledEffectSpeed < 11 && frame % cycleFrames == 0)) {
+                if (ledEffectSpeed == 11 && EncoderLedChange != 0) { EncoderLedChange = 0; }
+#else
+            if (frame % cycleFrames == 0) {
+#endif
+                for (int i = 0; i < LED_COUNT; i++) {
+                    short randomHue = random(0, 360);
+                    leds[i] = hsvToRgb(randomHue, 255, 255);
                 }
             }
             frame++;
-
-        } else if (ledEffect == LED_EFFECT_DISCO) {
-            uint8_t cycleFrames = 12 - ledEffectSpeed;
+        } else if (ledEffect == LED_EFFECT_FIRE) {
+            uint8_t cycleFrames = 11 - ledEffectSpeed;
+#ifdef HAS_ENCODER_LED
+            if ((ledEffectSpeed == 11 && EncoderLedChange != 0) ||
+                (ledEffectSpeed < 11 && frame % cycleFrames == 0)) {
+                if (ledEffectSpeed == 11 && EncoderLedChange != 0) { EncoderLedChange = 0; }
+#else
             if (frame % cycleFrames == 0) {
+#endif
                 for (int i = 0; i < LED_COUNT; i++) {
-                    short randomHue = random(0, 360);
-                    leds[i] = hsvToRgb(randomHue, 200, 255);
+                    uint8_t flicker = random(150, 255);
+                    uint8_t isRed = random(0, 2);
+                    if (isRed) {
+                        leds[i] = CRGB(flicker, random(0, flicker / 3), 0);
+                    } else {
+                        leds[i] = CRGB(255, random(flicker / 2, flicker), 0);
+                    }
                 }
             }
             frame++;
@@ -591,18 +605,18 @@ void setLedEffectConfig() {
                  setLedEffect(LED_EFFECT_RAINBOW_BREATHE);
                  return false;
              }                                                                        },
-            {"Fire",
-             [=]() { bruceConfig.setLedEffect(LED_EFFECT_FIRE); },
-             bruceConfig.ledEffect == LED_EFFECT_FIRE,
-             [](void *pointer,                                                                         bool shouldRender) {
-                 setLedEffect(LED_EFFECT_FIRE);
-                 return false;
-             }                                                                        },
             {"Disco",
              [=]() { bruceConfig.setLedEffect(LED_EFFECT_DISCO); },
              bruceConfig.ledEffect == LED_EFFECT_DISCO,
              [](void *pointer,                                                                         bool shouldRender) {
                  setLedEffect(LED_EFFECT_DISCO);
+                 return false;
+             }                                                                        },
+            {"Fire",
+             [=]() { bruceConfig.setLedEffect(LED_EFFECT_FIRE); },
+             bruceConfig.ledEffect == LED_EFFECT_FIRE,
+             [](void *pointer,                                                                         bool shouldRender) {
+                 setLedEffect(LED_EFFECT_FIRE);
                  return false;
              }                                                                        },
 #endif

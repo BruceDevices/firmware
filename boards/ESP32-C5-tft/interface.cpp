@@ -129,12 +129,12 @@ void InputHandler(void) {
         _IH_touched = false;
         Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d", t.x, t.y);
         if (bruceConfigPins.rotation == 3) {
-            t.y = (tftHeight + 20) - t.y;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
             t.x = tftWidth - t.x;
         }
         if (bruceConfigPins.rotation == 0) {
             uint16_t tmp = t.x;
-            t.x = map((tftHeight + 20) - t.y, 0, 320, 0, 240);
+            t.x = map((tftHeight + TOUCH_FOOTER_HEIGHT) - t.y, 0, 320, 0, 240);
             t.y = map(tmp, 0, 240, 0, 320);
         }
         if (bruceConfigPins.rotation == 2) {
@@ -167,8 +167,12 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (upPressed && dwPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = upPressed;
-    EscPress = upPressed && dwPressed;
+
     NextPress = dwPressed;
     SelPress = selPressed;
 #endif

@@ -1,7 +1,7 @@
 #include "i2c_finder.h"
+#include "bus_HAL.h"
 #include "display.h"
 #include "mykeyboard.h"
-#include <Wire.h>
 
 #define FIRST_I2C_ADDRESS 0x01
 #define LAST_I2C_ADDRESS 0x7F
@@ -12,7 +12,7 @@ void find_i2c_addresses() {
     padprintln("");
 
     bool first_found = true;
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    TwoWire *Wire = acquireI2CBus();
 
     padprintln("Checking I2C addresses ...\n\n");
     delay(300);
@@ -20,8 +20,8 @@ void find_i2c_addresses() {
     padprint("Found: ");
 
     for (uint8_t i = FIRST_I2C_ADDRESS; i <= LAST_I2C_ADDRESS; i++) {
-        Wire.beginTransmission(i);
-        if (Wire.endTransmission() == 0) {
+        Wire->beginTransmission(i);
+        if (Wire->endTransmission() == 0) {
             if (!first_found) tft.print(", ");
             else first_found = false;
             tft.printf("0x%X", i);
@@ -33,20 +33,29 @@ void find_i2c_addresses() {
             returnToMenu = true;
             break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
+    releaseI2CBus();
 }
 
 uint8_t find_first_i2c_address() {
+    TwoWire *Wire = acquireI2CBus();
+    uint8_t found = 0;
     for (uint8_t i = FIRST_I2C_ADDRESS; i <= LAST_I2C_ADDRESS; i++) {
-        Wire.beginTransmission(i);
-        if (Wire.endTransmission() == 0) return i;
+        Wire->beginTransmission(i);
+        if (Wire->endTransmission() == 0) {
+            found = i;
+            break;
+        }
     }
-    return 0;
+    releaseI2CBus();
+    return found;
 }
 
 bool check_i2c_address(uint8_t i2c_address) {
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
-    Wire.beginTransmission(i2c_address);
-    int error = Wire.endTransmission();
+    TwoWire *Wire = acquireI2CBus();
+    Wire->beginTransmission(i2c_address);
+    int error = Wire->endTransmission();
+    releaseI2CBus();
     return (error == 0);
 }

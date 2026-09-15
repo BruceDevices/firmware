@@ -9,7 +9,17 @@
 #include <set>
 #include <vector>
 
+// Most panels want the framebuffer inverted; boards whose panel does not
+// (e.g. the LilyGO T4 ILI9341) can override this default from their build flags.
+#ifndef DEFAULT_COLOR_INVERTED
+#define DEFAULT_COLOR_INVERTED 1
+#endif
+
 enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSWORD = 2, SAVE_LENGTH = 3 };
+
+// How the main menu presents the modules:
+// CAROUSEL shows one big icon at a time, GRID exposes every module as a selectable cell
+enum MainMenuStyle { MAIN_MENU_CAROUSEL = 0, MAIN_MENU_GRID = 1 };
 
 class BruceConfig : public BruceTheme {
 public:
@@ -36,7 +46,7 @@ public:
     const char *filepath = "/bruce.conf";
 
     //  Settings
-    int dimmerSet = 10;
+    int dimmerSet = 60;
     int bright = 100;
     bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;
@@ -65,10 +75,12 @@ public:
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
+    bool TerminalLog = true;
 
     // EvilPortal
     EvilPortalEndpoints evilPortalEndpoints = {"/creds", "/ssid", true, true, true};
     EvilPortalPasswordMode evilPortalPasswordMode = FULL_PASSWORD;
+    String evilPortalGatewayIp = "172.0.0.1";
 
     void setWifiMAC(const String &mac) {
         wifiMAC = mac;
@@ -82,8 +94,11 @@ public:
     String startupApp = "";
     String startupAppJSInterpreterFile = "";
     String wigleBasicToken = "";
+    String wdgwarsApiKey = "your 64-char hex key from wdgwars.pl/profile";
     int devMode = 0;
-    int colorInverted = 1;
+
+    int colorInverted = DEFAULT_COLOR_INVERTED;
+    int mainMenuStyle = MAIN_MENU_CAROUSEL;
     int badUSBBLEKeyboardLayout = 0;
     uint16_t badUSBBLEKeyDelay = 10;
     bool badUSBBLEShowOutput = true;
@@ -102,6 +117,11 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////
     BruceConfig() {};
     // ~BruceConfig();
+
+private:
+    bool _mifareKeysLoaded = false;
+
+public:
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
@@ -151,10 +171,12 @@ public:
     // Wifi
     void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
+    void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);
     void removeQrCodeEntry(const String &menuName);
     String getWifiPassword(const String &ssid) const;
+    bool hasWifiCredential(const String &ssid) const;
     void addEvilWifiName(String value);
     void removeEvilWifiName(String value);
     void setEvilEndpointCreds(String value);
@@ -163,11 +185,14 @@ public:
     void setEvilAllowGetCreds(bool value);
     void setEvilAllowSetSsid(bool value);
     void setEvilPasswordMode(EvilPortalPasswordMode value);
+    void setEvilGatewayIp(String value);
     void validateEvilEndpointCreds();
     void validateEvilEndpointSsid();
     void validateEvilPasswordMode();
+    void validateEvilGatewayIp();
 
     // RFID
+    void ensureMifareKeysLoaded();
     void addMifareKey(String value);
     void validateMifareKeysItems();
 
@@ -175,17 +200,20 @@ public:
     void setStartupApp(String value);
     void setStartupAppJSInterpreterFile(String value);
     void setWigleBasicToken(String value);
+    void setWdgwarsApiKey(String value);
     void setDevMode(int value);
     void validateDevModeValue();
     void setColorInverted(int value);
     void validateColorInverted();
+    void setMainMenuStyle(int value);
+    void validateMainMenuStyle();
     void setBadUSBBLEKeyboardLayout(int value);
     void validateBadUSBBLEKeyboardLayout();
     void setBadUSBBLEKeyDelay(uint16_t value);
     void validateBadUSBBLEKeyDelay();
     void setBadUSBBLEShowOutput(bool value);
     void addDisabledMenu(String value);
-    // TODO: removeDisabledMenu(String value);
+    void removeDisabledMenu(String value);
 
     void addWebUISession(const String &token);
     void removeWebUISession(const String &token);

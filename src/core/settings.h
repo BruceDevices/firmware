@@ -18,6 +18,8 @@ void setBrightnessMenu();
 
 void setUIColor();
 
+void setMainMenuStyleMenu();
+
 bool setCustomUIColorMenu();
 
 void setCustomUIColorChoiceMenu(int colorType);
@@ -47,6 +49,8 @@ void setEvilAllowGetCreds();
 void setEvilAllowSetSsid();
 
 void setEvilPasswordMode();
+
+void setEvilGatewayIp();
 
 void setRFModuleMenu();
 

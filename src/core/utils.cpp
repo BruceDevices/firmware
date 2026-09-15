@@ -1,6 +1,7 @@
 #include "utils.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
 #include "scrollableTextArea.h"
+#include <Preferences.h>
 #include <globals.h>
 
 /*********************************************************************
@@ -90,6 +91,52 @@ void updateClockTimezone() {
     settimeofday(&tv, nullptr);
 }
 
+#if !defined(HAS_RTC)
+// --- Persistent software clock (boards without an RTC chip) ---
+// Boards without an RTC lose a set time on a full power-off. Periodically save
+// the current epoch to NVS and restore it on boot, so the clock comes back
+// close to correct (it re-syncs exactly via NTP/GPS when available). NVS (not
+// the user filesystem) so it survives FS reformats and custom partition layouts.
+#define CLOCK_PERSIST_NS "clock"
+#define CLOCK_PERSIST_KEY "epoch"
+#define CLOCK_PERSIST_INTERVAL_MS 300000 // 5 min: bounds NVS wear, <=5 min drift after power loss
+
+static void time_persist_task(void *param) {
+    Preferences prefs;
+    uint32_t last_write_ms = 0;
+    bool saved = false;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(60000)); // wake every minute
+        if (!clock_set) continue;
+        // Save promptly the first time the clock is set, then at most every 5 min.
+        if (saved && (millis() - last_write_ms) < CLOCK_PERSIST_INTERVAL_MS) continue;
+        if (prefs.begin(CLOCK_PERSIST_NS, false)) {
+            prefs.putULong(CLOCK_PERSIST_KEY, (uint32_t)rtc.getEpoch());
+            prefs.end();
+            last_write_ms = millis();
+            saved = true;
+        }
+    }
+}
+
+// Restore the last-saved time from NVS (if plausible) and start the periodic
+// save task. Call once from init_clock() on boards without an RTC.
+void restorePersistedClock() {
+    Preferences prefs;
+    if (prefs.begin(CLOCK_PERSIST_NS, true)) { // read-only
+        uint32_t epoch = prefs.getULong(CLOCK_PERSIST_KEY, 0);
+        prefs.end();
+        if (epoch > 1735689600UL) { // sanity: only restore a plausible time (after 2025-01-01)
+            rtc.setTime((unsigned long)epoch);
+            clock_set = true;
+            struct timeval tv = {.tv_sec = (time_t)epoch};
+            settimeofday(&tv, nullptr);
+        }
+    }
+    xTaskCreate(time_persist_task, "clockSave", 4096, NULL, 1, NULL);
+}
+#endif
+
 void updateTimeStr(struct tm timeInfo) {
     if (bruceConfig.clock24hr) {
         // Use 24 hour format
@@ -127,10 +174,10 @@ void showDeviceInfo() {
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
     String localIP = WiFi.localIP().toString();
     String softAPIP = WiFi.softAPIP().toString();
-    String ipStatus = (WiFi.status() == WL_CONNECTED) ? (localIP != "0.0.0.0"    ? localIP
-                                                         : softAPIP != "0.0.0.0" ? softAPIP
-                                                                                 : "No valid IP")
-                                                      : "Not connected";
+    String ipStatus = (WiFi.isConnected()) ? (localIP != "0.0.0.0"    ? localIP
+                                              : softAPIP != "0.0.0.0" ? softAPIP
+                                                                      : "No valid IP")
+                                           : "Not connected";
     area.addLine("IP address: " + ipStatus);
     area.addLine("");
     area.addLine("[STORAGE]");
@@ -155,6 +202,8 @@ void showDeviceInfo() {
     area.addLine("[GPIO]");
     area.addLine("GROVE_SDA: " + String(bruceConfigPins.i2c_bus.sda));
     area.addLine("GROVE_SCL: " + String(bruceConfigPins.i2c_bus.scl));
+    area.addLine("SYS_I2C_SDA: " + String(bruceConfigPins.sys_i2c.sda));
+    area.addLine("SYS_I2C_SCL: " + String(bruceConfigPins.sys_i2c.scl));
     area.addLine("SERIAL TX: " + String(bruceConfigPins.uart_bus.tx));
     area.addLine("SERIAL RX: " + String(bruceConfigPins.uart_bus.rx));
     area.addLine("SPI_SCK_PIN: " + String(SPI_SCK_PIN));
@@ -202,21 +251,26 @@ void touchHeatMap(struct TouchPoint t) {
     int third_x = tftWidth / 3;
     int third_y = tftHeight / 3;
 
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y > third_y) PrevPress = true;
+    // The footer band always reads as PREV/SEL/NEXT (the labels TouchFooter() draws there).
+    // Everything above it is opt-out via touchZoneOutsideFooterEnabled, so a screen that wants to
+    // hit-test raw taps itself (see loopOptions()) can turn zone-reading off without losing the footer.
+    if (t.y <= tftHeight && !touchZoneOutsideFooterEnabled) return;
+
+    if (t.x > third_x * 0 && t.x < third_x * 1) PrevPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && ((t.y > third_y && t.y < third_y * 2) || t.y > tftHeight))
         SelPress = true;
-    if (t.x > third_x * 2 && t.x < third_x * 3) NextPress = true;
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y < third_y) EscPress = true;
+    if (t.x > third_x * 2 && t.x < third_x * 3 && t.y > third_y) NextPress = true;
+    if (t.x > third_x * 2 && t.x < third_x * 3 && t.y < third_y) EscPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && t.y < third_y) UpPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && t.y > third_y * 2 && t.y < third_y * 3) DownPress = true;
     /*
                         Touch area Map
                 ________________________________ 0
-                |   Esc   |   UP    |         |
-                |_________|_________|         |_> third_y
+                |         |   UP    |   Esc   |
+                |         |_________|_________|_> third_y
                 |         |   Sel   |         |
-                |         |_________|  Next   |_> third_y*2
-                |  Prev   |  Down   |         |
+                |  Prev   |_________|  Next   |_> third_y*2
+                |         |  Down   |         |
                 |_________|_________|_________|_> third_y*3
                 |__Prev___|___Sel___|__Next___| 20 pixel touch area where the touchFooter is drawn
                 0         L third_x |         |
@@ -276,7 +330,7 @@ String formatTimeDecimal(uint32_t totalMillis) {
     float seconds = (totalMillis % 60000) / 1000.0;
 
     char buffer[16];
-    sprintf(buffer, "%02d:%06.3f", minutes, seconds);
+    snprintf(buffer, sizeof(buffer), "%02d:%06.3f", minutes, seconds);
     return String(buffer);
 }
 

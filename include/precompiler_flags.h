@@ -16,7 +16,7 @@
   #define INPUT_HANDLER_TASK_STACK_SIZE 4096
 #endif
 #ifndef SSH_TASK_STACK_SIZE
-  #define SSH_TASK_STACK_SIZE 1024*10
+  #define SSH_TASK_STACK_SIZE (1024 * 16)
 #endif
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 4096
@@ -33,7 +33,7 @@
   #define INPUT_HANDLER_TASK_STACK_SIZE 2048
 #endif
 #ifndef SSH_TASK_STACK_SIZE
-  #define SSH_TASK_STACK_SIZE 1024*8
+  #define SSH_TASK_STACK_SIZE (1024 * 16)
 #endif
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 1024
@@ -47,6 +47,12 @@
 #endif
 #ifndef GROVE_SCL           // Pin to be used in I2C communications
   #define GROVE_SCL -1
+#endif
+#ifndef SYS_I2C_SDA         // Pin to be used in I2C communications
+  #define SYS_I2C_SDA -1
+#endif
+#ifndef SYS_I2C_SCL         // Pin to be used in I2C communications
+  #define SYS_I2C_SCL -1
 #endif
 #ifndef RXLED               // Default RX Infrared LED
   #define RXLED GROVE_SCL
@@ -68,6 +74,9 @@
 #endif
 #ifndef FG                  // LArge Font -> Fonte Grande
   #define FG 3
+#endif
+#ifndef TOUCH_FOOTER_HEIGHT
+  #define TOUCH_FOOTER_HEIGHT (LH * FM + 2 * (FP + 4))
 #endif
 #ifndef ROTATION
   #define ROTATION 1
@@ -196,6 +205,30 @@
 
 #ifndef NRF24_MOSI_PIN
 #define NRF24_MOSI_PIN -1
+#endif
+
+#ifndef BAD_TX
+#define BAD_TX GROVE_SDA
+#endif
+
+#ifndef BAD_RX
+#define BAD_RX GROVE_SCL
+#endif
+
+#ifndef SPI_SS_PIN
+#define SPI_SS_PIN -1
+#endif
+
+#ifndef SPI_SCK_PIN
+#define SPI_SCK_PIN -1
+#endif
+
+#ifndef SPI_MOSI_PIN
+#define SPI_MOSI_PIN -1
+#endif
+
+#ifndef SPI_MISO_PIN
+#define SPI_MISO_PIN -1
 #endif
 
 #ifndef NRF24_SS_PIN

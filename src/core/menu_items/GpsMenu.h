@@ -11,7 +11,7 @@ public:
     void wardrivingMenu(void);
     void drawIcon(float scale);
     bool hasTheme() { return bruceConfig.theme.gps; }
-    String themePath() { return bruceConfig.theme.paths.gps; }
+    const String& themePath() override { return bruceConfig.theme.paths.gps; }
 
 private:
     void configMenu(void);

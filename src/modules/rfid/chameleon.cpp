@@ -85,6 +85,7 @@ void Chameleon::loop() {
             case HF_SAVE_MODE: saveFileHF(); break;
             case HF_LOAD_MODE: loadFileHF(); break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -410,6 +411,7 @@ void Chameleon::saveFileLF() {
     String data = printableLFUID;
     data.replace(" ", "");
     String filename = keyboard(data, 30, "File name:");
+    if (filename == "\x1B") return;
 
     displayBanner();
 
@@ -677,6 +679,7 @@ void Chameleon::saveFileHF() {
     String uid_str = printableHFUID.uid;
     uid_str.replace(" ", "");
     String filename = keyboard(uid_str, 30, "File name:");
+    if (filename == "\x1B") return;
 
     displayBanner();
 

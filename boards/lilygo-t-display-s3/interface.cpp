@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <globals.h>
@@ -53,6 +54,7 @@ void _setup_gpio() {
     digitalWrite(21, LOW);  // PIN_TOUCH_RES
     delay(500);
     digitalWrite(21, HIGH); // PIN_TOUCH_RES
+    setSysI2CBus(&Wire);    // Touch lives on the default Wire object
     Wire.begin(18, 17);     // SDA, SCL
     if (!touch.init()) { Serial.println("Touch IC not found"); }
 
@@ -137,7 +139,7 @@ void InputHandler(void) {
             auto t = touch.getPoint(0);
             tm = millis();
             if (bruceConfigPins.rotation == 1) {
-                t.y = (tftHeight + 20) - t.y;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
                 // t.x = tftWidth-t.x;
             }
             if (bruceConfigPins.rotation == 3) {
@@ -154,7 +156,7 @@ void InputHandler(void) {
             if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = t.y;
-                t.y = (tftHeight + 20) - tmp;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
             }
 
             // Serial.printf("\nPressed x=%d , y=%d, rot: %d",t.x, t.y, bruceConfigPins.rotation);

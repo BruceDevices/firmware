@@ -13,6 +13,7 @@
  *   - BOOT button (GPIO0)
  */
 
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Arduino.h>
@@ -103,6 +104,7 @@ void _setup_gpio() {
     pinMode(ES3C28P_TOUCH_INT, INPUT);
 
     // Initialize I2C bus (shared with audio codec ES8311)
+    setSysI2CBus(&Wire);
     Wire.begin(ES3C28P_TOUCH_SDA, ES3C28P_TOUCH_SCL);
     touchInitialized = true;
 
