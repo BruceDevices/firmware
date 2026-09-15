@@ -7,7 +7,7 @@ const unsigned char ECCLEVEL = 1;
 const unsigned char WD = 45;
 const unsigned char WDB = 6;
 unsigned char strinbuf[270];
-unsigned char qrframe[600];
+unsigned char *qrframe = 0; // allocated on demand, see QRcode::create()
 unsigned char rlens[46];
 #ifndef __AVR__
 #define PROGMEM

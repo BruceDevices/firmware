@@ -9,8 +9,8 @@ public:
 
     void optionsMenu(void);
     void drawIcon(float scale);
-    void drawIconImg();
-    bool getTheme() { return bruceConfig.theme.fm; }
+    bool hasTheme() { return bruceConfig.theme.fm; }
+    const String& themePath() override { return bruceConfig.theme.paths.fm; }
 };
 
 #endif

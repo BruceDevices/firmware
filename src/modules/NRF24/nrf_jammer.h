@@ -1,4 +1,6 @@
-
+#ifndef __NRF_JAMMER_H
+#define __NRF_JAMMER_H
+#include "modules/NRF24/nrf_common.h"
 #include <RF24.h>
 
 /*
@@ -21,5 +23,4 @@ FLAFS:
 */
 
 void nrf_jammer();
-void nrf_channel_jammer();
-void nrf_channel_hopper();
+#endif

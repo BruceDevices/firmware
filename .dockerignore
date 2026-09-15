@@ -1,0 +1,8 @@
+.pio/
+.platformio/
+.git/
+.vscode/
+__pycache__/
+*.pyc
+mqjs_build/
+Bruce-*.bin

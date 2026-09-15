@@ -54,6 +54,7 @@ private:
     uint8_t _reportData[KEY_REPORT_DATA_LENGTH];
     void sendReport(CH9329_KeyReport *keys);
     int getReportData(CH9329_KeyReport *keys, uint8_t *buffer, size_t size);
+    uint32_t _delay_ms = 25;
 
 public:
     CH9329_Keyboard_(void);
@@ -67,6 +68,7 @@ public:
     size_t release(uint8_t k) override;
     void releaseAll(void) override;
     void setLayout(const uint8_t *layout) override { _asciimap = layout; };
+    void setDelay(uint32_t ms);
 };
 extern CH9329_Keyboard_ CH9329_Keyboard;
 

@@ -174,17 +174,17 @@ void shark_loop() {
 
         if (score == 99) {
             displaySuccess("So...");
-            while (!check(SelPress)) { yield(); }
-            while (check(SelPress)) { yield(); } // debounce
+            while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); } // debounce
             displaySuccess("you just found");
-            while (!check(SelPress)) { yield(); }
-            while (check(SelPress)) { yield(); } // debounce
+            while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); } // debounce
             displayInfo("hidden credits!");
-            while (!check(SelPress)) { yield(); }
-            while (check(SelPress)) { yield(); } // debounce
+            while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); } // debounce
             displayInfo("main devs:");
-            while (!check(SelPress)) { yield(); }
-            while (check(SelPress)) { yield(); } // debounce
+            while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+            while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); } // debounce
             options = {
                 {"Pirata",       [=]() { displayError("github.com/bmorcelli", true); }   },
                 {"pr3y",         [=]() { displaySuccess("github.com/pr3y", true); }      },

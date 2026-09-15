@@ -1,6 +1,6 @@
 #ifndef MAC_FLOODING_H
 #define MAC_FLOODING_H
-
+#if !defined(LITE_VERSION)
 #include "Arduino.h"
 #include "lwip/prot/dhcp.h"
 #include "lwip/prot/ethernet.h"
@@ -42,4 +42,5 @@ public:
     void loop();
 };
 
+#endif
 #endif

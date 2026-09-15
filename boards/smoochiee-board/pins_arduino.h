@@ -20,6 +20,8 @@ static const uint8_t SCK = 18;
 #define SERIAL_TX 1
 #define BAD_RX SERIAL_RX
 #define BAD_TX SERIAL_TX
+#define GPS_SERIAL_TX SERIAL_TX
+#define GPS_SERIAL_RX SERIAL_RX
 #define USB_as_HID 1
 
 #define BTN_ALIAS "\"OK\""
@@ -32,7 +34,7 @@ static const uint8_t SCK = 18;
 #define BTN_ACT LOW
 
 #define RXLED 4
-#define LED 5
+#define TXLED 5
 #define LED_ON HIGH
 #define LED_OFF LOW
 
@@ -85,6 +87,8 @@ static const uint8_t SCK = 18;
 
 #define GROVE_SDA 47
 #define GROVE_SCL 48
+#define SYS_I2C_SDA 47
+#define SYS_I2C_SCL 48
 
 #define SPI_SCK_PIN 13
 #define SPI_MOSI_PIN 12
@@ -99,9 +103,13 @@ static const uint8_t SCK = 18;
 #define LED_ORDER GRB
 #define LED_TYPE_IS_RGBW 0
 #define LED_COUNT 16
+
 #define LED_COLOR_STEP 15
 
-#define USE_BQ25896
+#define XPOWERS_CHIP_BQ25896
+
+// USE BOOST ENABLE PMIC 5V OUTPUT
+#define USE_BOOST
 
 // Mic#
 #define PIN_CLK 1

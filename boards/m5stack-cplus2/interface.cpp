@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <interface.h>
 
@@ -7,6 +8,10 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    setSysI2CBus(&Wire1); // BM8563 RTC lives on Wire1
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
@@ -18,20 +23,23 @@ void _setup_gpio() {
     pinMode(33, OUTPUT);
     digitalWrite(32, LOW);
     digitalWrite(33, HIGH);
-}
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    uint8_t percent;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_38);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent >= 100) ? 100 : percent;
+    //=========================================================================
+    // Issue: During startup, the SD card might keep the MISO line at a high level continuously, causing RF
+    // initialization to fail. Solution：Forcing switch to SD card and sending dummy clocks
+    //=========================================================================
+    int pin_shared_ctrl = 33; // Controls CS: HIGH=SD_Select, LOW=RF_Select
+    int pin_sck = 0;          // SCK Pin for M5StickC Plus 2
+    pinMode(pin_shared_ctrl, OUTPUT);
+    pinMode(pin_sck, OUTPUT);
+    digitalWrite(pin_shared_ctrl, HIGH); // Force Select SD Card
+    delay(10);
+    for (int i = 0; i < 80; i++) {
+        digitalWrite(pin_sck, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(pin_sck, LOW);
+        delayMicroseconds(10);
+    } // send dummy clocks
+    digitalWrite(pin_shared_ctrl, HIGH); // Keep the SD card selected.
 }
 
 /*********************************************************************
@@ -65,8 +73,11 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (upPressed && dwPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = upPressed;
-    EscPress = upPressed;
     NextPress = dwPressed;
     SelPress = selPressed;
 }
@@ -85,16 +96,20 @@ void powerOff() {
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (digitalRead(UP_BTN) == LOW) {
         uint32_t time_count = millis();
         while (digitalRead(UP_BTN) == LOW) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("PWR OFF IN 3/3", 1);
+                    tft.fillRect(60, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setCursor(60, 12);
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -105,8 +120,10 @@ void checkReboot() {
         }
 
         // Clear text after releasing the button
-        if (millis() - time_count > 500)
+        if (millis() - time_count > 500) {
             tft.fillRect(60, 12, 16 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
         PrevPress = true;
     }
 }

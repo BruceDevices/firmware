@@ -82,7 +82,9 @@ void Wigle::dump_wigle_info() {
     padprintln("");
 }
 
-void Wigle::send_upload_headers(WiFiClientSecure &client, String filename, int filesize, String boundary) {
+void Wigle::send_upload_headers(
+    WiFiClientSecure &client, const String &filename, int filesize, const String &boundary
+) {
     // Content-Disposition header size.
     int cd_header_len = 147 - 45 - 8 + filename.length() + 2 * (boundary.length() + 2);
 
@@ -108,7 +110,7 @@ void Wigle::send_upload_headers(WiFiClientSecure &client, String filename, int f
     client.println();
 }
 
-bool Wigle::upload(FS *fs, String filepath, bool auto_delete) {
+bool Wigle::upload(FS *fs, const String &filepath, bool auto_delete) {
     display_banner();
 
     if (!fs || !get_user()) return false;
@@ -134,7 +136,7 @@ bool Wigle::upload(FS *fs, String filepath, bool auto_delete) {
     return true;
 }
 
-bool Wigle::upload_all(FS *fs, String folder, bool auto_delete) {
+bool Wigle::upload_all(FS *fs, const String &folder, bool auto_delete) {
     Serial.println("Wigle upload all path: " + folder);
 
     display_banner();
@@ -149,34 +151,46 @@ bool Wigle::upload_all(FS *fs, String folder, bool auto_delete) {
     bool success;
 
     while (true) {
+        bool isDir;
+
         success = false;
 
-        File file = root.openNextFile();
-        if (!file) break;
-        String filename = file.name();
-        String filepath = file.path();
+        String fullPath = root.getNextFileName(&isDir);
+        String nameOnly = fullPath.substring(fullPath.lastIndexOf("/") + 1);
+        if (fullPath == "") { break; }
+        // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
 
-        if (!file.isDirectory() && filename.endsWith(".csv")) {
-            Serial.println("Uploading file to Wigle: " + filename);
+        if (!isDir) {
 
-            if (!_upload_file(file, "Uploading " + String(i) + "...")) {
-                file.close();
-                displayError("File upload error", true);
-                return false;
+            int dotIndex = nameOnly.lastIndexOf(".");
+            String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
+            ext.toUpperCase();
+            if (ext.equals("CSV")) {
+                File file = fs->open(fullPath);
+
+                if (file) {
+                    if (!_upload_file(file, "Uploading " + String(i) + "...")) {
+                        file.close();
+                        displayError("File upload error", true);
+                        return false;
+                    }
+                    i++;
+                    success = true;
+
+                    file.close();
+                    if (success && auto_delete) fs->remove(fullPath);
+                }
             }
-            i++;
-            success = true;
         }
-        file.close();
-        if (success && auto_delete) fs->remove(filepath);
     }
+    root.close();
 
     String plural = i > 2 ? "s" : "";
     displaySuccess(String(i - 1) + " file" + plural + " uploaded", true);
     return true;
 }
 
-bool Wigle::_upload_file(File file, String upload_message) {
+bool Wigle::_upload_file(File file, const String &upload_message) {
     WiFiClientSecure client;
     client.setInsecure();
     if (!client.connect(host, 443)) {

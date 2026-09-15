@@ -9,11 +9,23 @@ public:
 
     void optionsMenu(void);
     void drawIcon(float scale);
-    void drawIconImg();
-    bool getTheme() { return bruceConfig.theme.config; }
+    bool hasTheme() { return bruceConfig.theme.config; }
+    const String &themePath() override { return bruceConfig.theme.paths.config; }
 
 private:
+    // Submenus
+    void displayUIMenu(void);
+    void ledMenu(void);
+    void audioMenu(void);
+    void systemMenu(void);
+    void advancedMenu(void);
+    void powerMenu(void);
+    void pinsMenu(void);
     void devMenu(void);
+
+    // Helper methods for complex operations
+    void switchToUSBSerial(void);
+    void switchToUARTSerial(void);
 };
 
 #endif

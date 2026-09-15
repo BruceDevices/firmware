@@ -1,6 +1,7 @@
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #ifndef __ESP_FILE_SHARING_H__
 #define __ESP_FILE_SHARING_H__
-
+#if !defined(LITE_VERSION)
 #include "esp_connection.h"
 
 class FileSharing : public EspConnection {
@@ -27,4 +28,5 @@ private:
     void createFilename(FS *fs, Message fileMessage);
 };
 
+#endif
 #endif

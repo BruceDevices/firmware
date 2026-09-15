@@ -1,4 +1,15 @@
+var display = require('display');
+var keyboardApi = require('keyboard');
+var dialog = require('dialog');
+var subghz = require('subghz');
 
+var fillScreen = display.fill;
+var drawString = display.drawString;
+var getAnyPress = keyboardApi.getAnyPress;
+var keyboardPrompt = keyboardApi.keyboard;
+var dialogChoice = dialog.choice;
+var dialogError = dialog.error;
+var subghzTransmit = subghz.transmit;
 // bruteforce RF signals
 // derived from https://github.com/mcore1976/cc1101-tool/blob/main/cc1101-tool-esp32.ino#617
 // for a more efficient attack look at https://github.com/UberGuidoZ/Flipper/tree/main/Sub-GHz/Garages/deBruijn
@@ -26,12 +37,12 @@ function brute_force() {
         // example full cmd: "subghz tx 445533 433920000 174 10"
         //serialCmd("subghz tx " + curr_val + " " + freq + " 174 10");
 
-        
+
         var r = subghzTransmit(curr_val, freq, 174, 10);
         // TODO: customize te=174  count=10
 
         if(!r) drawString("ERROR: check serial log", 3 , 64);
-        
+
         delay(delay_ms);
     }
 }
@@ -39,25 +50,26 @@ function brute_force() {
 
 while(true)
 {
-  var choice = dialogChoice({
-    ["Init value:" + value_prefix]: "value_prefix",
-    ["Range bits:" + no_bits]: "no_bits",
-    ["Delay: " + delay_ms]: "delay_ms",
-    ["Frequency:" + freq]: "freq",
-    ["Start attack"]: "attack"
-  });
+    var menu_options = {};
+    menu_options["Init value:" + value_prefix] = "value_prefix";
+    menu_options["Range bits:" + no_bits] = "no_bits";
+    menu_options["Delay: " + delay_ms] = "delay_ms";
+    menu_options["Frequency:" + freq] = "freq";
+    menu_options["Start attack"] = "attack";
 
-  if(choice=="") break;  // quit
-  else if(choice=="value_prefix") value_prefix = parseInt(keyboard(String(value_prefix), 32, "starting value"));
-  else if(choice=="no_bits") no_bits = parseInt(keyboard(String(no_bits), 32, "bits to iterate"));
-  else if(choice=="delay_ms") delay_ms = parseInt(keyboard(String(delay_ms), 32, "delay afear each try (in ms)"));
-  else if(choice=="freq") freq = parseInt(keyboard(String(freq), 32, "Frequency"));
-  else if(choice=="attack") {
-      if(!value_prefix || !no_bits || !delay_ms || !freq) {
-          dialogError("invalid params");
-          continue;
-      }
-      brute_force();
+    var choice = dialogChoice(menu_options);
+
+    if(choice=="") break;  // quit
+    else if(choice=="value_prefix") value_prefix = parseInt(keyboardPrompt(String(value_prefix), 32, "starting value"));
+    else if(choice=="no_bits") no_bits = parseInt(keyboardPrompt(String(no_bits), 32, "bits to iterate"));
+    else if(choice=="delay_ms") delay_ms = parseInt(keyboardPrompt(String(delay_ms), 32, "delay afear each try (in ms)"));
+    else if(choice=="freq") freq = parseInt(keyboardPrompt(String(freq), 32, "Frequency"));
+    else if(choice=="attack") {
+        if(!value_prefix || !no_bits || !delay_ms || !freq) {
+            dialogError("invalid params");
+            continue;
+        }
+        brute_force();
   }
 
   fillScreen(0); // clear screen

@@ -4,6 +4,12 @@
 #include <interface.h>
 CYD28_TouchR touch(320, 240);
 
+#ifdef WAVESENTRY
+#include <rotary_decoder.h>
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
+#endif
+
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
@@ -11,8 +17,15 @@ CYD28_TouchR touch(320, 240);
 ***************************************************************************************/
 void _setup_gpio() {
     bruceConfig.colorInverted = 0;
-    bruceConfig.rotation = 0; // portrait mode for Phantom
+    bruceConfigPins.rotation = 0; // portrait mode for Phantom
     pinMode(TFT_BL, OUTPUT);
+#ifdef WAVESENTRY
+    pinMode(ENCODER_KEY, INPUT);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
+#endif
 }
 
 /***************************************************************************************
@@ -49,27 +62,27 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static long tm = millis();
+    static unsigned long tm = millis();
     if (millis() - tm > 300 || LongPress) { // don´t allow multiple readings in less than 200ms
         if (touch.touched()) {
             auto t = touch.getPointScaled();
             t = touch.getPointScaled();
             tm = millis();
-            if (bruceConfig.rotation == 3) {
-                t.y = (tftHeight + 20) - t.y;
+            if (bruceConfigPins.rotation == 3) {
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = t.y;
-                t.y = (tftHeight + 20) - tmp;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
             }
-            Serial.printf("Touched at x=%d, y=%d, rot=%d\n", t.x, t.y, bruceConfig.rotation);
+            Serial.printf("Touched at x=%d, y=%d, rot=%d\n", t.x, t.y, bruceConfigPins.rotation);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;
@@ -81,6 +94,51 @@ void InputHandler(void) {
             touchHeatMap(touchPoint);
         } else touchPoint.pressed = false;
     }
+
+#ifdef WAVESENTRY
+    static unsigned long lastEncoderMoveMs = 0;
+    static int posDifference = 0;
+    static int lastPos = 0;
+    bool sel = !BTN_ACT;
+
+    int newPos = encoder->getPosition();
+    if (newPos != lastPos) {
+        posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
+        lastPos = newPos;
+        lastEncoderMoveMs = millis();
+    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
+        // Drop any stale queued steps once the encoder has stopped moving.
+        posDifference = 0;
+    }
+
+    if (millis() - tm < 200 && !LongPress) return;
+
+    sel = digitalRead(ENCODER_KEY);
+
+    if (posDifference != 0 || sel == BTN_ACT) {
+        if (!wakeUpScreen()) AnyKeyPress = true;
+        else return;
+    }
+    if (posDifference > 0) {
+        PrevPress = true;
+        posDifference--;
+    }
+    if (posDifference < 0) {
+        NextPress = true;
+        posDifference++;
+    }
+
+    if (sel == BTN_ACT) {
+        posDifference = 0;
+        SelPress = true;
+        tm = millis();
+    }
+#endif
 }
 
 /*********************************************************************
@@ -93,6 +151,6 @@ void powerOff() {}
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

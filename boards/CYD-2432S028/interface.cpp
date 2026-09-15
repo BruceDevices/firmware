@@ -1,13 +1,23 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Arduino.h>
 #include <interface.h>
 
 #if defined(HAS_CAPACITIVE_TOUCH)
+#if defined(TOUCH_GT911_I2C)
+#include "TouchDrvGT911.hpp"
+TouchDrvGT911 touch;
+struct TouchPointPro {
+    int16_t x = 0;
+    int16_t y = 0;
+};
+#else
 #include "CYD28_TouchscreenC.h"
 #define CYD28_DISPLAY_HOR_RES_MAX 240
 #define CYD28_DISPLAY_VER_RES_MAX 320
 CYD28_TouchC touch(CYD28_DISPLAY_HOR_RES_MAX, CYD28_DISPLAY_VER_RES_MAX);
+#endif
 #elif defined(USE_TFT_eSPI_TOUCH)
 #define XPT2046_CS TOUCH_CS
 #else
@@ -34,12 +44,33 @@ void _setup_gpio() {
     digitalWrite(XPT2046_CS, HIGH);
 #endif
 
+#if defined(HAS_CAPACITIVE_TOUCH)
+    setSysI2CBus(&Wire1);
+#if defined(TOUCH_GT911_I2C)
+    bruceConfigPins.sys_i2c.sda = (gpio_num_t)SYS_I2C_SDA;
+    bruceConfigPins.sys_i2c.scl = (gpio_num_t)SYS_I2C_SCL;
+#else
+    bruceConfigPins.sys_i2c.sda = (gpio_num_t)CYD28_TouchC_SDA;
+    bruceConfigPins.sys_i2c.scl = (gpio_num_t)CYD28_TouchC_SCL;
+#endif
+#endif
+
+#if defined(TOUCH_GT911_I2C)
+    pinMode(BOARD_TOUCH_INT, INPUT);
+    touch.setPins(-1, BOARD_TOUCH_INT);
+    if (!touch.begin(Wire1, GT911_SLAVE_ADDRESS_L, SYS_I2C_SDA, SYS_I2C_SCL)) {
+        Serial.println("Failed to find GT911 - check your wiring!");
+    }
+#else
 #if !defined(USE_TFT_eSPI_TOUCH) // Use libraries
     if (!touch.begin()) {
         Serial.println("Touch IC not Started");
         log_i("Touch IC not Started");
     } else log_i("Touch IC Started");
 #endif
+#endif
+
+    bruceConfig.colorInverted = 0;
 }
 
 /***************************************************************************************
@@ -80,7 +111,41 @@ void _post_setup_gpio() {
     // Brightness control must be initialized after tft in this case @Pirata
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BRIGHT_CHANNEL, 255);
+    ledcWrite(TFT_BL, 255);
+
+    // Force sync color inversion to prevent bruceConf.json from overriding
+    // the value set in _setup_gpio(). For CYD variants with TFT_INVERSION_ON,
+    // the init() sequence sends INVON; we send INVOFF here to ensure normal colors.
+#ifdef TFT_INVERSION_ON
+    bruceConfig.colorInverted = 0;
+    tft.invertDisplay(0);
+#else
+    bruceConfig.colorInverted = 1;
+    tft.invertDisplay(1);
+#endif
+
+    bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
+    bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;
+    bruceConfigPins.gpsBaudrate = 9600;
+
+    bool pinsChanged = false;
+    if (bruceConfigPins.rfTx != 22) {
+        bruceConfigPins.rfTx = 22;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.rfRx != 27) {
+        bruceConfigPins.rfRx = 27;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.irTx != 22) {
+        bruceConfigPins.irTx = 22;
+        pinsChanged = true;
+    }
+    if (bruceConfigPins.irRx != 27) {
+        bruceConfigPins.irRx = 27;
+        pinsChanged = true;
+    }
+    if (pinsChanged) bruceConfigPins.saveFile();
 }
 
 /*********************************************************************
@@ -97,8 +162,8 @@ void _setBrightness(uint8_t brightval) {
     else if (brightval == 0) dutyCycle = 0;
     else dutyCycle = ((brightval * 255) / 100);
 
-    log_i("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BRIGHT_CHANNEL, dutyCycle); // Channel 0
+    // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
+    ledcWrite(TFT_BL, dutyCycle);
 }
 
 /*********************************************************************
@@ -126,26 +191,75 @@ void InputHandler(void) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             _IH_touched = false;
+#elif defined(TOUCH_GT911_I2C)
+        static unsigned long tm = millis();
+        TouchPointPro t;
+        uint8_t touched = 0;
+        uint8_t rot = 5;
+
+        if (rot != bruceConfigPins.rotation) {
+            if (bruceConfigPins.rotation == 1) {
+                touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
+                touch.setSwapXY(true);
+                touch.setMirrorXY(false, true);
+            }
+            if (bruceConfigPins.rotation == 3) {
+                touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
+                touch.setSwapXY(true);
+                touch.setMirrorXY(true, false);
+            }
+            if (bruceConfigPins.rotation == 0) {
+                touch.setMaxCoordinates(TFT_WIDTH, TFT_HEIGHT);
+                touch.setSwapXY(false);
+                touch.setMirrorXY(false, false);
+            }
+            if (bruceConfigPins.rotation == 2) {
+                touch.setMaxCoordinates(TFT_WIDTH, TFT_HEIGHT);
+                touch.setSwapXY(false);
+                touch.setMirrorXY(true, true);
+            }
+            rot = bruceConfigPins.rotation;
+        }
+        // Track touch state to prevent double events on press/release
+        static bool lastTouchState = false;
+        static unsigned long lastTouchTime = 0;
+
+        touched = touch.getPoint(&t.x, &t.y);
+        bool currentTouchState = touched > 0;
+
+        // Only process new touch presses with debouncing
+        if (currentTouchState && !lastTouchState && (millis() - lastTouchTime) > 100) {
+            // This is a genuine new touch press
+            lastTouchTime = millis();
+        } else if (!currentTouchState || lastTouchState) {
+            // Touch release or continuing touch - ignore
+            touched = 0;
+        }
+        lastTouchState = currentTouchState;
+        if (((millis() - tm) > 190 || LongPress) && touched) {
+            tm = millis();
 #else
         if (touch.touched()) {
             auto t = touch.getPointScaled();
 #endif
+#if !defined(TOUCH_GT911_I2C)
             // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d",t.x, t.y);
-            if (bruceConfig.rotation == 3) {
-                t.y = (tftHeight + 20) - t.y;
+            if (bruceConfigPins.rotation == 3) {
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = t.y;
-                t.y = (tftHeight + 20) - tmp;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
             }
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n",t.x, t.y);
+#endif
+            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n", t.x, t.y);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else goto END;
@@ -174,6 +288,6 @@ void powerOff() {
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

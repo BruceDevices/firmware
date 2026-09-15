@@ -1,6 +1,6 @@
 #ifndef DHCP_STARVATION_H
 #define DHCP_STARVATION_H
-
+#if !defined(LITE_VERSION)
 #include "Arduino.h"
 #include "lwip/prot/dhcp.h"
 #include "lwip/prot/ip4.h"
@@ -46,4 +46,5 @@ public:
     void loop();
 };
 
+#endif
 #endif

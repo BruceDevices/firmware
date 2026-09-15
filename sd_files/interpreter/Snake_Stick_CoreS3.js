@@ -1,5 +1,16 @@
 // Snake Example
 
+var display = require('display');
+var keyboard = require('keyboard');
+
+var width = display.width;
+var height = display.height;
+var color = display.color;
+var drawFillRect = display.drawFillRect;
+var drawRect = display.drawRect;
+var drawString = display.drawString;
+var fillScreen = display.fill;
+
 var screenWidth = width();
 var screenHeight = height();
 var cBG = color(0, 0, 0);
@@ -69,18 +80,18 @@ function isOnSnake(x, y) {
 function updateSnake() {
     if (canMove) {
         // 0 = up, 1 = down, 2 = left, 3 = right
-        if(getSelPress()) { // clockwise
+        if(keyboard.getSelPress()) { // clockwise
             if(headDir==0) headDir=3;
-            else if(headDir==3) headDir=1; 
-            else if(headDir==1) headDir=2; 
-            else if(headDir==2) headDir=0; 
+            else if(headDir==3) headDir=1;
+            else if(headDir==1) headDir=2;
+            else if(headDir==2) headDir=0;
             canMove = false;
         }
-        if(getNextPress()) { // Anti-Clockwise
+        if(keyboard.getNextPress()) { // Anti-Clockwise
             if(headDir==0) headDir=2;
-            else if(headDir==2) headDir=1; 
-            else if(headDir==1) headDir=3; 
-            else if(headDir==3) headDir=0; 
+            else if(headDir==2) headDir=1;
+            else if(headDir==1) headDir=3;
+            else if(headDir==3) headDir=0;
             canMove=false;
         }
     }

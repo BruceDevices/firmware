@@ -1,8 +1,8 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
-#include <stdint.h>
 #include "soc/soc_caps.h"
+#include <stdint.h>
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001
@@ -49,85 +49,85 @@ static const uint8_t G46 = 46;
 static const uint8_t ADC1 = 7;
 static const uint8_t ADC2 = 8;
 
-#define FM_RSTPIN	    40
-#define PIN_CLK	        43
-#define I2S_SCLK_PIN	43
-#define I2S_DATA_PIN	46
-#define PIN_DATA	    46
+#define FM_RSTPIN 40
+#define PIN_CLK 43
+#define I2S_SCLK_PIN 43
+#define I2S_DATA_PIN 46
+#define PIN_DATA 46
 
-#define RGB_LED	21
+#define RGB_LED 21
 
-#define BCLK	41
-#define WCLK	43
-#define DOUT	42
+#define BCLK 41
+#define WCLK 43
+#define DOUT 42
 
-#define BAD_TX	GROVE_SDA
-#define BAD_RX	GROVE_SCL
+#define BAD_TX GROVE_SDA
+#define BAD_RX GROVE_SCL
 
-#define HAS_BTN	    0
-#define BTN_ALIAS	"\"Ok\""
-#define BTN_PIN	    0
-#define BTN_ACT	    LOW
+#define HAS_BTN 0
+#define BTN_ALIAS "\"Ok\""
+#define BTN_PIN 0
+#define BTN_ACT LOW
 
-#define IR_TX_PINS	'{{"M5 IR Mod", GROVE_SDA}, {"Pin 1", 1}, {"Pin 2", 2}}'
-#define IR_RX_PINS	'{{"M5 IR Mod", GROVE_SCL}, {"Pin 1", 1}, {"Pin 2", 2}}'
-#define LED     -1
-#define LED_ON	HIGH
-#define LED_OFF	LOW
+#define IR_TX_PINS '{{"M5 IR Mod", GROVE_SDA}, {"Pin 1", 1}, {"Pin 2", 2}}'
+#define IR_RX_PINS '{{"M5 IR Mod", GROVE_SCL}, {"Pin 1", 1}, {"Pin 2", 2}}'
+#define TXLED -1
+#define LED_ON HIGH
+#define LED_OFF LOW
 
-#define RF_TX_PINS	'{{"M5 RF433T", GROVE_SDA}, {"Pin 1", 1}, {"Pin 2", 2}}'
-#define RF_RX_PINS	'{{"M5 FR433R", GROVE_SCL}, {"Pin 1", 1}, {"Pin 2", 2}}'
+#define RF_TX_PINS '{{"M5 RF433T", GROVE_SDA}, {"Pin 1", 1}, {"Pin 2", 2}}'
+#define RF_RX_PINS '{{"M5 FR433R", GROVE_SCL}, {"Pin 1", 1}, {"Pin 2", 2}}'
 
-#define CC1101_GDO0_PIN	9
-#define CC1101_SS_PIN	10
-#define CC1101_MOSI_PIN	SPI_MOSI_PIN
-#define CC1101_SCK_PIN	SPI_SCK_PIN
-#define CC1101_MISO_PIN	SPI_MISO_PIN
+#define CC1101_GDO0_PIN 9
+#define CC1101_SS_PIN 10
+#define CC1101_MOSI_PIN SPI_MOSI_PIN
+#define CC1101_SCK_PIN SPI_SCK_PIN
+#define CC1101_MISO_PIN SPI_MISO_PIN
 
-#define NRF24_CE_PIN	6
-#define NRF24_SS_PIN	7
-#define NRF24_MOSI_PIN	SPI_MOSI_PIN
-#define NRF24_SCK_PIN	SPI_SCK_PIN
-#define NRF24_MISO_PIN	SPI_MISO_PIN
+#define NRF24_CE_PIN 6
+#define NRF24_SS_PIN 7
+#define NRF24_MOSI_PIN SPI_MOSI_PIN
+#define NRF24_SCK_PIN SPI_SCK_PIN
+#define NRF24_MISO_PIN SPI_MISO_PIN
 
-#define FP	1
-#define FM	2
-#define FG	3
+#define FP 1
+#define FM 2
+#define FG 3
 
-#define HAS_SCREEN	1
-#define ROTATION	1
-#define MINBRIGHT	160
+#define HAS_SCREEN 1
+#define ROTATION 1
+#define MINBRIGHT 160
 
-#define USER_SETUP_LOADED	1
-#define USE_HSPI_PORT	    1
-#define ST7789_2_DRIVER	    1
-#define TFT_RGB_ORDER	    1
-#define TFT_WIDTH	        135
-#define TFT_HEIGHT	        240
-#define TFT_BACKLIGHT_ON	1
-#define TFT_BL	            38
-#define TFT_RST	            33
-#define TFT_DC	            34
-#define TFT_MOSI	        35
-#define TFT_SCLK	        36
-#define TFT_CS	            37
-#define TOUCH_CS	        -1
-#define SMOOTH_FONT	        1
-#define SPI_FREQUENCY	    20000000
-#define SPI_READ_FREQUENCY	20000000
-#define SPI_TOUCH_FREQUENCY	2500000
+#define USER_SETUP_LOADED 1
+#define USE_HSPI_PORT 1
+#define ST7789_2_DRIVER 1
+#define TFT_RGB_ORDER 1
+#define TFT_WIDTH 135
+#define TFT_HEIGHT 240
+#define TFT_BACKLIGHT_ON 1
+#define TFT_BL 38
+#define TFT_RST 33
+#define TFT_DC 34
+#define TFT_MOSI 35
+#define TFT_SCLK 36
+#define TFT_CS 37
+#define TOUCH_CS -1
+#define SMOOTH_FONT 1
+#define SPI_FREQUENCY 20000000
+#define SPI_READ_FREQUENCY 20000000
+#define SPI_TOUCH_FREQUENCY 2500000
 
-#define SDCARD_CS	12
-#define SDCARD_SCK	40
-#define SDCARD_MISO	39
-#define SDCARD_MOSI	14
+#define SDCARD_CS 12
+#define SDCARD_SCK 40
+#define SDCARD_MISO 39
+#define SDCARD_MOSI 14
 
-#define GROVE_SDA	2
-#define GROVE_SCL	1
+#define GROVE_SDA 2
+#define GROVE_SCL 1
 
-#define SPI_SCK_PIN	    12
-#define SPI_MOSI_PIN	11
-#define SPI_MISO_PIN	13
-#define SPI_SS_PIN	    10
+#define SPI_SCK_PIN 12
+#define SPI_MOSI_PIN 11
+#define SPI_MISO_PIN 13
+#define SPI_SS_PIN 10
 
 #endif /* Pins_Arduino_h */

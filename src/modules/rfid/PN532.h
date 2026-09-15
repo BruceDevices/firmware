@@ -7,7 +7,9 @@
  */
 
 #include "RFIDInterface.h"
+#define private public
 #include <Adafruit_PN532.h>
+#undef private
 
 class PN532 : public RFIDInterface {
 public:
@@ -46,8 +48,10 @@ public:
     int erase();
     int write(int cardBaudRate = PN532_MIFARE_ISO14443A);
     int write_ndef();
+    int emulate() override;
     int load();
-    int save(String filename);
+    int save(const String &filename);
+    String emulationCaveat() const override;
 
 private:
     bool _use_i2c;
@@ -70,6 +74,7 @@ private:
     int read_mifare_classic_data_sector(byte sector);
     int authenticate_mifare_classic(byte block);
     int read_mifare_ultralight_data_blocks();
+    int read_ndef_t4t_data();
 
     int write_data_blocks();
     bool write_mifare_classic_data_block(int block, String data);

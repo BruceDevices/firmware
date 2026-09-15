@@ -18,6 +18,7 @@
 #include "core/mykeyboard.h"
 #include "core/settings.h"
 #include "core/utils.h"
+#include "ir_utils.h"
 #include <globals.h>
 #include <interface.h>
 
@@ -377,7 +378,7 @@ void setupJammer(IRsend &irsend) {
     irsend.begin();
 
     // Configure IR LED pin as output
-    pinMode(bruceConfig.irTx, OUTPUT);
+    setup_ir_pin(bruceConfigPins.irTx, OUTPUT);
 
     // Draw UI border on the display
     drawMainBorder();
@@ -400,7 +401,7 @@ void renderJammerUI(JammerState &state) {
 
     // Calculate layout dimensions based on screen size
     int contentWidth = tftWidth - 20;
-    int yStart = 35;
+    int yStart = BORDER_PAD_Y;
     int ySpacing = 10;
     int rightColumnX = tftWidth / 2 + 10;
 
@@ -428,7 +429,7 @@ void renderJammerUI(JammerState &state) {
     }
 
     // Display current status with highlighting for selected setting
-    int curY = yStart + 20;
+    int curY = yStart + LH * FM + 4;
     tft.setCursor(10, curY);
     tft.setTextSize(FP);
     tft.setTextColor((state.settingIndex == 0) ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
@@ -466,7 +467,7 @@ void renderJammerUI(JammerState &state) {
 
     // Display exit instruction in top-right corner
     tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.setCursor(tftWidth - 70, 30);
+    tft.setCursor(tftWidth - 70, BORDER_PAD_Y);
     tft.print("[ESC] Exit");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
@@ -535,9 +536,9 @@ void performBasicJamming(JammerState &state, IRsend &irsend) {
         // Method 1: Direct LED control for precise timing
         // Generates simple square wave with equal mark/space duration
         for (int i = 0; i < 50 * state.jamDensity; i++) {
-            digitalWrite(bruceConfig.irTx, HIGH);
+            digitalWrite(bruceConfigPins.irTx, HIGH);
             delayMicroseconds(state.markTiming);
-            digitalWrite(bruceConfig.irTx, LOW);
+            digitalWrite(bruceConfigPins.irTx, LOW);
             delayMicroseconds(state.markTiming);
         }
 
@@ -562,9 +563,9 @@ void performEnhancedBasicJamming(JammerState &state, IRsend &irsend) {
         // Method 1: Direct LED control with separate mark/space timing
         // Provides more flexibility to target specific IR protocols
         for (int i = 0; i < 25 * state.jamDensity; i++) {
-            digitalWrite(bruceConfig.irTx, HIGH);
+            digitalWrite(bruceConfigPins.irTx, HIGH);
             delayMicroseconds(state.markTiming);
-            digitalWrite(bruceConfig.irTx, LOW);
+            digitalWrite(bruceConfigPins.irTx, LOW);
             delayMicroseconds(state.spaceTiming);
         }
 
@@ -604,9 +605,9 @@ void performSweepJamming(JammerState &state, IRsend &irsend) {
 
         // Direct LED control for precise timing
         for (int i = 0; i < 20 * state.jamDensity; i++) {
-            digitalWrite(bruceConfig.irTx, HIGH);
+            digitalWrite(bruceConfigPins.irTx, HIGH);
             delayMicroseconds(state.markTiming);
-            digitalWrite(bruceConfig.irTx, LOW);
+            digitalWrite(bruceConfigPins.irTx, LOW);
             delayMicroseconds(state.markTiming);
         }
 
@@ -676,8 +677,12 @@ void performEmptyJamming(JammerState &state, IRsend &irsend) {
  * @param irsend IR transmitter interface to reset
  */
 void cleanupJammer(IRsend &irsend) {
+
+#ifdef USE_BOOST /// ENABLE 5V OUTPUT
+    PPM.disableOTG();
+#endif
     // Ensure IR LED is turned off
-    digitalWrite(bruceConfig.irTx, LOW);
+    digitalWrite(bruceConfigPins.irTx, LOW);
 
     // Display exit message
     displayRedStripe("IR Jamming Stopped");
@@ -691,8 +696,11 @@ void cleanupJammer(IRsend &irsend) {
  * Initializes hardware, runs the main loop, and handles cleanup
  */
 void startIrJammer() {
+#ifdef USE_BOOST /// ENABLE 5V OUTPUT
+    PPM.enableOTG();
+#endif
     // Initialize IR transmitter with configured pin
-    IRsend irsend(bruceConfig.irTx);
+    IRsend irsend(bruceConfigPins.irTx);
 
     // Initialize jammer state structure
     JammerState state;

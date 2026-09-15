@@ -1,6 +1,6 @@
 #ifndef ARP_POISONER_H
 #define ARP_POISONER_H
-
+#if !defined(LITE_VERSION)
 #include "Arduino.h"
 #include "FS.h"
 
@@ -25,4 +25,5 @@ public:
     ~ARPoisoner();
 };
 
+#endif
 #endif

@@ -25,17 +25,32 @@ if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
         FRAMEWORK_DIR, mcu, "lib", "libnet80211.a.patched"
     )
 
-    env.Execute(
-        "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=s %s %s"
-        % (mcu, mcu, original_file, patched_file)
-    )
+    if mcu=="esp32c5" or mcu=="esp32c6" :
+        env.Execute(
+            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
+            % (original_file, patched_file)
+        )
+    elif mcu=="esp32p4":
+        """Do nothing"""
+    else:
+        env.Execute(
+            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
+            % (mcu, mcu, original_file, patched_file)
+        )
+
     if isfile("%s.old" % (original_file)):
         remove("%s.old" % (original_file))
-    rename(original_file, "%s.old" % (original_file))
-    env.Execute(
-        "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-        % (mcu, mcu, patched_file, original_file)
-    )
+
+    if isfile(original_file):
+        rename(original_file, "%s.old" % (original_file))
+    else:
+        print("Patch: Original file not found")
+
+    if isfile(patched_file):
+        rename(patched_file, original_file)
+    else:
+        print("Patch: Patched file not found")
+
 
     def _touch(path):
         with open(path, "w") as fp:
@@ -76,17 +91,32 @@ def load_checksum_file(input_file):
     with open(input_file, "r") as f:
         return f.readline().strip()
 
+
 def minify_css(c):
-    minify_req = requests.post("https://www.toptal.com/developers/cssminifier/api/raw", {"input": c.read().decode('utf-8')})
+    minify_req = requests.post(
+        "https://www.toptal.com/developers/cssminifier/api/raw",
+        {"input": c.read().decode('utf-8')},
+    )
     return c if minify_req is False else minify_req.text.encode('utf-8')
 
+
 def minify_js(js):
-    minify_req = requests.post('https://www.toptal.com/developers/javascript-minifier/api/raw', {'input': js.read().decode('utf-8')})
+    minify_req = requests.post(
+        'https://www.toptal.com/developers/javascript-minifier/api/raw',
+        {'input': js.read().decode('utf-8')},
+        timeout=10
+    )
     return js if minify_req is False else minify_req.text.encode('utf-8')
 
+
 def minify_html(html):
-    minify_req = requests.post('https://www.toptal.com/developers/html-minifier/api/raw', {'input': html.read().decode('utf-8')})
+    minify_req = requests.post(
+        'https://www.toptal.com/developers/html-minifier/api/raw',
+        {'input': html.read().decode('utf-8')},
+        timeout=10
+    )
     return html if minify_req is False else minify_req.text.encode('utf-8')
+
 
 # gzip web files
 def prepare_www_files():
@@ -136,6 +166,11 @@ def prepare_www_files():
                     minified = minify_js(src)
                 else:
                     raise ValueError(f"Unsupported file type: {ext}")
+
+                # # Output minified file
+                # min_file = file + ".min"
+                # with open(min_file, "wb") as minf:
+                #     minf.write(minified)
 
                 dst.write(minified)
 

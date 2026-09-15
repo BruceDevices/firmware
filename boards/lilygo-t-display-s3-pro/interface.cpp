@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <SD_MMC.h>
@@ -10,8 +11,6 @@ static PowersSY6970 PMU;
 #include <Wire.h>
 #define LCD_MODULE_CMD_1
 
-#define BOARD_I2C_SDA 5
-#define BOARD_I2C_SCL 6
 #define BOARD_SENSOR_IRQ 21
 #define BOARD_TOUCH_RST 13
 TouchDrvCSTXXX touch;
@@ -48,19 +47,20 @@ void _setup_gpio() {
     pinMode(BOARD_TOUCH_RST, OUTPUT);   // PIN_TOUCH_RES
     digitalWrite(BOARD_TOUCH_RST, LOW); // PIN_TOUCH_RES
     delay(500);
-    digitalWrite(BOARD_TOUCH_RST, HIGH);      // PIN_TOUCH_RES
-    Wire.begin(BOARD_I2C_SDA, BOARD_I2C_SCL); // SDA, SCL
+    digitalWrite(BOARD_TOUCH_RST, HIGH);  // PIN_TOUCH_RES
+    setSysI2CBus(&Wire);                  // Touch + PMU both live on the default Wire object
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL); // SDA, SCL
 
     // Initialize capacitive touch
     touch.setPins(BOARD_TOUCH_RST, BOARD_SENSOR_IRQ);
-    touch.begin(Wire, CST226SE_SLAVE_ADDRESS, BOARD_I2C_SDA, BOARD_I2C_SCL);
+    touch.begin(Wire, CST226SE_SLAVE_ADDRESS, SYS_I2C_SDA, SYS_I2C_SCL);
     touch.setMaxCoordinates(TFT_HEIGHT, TFT_WIDTH);
     touch.setSwapXY(true);
     touch.setMirrorXY(false, false);
     // Set the screen to turn on or off after pressing the screen Home touch button
     touch.setHomeButtonCallback(touchHomeKeyCallback);
 
-    bool hasPMU = PMU.init(Wire, BOARD_I2C_SDA, BOARD_I2C_SCL, SY6970_SLAVE_ADDRESS);
+    bool hasPMU = PMU.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, SY6970_SLAVE_ADDRESS);
     if (!hasPMU) {
         Serial.println("PMU is not online...");
     } else {
@@ -78,7 +78,7 @@ void _setup_gpio() {
 void _post_setup_gpio() {
     // PWM backlight setup
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BRIGHT_CHANNEL, 255);
+    ledcWrite(TFT_BL, 255);
 }
 
 /***************************************************************************************
@@ -90,7 +90,7 @@ int getBattery() {
     int percent = 0;
     percent = (PMU.getSystemVoltage() - 3300) * 100 / (float)(4150 - 3350);
 
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************
@@ -108,7 +108,7 @@ void _setBrightness(uint8_t brightval) {
     else dutyCycle = ((brightval * 255) / 100);
 
     Serial.printf("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BRIGHT_CHANNEL, dutyCycle); // Channel 0
+    ledcWrite(TFT_BL, dutyCycle);
 }
 
 struct TouchPointPro {
@@ -139,21 +139,21 @@ void InputHandler(void) {
         }
         if (touched && touch.isPressed()) {
             tm = millis();
-            if (bruceConfig.rotation == 1) { t.y[0] = TFT_WIDTH - t.y[0]; }
-            if (bruceConfig.rotation == 3) { t.x[0] = TFT_HEIGHT - t.x[0]; }
+            if (bruceConfigPins.rotation == 1) { t.y[0] = TFT_WIDTH - t.y[0]; }
+            if (bruceConfigPins.rotation == 3) { t.x[0] = TFT_HEIGHT - t.x[0]; }
             // Need to test these 2
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x[0];
                 t.x[0] = t.y[0];
                 t.y[0] = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x[0];
                 t.x[0] = TFT_WIDTH - t.y[0];
                 t.y[0] = TFT_HEIGHT - tmp;
             }
 
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x[0], t.y[0], bruceConfig.rotation);
+            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x[0], t.y[0], bruceConfigPins.rotation);
 
             if (!wakeUpScreen()) AnyKeyPress = true;
             else return;
@@ -177,6 +177,6 @@ void powerOff() {}
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

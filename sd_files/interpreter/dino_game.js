@@ -319,6 +319,7 @@ function main() {
   sprite.setTextColor(foreground);
   sprite.setTextSize(2);
   sprite.setTextAlign(2);
+  keyboard.setLongPress(true);
   while (true) {
     if (keyboard.getPrevPress(true)) {
       break; // Exits the game when a prev button is pressed.
@@ -399,8 +400,8 @@ function main() {
     if (modScore % dayInterval >= dayInterval - dayTransitionRange) {
       baseColorValue = Math.round(
         255 *
-          (((modScore % dayInterval) - (dayInterval - dayTransitionRange)) /
-            dayTransitionRange)
+        (((modScore % dayInterval) - (dayInterval - dayTransitionRange)) /
+          dayTransitionRange)
       );
       baseColorInverted = Math.abs(baseColorValue - 255);
     }
@@ -441,7 +442,7 @@ function main() {
       obstacleX,
       obstacleY,
       obstacle.sprites[
-        obstacle.isAnimated ? Math.floor((nowTime % 500) / 250) : 0
+      obstacle.isAnimated ? Math.floor((nowTime % 500) / 250) : 0
       ],
       obstacle.width,
       obstacle.height,
@@ -502,5 +503,6 @@ function main() {
       startTime = now();
     }
   }
+  keyboard.setLongPress(false);
 }
 main();

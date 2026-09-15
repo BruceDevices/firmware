@@ -67,9 +67,9 @@ extern const uint8_t KeyboardLayout_si_SI[128] PROGMEM = {
 
     0x37 | SHIFT,  // :      (Shift+.)
     0x36 | SHIFT,  // ;      (Shift+,)
-    0x32,          // <      (Shift+,) popravi
+    0x36 | ALT_GR, // <      (AltGr+,) popravi
     0x27 | SHIFT,  // =      (Shift+0)
-    0x32 | SHIFT,  // >      (Shift+.) popravi
+    0x37 | ALT_GR, // >      (AltGr+.) popravi
     0x2d | SHIFT,  // ?      (Shift+')
     0x19 | ALT_GR, // @      (AltGr+V)
 
@@ -103,7 +103,7 @@ extern const uint8_t KeyboardLayout_si_SI[128] PROGMEM = {
     0x09 | ALT_GR, // [      (AltGr+F)
     0x14 | ALT_GR, // bslash (AltGr+Q)
     0x0a | ALT_GR, // ]      (AltGr+G)
-    0x1f,          // ^      (Dead key on 2)
+    0x20 | ALT_GR, // ^      (AltGr+3)
     0x38 | SHIFT,  // _      (Shift+-)
     0x24 | ALT_GR, // `      (AltGr+7)
 

@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 
 /***************************************************************************************
@@ -7,9 +8,11 @@
 ***************************************************************************************/
 
 // Power handler for battery detection
+#ifdef XPOWERS_CHIP_BQ25896
 #include <Wire.h>
 #include <XPowersLib.h>
 XPowersPPM PPM;
+#endif
 
 void _setup_gpio() {
 
@@ -26,13 +29,14 @@ void _setup_gpio() {
     digitalWrite(NRF24_SS_PIN, HIGH);
     // Starts SPI instance for CC1101 and NRF24 with CS pins blocking communication at start
 
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.irRx = RXLED;
-    Wire.setPins(GROVE_SDA, GROVE_SCL);
-    Wire.begin();
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.irRx = RXLED;
+    setSysI2CBus(&Wire); // PMU lives on the default Wire object
+    Wire.setPins(SYS_I2C_SDA, SYS_I2C_SCL);
+    // Wire.begin();
     bool pmu_ret = false;
-
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
         PPM.setSysPowerDownVoltage(3300);
         PPM.setInputCurrentLimit(3250);
@@ -43,23 +47,31 @@ void _setup_gpio() {
         PPM.setChargerConstantCurr(832);
         PPM.getChargerConstantCurr();
         Serial.printf("getChargerConstantCurr: %d mA\n", PPM.getChargerConstantCurr());
-        PPM.enableADCMeasure();
-        PPM.enableCharge();
-        PPM.enableOTG();
+        PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
         PPM.disableOTG();
+        PPM.enableCharge();
     }
 }
+bool isCharging() {
+    // PPM.disableBatterPowerPath();
+    return PPM.isCharging();
+}
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100+
-***************************************************************************************/
 int getBattery() {
-    int8_t percent = 0;
-    percent = (PPM.getSystemVoltage() - 3300) * 100 / (float)(4150 - 3350);
+    int voltage = PPM.getBattVoltage();
+    int percent = (voltage - 3300) * 100 / (float)(4150 - 3350);
 
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    if (percent < 0) return 1;
+    if (percent > 100) percent = 100;
+
+    if (PPM.isCharging() && percent >= 97) {
+        PPM.disableBatLoad();
+        percent = 95; // estimate still charging
+    }
+
+    if (PPM.isChargeDone()) { percent = 100; }
+
+    return percent;
 }
 
 /*********************************************************************
@@ -125,16 +137,20 @@ void powerOff() {
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (digitalRead(L_BTN) == BTN_ACT && digitalRead(R_BTN) == BTN_ACT) {
         uint32_t time_count = millis();
         while (digitalRead(L_BTN) == BTN_ACT && digitalRead(R_BTN) == BTN_ACT) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("PWR OFF IN 3/3", 1);
+                    tft.fillRect(tftWidth / 2 - textWidth / 2, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 countDown = (millis() - time_count) / 1000 + 1;
@@ -152,13 +168,9 @@ void checkReboot() {
 
         // Clear text after releasing the button
         delay(30);
-        tft.fillRect(60, 12, tftWidth - 60, tft.fontHeight(1), bruceConfig.bgColor);
+        if (millis() - time_count > 500) {
+            tft.fillRect(60, 12, tftWidth - 60, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
     }
-}
-/***************************************************************************************
-** Function name: isCharging()
-** Description:   Determines if the device is charging
-***************************************************************************************/
-bool isCharging() {
-    return PPM.isCharging(); // Return the charging status from BQ27220
 }

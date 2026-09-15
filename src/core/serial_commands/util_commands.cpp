@@ -4,8 +4,8 @@
 #include "core/utils.h" // to return optionsJSON
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
+#include "core/bus_HAL.h"
 #include "modules/badusb_ble/ducky_typer.h"
-#include <Wire.h>
 #include <globals.h>
 
 uint32_t uptimeCallback(cmd *c) {
@@ -56,7 +56,7 @@ uint32_t dateCallback(cmd *c) {
 uint32_t i2cCallback(cmd *c) {
     // scan for connected i2c modules
     // derived from https://learn.adafruit.com/scanning-i2c-addresses/arduino
-    Wire.begin(GROVE_SDA, GROVE_SCL);
+    TwoWire *Wire = acquireI2CBus();
     byte error, address;
     int nDevices;
     serialDevice->println("Scanning...");
@@ -65,8 +65,8 @@ uint32_t i2cCallback(cmd *c) {
         // The i2c_scanner uses the return value of
         // the Write.endTransmisstion to see if
         // a device did acknowledge to the address.
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
+        Wire->beginTransmission(address);
+        error = Wire->endTransmission();
         if (error == 0) {
             serialDevice->print("I2C device found at address 0x");
             if (address < 16) serialDevice->print("0");
@@ -78,6 +78,7 @@ uint32_t i2cCallback(cmd *c) {
             serialDevice->println(address, HEX);
         }
     }
+    releaseI2CBus();
 
     if (nDevices == 0) {
         serialDevice->println("No I2C devices found");
@@ -107,7 +108,8 @@ uint32_t infoCallback(cmd *c) {
     serialDevice->print("Bruce v");
     serialDevice->println(BRUCE_VERSION);
     serialDevice->println(GIT_COMMIT_HASH);
-    serialDevice->printf("SDK: %s\n", ESP.getSdkVersion());
+    serialDevice->print("SDK: ");
+    serialDevice->println(ESP.getSdkVersion());
     serialDevice->println("MAC addr: " + String(WiFi.macAddress()));
     // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/ChipID/GetChipID/GetChipID.ino
     // serialDevice->printf("Chip is %s (revision v%d)\n", ESP.getChipModel(), ESP.getChipRevision());
@@ -135,25 +137,45 @@ uint32_t helpCallback(cmd *c) {
     serialDevice->print(BRUCE_VERSION);
     serialDevice->print("\nThese shell commands are defined internally.\n");
 
+    serialDevice->println("\nWiFi Commands:");
+    serialDevice->println("  wifi off (Disconnects Wifi)");
+    serialDevice->println(
+        "  wifi on  (Connects to a known Wifi network. if there's no known network, starts in AP Mode)"
+    );
+    serialDevice->println("  wifi add \"SSID\" \"Password\" (adds a network to the list)");
+    serialDevice->println("  arp - Starts Scan Hosts ARP Scanner");
+    serialDevice->println("  listen   - Starts listening TCP default port");
+    serialDevice->println("  sniffer - Starts Raw Sniffer");
+    serialDevice->println("\nWebUI Commands:");
+    serialDevice->println("  webui      - WebUI Webserver start");
     serialDevice->println("\nIR Commands:");
     serialDevice->println("  ir rx <timeout>      - Read an IR signal and print the dump on serialDevice->");
-    serialDevice->println("  ir rx raw <timeout>  - Read an IR signal in RAW mode and print the dump on serialDevice->");
+    serialDevice->println(
+        "  ir rx raw <timeout>  - Read an IR signal in RAW mode and print the dump on serialDevice->"
+    );
     serialDevice->println("  ir tx <protocol> <address> <decoded_value>  - Send a custom decoded IR signal.");
-    serialDevice->println("  ir tx_from_file <ir file path>  - Send an IR signal saved in storage.");
+    serialDevice->println(
+        "  ir tx_from_file <ir file path> [hide default UI true/false] - Send an IR signal saved in "
+        "storage. Optionally hide the default UI."
+    );
 
     serialDevice->println("\nRF Commands:");
     serialDevice->println(
         "  subghz rx <timeout>       - Read an RF signal and print the dump on serialDevice-> (alias: rf rx)"
     );
     serialDevice->println(
-        "  subghz rx raw <timeout>   - Read an RF signal in RAW mode and print the dump on serialDevice-> (alias: "
+        "  subghz rx raw <timeout>   - Read an RF signal in RAW mode and print the dump on serialDevice-> "
+        "(alias: "
         "rf rx raw)"
     );
     serialDevice->println(
         "  subghz tx <decoded_value> <frequency> <te> <count>  - Send a custom decoded RF signal. (alias: rf "
         "tx)"
     );
-    serialDevice->println("  subghz tx_from_file <sub file path>  - Send an RF signal saved in storage.");
+    serialDevice->println(
+        "  subghz tx_from_file <sub file path> [hide default UI true/false] - Send an RF signal "
+        "saved in storage. Optionally hide the default UI."
+    );
 
     serialDevice->println("\nAudio Commands:");
     serialDevice->println("  music_player <audio file path>  - Play an audio file.");
@@ -161,8 +183,20 @@ uint32_t helpCallback(cmd *c) {
     serialDevice->println("  say <text>   - Text-To-Speech (speaker required).");
 
     serialDevice->println("\nUI Commands:");
-    serialDevice->println("  led <r/g/b> <0-255>    - Change the UI main color.");
-    serialDevice->println("  clock                 - Show the clock UI.");
+    serialDevice->println("  screen color rgb <r> <g> <b>  - Change the UI main color.");
+    serialDevice->println("  screen color hex <RRGGBB>     - Change the UI main color.");
+    serialDevice->println("  screen brightness <0-255>     - Change the screen backlight.");
+    serialDevice->println("  clock                         - Show the clock UI.");
+
+#ifdef HAS_RGB_LED
+    serialDevice->println("\nRGB LED Commands:");
+    serialDevice->println("  led <r/g/b> <0-255>      - Change a single channel of the RGB LED.");
+    serialDevice->println("  led rgb <r> <g> <b>      - Change the RGB LED color.");
+    serialDevice->println("  led hex <RRGGBB>         - Change the RGB LED color.");
+    serialDevice->println("  led brightness <0-100>   - Change the RGB LED brightness.");
+    serialDevice->println("  led effect <0-9>         - Change the RGB LED effect (0 = solid color).");
+    serialDevice->println("  led off                  - Turn the RGB LED off.");
+#endif
 
     serialDevice->println("\nPower Management:");
     serialDevice->println("  power <off/reboot/sleep>  - General power management.");
@@ -190,11 +224,11 @@ uint32_t helpCallback(cmd *c) {
 
 void optionsList() {
     int i = 0;
-    serialDevice->println("\nActual Menu: " + menuOptionLabel);
-    serialDevice->println("Options available: ");
+    Serial.println("\nActual Menu: " + menuOptionLabel);
+    Serial.println("Options available: ");
     for (auto opt : options) {
         String txt = (opt.hovered ? ">" : " ") + String(i) + " - " + opt.label;
-        serialDevice->println(txt);
+        Serial.println(txt);
         i++;
     }
 }
@@ -215,29 +249,30 @@ uint32_t navCallback(cmd *c) {
     String nav = arg.getValue();
     nav.trim();
 
+    // Here send press response only to USB serial to avoid problems with BLE app
     if (nav == "next") {
-        serialDevice->println("Next Pressed");
+        Serial.println("Next Pressed");
         var = &NextPress;
     } else if (nav == "prev") {
-        serialDevice->println("Prev Pressed");
+        Serial.println("Prev Pressed");
         var = &PrevPress;
     } else if (nav == "esc") {
-        serialDevice->println("Esc Pressed");
+        Serial.println("Esc Pressed");
         var = &EscPress;
     } else if (nav == "up") {
-        serialDevice->println("Up Pressed");
+        Serial.println("Up Pressed");
         var = &UpPress;
     } else if (nav == "down") {
-        serialDevice->println("Down Pressed");
+        Serial.println("Down Pressed");
         var = &DownPress;
     } else if (nav == "select" || nav == "sel") {
-        serialDevice->println("Select Pressed");
+        Serial.println("Select Pressed");
         var = &SelPress;
     } else if (nav == "nextpage") {
-        serialDevice->println("Next Page Pressed");
+        Serial.println("Next Page Pressed");
         var = &NextPagePress;
     } else if (nav == "prevpage") {
-        serialDevice->println("Prev Page Pressed");
+        Serial.println("Prev Page Pressed");
         var = &PrevPagePress;
     } else {
         serialDevice->println(
@@ -253,12 +288,12 @@ uint32_t navCallback(cmd *c) {
             AnyKeyPress = true;
             SerialCmdPress = true;
             *var = true;
-            if (!LongPress) vTaskDelay(190 / portTICK_PERIOD_MS);
+            if (!LongPress) break;
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     tmp = millis() - tmp;
-    serialDevice->printf("and Released after %lums", tmp);
+    Serial.printf("and Released after %lums", tmp);
     optionsList();
 
     return true;
@@ -273,7 +308,9 @@ uint32_t optionsCallback(cmd *c) {
     if (opt >= 0 && opt < options.size()) {
         // wakeUpScreen(); // Do not wakeup screen if it is dimmed and using Remote control
         forceMenuOption = opt;
-        serialDevice->printf("Selected option %d: %s\n", forceMenuOption, options[forceMenuOption].label.c_str());
+        serialDevice->printf(
+            "Selected option %d: %s\n", forceMenuOption, options[forceMenuOption].label.c_str()
+        );
         vTaskDelay(30 / portTICK_PERIOD_MS);
         optionsList();
     } else if (options.size() > 0) {
@@ -313,6 +350,8 @@ uint32_t displayCallback(cmd *c) {
             serialDevice->printf("%02X ", binData[i]);
         }
         serialDevice->println("\n[End of Dump]");
+    } else if (opt == "info") {
+        serialDevice->println(TFT_WIDTH + String("x") + TFT_HEIGHT + String("x") + ROTATION);
     } else {
         serialDevice->println(
             "Display command accept:\n"
@@ -320,6 +359,7 @@ uint32_t displayCallback(cmd *c) {
             "display stop  : Stop Logging\n"
             "display status: Get Logging state\n"
             "display dump  : Dumps binary log"
+            "display info  : Get display info"
         );
         return false;
     }
@@ -351,11 +391,14 @@ uint32_t loaderCallback(cmd *c) {
                     return true;
                 }
             }
-            // additional shortcuts
+// additional shortcuts
+#if !defined(LITE_VERSION)
             if (appname.equalsIgnoreCase("badusb")) {
                 ducky_setup(hid_usb, false);
                 return true;
-            } else if (appname.equalsIgnoreCase("webui")) {
+            } else
+#endif
+                if (appname.equalsIgnoreCase("webui")) {
                 loopOptionsWebUi();
                 return true;
             } else if (appname.equalsIgnoreCase("littlefs")) {

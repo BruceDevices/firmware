@@ -1,10 +1,27 @@
 ---
 name: Build and Push Releases
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
-      - main, workflow
+      - main
+      - dev
+
+    paths:
+        - "**.yml"
+        - "**.h"
+        - "**.cpp"
+        - "**.py"
+        - "**.html"
+        - "**.css"
+        - "**.js"
+        - "**.ini"
+        - "**.json"
+        - "**.csv"
     tags:
       - "*"
   workflow_dispatch:
@@ -17,8 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         board:
+          - { env: "arduino-nesso-n1",                family: "ESP32-C6",}
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
-          - { env: "m5stack-cardputer-adv",           family: "ESP32-S3",}
+          - { env: "m5stack-sticks3",                 family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
           - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
@@ -26,17 +44,28 @@ jobs:
           - { env: "m5stack-core16mb",                family: "ESP32",}
           - { env: "m5stack-core4mb",                 family: "ESP32",}
           - { env: "m5stack-cores3",                  family: "ESP32-S3",}
+          - { env: "m5stack-dinmeter",                family: "ESP32-S3",}
+          - { env: "m5stack-tab5",                    family: "ESP32-P4",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
+          - { env: "Freenove-FNK0104AB",              family: "ESP32-S3",}
+          - { env: "esp32-s3-devkitc-1-psram",        family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
+          - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
+          - { env: "nm-cyd-c5",                       family: "ESP32-C5",}
           - { env: "CYD-2432S028",                    family: "ESP32",}
           - { env: "CYD-2USB",                        family: "ESP32",}
           - { env: "CYD-2432W328C",                   family: "ESP32",}
           - { env: "CYD-2432W328C_2",                 family: "ESP32",}
           - { env: "CYD-2432W328R-or-S024R",          family: "ESP32",}
+          - { env: "CYD-3248S035R",                   family: "ESP32",}
+          - { env: "CYD-3248S035C",                   family: "ESP32",}
+          - { env: "ES3C28P",                         family: "ESP32-S3",}
           - { env: "LAUNCHER_CYD-2432W328R-or-S024R", family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432S028",           family: "ESP32",}
           - { env: "LAUNCHER_CYD-2USB",               family: "ESP32",}
           - { env: "LAUNCHER_CYD-2432W328C",          family: "ESP32",}
+          - { env: "LAUNCHER_CYD-3248S035R",          family: "ESP32",}
+          - { env: "LAUNCHER_CYD-3248S035C",          family: "ESP32",}
           - { env: "lilygo-t-embed-cc1101",           family: "ESP32-S3",}
           - { env: "lilygo-t-embed",                  family: "ESP32-S3",}
           - { env: "lilygo-t-deck",                   family: "ESP32-S3",}
@@ -48,10 +77,15 @@ jobs:
           - { env: "lilygo-t-display-s3-touch-mmc",   family: "ESP32-S3",}
           - { env: "lilygo-t-display-S3-pro",         family: "ESP32-S3",}
           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
+          - { env: "lilygo-t4",                       family: "ESP32",}
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
+          - { env: "elecrow-24B",                     family: "ESP32",}
+          - { env: "elecrow-28B",                     family: "ESP32",}
+          - { env: "elecrow-advance-35-s3",           family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
           - { env: "S3_supermini_madara",             family: "ESP32-S3",}
+          - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
           - { env: "Marauder-Mini",                   family: "ESP32",}
@@ -64,6 +98,8 @@ jobs:
           - { env: "LAUNCHER_Marauder-V4-V6",         family: "ESP32",}
           - { env: "LAUNCHER_Marauder-v61",           family: "ESP32",}
           - { env: "Awok-Touch",                      family: "ESP32",}
+          - { env: "WaveSentry-R1",                   family: "ESP32",}
+          - { env: "LAUNCHER_WaveSentry-R1",          family: "ESP32",}
 
     steps:
       - uses: actions/checkout@v4
@@ -72,43 +108,53 @@ jobs:
         name: setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.13"
+
+      - name: Install build deps (multilib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
 
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
           restore-keys: |
+            ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
-        run: |
-          pip install requests esptool intelhex
-
-      - name: Cache PlatformIO
+      - name: Cache PlatformIO Framework
         uses: actions/cache@v4
         with:
           path: |
             ~/.platformio
-          key: Bruce-platformio-${{ hashFiles('**/platformio.ini') }}
-          restore-keys: Bruce-platformio-
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-platformio-
 
-      - name: Restore PIO
-        uses: actions/cache/restore@v4
+      - name: PIO libraries cache
+        uses: actions/cache@v4
         with:
           path: |
-            ${{ github.workspace }}/.pio
-          key: Bruce-pio-${{ matrix.board.env }}-${{ github.run_id }}-${{ github.run_attempt }}
+            .pio/libdeps
+          key: ${{ runner.os }}-pio-${{ matrix.board.env }}-${{ hashFiles('platformio.ini') }}
           restore-keys: |
-            Bruce-pio-${{ matrix.board.env }}-
+            ${{ runner.os }}-pio-${{ matrix.board.env }}-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-pio-${{ matrix.board.env }}-
 
-      - name: Install PlatformIO Core
+      - name: Install dependencies
         run: |
+          pip install requests esptool intelhex
           pip install platformio
+
+      - name: Prepare PlatformIO file
+        run: |
 
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             version=${{ github.ref_name }}
+            sed -i "s/-D ENABLE_RAM_LOGGING=1/;-D ENABLE_RAM_LOGGING=1'\"$version\"' ; /g" ./platformio.ini
           else
             version="${GITHUB_SHA::7}"
           fi
@@ -120,26 +166,24 @@ jobs:
 
       - name: Run Compile
         run: |
-          platformio run -e ${{ matrix.board.env }}
+          set -o pipefail
+          platformio run -e ${{ matrix.board.env }} | tee build-${{ matrix.board.env }}.log
 
-      - name: Cache PIO
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ github.workspace }}/.pio
-          key: Bruce-pio-${{ matrix.board.env }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Merge files
+      - name: Build summary
         run: |
-          # pio run -e ${{ matrix.board.env }} -t build-firmware
-          # Files are merged after build
+          if [[ -f build-${{ matrix.board.env }}.log ]]; then
+            echo "Last 75 lines of build-${{ matrix.board.env }}.log:"
+            tail -n 75 build-${{ matrix.board.env }}.log
+          else
+            echo "Build log not found; nothing to show."
+          fi
 
       - name: Upload ${{ matrix.board.env }}
         uses: actions/upload-artifact@v4
         with:
           name: Bruce-${{ matrix.board.env }}
           path: Bruce-*.*
-          retention-days: 5
+          retention-days: 1
           if-no-files-found: error
 
   post_compile_steps:
@@ -273,6 +317,9 @@ jobs:
     environment: github_release
     needs: [compile_sketch]
     if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+      issues: write
     steps:
       - id: bruce_version
         name: Get Version
@@ -306,3 +353,22 @@ jobs:
           generate_release_notes: true
           files: |
             Bruce-*.bin
+
+      - name: Close "Fixed on Beta" issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.bruce_version.outputs.version }}
+        run: |
+          set -x
+          gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "Fixed on Beta" \
+            --state open \
+            --limit 500 \
+            --json number \
+            --jq '.[].number' | while read -r issue; do
+            [ -z "$issue" ] && continue
+            gh issue close "$issue" \
+              --repo "${{ github.repository }}" \
+              --comment "Fixed on ${VERSION}. Issue automatically closed after release"
+          done

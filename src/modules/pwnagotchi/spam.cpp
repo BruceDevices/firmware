@@ -6,7 +6,7 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include <ArduinoJson.h>
@@ -14,6 +14,7 @@ Thanks to @bmorcelli for his help doing a better code.
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
+#include "core/wifi/wifi_common.h"
 #include "spam.h"
 #include "ui.h"
 
@@ -28,6 +29,9 @@ const char *faces[30]; // Increase size if needed
 const char *names[30]; // Increase size if needed
 int num_faces = 0;
 int num_names = 0;
+
+// External variable for all channels toggle
+extern bool use_all_channels;
 
 // Forward declarations
 void displaySpamStatus();
@@ -100,7 +104,7 @@ void send_pwnagotchi_beacon(uint8_t channel, const char *face, const char *name)
 
     // Définir le canal et envoyer la trame
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_80211_tx(WIFI_IF_AP, beacon_frame, sizeof(beacon_frame), false);
+    wifiRawTx(WIFI_IF_AP, beacon_frame, sizeof(beacon_frame));
 }
 
 const char *pwnd_faces[] = {
@@ -114,11 +118,26 @@ const char *pwnd_names[] = {
 
 // Tâche pour envoyer des trames beacon avec changement de face, de nom et de canal
 void beacon_task(void *pvParameters) {
-    const uint8_t channels[] = {1, 6, 11}; // Liste des canaux Wi-Fi à utiliser
-    const int num_channels = sizeof(channels) / sizeof(channels[0]);
+    // Primary channels
+    const uint8_t channels_primary[] = {1, 6, 11};
+    // All channels
+    const uint8_t channels_all[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    const uint8_t *channels;
+    int num_channels;
+
     const int num_pwnd_faces = sizeof(pwnd_faces) / sizeof(pwnd_faces[0]);
 
     while (spamRunning) {
+        // Determine which channels to use based on toggle
+        if (use_all_channels) {
+            channels = channels_all;
+            num_channels = sizeof(channels_all) / sizeof(channels_all[0]);
+        } else {
+            channels = channels_primary;
+            num_channels = sizeof(channels_primary) / sizeof(channels_primary[0]);
+        }
+
         if (dos_pwnd) {
             // Send PWND beacons
             for (int ch = 0; ch < num_channels; ++ch) {
@@ -146,7 +165,7 @@ void displaySpamStatus() {
     drawTopCanvas();
     drawBottomCanvas();
     tft.fillRect(0, 20, tftWidth, tftHeight - 40, bruceConfig.bgColor);
-    tft.setTextSize(1.5);
+    tft.setTextSize(FP);
     tft.setCursor(0, 20);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.println("PwnGrid Spam Running...");
@@ -158,8 +177,14 @@ void displaySpamStatus() {
     int current_face_index = 0;
     int current_name_index = 0;
     int current_channel_index = 0;
-    const uint8_t channels[] = {1, 6, 11};
-    const int num_channels = sizeof(channels) / sizeof(channels[0]);
+
+    // Primary channels
+    const uint8_t channels_primary[] = {1, 6, 11};
+    // All channels
+    const uint8_t channels_all[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    const uint8_t *channels;
+    int num_channels;
 
     while (spamRunning) {
 
@@ -176,11 +201,21 @@ void displaySpamStatus() {
             Serial.printf("Change Identity %s.\n", change_identity ? "enabled" : "disabled");
         }
 
+        // Determine which channels to use based on toggle
+        if (use_all_channels) {
+            channels = channels_all;
+            num_channels = sizeof(channels_all) / sizeof(channels_all[0]);
+        } else {
+            channels = channels_primary;
+            num_channels = sizeof(channels_primary) / sizeof(channels_primary[0]);
+        }
+
         // Update and display current face, name, and channel
         tft.setCursor(45, 45);
         tft.printf("Flood:%s", change_identity ? "1" : "0");
         tft.setCursor(125, 45);
         tft.printf("DoScreen:%s", dos_pwnd ? "1" : "0");
+
         if (!dos_pwnd) {
             tft.setCursor(0, 50);
             tft.printf("Face: \n%s                                              ", faces[current_face_index]);
@@ -369,3 +404,4 @@ void send_pwnagotchi_beacon_main() {
     // Display the spam status and wait for user input
     displaySpamStatus();
 }
+#endif

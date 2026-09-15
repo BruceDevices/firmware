@@ -1,3 +1,5 @@
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
+#if !defined(LITE_VERSION) && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "serial_commands.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -81,7 +83,7 @@ void EspSerialCmd::receiveCommands() {
             recvStatus = WAITING;
         }
         if (recvStatus == SUCCESS) {
-            displayRecvCommand(serialCli.parse(recvCommand));
+            displayRecvCommand(parseSerialCommand(recvCommand));
             recvStatus = WAITING;
         }
 
@@ -110,6 +112,7 @@ EspSerialCmd::Message EspSerialCmd::createCmdMessage() {
     delay(500);
 
     String command = keyboard("", ESP_DATA_SIZE, "Serial Command");
+    if (command == "\x1B") command = "";
     Message msg = createMessage(command);
     printMessage(msg);
 
@@ -164,3 +167,14 @@ void EspSerialCmd::displaySentFooter() {
     padprintln("");
     padprintln("Press [ESC] to leave");
 }
+#elif !defined(LITE_VERSION)
+// ESP-NOW command sharing is unavailable on ESP32-P4 (no esp_now_* API). Stub the entry
+// points so the menus keep working and just tell the user it is unsupported here.
+#include "serial_commands.h"
+#include "core/display.h"
+
+EspSerialCmd::EspSerialCmd() {}
+
+void EspSerialCmd::sendCommands() { displayWarning("Not available on this device", true); }
+void EspSerialCmd::receiveCommands() { displayWarning("Not available on this device", true); }
+#endif

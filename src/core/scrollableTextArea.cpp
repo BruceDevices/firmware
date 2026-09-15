@@ -3,7 +3,7 @@
 ScrollableTextArea::ScrollableTextArea(const String &title)
     : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
       _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
-      _height(tftHeight - BORDER_PAD_X - BORDER_PAD_Y) {
+      _height(tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - BORDER_PAD_X - BORDER_PAD_Y) {
     drawMainBorder();
 
     if (!_title.isEmpty()) {
@@ -87,6 +87,29 @@ void ScrollableTextArea::show(bool force) {
 uint32_t ScrollableTextArea::getMaxVisibleTextLength() { return _maxVisibleLines * _maxCharactersPerLine; }
 
 void ScrollableTextArea::update(bool force) {
+#ifdef HAS_ENCODER
+    int32_t rotarySteps = drainRotarySteps();
+    if (rotarySteps != 0) {
+        check(PrevPress);
+        check(NextPress);
+        check(UpPress);
+        check(DownPress);
+        while (rotarySteps > 0) {
+            scrollUp();
+            rotarySteps--;
+        }
+        while (rotarySteps < 0) {
+            scrollDown();
+            rotarySteps++;
+        }
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+        PrevPress = false;
+        NextPress = false;
+        UpPress = false;
+        DownPress = false;
+    }
+#endif
+
     if (check(PrevPress) || check(UpPress)) scrollUp();
     else if (check(NextPress) || check(DownPress)) scrollDown();
 
@@ -121,7 +144,7 @@ void ScrollableTextArea::fromString(const String &text) {
         endIdx++;
     }
 
-    // Add the last line if there’s remaining text (text does not ends with \n)
+    // Add the last line if there's remaining text (text does not ends with \n)
     if (startIdx < text.length()) { addLine(text.substring(startIdx, endIdx)); }
 }
 
@@ -161,7 +184,7 @@ void ScrollableTextArea::draw(bool force) {
 
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, bruceConfig.bgColor);
     _scrollBuffer.setTextColor(bruceConfig.priColor);
-    uint8_t _fSize = tft.textsize;
+    uint8_t _fSize = tft.getTextSize();
     tft.setTextSize(FP);
 
     uint16_t yOffset = 0;

@@ -97,9 +97,10 @@
 // Include the processor specific drivers
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "Processors/TFT_eSPI_ESP32_S3.h"
-#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C5) ||                            \
-    defined(CONFIG_IDF_TARGET_ESP32C6)
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
 #include "Processors/TFT_eSPI_ESP32_C3.h"
+#elif defined(CONFIG_IDF_TARGET_ESP32C5)
+#include "Processors/TFT_eSPI_ESP32_C5.h"
 #elif defined(ESP32)
 #include "Processors/TFT_eSPI_ESP32.h"
 #elif defined(ARDUINO_ARCH_ESP8266)

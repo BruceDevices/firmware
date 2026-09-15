@@ -1,3 +1,18 @@
+var display = require('display');
+var keyboard = require('keyboard');
+
+var width = display.width;
+var height = display.height;
+var fillScreen = display.fill;
+var drawFillRect = display.drawFillRect;
+var drawString = display.drawString;
+var setTextSize = display.setTextSize;
+
+var getPrevPress = keyboard.getPrevPress;
+var getNextPress = keyboard.getNextPress;
+var getSelPress = keyboard.getSelPress;
+var getEscPress = keyboard.getEscPress;
+
 var playerX = 140;
 var playerY = 120;
 var playerWidth = 12;
@@ -561,6 +576,7 @@ drawString('Space Shooter', 5, 40);
 drawString('Scroll/Prev = Left/Right', 5, 55);
 drawString('Select = Shoot/Menu', 5, 70);
 drawString('Press Select to Start', 5, 85);
+keyboard.setLongPress(true);
 
 while (true) {
     if (getSelPress()) {
@@ -591,3 +607,4 @@ while (true) {
 
     delay(16);
 }
+keyboard.setLongPress(false);

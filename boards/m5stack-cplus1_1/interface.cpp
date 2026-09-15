@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <AXP192.h>
 #include <interface.h>
@@ -10,6 +11,10 @@ AXP192 axp192;
 void _setup_gpio() {
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
+    setSysI2CBus(&Wire1); // AXP192 (BM8563 RTC included) lives on Wire1
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     axp192.begin(); // Start the energy management of AXP192
 }
 
@@ -17,12 +22,14 @@ void _setup_gpio() {
 ** Function name: getBattery()
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
+
 int getBattery() {
     int percent = 0;
+#ifndef LITE_VERSION
     float b = axp192.GetBatVoltage();
     percent = ((b - 3.0) / 1.2) * 100;
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+#endif
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************
@@ -51,22 +58,34 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (upPressed && dwPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = upPressed;
-    EscPress = upPressed;
     NextPress = dwPressed;
     SelPress = selPressed;
 }
 
 void powerOff() { axp192.PowerOff(); }
-
+#ifndef LITE_VERSION
+/*********************************************************************
+** Function: checkReboot
+** location: mykeyboard.cpp
+** Btn logic to tornoff the device (name is odd btw)
+**********************************************************************/
 void checkReboot() {
-    int countDown;
+    int countDown = 0;
     /* Long press power off */
     if (axp192.GetBtnPress()) {
         uint32_t time_count = millis();
         while (axp192.GetBtnPress()) {
             // Display poweroff bar only if holding button
             if (millis() - time_count > 500) {
+                if (countDown == 0) {
+                    int textWidth = tft.textWidth("PWR OFF IN 3/3", 1);
+                    tft.fillRect(60, 7, textWidth, 18, bruceConfig.bgColor);
+                }
                 tft.setCursor(60, 12);
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -75,9 +94,12 @@ void checkReboot() {
                 vTaskDelay(10 / portTICK_RATE_MS);
             }
         }
+
         // Clear text after releasing the button
-        if (millis() - time_count > 500)
+        if (millis() - time_count > 500) {
             tft.fillRect(60, 12, 16 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+            drawStatusBar();
+        }
         PrevPress = true;
     }
 }
@@ -89,3 +111,4 @@ void checkReboot() {
 bool isCharging() {
     return axp192.GetBatCurrent() > 20; // need testing
 }
+#endif

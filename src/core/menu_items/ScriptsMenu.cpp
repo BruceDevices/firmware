@@ -1,59 +1,19 @@
-
 #include "ScriptsMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
 #include "core/utils.h"
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
-
-String getScriptsFolder(FS *&fs) {
-    String folder;
-    String possibleFolders[] = {"/scripts", "/BruceScripts", "/BruceJS"};
-    int listSize = sizeof(possibleFolders) / sizeof(possibleFolders[0]);
-
-    for (int i = 0; i < listSize; i++) {
-        if (SD.exists(possibleFolders[i])) {
-            fs = &SD;
-            return possibleFolders[i];
-        }
-        if (LittleFS.exists(possibleFolders[i])) {
-            fs = &LittleFS;
-            return possibleFolders[i];
-        }
-    }
-    return "";
-}
-
-std::vector<Option> getScriptsOptionsList() {
-    std::vector<Option> opt = {};
-#ifndef LITE_VERSION
-    FS *fs;
-    String folder = getScriptsFolder(fs);
-    if (folder == "") return opt; // did not find
-
-    File root = fs->open(folder);
-    if (!root || !root.isDirectory()) return opt; // not a dir
-    File file2;
-
-    while (file2 = root.openNextFile()) {
-        if (file2.isDirectory()) continue;
-
-        String fileName = String(file2.name());
-        if (!fileName.endsWith(".js") && !fileName.endsWith(".bjs")) continue;
-
-        String entry_title = String(file2.name());
-        entry_title = entry_title.substring(0, entry_title.lastIndexOf(".")); // remove the extension
-        opt.push_back({entry_title.c_str(), [=]() { run_bjs_script_headless(*fs, file2.path()); }});
-    }
-
-    file2.close();
-    root.close();
-#endif
-    return opt;
-}
+#include <algorithm>                             // for std::sort
 
 void ScriptsMenu::optionsMenu() {
-#ifndef LITE_VERSION
-    options = getScriptsOptionsList();
+#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
+    if (interpreter_state >= 0) {
+        interpreter_state = 1;
+        returnToMenu = true;
+        return;
+    }
+
+    options = getScriptsOptionsList("", false);
 
     options.push_back({"Load...", run_bjs_script});
     addOptionToMainMenu();
@@ -61,15 +21,7 @@ void ScriptsMenu::optionsMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "Scripts");
 #endif
 }
-void ScriptsMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(),
-        bruceConfig.getThemeItemImg(bruceConfig.theme.paths.interpreter),
-        0,
-        imgCenterY,
-        true
-    );
-}
+
 void ScriptsMenu::drawIcon(float scale) {
     clearIconArea();
 

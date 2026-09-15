@@ -6,18 +6,19 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
-
+#if !defined(LITE_VERSION)
 #include "core/display.h"
 #include "mood.h"
 #include "pwngrid.h"
 
 void initUi();
 void wakeUp();
-void drawMood(String face, String phrase, bool broken = false);
+void drawMood(const String &face, const String &phrase, bool broken = false);
 void drawTime();
 void drawFooterData(
-    uint8_t friends_run = 0, uint8_t friends_tot = 0, String last_friend_name = "", signed int rssi = -1000
+    uint8_t friends_run = 0, uint8_t friends_tot = 0, const String &last_friend_name = "", signed int rssi = -1000
 );
 void drawTopCanvas();
 void drawBottomCanvas();
 void updateUi(bool show_toolbars = false);
+#endif

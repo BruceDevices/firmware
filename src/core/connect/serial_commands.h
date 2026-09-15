@@ -1,6 +1,7 @@
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #ifndef __ESP_SERIAL_CMD_H__
 #define __ESP_SERIAL_CMD_H__
-
+#if !defined(LITE_VERSION)
 #include "esp_connection.h"
 
 class EspSerialCmd : public EspConnection {
@@ -35,4 +36,5 @@ private:
     Message createCmdMessage();
 };
 
+#endif
 #endif

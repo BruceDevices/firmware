@@ -1,8 +1,10 @@
 #ifndef __GLOBALS__
 #define __GLOBALS__
 
-#include <interface.h>
 #include <precompiler_flags.h>
+
+#include <interface.h>
+
 // Globals.h
 
 #define ALCOLOR TFT_RED
@@ -14,30 +16,34 @@
 #include "core/serial_commands/cli.h"
 #include "core/startup_app.h"
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <ESP32Time.h>
 #include <LittleFS.h>
 #include <NTPClient.h>
 #include <SPI.h>
-#include <Timezone.h>
 #include <functional>
 #include <io_expander/io_expander.h> // ./lib/HAL
 #include <vector>
 extern io_expander ioExpander;
 
 #if defined(HAS_RTC)
+#if defined(HAS_RTC_PCF85063A)
+#include "../lib/RTC/pcf85063_RTC.h"
+extern pcf85063_RTC _rtc;
+#else
 #include "../lib/RTC/cplus_RTC.h"
 extern cplus_RTC _rtc;
+#endif
 extern RTC_TimeTypeDef _time;
 extern RTC_DateTypeDef _date;
 #endif
 
 // Declaração dos objetos TFT
 #if defined(HAS_SCREEN)
+#include <display/tft.h>
 #include <tftLogger.h>
 extern tft_logger tft;
-extern TFT_eSprite sprite;
-extern TFT_eSprite draw;
+extern tft_sprite sprite;
+extern tft_sprite draw;
 #else
 #include <tftLogger.h>
 extern tft_logger tft;
@@ -55,7 +61,12 @@ extern BQ27220 bq;
 extern XPowersPPM PPM;
 #endif
 
-extern bool interpreter_start;
+#ifdef USE_BOOST /// to avoid t embed toggle otg on some codes
+#include <XPowersLib.h>
+extern XPowersPPM PPM;
+#endif
+
+extern int8_t interpreter_state; // -1 - stopped, 0 - background, 1 - waiting for foreground, 2 - foreground
 
 extern BruceConfig bruceConfig;
 extern BruceConfigPins bruceConfigPins;
@@ -64,15 +75,14 @@ extern SerialDevice *serialDevice;
 extern USBSerial USBserial;
 extern StartupApp startupApp;
 
-extern char timeStr[10];
+extern char timeStr[16];
 extern SPIClass sdcardSPI;
-extern SPIClass CC_NRF_SPI;
+extern SPIClass AUX_SPI;
 extern bool clock_set;
 extern time_t localTime;
 extern struct tm *timeInfo;
 extern ESP32Time rtc;
 extern NTPClient timeClient;
-extern Timezone myTZ;
 
 extern int prog_handler; // 0 - Flash, 1 - LittleFS, 2 - Download
 
@@ -94,17 +104,35 @@ struct Option {
     String label;
     std::function<void()> operation;
     bool selected = false;
+    bool enabled = true;
     bool (*hover)(void *hoverPointer, bool shouldRender);
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
 
+    bool hasColor = false;
+    uint16_t color = 0;
+
+    // On-screen bounding box of this item in its most recent draw, for tap-to-select hit-testing
+    // (see loopOptions()). Populated by drawOptions()/drawGridCell(); zero/unused otherwise.
+    uint16_t x = 0, y = 0, w = 0, h = 0;
+    bool contain(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
+
     Option(
-        String lbl, const std::function<void()> &op, bool sel = false,
+        const char *lbl, const std::function<void()> &op, bool sel = false,
+        bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,
+        bool en = true, bool hasClr = false, uint16_t clr = 0
+    )
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
+
+    Option(
+        const String &lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) =
             nullptr, // hover lambda returns true if it already handled rendering
-        void *ptr = nullptr, bool hvrd = false
+        void *ptr = nullptr, bool hvrd = false, bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), hover(hov), hoverPointer(ptr), hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!
@@ -128,9 +156,9 @@ struct keyStroke { // DO NOT CHANGE IT!!!!!
         fn = false;
         del = false;
         enter = false;
-        bool alt = false;
-        bool ctrl = false;
-        bool gui = false;
+        alt = false;
+        ctrl = false;
+        gui = false;
         modifiers = 0;
         word.clear();
         hid_keys.clear();
@@ -152,11 +180,15 @@ struct TouchPoint {
 };
 
 extern TouchPoint touchPoint;
+// true (default): touchHeatMap() maps taps anywhere on screen into zone-based Prev/Sel/Next/Esc/Up/Down,
+// same as physical buttons. A screen that wants to hit-test raw taps itself (e.g. tap-to-select in
+// loopOptions) sets this false while it runs; the TouchFooter band keeps working either way.
+extern volatile bool touchZoneOutsideFooterEnabled;
 extern keyStroke KeyStroke;
 extern std::vector<Option> options;
 
 template <typename R, typename... Args>
-std::function<void()> lambdaHelper(R (*callback)(Args...), Args... args) {
+std::function<void()> lambdaHelper(R (*callback)(Args...), std::decay_t<Args>... args) {
     return [=]() { (void)callback(args...); };
 }
 
@@ -167,6 +199,8 @@ extern const int bufSize;
 extern bool returnToMenu; // variable to check and break loops to return to main menu
 
 extern String cachedPassword;
+
+extern int currentScreenBrightness;
 
 // Screen sleep control variables
 extern unsigned long previousMillis;
@@ -206,15 +240,45 @@ extern String menuOptionLabel;
 extern volatile int EncoderLedChange;
 #endif
 
+// Net pending rotary encoder steps, independent from NextPress/PrevPress,
+// so a consumer can apply a whole backlog at once instead of one per redraw.
+extern volatile int32_t RotaryNetSteps;
+
+#ifdef HAS_ENCODER
+static inline int32_t drainRotarySteps() {
+    int32_t steps = RotaryNetSteps;
+    RotaryNetSteps -= steps;
+    return steps;
+}
+#endif
+
 extern TaskHandle_t xHandle;
-extern inline bool check(volatile bool &btn) {
+extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
 #ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
+#ifdef HAS_ENCODER
+    // NextPress/PrevPress here are rotary-encoder-derived, not raw mechanical
+    // button reads -- the encoder's own quadrature decode already rejects
+    // bounce, so the extra software debounce delay below is redundant for
+    // these two flags and only adds latency to every scroll step. Skip it
+    // for them; every other flag (SelPress, EscPress, etc.) keeps the
+    // original suspend+delay+resume debounce untouched.
+    if (&btn == &NextPress || &btn == &PrevPress) {
+        if (resetButtonStatus) {
+            btn = false;
+            AnyKeyPress = false;
+            SerialCmdPress = false;
+        }
+        return true;
+    }
+#endif
     vTaskSuspend(xHandle);
-    btn = false;
-    AnyKeyPress = false;
-    SerialCmdPress = false;
+    if (resetButtonStatus) {
+        btn = false;
+        AnyKeyPress = false;
+        SerialCmdPress = false;
+    }
     delay(10);
     vTaskResume(xHandle);
     return true;
@@ -229,5 +293,7 @@ extern inline bool check(volatile bool &btn) {
 
 #endif
 }
+
+extern gpio_num_t mic_bclk_pin; // used to configure Cardputer ADV Microphone
 
 #endif

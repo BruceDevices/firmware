@@ -1,0 +1,23 @@
+//@IncursioHack
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build + Public Download",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/.vscode/build_public_download.py"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

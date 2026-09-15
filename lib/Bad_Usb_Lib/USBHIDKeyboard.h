@@ -22,6 +22,7 @@
 #pragma once
 #include "Print.h"
 #include "USBHID.h"
+
 #if CONFIG_TINYUSB_HID_ENABLED
 
 #include "Bad_Usb_Lib.h"
@@ -52,22 +53,32 @@ private:
     USBHID hid;
     KeyReport _keyReport;
     const uint8_t *_asciimap;
+    bool shiftKeyReports;
+    uint32_t _delay_ms = 10; // Default delay between keystrokes - actual value loaded from config
+    uint8_t _keySlotMap[6];
+    uint8_t _shiftCache[128];
+    bool _cacheValid;
 
 public:
-    USBHIDKeyboard(void);
-    void begin(const uint8_t *layout = KeyboardLayout_en_US) override; // void begin(void);
-    void end(void) override;
-    size_t write(uint8_t k) override;
-    size_t write(const uint8_t *buffer, size_t size) override;
-    size_t press(uint8_t k) override;
-    size_t release(uint8_t k) override;
-    void releaseAll(void) override;
-    void setLayout(const uint8_t *layout) override { _asciimap = layout; };
+    USBHIDKeyboard();
+    void begin(const uint8_t *layout = KeyboardLayout_en_US);
+    void end(void);
+    size_t write(uint8_t k);
+    size_t write(const uint8_t *buffer, size_t size);
+    size_t press(uint8_t k);
+    size_t release(uint8_t k);
+    void releaseAll(void);
+    void setLayout(const uint8_t *layout) override {
+        _asciimap = layout;
+        _cacheValid = false;
+        _buildShiftCache();
+    };
     void sendReport(KeyReport *keys);
+    void setShiftKeyReports(bool set);
 
     // raw functions work with TinyUSB's HID_KEY_* macros
-    size_t pressRaw(uint8_t k) override;
-    size_t releaseRaw(uint8_t k) override;
+    size_t pressRaw(uint8_t k);
+    size_t releaseRaw(uint8_t k);
 
     void onEvent(esp_event_handler_t callback);
     void onEvent(arduino_usb_hid_keyboard_event_t event, esp_event_handler_t callback);
@@ -75,6 +86,9 @@ public:
     // internal use
     uint16_t _onGetDescriptor(uint8_t *buffer);
     void _onOutput(uint8_t report_id, const uint8_t *buffer, uint16_t len);
+    void _buildShiftCache();
+
+    void setDelay(uint32_t ms);
 };
 
-#endif
+#endif /* CONFIG_TINYUSB_HID_ENABLED */

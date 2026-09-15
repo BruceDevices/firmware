@@ -1,3 +1,19 @@
+var display = require('display');
+var keyboardApi = require('keyboard');
+
+var width = display.width;
+var height = display.height;
+var color = display.color;
+var drawFillRect = display.drawFillRect;
+var drawRect = display.drawRect;
+var drawString = display.drawString;
+var setTextColor = display.setTextColor;
+var setTextSize = display.setTextSize;
+
+var getPrevPress = keyboardApi.getPrevPress;
+var getNextPress = keyboardApi.getNextPress;
+var getSelPress = keyboardApi.getSelPress;
+
 // SCRIPT NOT MINE! Script author : sadecemsi
 // change by timenetworks
 // i remade this script for t-embed screen
@@ -29,11 +45,12 @@ var keyboard = [
 var selectedRow = 0;
 var selectedCol = 0;
 
-var KEY_WIDTH = 40;
-var KEY_HEIGHT = 18;
-var KEY_SPACING = 6;
 var KEYBOARD_START_Y = 50;
 var KEYBOARD_START_X = 70;
+var KEY_SPACING = 2;
+var KEY_WIDTH = (screenWidth - KEYBOARD_START_X - KEY_SPACING)/4;
+var KEY_HEIGHT = (screenHeight - KEYBOARD_START_Y - KEY_SPACING)/5;
+
 
 var redraw = true;
 var shouldExit = false;
@@ -52,7 +69,7 @@ function setupScreen() {
 function drawTitle() {
     setTextColor(COLOR_WHITE);
     setTextSize(1);
-    drawString("Calculator", 130, 5);
+    drawString("Calculator", screenWidth/2-30, 5);
 }
 
 function drawDisplay() {

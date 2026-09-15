@@ -15,8 +15,8 @@
 #define RFID125_START_MARK 0x02
 #define RFID125_END_MARK 0x03
 #if !defined(RFID125_RX_PIN) || !defined(RFID125_TX_PIN)
-#define RFID125_RX_PIN GROVE_SCL
-#define RFID125_TX_PIN GROVE_SDA
+#define RFID125_RX_PIN bruceConfigPins.uart_bus.rx
+#define RFID125_TX_PIN bruceConfigPins.uart_bus.tx
 #endif
 
 class RFID125 {
@@ -81,7 +81,7 @@ private:
     /////////////////////////////////////////////////////////////////////////////////////
     // File handlers
     /////////////////////////////////////////////////////////////////////////////////////
-    bool write_file(String filename);
+    bool write_file(const String &filename);
     // bool load_from_file();
 
     /////////////////////////////////////////////////////////////////////////////////////

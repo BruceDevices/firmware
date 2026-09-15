@@ -4,7 +4,7 @@
 #include "helpers.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include <globals.h>
-
+#ifndef LITE_VERSION
 uint32_t decryptFileCallback(cmd *c) {
     // crypto decrypt_from_file passwords/github.com.txt.enc 1234
 
@@ -101,8 +101,9 @@ uint32_t typeFileCallback(cmd *c) {
     key_input_from_string(plaintext);
     return true;
 }
-
+#endif
 void createCryptoCommands(SimpleCLI *cli) {
+#ifndef LITE_VERSION
     Command cryptoCmd = cli->addCompositeCmd("crypto");
 
     Command decryptCmd = cli->addCommand("decrypt", decryptFileCallback);
@@ -120,10 +121,10 @@ void createCryptoCommands(SimpleCLI *cli) {
     Command encryptFileCmd = cryptoCmd.addCommand("encrypt_to_file", encryptFileCallback);
     encryptFileCmd.addPosArg("filepath");
     encryptFileCmd.addPosArg("password");
-
 #ifdef USB_as_HID
     Command typeFileCmd = cryptoCmd.addCommand("type_from_file", typeFileCallback);
     typeFileCmd.addPosArg("filepath");
     typeFileCmd.addPosArg("password");
+#endif
 #endif
 }

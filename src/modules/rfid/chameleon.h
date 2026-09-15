@@ -147,6 +147,7 @@ private:
     uint8_t selectSlot();
     bool isMifareClassic(byte sak);
     void saveScanResult();
+    void delayWithReturn(uint32_t ms);
 };
 
 #endif

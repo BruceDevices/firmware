@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bruce</title>
+    <link rel="stylesheet" href="/index.css">
+    <link rel="stylesheet" href="/theme.css">
+</head>
+
+<body>
+    <div class="dialog-background">
+        <form action="/login" method="POST">
+            <div class="dialog login">
+                <div class="dialog-head">
+                    Login
+                </div>
+                <div class="dialog-body">
+                    <div id="notice" style="display: none;font-weight: bold;padding-bottom: 5px;"></div>
+                    <label for="username" class="oinput-label">Username</label>
+                    <input type="text" name="username" id="username" class="oinput-text-submit"
+                        style="margin-bottom: 10px">
+                    <label for="password" class="oinput-label">Password</label>
+                    <input type="password" name="password" class="oinput-text-submit">
+                </div>
+                <div class="dialog-footer">
+                    <input type="submit" class="btn-action" value="Login">
+                </div>
+            </div>
+        </form>
+    </div>
+    <script>
+        document.getElementById('username').focus();
+
+        const params = new URLSearchParams(location.search);
+        const notice = document.getElementById('notice');
+        if (params.has('failed')) notice.style.display = 'block', notice.textContent = 'Login Failed - Please try again.';
+        else if (params.has('loggedout')) notice.style.display = 'block', notice.textContent = 'You have been logged out successfully.';
+    </script>
+</body>
+
+</html>

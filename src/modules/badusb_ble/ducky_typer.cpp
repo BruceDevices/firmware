@@ -1,11 +1,20 @@
+#if !defined(LITE_VERSION)
 #include "ducky_typer.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
 #include "core/sd_functions.h"
 #include "core/utils.h"
+#include "esp_mac.h"
+#include "modules/ble/ble_common.h"
+#include <NimBLEDevice.h>
+#if defined(USB_as_HID)
+#include "tusb.h"
+#endif
+
 #define DEF_DELAY 100
 
-uint8_t _Ask_for_restart = 0;
+int currentOutputY = 0;
 
 #if !defined(USB_as_HID)
 HardwareSerial mySerial(1);
@@ -14,17 +23,140 @@ HardwareSerial mySerial(1);
 HIDInterface *hid_usb = nullptr;
 HIDInterface *hid_ble = nullptr;
 
+// Track active BLE instances to know when to deinit
+int activeBLEInstances = 0;
+
+// ============================================================================
+// PER-FUNCTION MAC ADDRESSES - Logitech OUIs (look like real keyboards!)
+// ============================================================================
+
+// All using Logitech OUI 88:3B:5F
+// The suffixes are fixed but look random
+static const uint8_t FUNC_MACS[4][6] = {
+    {0x88, 0x3B, 0x5F, 0x7A, 0x3F, 0x1E}, // Keyboard - Logitech
+    {0x88, 0x3B, 0x5F, 0x4B, 0x8C, 0x2A}, // Media - Logitech
+    {0x88, 0x3B, 0x5F, 0x9E, 0x5F, 0x37}, // BadUSB - Logitech
+    {0x88, 0x3B, 0x5F, 0x6C, 0x92, 0x4D}  // Presenter - Logitech
+};
+
+// ============================================================================
+// MAC ADDRESS SETTING - Works across ESP32 variants
+// ============================================================================
+
+void setBleMac(const uint8_t *mac) {
+#ifdef ESP_MAC_BT
+    esp_iface_mac_addr_set(mac, ESP_MAC_BT);
+    Serial.println("[setBleMac] Set MAC using esp_iface_mac_addr_set");
+#else
+    esp_base_mac_addr_set(mac);
+    Serial.println("[setBleMac] Set MAC using esp_base_mac_addr_set");
+#endif
+}
+
+// ============================================================================
+// CLEANUP - Cleans a specific HID instance
+// ============================================================================
+
+void cleanupDuckyBLE(HIDInterface *&hid) {
+    if (hid) {
+        BleKeyboard *bleKb = static_cast<BleKeyboard *>(hid);
+
+        // Release all keys first (clean state)
+        bleKb->releaseAll();
+        delay(20);
+
+        // Stop advertising
+        if (NimBLEDevice::getAdvertising()) {
+            NimBLEDevice::getAdvertising()->stop();
+            Serial.println("[cleanupDuckyBLE] Advertising stopped");
+        }
+        delay(50);
+
+        // If this was the active instance, clear the pointer
+        if (hid_ble == hid) {
+            hid_ble = nullptr;
+            Serial.println("[cleanupDuckyBLE] Cleared hid_ble pointer");
+        }
+
+        // Decrement active instance count
+        if (activeBLEInstances > 0) {
+            activeBLEInstances--;
+            Serial.printf("[cleanupDuckyBLE] Active BLE instances: %d\n", activeBLEInstances);
+        }
+
+        // CRITICAL: Only call end() if this is the LAST instance
+        // end() deinits the BLE stack, so we only want to do it once
+        if (activeBLEInstances == 0) {
+            // Last instance - call end() to fully clean up
+            bleKb->end();
+            Serial.println("[cleanupDuckyBLE] Last instance: BleKeyboard::end() called (deinits BLE)");
+        } else {
+            // Not the last instance - just delete the object without calling end()
+            Serial.println("[cleanupDuckyBLE] Not last instance: deleting HID without end()");
+        }
+
+        // Delete the wrapper object
+        delete hid;
+        hid = nullptr;
+        Serial.println("[cleanupDuckyBLE] hid deleted");
+    }
+
+    // Only deinit BLE when NO instances are left (safety)
+    if (activeBLEInstances == 0 && NimBLEDevice::isInitialized()) {
+        Serial.println("[cleanupDuckyBLE] Last instance, ensuring BLE deinit...");
+        NimBLEDevice::deinit();
+        delay(50);
+        Serial.println("[cleanupDuckyBLE] BLE stack deinitialized");
+    }
+
+    BLEConnected = false;
+}
+
+// ============================================================================
+// SAFE CLEANUP - Double cleanup with cooling delay
+// ============================================================================
+
+void safeCleanupDuckyBLE(HIDInterface *&hid) {
+    Serial.println("[safeCleanupDuckyBLE] First cleanup pass...");
+    cleanupDuckyBLE(hid);
+    delay(200);
+
+    // Second pass to catch anything lingering
+    if (hid != nullptr) {
+        Serial.println("[safeCleanupDuckyBLE] Second cleanup pass...");
+        cleanupDuckyBLE(hid);
+        delay(200);
+    }
+
+    // Extra safety: if BLE is still initialized, force deinit
+    if (NimBLEDevice::isInitialized()) {
+        Serial.println("[safeCleanupDuckyBLE] Force deinitializing BLE...");
+        NimBLEDevice::deinit();
+        delay(200);
+    }
+
+    Serial.println("[safeCleanupDuckyBLE] Cleanup complete");
+}
+
+// ============================================================================
+// DUCKY COMMAND STRUCTURES - Stored in PROGMEM
+// ============================================================================
+
 enum DuckyCommandType {
-    DuckyCommandType_Unknown,
     DuckyCommandType_Cmd,
     DuckyCommandType_Print,
     DuckyCommandType_Delay,
     DuckyCommandType_Comment,
-    DuckyCommandType_Loop,
-    DuckyCommandType_Combination
+    DuckyCommandType_Repeat,
+    DuckyCommandType_Combination,
+    DuckyCommandType_WaitForButtonPress,
+    DuckyCommandType_AltChar,
+    DuckyCommandType_AltString,
+    DuckyCommandType_StringDelay,
+    DuckyCommandType_DefaultStringDelay
 };
 
-struct DuckyCommand {
+struct DuckyCommandLookup {
     const char *command;
     char key;
     DuckyCommandType type;
@@ -36,100 +168,499 @@ struct DuckyCombination {
     char key2;
     char key3;
 };
-const DuckyCombination duckyComb[]{
-    {"CTRL-ALT",       KEY_LEFT_CTRL, KEY_LEFT_ALT,   0             },
-    {"CTRL-SHIFT",     KEY_LEFT_CTRL, KEY_LEFT_SHIFT, 0             },
-    {"CTRL-GUI",       KEY_LEFT_CTRL, KEY_LEFT_GUI,   0             },
-    {"CTRL-ESCAPE",    KEY_LEFT_CTRL, KEY_ESC,        0             },
-    {"ALT-SHIFT",      KEY_LEFT_ALT,  KEY_LEFT_SHIFT, 0             },
-    {"ALT-GUI",        KEY_LEFT_ALT,  KEY_LEFT_GUI,   0             },
-    {"GUI-SHIFT",      KEY_LEFT_GUI,  KEY_LEFT_SHIFT, 0             },
-    {"GUI-SPACE",      KEY_LEFT_GUI,  KEY_SPACE,      0             },
-    {"CTRL-ALT-SHIFT", KEY_LEFT_CTRL, KEY_LEFT_ALT,   KEY_LEFT_SHIFT},
-    {"CTRL-ALT-GUI",   KEY_LEFT_CTRL, KEY_LEFT_ALT,   KEY_LEFT_GUI  },
-    {"ALT-SHIFT-GUI",  KEY_LEFT_ALT,  KEY_LEFT_SHIFT, KEY_LEFT_GUI  },
-    {"CTRL-SHIFT-GUI", KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_LEFT_GUI  }
+
+const DuckyCombination duckyComb[] PROGMEM = {
+    {"CTRL-ALT",       KEY_LEFT_CTRL, KEY_LEFT_ALT,     0             },
+    {"CTRL-SHIFT",     KEY_LEFT_CTRL, KEY_LEFT_SHIFT,   0             },
+    {"CTRL-GUI",       KEY_LEFT_CTRL, KEY_LEFT_GUI,     0             },
+    {"CTRL-ESCAPE",    KEY_LEFT_CTRL, KEY_ESC,          0             },
+    {"ALT-SHIFT",      KEY_LEFT_ALT,  KEY_LEFT_SHIFT,   0             },
+    {"ALT-GUI",        KEY_LEFT_ALT,  KEY_LEFT_GUI,     0             },
+    {"GUI-SHIFT",      KEY_LEFT_GUI,  KEY_LEFT_SHIFT,   0             },
+    {"GUI-SPACE",      KEY_LEFT_GUI,  KEY_SPACE,        0             },
+    {"CTRL-ALT-SHIFT", KEY_LEFT_CTRL, KEY_LEFT_ALT,     KEY_LEFT_SHIFT},
+    {"CTRL-ALT-GUI",   KEY_LEFT_CTRL, KEY_LEFT_ALT,     KEY_LEFT_GUI  },
+    {"ALT-SHIFT-GUI",  KEY_LEFT_ALT,  KEY_LEFT_SHIFT,   KEY_LEFT_GUI  },
+    {"CTRL-SHIFT-GUI", KEY_LEFT_CTRL, KEY_LEFT_SHIFT,   KEY_LEFT_GUI  },
+    {"SYSREQ",         KEY_LEFT_ALT,  KEY_PRINT_SCREEN, 0             }
 };
 
-const DuckyCommand duckyCmds[]{
-    {"STRING",         0,                DuckyCommandType_Print      },
-    {"STRINGLN",       0,                DuckyCommandType_Print      },
-    {"REM",            0,                DuckyCommandType_Comment    },
-    {"DELAY",          0,                DuckyCommandType_Delay      },
-    {"DEFAULTDELAY",   DEF_DELAY,        DuckyCommandType_Delay      },
-    {"REPEAT",         0,                DuckyCommandType_Loop       },
-    {"CTRL-ALT",       0,                DuckyCommandType_Combination},
-    {"CTRL-SHIFT",     0,                DuckyCommandType_Combination},
-    {"CTRL-GUI",       0,                DuckyCommandType_Combination},
-    {"CTRL-ESCAPE",    0,                DuckyCommandType_Combination},
-    {"ALT-SHIFT",      0,                DuckyCommandType_Combination},
-    {"ALT-GUI",        0,                DuckyCommandType_Combination},
-    {"GUI-SHIFT",      0,                DuckyCommandType_Combination},
-    {"GUI-SPACE",      0,                DuckyCommandType_Combination},
-    {"CTRL-ALT-SHIFT", 0,                DuckyCommandType_Combination},
-    {"CTRL-ALT-GUI",   0,                DuckyCommandType_Combination},
-    {"ALT-SHIFT-GUI",  0,                DuckyCommandType_Combination},
-    {"CTRL-SHIFT-GUI", 0,                DuckyCommandType_Combination},
-    {"BACKSPACE",      KEYBACKSPACE,     DuckyCommandType_Cmd        },
-    {"DELETE",         KEY_DELETE,       DuckyCommandType_Cmd        },
-    {"ALT",            KEY_LEFT_ALT,     DuckyCommandType_Cmd        },
-    {"CTRL",           KEY_LEFT_CTRL,    DuckyCommandType_Cmd        },
-    {"GUI",            KEY_LEFT_GUI,     DuckyCommandType_Cmd        },
-    {"SHIFT",          KEY_LEFT_SHIFT,   DuckyCommandType_Cmd        },
-    {"ESCAPE",         KEY_ESC,          DuckyCommandType_Cmd        },
-    {"TAB",            KEYTAB,           DuckyCommandType_Cmd        },
-    {"ENTER",          KEY_RETURN,       DuckyCommandType_Cmd        },
-    {"DOWNARROW",      KEY_DOWN_ARROW,   DuckyCommandType_Cmd        },
-    {"DOWN",           KEY_DOWN_ARROW,   DuckyCommandType_Cmd        },
-    {"LEFTARROW",      KEY_LEFT_ARROW,   DuckyCommandType_Cmd        },
-    {"LEFT",           KEY_LEFT_ARROW,   DuckyCommandType_Cmd        },
-    {"RIGHTARROW",     KEY_RIGHT_ARROW,  DuckyCommandType_Cmd        },
-    {"RIGHT",          KEY_RIGHT_ARROW,  DuckyCommandType_Cmd        },
-    {"UPARROW",        KEY_UP_ARROW,     DuckyCommandType_Cmd        },
-    {"UP",             KEY_UP_ARROW,     DuckyCommandType_Cmd        },
-    {"BREAK",          KEY_PAUSE,        DuckyCommandType_Cmd        },
-    {"CAPSLOCK",       KEY_CAPS_LOCK,    DuckyCommandType_Cmd        },
-    {"PAUSE",          KEY_PAUSE,        DuckyCommandType_Cmd        },
-    {"END",            KEY_END,          DuckyCommandType_Cmd        },
-    {"HOME",           KEY_HOME,         DuckyCommandType_Cmd        },
-    {"INSERT",         KEY_INSERT,       DuckyCommandType_Cmd        },
-    {"NUMLOCK",        LED_NUMLOCK,      DuckyCommandType_Cmd        },
-    {"PAGEUP",         KEY_PAGE_UP,      DuckyCommandType_Cmd        },
-    {"PAGEDOWN",       KEY_PAGE_DOWN,    DuckyCommandType_Cmd        },
-    {"PRINTSCREEN",    KEY_PRINT_SCREEN, DuckyCommandType_Cmd        },
-    {"SCROLLOCK",      KEY_SCROLL_LOCK,  DuckyCommandType_Cmd        },
-    {"MENU",           KEY_MENU,         DuckyCommandType_Cmd        },
-    {"F1",             KEY_F1,           DuckyCommandType_Cmd        },
-    {"F2",             KEY_F2,           DuckyCommandType_Cmd        },
-    {"F3",             KEY_F3,           DuckyCommandType_Cmd        },
-    {"F4",             KEY_F4,           DuckyCommandType_Cmd        },
-    {"F5",             KEY_F5,           DuckyCommandType_Cmd        },
-    {"F6",             KEY_F6,           DuckyCommandType_Cmd        },
-    {"F7",             KEY_F7,           DuckyCommandType_Cmd        },
-    {"F8",             KEY_F8,           DuckyCommandType_Cmd        },
-    {"F9",             KEY_F9,           DuckyCommandType_Cmd        },
-    {"F10",            KEY_F10,          DuckyCommandType_Cmd        },
-    {"F11",            KEY_F11,          DuckyCommandType_Cmd        },
-    {"F12",            KEY_F12,          DuckyCommandType_Cmd        },
-    {"SPACE",          KEY_SPACE,        DuckyCommandType_Cmd        }
+const DuckyCommandLookup duckyCmds[] PROGMEM = {
+    {"REM",                   0,                DuckyCommandType_Comment           },
+    {"//",                    0,                DuckyCommandType_Comment           },
+    {"STRING",                0,                DuckyCommandType_Print             },
+    {"STRINGLN",              0,                DuckyCommandType_Print             },
+    {"DELAY",                 0,                DuckyCommandType_Delay             },
+    {"DEFAULTDELAY",          DEF_DELAY,        DuckyCommandType_Delay             },
+    {"DEFAULT_DELAY",         DEF_DELAY,        DuckyCommandType_Delay             },
+    {"STRING_DELAY",          0,                DuckyCommandType_StringDelay       },
+    {"STRINGDELAY",           0,                DuckyCommandType_StringDelay       },
+    {"DEFAULT_STRING_DELAY",  0,                DuckyCommandType_DefaultStringDelay},
+    {"DEFAULTSTRINGDELAY",    0,                DuckyCommandType_DefaultStringDelay},
+    {"REPEAT",                0,                DuckyCommandType_Repeat            },
+    {"WAIT_FOR_BUTTON_PRESS", 0,                DuckyCommandType_WaitForButtonPress},
+    {"ALTCHAR",               0,                DuckyCommandType_AltChar           },
+    {"ALTSTRING",             0,                DuckyCommandType_AltString         },
+    {"ALTCODE",               0,                DuckyCommandType_AltString         },
+    {"CTRL-ALT",              0,                DuckyCommandType_Combination       },
+    {"CTRL-SHIFT",            0,                DuckyCommandType_Combination       },
+    {"CTRL-GUI",              0,                DuckyCommandType_Combination       },
+    {"CTRL-ESCAPE",           0,                DuckyCommandType_Combination       },
+    {"ALT-SHIFT",             0,                DuckyCommandType_Combination       },
+    {"ALT-GUI",               0,                DuckyCommandType_Combination       },
+    {"GUI-SHIFT",             0,                DuckyCommandType_Combination       },
+    {"GUI-SPACE",             0,                DuckyCommandType_Combination       },
+    {"CTRL-ALT-SHIFT",        0,                DuckyCommandType_Combination       },
+    {"CTRL-ALT-GUI",          0,                DuckyCommandType_Combination       },
+    {"ALT-SHIFT-GUI",         0,                DuckyCommandType_Combination       },
+    {"CTRL-SHIFT-GUI",        0,                DuckyCommandType_Combination       },
+    {"SYSREQ",                0,                DuckyCommandType_Combination       },
+    {"BACKSPACE",             KEYBACKSPACE,     DuckyCommandType_Cmd               },
+    {"DELETE",                KEY_DELETE,       DuckyCommandType_Cmd               },
+    {"ALT",                   KEY_LEFT_ALT,     DuckyCommandType_Cmd               },
+    {"CTRL",                  KEY_LEFT_CTRL,    DuckyCommandType_Cmd               },
+    {"CONTROL",               KEY_LEFT_CTRL,    DuckyCommandType_Cmd               },
+    {"GUI",                   KEY_LEFT_GUI,     DuckyCommandType_Cmd               },
+    {"WINDOWS",               KEY_LEFT_GUI,     DuckyCommandType_Cmd               },
+    {"SHIFT",                 KEY_LEFT_SHIFT,   DuckyCommandType_Cmd               },
+    {"ESCAPE",                KEY_ESC,          DuckyCommandType_Cmd               },
+    {"ESC",                   KEY_ESC,          DuckyCommandType_Cmd               },
+    {"TAB",                   KEYTAB,           DuckyCommandType_Cmd               },
+    {"ENTER",                 KEY_RETURN,       DuckyCommandType_Cmd               },
+    {"DOWNARROW",             KEY_DOWN_ARROW,   DuckyCommandType_Cmd               },
+    {"DOWN",                  KEY_DOWN_ARROW,   DuckyCommandType_Cmd               },
+    {"LEFTARROW",             KEY_LEFT_ARROW,   DuckyCommandType_Cmd               },
+    {"LEFT",                  KEY_LEFT_ARROW,   DuckyCommandType_Cmd               },
+    {"RIGHTARROW",            KEY_RIGHT_ARROW,  DuckyCommandType_Cmd               },
+    {"RIGHT",                 KEY_RIGHT_ARROW,  DuckyCommandType_Cmd               },
+    {"UPARROW",               KEY_UP_ARROW,     DuckyCommandType_Cmd               },
+    {"UP",                    KEY_UP_ARROW,     DuckyCommandType_Cmd               },
+    {"BREAK",                 KEY_PAUSE,        DuckyCommandType_Cmd               },
+    {"PAUSE",                 KEY_PAUSE,        DuckyCommandType_Cmd               },
+    {"CAPSLOCK",              KEY_CAPS_LOCK,    DuckyCommandType_Cmd               },
+    {"END",                   KEY_END,          DuckyCommandType_Cmd               },
+    {"HOME",                  KEY_HOME,         DuckyCommandType_Cmd               },
+    {"INSERT",                KEY_INSERT,       DuckyCommandType_Cmd               },
+    {"NUMLOCK",               LED_NUMLOCK,      DuckyCommandType_Cmd               },
+    {"PAGEUP",                KEY_PAGE_UP,      DuckyCommandType_Cmd               },
+    {"PAGEDOWN",              KEY_PAGE_DOWN,    DuckyCommandType_Cmd               },
+    {"PRINTSCREEN",           KEY_PRINT_SCREEN, DuckyCommandType_Cmd               },
+    {"SCROLLOCK",             KEY_SCROLL_LOCK,  DuckyCommandType_Cmd               },
+    {"MENU",                  KEY_MENU,         DuckyCommandType_Cmd               },
+    {"APP",                   KEY_MENU,         DuckyCommandType_Cmd               },
+    {"F1",                    KEY_F1,           DuckyCommandType_Cmd               },
+    {"F2",                    KEY_F2,           DuckyCommandType_Cmd               },
+    {"F3",                    KEY_F3,           DuckyCommandType_Cmd               },
+    {"F4",                    KEY_F4,           DuckyCommandType_Cmd               },
+    {"F5",                    KEY_F5,           DuckyCommandType_Cmd               },
+    {"F6",                    KEY_F6,           DuckyCommandType_Cmd               },
+    {"F7",                    KEY_F7,           DuckyCommandType_Cmd               },
+    {"F8",                    KEY_F8,           DuckyCommandType_Cmd               },
+    {"F9",                    KEY_F9,           DuckyCommandType_Cmd               },
+    {"F10",                   KEY_F10,          DuckyCommandType_Cmd               },
+    {"F11",                   KEY_F11,          DuckyCommandType_Cmd               },
+    {"F12",                   KEY_F12,          DuckyCommandType_Cmd               },
+    {"F13",                   KEY_F13,          DuckyCommandType_Cmd               },
+    {"F14",                   KEY_F14,          DuckyCommandType_Cmd               },
+    {"F15",                   KEY_F15,          DuckyCommandType_Cmd               },
+    {"F16",                   KEY_F16,          DuckyCommandType_Cmd               },
+    {"F17",                   KEY_F17,          DuckyCommandType_Cmd               },
+    {"F18",                   KEY_F18,          DuckyCommandType_Cmd               },
+    {"F19",                   KEY_F19,          DuckyCommandType_Cmd               },
+    {"F20",                   KEY_F20,          DuckyCommandType_Cmd               },
+    {"F21",                   KEY_F21,          DuckyCommandType_Cmd               },
+    {"F22",                   KEY_F22,          DuckyCommandType_Cmd               },
+    {"F23",                   KEY_F23,          DuckyCommandType_Cmd               },
+    {"F24",                   KEY_F24,          DuckyCommandType_Cmd               },
+    {"SPACE",                 KEY_SPACE,        DuckyCommandType_Cmd               },
+    {"FN",                    KEYFN,            DuckyCommandType_Cmd               },
+    {"GLOBE",                 KEYFN,            DuckyCommandType_Cmd               },
 };
 
-void ducky_startKb(HIDInterface *&hid, const uint8_t *layout, bool ble) {
-    Serial.printf("\nducky_startKb before hid==null: BLE: %d\n", ble);
+const uint8_t *keyboardLayouts[] PROGMEM = {
+    KeyboardLayout_en_US, // 0
+    KeyboardLayout_da_DK, // 1
+    KeyboardLayout_en_UK, // 2
+    KeyboardLayout_fr_FR, // 3
+    KeyboardLayout_de_DE, // 4
+    KeyboardLayout_hu_HU, // 5
+    KeyboardLayout_it_IT, // 6
+    KeyboardLayout_en_US, // 7
+    KeyboardLayout_pt_BR, // 8
+    KeyboardLayout_pt_PT, // 9
+    KeyboardLayout_si_SI, // 10
+    KeyboardLayout_es_ES, // 11
+    KeyboardLayout_sv_SE, // 12
+    KeyboardLayout_tr_TR  // 13
+};
+
+// ============================================================================
+// MENU KEY STRUCTURES - Stored in PROGMEM
+// ============================================================================
+
+struct KeyboardMenuKey {
+    const char *label;
+    uint8_t key;
+};
+
+struct QueuedHIDKey {
+    uint8_t key;
+    String label;
+};
+
+static const KeyboardMenuKey modifierMenuKeys[] PROGMEM = {
+    {"Ctrl",        KEY_LEFT_CTRL  },
+    {"Shift",       KEY_LEFT_SHIFT },
+    {"Alt",         KEY_LEFT_ALT   },
+    {"GUI",         KEY_LEFT_GUI   },
+    {"Right Ctrl",  KEY_RIGHT_CTRL },
+    {"Right Shift", KEY_RIGHT_SHIFT},
+    {"Right Alt",   KEY_RIGHT_ALT  },
+    {"Right GUI",   KEY_RIGHT_GUI  },
+    {"Fn",          KEYFN          },
+};
+
+static const KeyboardMenuKey navigationMenuKeys[] PROGMEM = {
+    {"Up Arrow",    KEY_UP_ARROW   },
+    {"Down Arrow",  KEY_DOWN_ARROW },
+    {"Left Arrow",  KEY_LEFT_ARROW },
+    {"Right Arrow", KEY_RIGHT_ARROW},
+    {"Home",        KEY_HOME       },
+    {"End",         KEY_END        },
+    {"Page Up",     KEY_PAGE_UP    },
+    {"Page Down",   KEY_PAGE_DOWN  },
+    {"Insert",      KEY_INSERT     },
+    {"Delete",      KEY_DELETE     },
+};
+
+static const KeyboardMenuKey specialMenuKeys[] PROGMEM = {
+    {"Enter",        KEY_RETURN      },
+    {"Tab",          KEYTAB          },
+    {"Escape",       KEY_ESC         },
+    {"Backspace",    KEYBACKSPACE    },
+    {"Space",        KEY_SPACE       },
+    {"Caps Lock",    KEY_CAPS_LOCK   },
+    {"Num Lock",     KEY_NUM_LOCK    },
+    {"Scroll Lock",  KEY_SCROLL_LOCK },
+    {"Print Screen", KEY_PRINT_SCREEN},
+    {"Pause",        KEY_PAUSE       },
+    {"Menu",         KEY_MENU        },
+};
+
+static const KeyboardMenuKey functionMenuKeys[] PROGMEM = {
+    {"F1",  KEY_F1 },
+    {"F2",  KEY_F2 },
+    {"F3",  KEY_F3 },
+    {"F4",  KEY_F4 },
+    {"F5",  KEY_F5 },
+    {"F6",  KEY_F6 },
+    {"F7",  KEY_F7 },
+    {"F8",  KEY_F8 },
+    {"F9",  KEY_F9 },
+    {"F10", KEY_F10},
+    {"F11", KEY_F11},
+    {"F12", KEY_F12},
+    {"F13", KEY_F13},
+    {"F14", KEY_F14},
+    {"F15", KEY_F15},
+    {"F16", KEY_F16},
+    {"F17", KEY_F17},
+    {"F18", KEY_F18},
+    {"F19", KEY_F19},
+    {"F20", KEY_F20},
+    {"F21", KEY_F21},
+    {"F22", KEY_F22},
+    {"F23", KEY_F23},
+    {"F24", KEY_F24},
+};
+
+static const KeyboardMenuKey numpadMenuKeys[] PROGMEM = {
+    {"KP /",     KEY_KP_SLASH   },
+    {"KP *",     KEY_KP_ASTERISK},
+    {"KP -",     KEY_KP_MINUS   },
+    {"KP +",     KEY_KP_PLUS    },
+    {"KP Enter", KEY_KP_ENTER   },
+    {"KP 0",     KEY_KP_0       },
+    {"KP 1",     KEY_KP_1       },
+    {"KP 2",     KEY_KP_2       },
+    {"KP 3",     KEY_KP_3       },
+    {"KP 4",     KEY_KP_4       },
+    {"KP 5",     KEY_KP_5       },
+    {"KP 6",     KEY_KP_6       },
+    {"KP 7",     KEY_KP_7       },
+    {"KP 8",     KEY_KP_8       },
+    {"KP 9",     KEY_KP_9       },
+    {"KP .",     KEY_KP_DOT     },
+};
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+static bool isModifierKeyForQueue(uint8_t key) {
+    switch (key) {
+        case KEY_LEFT_CTRL:
+        case KEY_LEFT_SHIFT:
+        case KEY_LEFT_ALT:
+        case KEY_LEFT_GUI:
+        case KEY_RIGHT_CTRL:
+        case KEY_RIGHT_SHIFT:
+        case KEY_RIGHT_ALT:
+        case KEY_RIGHT_GUI: return true;
+        default: return false;
+    }
+}
+
+static bool isKeyboardInputCanceled(const String &value) {
+    return value.length() == 1 && value.charAt(0) == '\x1B';
+}
+
+static bool queueContainsKey(const std::vector<QueuedHIDKey> &queuedKeys, uint8_t key) {
+    for (const auto &queuedKey : queuedKeys) {
+        if (queuedKey.key == key) return true;
+    }
+    return false;
+}
+
+static int queuedNonModifierCount(const std::vector<QueuedHIDKey> &queuedKeys) {
+    int count = 0;
+    for (const auto &queuedKey : queuedKeys) {
+        if (!isModifierKeyForQueue(queuedKey.key)) count++;
+    }
+    return count;
+}
+
+static String queueToString(const std::vector<QueuedHIDKey> &queuedKeys) {
+    String result;
+    for (size_t i = 0; i < queuedKeys.size(); i++) {
+        if (i > 0) result += "+";
+        result += queuedKeys[i].label;
+        if (result.length() > 44) {
+            result = result.substring(0, 41) + "...";
+            break;
+        }
+    }
+    return result;
+}
+
+static void sendSingleKey(HIDInterface *hid, uint8_t key) {
+    hid->press(key);
+    delay(bruceConfig.badUSBBLEKeyDelay);
+    hid->releaseAll();
+}
+
+static void queueOrSendKey(
+    HIDInterface *hid, bool queueRecording, std::vector<QueuedHIDKey> &queuedKeys, const String &keyLabel,
+    uint8_t key
+) {
+    if (!queueRecording) {
+        sendSingleKey(hid, key);
+        displayTextLine("Sent: " + keyLabel);
+        return;
+    }
+
+    if (queueContainsKey(queuedKeys, key)) {
+        displayWarning("Already queued: " + keyLabel);
+        return;
+    }
+
+    if (!isModifierKeyForQueue(key) && queuedNonModifierCount(queuedKeys) >= 6) {
+        displayWarning("Queue full: max 6 non-modifier keys");
+        return;
+    }
+
+    queuedKeys.push_back({key, keyLabel});
+    displayTextLine("Queued: " + queueToString(queuedKeys));
+}
+
+static void getMenuKey(const KeyboardMenuKey *src, KeyboardMenuKey *dst) {
+    memcpy_P(dst, src, sizeof(KeyboardMenuKey));
+}
+
+static void openKeySection(
+    HIDInterface *hid, const char *title, const KeyboardMenuKey *menuKeys, size_t keyCount,
+    bool &queueRecording, std::vector<QueuedHIDKey> &queuedKeys
+) {
+    int index = 0;
+    while (1) {
+        std::vector<Option> sectionOptions;
+        sectionOptions.reserve(keyCount + 1);
+
+        for (size_t i = 0; i < keyCount; i++) {
+            KeyboardMenuKey menuKey;
+            getMenuKey(&menuKeys[i], &menuKey);
+            sectionOptions.push_back(
+                {menuKey.label, [&, menuKey]() {
+                     queueOrSendKey(hid, queueRecording, queuedKeys, menuKey.label, menuKey.key);
+                 }}
+            );
+        }
+
+        sectionOptions.push_back({"Back", []() {}});
+
+        int selected = loopOptions(sectionOptions, MENU_TYPE_REGULAR, title, index);
+        if (selected < 0 || selected == static_cast<int>(keyCount)) break;
+        index = selected;
+    }
+}
+
+static void
+keyboardSectionAction(HIDInterface *hid, bool &queueRecording, std::vector<QueuedHIDKey> &queuedKeys) {
+    if (queueRecording) {
+        String queuedChar = keyboard("", 1, "Queue character:");
+        if (queuedChar == "\x1B" || queuedChar.length() == 0 || isKeyboardInputCanceled(queuedChar)) return;
+        String label = queuedChar.substring(0, 1);
+        queueOrSendKey(hid, true, queuedKeys, label, static_cast<uint8_t>(queuedChar.charAt(0)));
+        return;
+    }
+
+    String typedText = keyboard("", 76, "Type your message:");
+    if (typedText == "\x1B" || typedText.length() == 0 || isKeyboardInputCanceled(typedText)) return;
+
+    hid->print(typedText.c_str());
+    displayTextLine("Text sent");
+}
+
+static void
+sendQueuedKeys(HIDInterface *hid, bool &queueRecording, const std::vector<QueuedHIDKey> &queuedKeys) {
+    if (queuedKeys.empty()) return;
+
+    for (const auto &queuedKey : queuedKeys) { hid->press(queuedKey.key); }
+    delay(bruceConfig.badUSBBLEKeyDelay);
+    hid->releaseAll();
+
+    queueRecording = false;
+    displaySuccess("Sent: " + queueToString(queuedKeys));
+}
+
+// ============================================================================
+// FIND FUNCTIONS - Optimized with caching
+// ============================================================================
+
+DuckyCommandLookup *findDuckyCommand(const char *cmd) {
+    static DuckyCommandLookup cached;
+    static char cachedCmd[25] = "";
+
+    if (strcmp(cmd, cachedCmd) == 0) { return &cached; }
+
+    size_t count = sizeof(duckyCmds) / sizeof(duckyCmds[0]);
+    for (size_t i = 0; i < count; i++) {
+        DuckyCommandLookup entry;
+        memcpy_P(&entry, &duckyCmds[i], sizeof(DuckyCommandLookup));
+        if (strcmp(cmd, entry.command) == 0) {
+            memcpy_P(&cached, &duckyCmds[i], sizeof(DuckyCommandLookup));
+            strlcpy(cachedCmd, cmd, sizeof(cachedCmd));
+            return &cached;
+        }
+    }
+    return nullptr;
+}
+
+DuckyCombination *findDuckyCombination(const char *cmd) {
+    static DuckyCombination cached;
+    static char cachedCmd[25] = "";
+
+    if (strcmp(cmd, cachedCmd) == 0) { return &cached; }
+
+    size_t count = sizeof(duckyComb) / sizeof(duckyComb[0]);
+    for (size_t i = 0; i < count; i++) {
+        DuckyCombination entry;
+        memcpy_P(&entry, &duckyComb[i], sizeof(DuckyCombination));
+        if (strcmp(cmd, entry.command) == 0) {
+            memcpy_P(&cached, &duckyComb[i], sizeof(DuckyCombination));
+            strlcpy(cachedCmd, cmd, sizeof(cachedCmd));
+            return &cached;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================================
+// START KEYBOARD - Creates fresh BLE instance with new stack
+// ============================================================================
+
+void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
+    Serial.printf("\nducky_startKb: BLE=%d, hid=%p, func=%d\n", ble, hid, functionId);
+
     if (hid == nullptr) {
-        Serial.printf("ducky_startKb after hid==null: BLE: %d\n", ble);
+        Serial.printf("Creating new HID instance for BLE=%d\n", ble);
         if (ble) {
-            // _Ask_for_restart change to 2 when use Disconnect option in BLE menu
-            if (_Ask_for_restart == 2) {
-                displayError("Restart your Device");
+            if (!radioHasMemForBle()) {
+                displayError("Low RAM: free WiFi/SD first", true);
                 returnToMenu = true;
+                return;
             }
-            hid = new BleKeyboard(bruceConfig.bleName, "BruceFW", 100);
+
+            // Set function-specific MAC address (Logitech OUIs)
+            if (functionId >= 0 && functionId < 4) {
+                Serial.printf("[ducky_startKb] Setting MAC for function %d: ", functionId);
+                for (int i = 0; i < 6; i++) {
+                    Serial.printf("%02X%s", FUNC_MACS[functionId][i], i < 5 ? ":" : "");
+                }
+                Serial.println();
+                setBleMac(FUNC_MACS[functionId]);
+                delay(50);
+            }
+
+            // Build device name with suffix for unique identification
+            String deviceName = bruceConfigPins.bleName;
+            if (deviceName.isEmpty()) { deviceName = "keyboard_99"; }
+
+            Serial.printf("[ducky_startKb] Device name: %s\n", deviceName.c_str());
+
+            // Check if BLE needs initialization
+            if (!NimBLEDevice::isInitialized()) {
+                Serial.println("[ducky_startKb] Initializing BLE stack...");
+                NimBLEDevice::init(std::string(deviceName.c_str()));
+                Serial.println("[ducky_startKb] BLE stack initialized");
+                delay(50);
+            } else {
+                Serial.println("[ducky_startKb] BLE stack already initialized");
+                // Stop any existing advertising
+                if (NimBLEDevice::getAdvertising()) {
+                    NimBLEDevice::getAdvertising()->stop();
+                    Serial.println("[ducky_startKb] Stopped existing advertising");
+                }
+            }
+
+            // Increment active instance count
+            activeBLEInstances++;
+            Serial.printf("[ducky_startKb] Active BLE instances: %d\n", activeBLEInstances);
+
+            // Create HID service
+            hid = new BleKeyboard(deviceName, "BruceFW", 100);
+            Serial.println("[ducky_startKb] New BleKeyboard created");
+
+            // Set hid_ble to point to the active instance
+            hid_ble = hid;
+            Serial.printf("[ducky_startKb] hid_ble now points to instance %p\n", hid_ble);
+
+            const uint8_t *layout =
+                (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
+
+            // Start the HID service
+            hid->begin(layout);
+            hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
+
+            // CRITICAL: Wait for HID service to be fully registered
+            delay(200);
+
+            // Force a clean state
+            hid->releaseAll();
+
+            Serial.println("[ducky_startKb] HID service started, advertising");
+            return;
         } else {
 #if defined(USB_as_HID)
-
             hid = new USBHIDKeyboard();
             USB.begin();
+
+            while (!tud_mounted()) {
+                printStatusBadUSBBLE("Waiting USB Host...");
+                delay(500);
+            }
+
+            printStatusBadUSBBLE("USB Host Connected");
 #else
             mySerial.begin(CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, BAD_RX, BAD_TX);
             delay(100);
@@ -137,59 +668,55 @@ void ducky_startKb(HIDInterface *&hid, const uint8_t *layout, bool ble) {
 #endif
         }
     }
+
     if (ble) {
         if (hid->isConnected()) {
-            // If connected as media controller and switch to BadBLE, changes the layout
+            Serial.println("BLE Already connected, updating settings");
+            const uint8_t *layout =
+                (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
             hid->setLayout(layout);
+            hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
             return;
         }
-        if (!_Ask_for_restart) _Ask_for_restart = 1; // arm the flag
+
+        Serial.println("Starting/restarting BLE advertising");
+        const uint8_t *layout =
+            (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
         hid->begin(layout);
+        hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
     } else {
 #if defined(USB_as_HID)
+        const uint8_t *layout =
+            (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
         hid->begin(layout);
+        hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
 #else
         mySerial.begin(CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, BAD_RX, BAD_TX);
         delay(100);
+        const uint8_t *layout =
+            (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
         hid->begin(mySerial, layout);
+        hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
 #endif
     }
 }
-void ducky_chooseKb(HIDInterface *&hid, bool ble) {
-    Serial.printf("\nducky_chooseKb BLE: %d\n", ble);
-    options = {
-        {"US International",      [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_en_US, ble); }},
-        {"Portuguese (Brazil)",   [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_pt_BR, ble); }},
-        {"Portuguese (Portugal)", [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_pt_PT, ble); }},
-        {"French AZERTY",         [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_fr_FR, ble); }},
-        {"Spanish (Spain)",       [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_es_ES, ble); }},
-        {"Italian (Italy)",       [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_it_IT, ble); }},
-        {"English (UK)",          [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_en_UK, ble); }},
-        {"German (Germany)",      [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_de_DE, ble); }},
-        {"Swedish (Sweden)",      [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_sv_SE, ble); }},
-        {"Danish (Denmark)",      [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_da_DK, ble); }},
-        {"Hungarian (Hungary)",   [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_hu_HU, ble); }},
-        {"Turkish (Turkey)",      [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_tr_TR, ble); }},
-        {"Polish (Poland)",       [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_en_US, ble); }},
-        {"Slovenian (Slovenia)",  [&hid, &ble]() { ducky_startKb(hid, KeyboardLayout_si_SI, ble); }}
-    };
-    addOptionToMainMenu();
-    loopOptions(options, true, "Keyboard Layout");
-    options.clear();
-}
-// Start badUSB or badBLE ducky runner
+
+// ============================================================================
+// DUCKY SETUP - Main entry for BadUSB/BLE script runner
+// ============================================================================
+
 void ducky_setup(HIDInterface *&hid, bool ble) {
     Serial.println("Ducky typer begin");
+
+    if (ble && bruceConfig.badUSBBLEKeyDelay < 50) {
+        displayWarning("Key delay is below 50ms. You may experience issues with missing keys.", true);
+    }
+
     tft.fillScreen(bruceConfig.bgColor);
 
-    if (ble && _Ask_for_restart == 2) {
-        displayError("Restart your Device");
-        returnToMenu = true;
-        return;
-    }
     FS *fs = nullptr;
     bool first_time = true;
-NewScript:
+
     tft.fillScreen(bruceConfig.bgColor);
     String bad_script = "";
     options = {};
@@ -209,10 +736,16 @@ NewScript:
             returnToMenu = true;
             goto EXIT;
         }
-        tft.fillScreen(bruceConfig.bgColor);
+    StartRunningScript:
+        printHeaderBadUSBBLE(bad_script);
+        printStatusBadUSBBLE("Preparing");
+
         if (first_time) {
-            ducky_chooseKb(hid, ble);
-            if (returnToMenu) goto EXIT; // make sure to free the hid object before exiting
+            printStatusBadUSBBLE("Preparing USB");
+            // Double cleanup before starting
+            if (ble) safeCleanupDuckyBLE(hid);
+            ducky_startKb(hid, ble, 2); // functionId 2 = BadUSB
+            if (returnToMenu) goto EXIT;
             first_time = false;
             if (!ble) {
 #if !defined(USB_as_HID)
@@ -224,20 +757,20 @@ NewScript:
                         mySerial.write(0x00);
                     } else break;
                     if (check(EscPress)) {
-                        displayError("CH9329 not found"); // Cancel run
+                        displayError("CH9329 not found");
                         delay(500);
                         goto EXIT;
                     }
                 }
 #endif
-                displayTextLine("Preparing");
-                delay(2000); // Time to Computer or device recognize the USB HID
+                printStatusBadUSBBLE("Preparing USB");
+                delay(2000);
             } else {
-                displayTextLine("Waiting Victim");
-                while (!hid->isConnected() && !check(EscPress));
+                printStatusBadUSBBLE("Waiting Victim");
+                while (!hid->isConnected() && !check(EscPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
                 if (hid->isConnected()) {
                     BLEConnected = true;
-                    displayTextLine("Preparing");
+                    printStatusBadUSBBLE("Preparing BLE");
                     delay(1000);
                 } else {
                     displayWarning("Canceled", true);
@@ -245,196 +778,235 @@ NewScript:
                 }
             }
         }
-        displayWarning(String(BTN_ALIAS) + " to deploy", true);
+        printStatusBadUSBBLE(String(BTN_ALIAS) + " to start");
+        if (!waitForButtonPress()) { goto EXIT; }
         delay(200);
         key_input(*fs, bad_script, hid);
 
-        displayTextLine("Payload Sent", true);
+        printStatusBadUSBBLE("Finished - " + String(BTN_ALIAS) + " to restart");
+        if (!waitForButtonPress()) { goto EXIT; }
 
-        if (returnToMenu) goto EXIT;
-        // Try to run a new script on the same device
-        goto NewScript;
-    } else displayWarning("Canceled", true);
+        goto StartRunningScript;
+    }
 EXIT:
     if (!ble) {
-        delete hid; // Keep the hid object alive for BLE
+        delete hid;
         hid = nullptr;
 #if !defined(USB_as_HID)
-        mySerial.end();       // Stops UART Serial as HID
-        Serial.begin(115200); // Force restart of Serial, just in case....
+        mySerial.end();
+        Serial.begin(115200);
 #endif
     }
+    if (ble) safeCleanupDuckyBLE(hid);
     returnToMenu = true;
 }
-// Parses a file to run in the badUSB
-void key_input(FS fs, String bad_script, HIDInterface *_hid) {
+
+// ============================================================================
+// KEY_INPUT - Main Ducky script parser
+// ============================================================================
+
+void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     if (!fs.exists(bad_script) || bad_script == "") return;
     File payloadFile = fs.open(bad_script, "r");
     if (!payloadFile) return;
-    tft.setCursor(0, 40);
-    tft.println("from file!");
     String lineContent = "";
     String Command = "";
-    char Cmd[15];
+    char Cmd[25];
     String Argument = "";
     String RepeatTmp = "";
-    char ArgChar = '\0';
-    bool ArgIsCmd; // Verifies if the Argument is DELETE, TAB or F1-F12
+
+    static int nextStringDelay = -1;
+    static int defaultStringDelay = bruceConfig.badUSBBLEKeyDelay;
+    currentOutputY = 0;
 
     _hid->releaseAll();
-    tft.setTextSize(1);
-    tft.setCursor(0, 0);
-    tft.fillScreen(bruceConfig.bgColor);
+
+    printHeaderBadUSBBLE(bad_script);
+    printStatusBadUSBBLE("Running");
+
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE * 2, FP * 8 * 3 + 2 + STATUS_BAR_HEIGHT);
+    tft.print("Run Time:");
+    printDecimalTime(0);
+
+    tft.drawLine(
+        BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight / 2 - FP * 4 - 2,
+        tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE,
+        tftHeight / 2 - FP * 4 - 2,
+        bruceConfig.priColor
+    );
+    if (!bruceConfig.badUSBBLEShowOutput) {
+        tft.setTextSize(FP);
+        tft.setTextColor(TFT_RED);
+        tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE * 2, tftHeight / 2);
+        tft.print("Script output disabled");
+    }
+
+    uint32_t startMillisBADUSBBLE = millis();
 
     while (payloadFile.available()) {
-        previousMillis = millis(); // resets DimScreen
+        previousMillis = millis();
         if (check(SelPress)) {
-            while (check(SelPress)); // hold the code in this position until release the btn
-            options = {
-                {"Continue", yield},
-            };
-            addOptionToMainMenu();
-            loopOptions(options);
-
-            if (returnToMenu) break;
-            tft.setTextSize(FP);
+            if (!handlePauseResume()) { goto EXIT; }
         }
-        // CRLF is a combination of two control characters: the "Carriage Return" represented by
-        // the character "\r" and the "Line Feed" represented by the character "\n".
         lineContent = payloadFile.readStringUntil('\n');
         if (lineContent.endsWith("\r")) lineContent.remove(lineContent.length() - 1);
 
-        RepeatTmp = lineContent.substring(0, lineContent.indexOf(' '));
-        RepeatTmp = RepeatTmp.c_str();
-        if (RepeatTmp == "REPEAT") {
-            if (lineContent.indexOf(' ') > 0) {
-                // how many times it will repeat, using .toInt() conversion;
-                RepeatTmp = lineContent.substring(lineContent.indexOf(' ') + 1);
-                if (RepeatTmp.toInt() == 0) {
-                    RepeatTmp = "1";
-                    tft.setTextColor(ALCOLOR);
-                    tft.println("REPEAT argument NaN, repeating once");
-                }
-            } else {
+        if (lineContent.length() == 0) continue;
+
+        int spaceIndex = lineContent.indexOf(' ');
+
+        if (spaceIndex > 0 && lineContent.substring(0, spaceIndex) == "REPEAT") {
+            RepeatTmp = lineContent.substring(spaceIndex + 1);
+            if (RepeatTmp.toInt() <= 0) {
                 RepeatTmp = "1";
-                tft.setTextColor(ALCOLOR);
-                tft.println("REPEAT without argument, repeating once");
+                printTFTBadUSBBLE("REPEAT argument NaN, repeating once", ALCOLOR, true);
             }
+        } else if (spaceIndex == -1 && lineContent == "REPEAT") {
+            RepeatTmp = "1";
+            printTFTBadUSBBLE("REPEAT without argument, repeating once", ALCOLOR, true);
         } else {
-            Command = lineContent.substring(0, lineContent.indexOf(' ')); // get the Command
-            strcpy(Cmd, Command.c_str());                                 // get the cmd
-            if (lineContent.indexOf(' ') > 0)
-                Argument = lineContent.substring(lineContent.indexOf(' ') + 1); // get the argument
-            else Argument = "";
+            if (spaceIndex > 0) {
+                Command = lineContent.substring(0, spaceIndex);
+                Argument = lineContent.substring(spaceIndex + 1);
+            } else {
+                Command = lineContent;
+                Argument = "";
+            }
+            strlcpy(Cmd, Command.c_str(), sizeof(Cmd));
             RepeatTmp = "1";
         }
+
         uint16_t i;
-        ArgIsCmd = false;
-        Argument = Argument.c_str();
-        ArgChar = Argument.charAt(0);
-        for (i = 0; i < RepeatTmp.toInt(); i++) {
-            DuckyCommand *ArgCmd = nullptr;
-            DuckyCommand *PriCmd = nullptr;
-            ArgIsCmd = false;
-            for (auto cmds : duckyCmds) {
-                if (strcmp(Cmd, cmds.command) == 0) {
-                    PriCmd = &cmds;
-                    // STRING and STRINGLN are processed here
-                    if (cmds.type == DuckyCommandType_Print) {
-                        _hid->print(Argument);
-                        if (strcmp(cmds.command, "STRINGLN") == 0) _hid->println();
-                        break;
+        uint16_t repeatCount = RepeatTmp.toInt();
+        for (i = 0; i < repeatCount; i++) {
+            DuckyCommandLookup *PriCmd = findDuckyCommand(Cmd);
+            DuckyCommandLookup *ArgCmd = findDuckyCommand(Argument.c_str());
+
+            if (PriCmd != nullptr) {
+                vTaskDelay(1);
+                if (PriCmd->type == DuckyCommandType_Comment) {
+                } else if (PriCmd->type == DuckyCommandType_Print) {
+                    int currentDelay = (nextStringDelay >= 0) ? nextStringDelay : defaultStringDelay;
+                    _hid->setDelay(currentDelay);
+
+                    _hid->print(Argument);
+                    if (strcmp(PriCmd->command, "STRINGLN") == 0) _hid->println();
+
+                    if (nextStringDelay >= 0) { nextStringDelay = -1; }
+                } else if (PriCmd->type == DuckyCommandType_WaitForButtonPress) {
+                    printStatusBadUSBBLE("Waiting for button press");
+                    bool waitSelect = false;
+                    while (!waitSelect) {
+                        waitSelect = check(SelPress);
+                        delay(50);
                     }
-                    // DELAY and DEFAULTDELAY are processed here
-                    else if (cmds.type == DuckyCommandType_Delay) {
-                        if ((int)cmds.key > 0) delay(DEF_DELAY); // Default delay is 100ms
-                        else if (Argument.toInt() > 0) delay(Argument.toInt());
+                    printStatusBadUSBBLE("Running");
+                    tft.setTextSize(FP);
+                } else if (PriCmd->type == DuckyCommandType_Delay) {
+                    if ((int)PriCmd->key > 0) delay(DEF_DELAY);
+                    else {
+                        int delayTime = Argument.toInt();
+                        if (delayTime > 0) delay(delayTime);
                         else delay(DEF_DELAY);
-                        break;
                     }
-                    // Comment line is porocessed Here
-                    else if (cmds.type == DuckyCommandType_Comment) {
-                        yield(); // do nothing, just wait for the next line
-                        break;
+                } else if (PriCmd->type == DuckyCommandType_AltChar) {
+                    int charCode = Argument.toInt();
+                    if (charCode > 0 && charCode <= 255) { sendAltChar(_hid, (uint8_t)charCode); }
+                } else if (PriCmd->type == DuckyCommandType_AltString) {
+                    sendAltString(_hid, Argument);
+                } else if (PriCmd->type == DuckyCommandType_StringDelay) {
+                    int delayValue = Argument.toInt();
+                    if (delayValue >= 0) { nextStringDelay = delayValue; }
+                } else if (PriCmd->type == DuckyCommandType_DefaultStringDelay) {
+                    int delayValue = Argument.toInt();
+                    if (delayValue >= 0) { defaultStringDelay = delayValue; }
+                } else if (PriCmd->type == DuckyCommandType_Cmd) {
+                    _hid->press(PriCmd->key);
+                } else if (PriCmd->type == DuckyCommandType_Combination) {
+                    DuckyCombination *comb = findDuckyCombination(Cmd);
+                    if (comb != nullptr) {
+                        _hid->press(comb->key1);
+                        _hid->press(comb->key2);
+                        if (comb->key3 != 0) _hid->press(comb->key3);
                     }
-                    // Normal commands are processed here
-                    else if (cmds.type == DuckyCommandType_Cmd) {
-                        _hid->press(cmds.key);
-                        ArgIsCmd = true;
-                    }
-                    // Combinations are processed here
-                    else if (cmds.type == DuckyCommandType_Combination) {
-                        for (auto comb : duckyComb) {
-                            if (strcmp(Cmd, comb.command) == 0) {
-                                _hid->press(comb.key1);
-                                _hid->press(comb.key2);
-                                if (comb.key3 != 0) _hid->press(comb.key3);
-                                ArgIsCmd = true;
-                            }
+                }
+
+                if (PriCmd->type != DuckyCommandType_Comment) {
+                    if (ArgCmd != nullptr && PriCmd != nullptr && ArgCmd->type == DuckyCommandType_Cmd &&
+                        PriCmd->type == DuckyCommandType_Cmd) {
+                        _hid->press(ArgCmd->key);
+                    } else if (
+                        PriCmd != nullptr && PriCmd->type == DuckyCommandType_Cmd && Argument.length() > 0
+                    ) {
+                        for (int idx = 0; idx < Argument.length(); idx++) {
+                            _hid->press(Argument.charAt(idx));
                         }
                     }
+                    _hid->releaseAll();
                 }
-                // check if the Argument contains a command
-                if (strcmp(Argument.c_str(), cmds.command) == 0) { ArgCmd = &cmds; }
             }
-
-            if (ArgCmd != nullptr && PriCmd != nullptr) {
-                if (ArgCmd->type == DuckyCommandType_Cmd) { _hid->press(ArgCmd->key); }
-            } else if (ArgIsCmd && PriCmd != nullptr) {
-                if (ArgChar != '\0') _hid->press(ArgChar);
-            }
-            _hid->releaseAll();
 
             if (PriCmd == nullptr) {
-                tft.setTextColor(ALCOLOR);
-                tft.print(Command);
-                tft.println(" -> Not Supported, running as STRINGLN");
-                if (Argument != "") {
-                    _hid->println(Command + " " + Argument);
-                } else {
-                    _hid->println(Command);
-                }
-            } else {
-                tft.setTextColor(bruceConfig.priColor);
-                tft.print(Command);
+                printTFTBadUSBBLE(Command + " - UNKNOWN COMMAND", ALCOLOR, true);
+            } else if (PriCmd->type != DuckyCommandType_Comment) {
+                printTFTBadUSBBLE(Command, bruceConfig.priColor);
+                if (Argument.length() > 0) {
+                    printTFTBadUSBBLE(" " + Argument, (ArgCmd == nullptr ? TFT_WHITE : TFT_WHITE), true);
+                } else printTFTBadUSBBLE("", TFT_WHITE, true);
+            } else if (PriCmd->type == DuckyCommandType_Comment) {
+                printTFTBadUSBBLE(Argument, TFT_DARKGREEN, true);
             }
-            if (Argument.length() > 0) {
-                tft.setTextColor(TFT_WHITE);
-                tft.println(Argument);
-            } else tft.println();
         }
+
+        printDecimalTime(millis() - startMillisBADUSBBLE);
     }
-    tft.setTextSize(FM);
+
+    printStatusBadUSBBLE("Finished");
+
+EXIT:
+    tft.setTextSize(FP);
     payloadFile.close();
     _hid->releaseAll();
 }
 
-// Sends a simple command
-void key_input_from_string(String text) {
-    ducky_startKb(hid_usb, KeyboardLayout_en_US, false);
+// ============================================================================
+// KEY_INPUT_FROM_STRING - Simple text input via USB
+// ============================================================================
 
-    hid_usb->print(text.c_str()); // buggy with some special chars
-
+void key_input_from_string(const String &text) {
+    ducky_startKb(hid_usb, false, 0);
+    hid_usb->print(text.c_str());
     delete hid_usb;
     hid_usb = nullptr;
 #if !defined(USB_as_HID)
     mySerial.end();
 #endif
 }
+
 #ifndef KB_HID_EXIT_MSG
 #define KB_HID_EXIT_MSG "Exit"
 #endif
-// Use device as a keyboard (USB or BLE)
+
+// ============================================================================
+// DUCKY_KEYBOARD - Interactive keyboard mode (USB or BLE)
+// ============================================================================
+
 void ducky_keyboard(HIDInterface *&hid, bool ble) {
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
-    ducky_chooseKb(hid, ble);
+
+    // Double cleanup before starting
+    if (ble) safeCleanupDuckyBLE(hid);
+    ducky_startKb(hid, ble, 0); // functionId 0 = Keyboard
     if (returnToMenu) return;
 
     if (ble) {
         displayTextLine("Waiting Victim");
-        while (!hid->isConnected() && !check(EscPress));
+        while (!hid->isConnected() && !check(EscPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
         if (hid->isConnected()) {
             BLEConnected = true;
         } else {
@@ -442,24 +1014,25 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
             goto EXIT;
         }
     } else {
-        // send a key to start communication
         hid->press(KEY_LEFT_ALT);
         hid->releaseAll();
     }
 
     drawMainBorder();
-    tft.setTextSize(FM);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor);
     tft.drawString("Keyboard Started", tftWidth / 2, tftHeight / 2);
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     drawMainBorder();
-    tft.setCursor(10, 28);
+    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y);
     if (ble) tft.println("BLE Keyboard:");
-    else tft.println("Usb Keyboard:");
-    tft.drawCentreString("> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - 20, 1);
-    tft.setTextSize(FM);
+    else tft.println("USB Keyboard:");
+    tft.drawCentreString(
+        "> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - BORDER_PAD_X - LH * FP, 1
+    );
+    tft.setTextSize(FP);
 
     while (1) {
 #if defined(HAS_KEYBOARD)
@@ -478,7 +1051,6 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 
             hid->releaseAll();
 
-            // only text for tft
             String keyStr = "";
             for (auto i : key.word) {
                 if (keyStr != "") {
@@ -493,7 +1065,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
                 if (_mymsg.length() > keyStr.length())
                     tft.drawCentreString(
                         "                                  ", tftWidth / 2, tftHeight / 2, 1
-                    ); // clears screen
+                    );
                 tft.drawCentreString("Pressed: " + keyStr, tftWidth / 2, tftHeight / 2, 1);
                 _mymsg = keyStr;
             }
@@ -501,66 +1073,126 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
         }
 #else
         hid->releaseAll();
-        static int inx = 0;
-        String str = "";
-        const DuckyCommand *cmd = nullptr;
-        options = {};
-        for (auto &cmds : duckyCmds) {
-            auto &cmds_cpy = cmds;
-            if (cmds_cpy.type != DuckyCommandType_Delay && cmds_cpy.type != DuckyCommandType_Comment &&
-                cmds_cpy.type != DuckyCommandType_Loop) {
-                options.push_back({cmds.command, [&]() { cmd = &cmds_cpy; }});
-            }
+        static int menuIndex = 0;
+        bool exitKeyboard = false;
+        bool queueRecording = false;
+        std::vector<QueuedHIDKey> queuedKeys;
+        String menuTitle = ble ? "BLE Keyboard" : "USB Keyboard";
+
+        while (!exitKeyboard) {
+            options = {
+                {"Keyboard",      [&]() { keyboardSectionAction(hid, queueRecording, queuedKeys); }},
+                {"Modifiers",
+                 [&]() {
+                     openKeySection(
+                         hid,
+                         "Modifier keys",
+                         modifierMenuKeys,
+                         sizeof(modifierMenuKeys) / sizeof(modifierMenuKeys[0]),
+                         queueRecording,
+                         queuedKeys
+                     );
+                 }                                                                                 },
+                {"Navigation",
+                 [&]() {
+                     openKeySection(
+                         hid,
+                         "Navigation keys",
+                         navigationMenuKeys,
+                         sizeof(navigationMenuKeys) / sizeof(navigationMenuKeys[0]),
+                         queueRecording,
+                         queuedKeys
+                     );
+                 }                                                                                 },
+                {"Special keys",
+                 [&]() {
+                     openKeySection(
+                         hid,
+                         "Special keys",
+                         specialMenuKeys,
+                         sizeof(specialMenuKeys) / sizeof(specialMenuKeys[0]),
+                         queueRecording,
+                         queuedKeys
+                     );
+                 }                                                                                 },
+                {"Function keys",
+                 [&]() {
+                     openKeySection(
+                         hid,
+                         "Function keys",
+                         functionMenuKeys,
+                         sizeof(functionMenuKeys) / sizeof(functionMenuKeys[0]),
+                         queueRecording,
+                         queuedKeys
+                     );
+                 }                                                                                 },
+                {"Numpad keys",   [&]() {
+                     openKeySection(
+                         hid,
+                         "Numpad keys",
+                         numpadMenuKeys,
+                         sizeof(numpadMenuKeys) / sizeof(numpadMenuKeys[0]),
+                         queueRecording,
+                         queuedKeys
+                     );
+                 }                                                  },
+            };
+
+            String startQueueLabel = queueRecording ? "Start Queue [ON]" : "Start Queue";
+            options.push_back({startQueueLabel, [&]() {
+                                   queuedKeys.clear();
+                                   queueRecording = true;
+                                   displayInfo("Queue capture started");
+                               }});
+
+            String sendQueueLabel = "Send Queue";
+            if (!queuedKeys.empty()) sendQueueLabel += " (" + String(queuedKeys.size()) + ")";
+            options.push_back({sendQueueLabel, [&]() { sendQueuedKeys(hid, queueRecording, queuedKeys); }});
+            options.back().enabled = !queuedKeys.empty();
+
+            options.push_back({"Reset Queue", [&]() {
+                                   queuedKeys.clear();
+                                   queueRecording = false;
+                                   displayWarning("Queue cleared");
+                               }});
+            options.back().enabled = !queuedKeys.empty();
+
+            options.push_back({"Exit Keyboard", [&]() { exitKeyboard = true; }});
+
+            menuIndex = loopOptions(options, MENU_TYPE_REGULAR, menuTitle.c_str(), menuIndex);
+
+            if (menuIndex < 0) exitKeyboard = true;
+            options.clear();
         }
-        addOptionToMainMenu();
-        inx = loopOptions(options, inx);
-        options.clear();
-        if (returnToMenu || cmd == nullptr) break;
-        if (cmd->type == DuckyCommandType_Print) {
-            str = keyboard("", 76, "Type your message:");
-            if (str.length() > 0) {
-                hid->print(str.c_str());
-                if (strcmp(cmd->command, "STRINGLN") == 0) hid->println();
-            }
-        } else if (cmd->type == DuckyCommandType_Cmd) {
-            str = keyboard("", 1, "Type a character:");
-            hid->press(cmd->key);
-            if (str.length() > 0) { hid->press(str.c_str()[0]); }
-        } else if (cmd->type == DuckyCommandType_Combination) {
-            for (auto comb : duckyComb) {
-                if (strcmp(cmd->command, comb.command) == 0) {
-                    str = keyboard("", 1, "Type a character:");
-                    hid->press(comb.key1);
-                    hid->press(comb.key2);
-                    if (comb.key3 != 0) hid->press(comb.key3);
-                    if (str.length() > 0) { hid->press(str.c_str()[0]); }
-                }
-            }
-        }
-        hid->releaseAll();
+
+        break;
 #endif
     }
 EXIT:
+    if (ble) safeCleanupDuckyBLE(hid);
+
     if (!ble) {
-        delete hid; // Keep the hid object alive for BLE
+        delete hid;
         hid = nullptr;
 #if !defined(USB_as_HID)
-        mySerial.end();       // Stops UART Serial as HID
-        Serial.begin(115200); // Force restart of Serial, just in case....
+        mySerial.end();
+        Serial.begin(115200);
 #endif
     }
 }
 
-// Send media commands through BLE or USB HID
-void MediaCommands(HIDInterface *hid, bool ble) {
-    if (_Ask_for_restart == 2) return;
-    _Ask_for_restart = 1; // arm the flag
+// ============================================================================
+// MEDIA COMMANDS - BLE Media Controller
+// ============================================================================
 
-    ducky_startKb(hid, KeyboardLayout_en_US, true);
+void MediaCommands(HIDInterface *hid, bool ble) {
+    // Double cleanup before starting
+    safeCleanupDuckyBLE(hid);
+    ducky_startKb(hid, true, 1); // functionId 1 = Media
 
     displayTextLine("Pairing...");
 
-    while (!hid->isConnected() && !check(EscPress));
+    while (!hid->isConnected() && !check(EscPress)) { delay(50); };
 
     if (hid->isConnected()) {
         BLEConnected = true;
@@ -589,5 +1221,331 @@ void MediaCommands(HIDInterface *hid, bool ble) {
         hid->releaseAll();
         if (!returnToMenu) goto reMenu;
     }
+
+    safeCleanupDuckyBLE(hid);
     returnToMenu = true;
 }
+
+// ============================================================================
+// ALT CHARACTER FUNCTIONS
+// ============================================================================
+
+void sendAltChar(HIDInterface *hid, uint8_t charCode) {
+    hid->press(KEY_LEFT_ALT);
+    delay(bruceConfig.badUSBBLEKeyDelay);
+
+    String codeStr = String(charCode);
+    if (codeStr.length() < 3) {
+        while (codeStr.length() < 3) { codeStr = "0" + codeStr; }
+    }
+
+    for (int i = 0; i < codeStr.length(); i++) {
+        char digit = codeStr[i];
+        uint8_t numpadKey = 0;
+
+        switch (digit) {
+            case '0': numpadKey = KEY_KP_0; break;
+            case '1': numpadKey = KEY_KP_1; break;
+            case '2': numpadKey = KEY_KP_2; break;
+            case '3': numpadKey = KEY_KP_3; break;
+            case '4': numpadKey = KEY_KP_4; break;
+            case '5': numpadKey = KEY_KP_5; break;
+            case '6': numpadKey = KEY_KP_6; break;
+            case '7': numpadKey = KEY_KP_7; break;
+            case '8': numpadKey = KEY_KP_8; break;
+            case '9': numpadKey = KEY_KP_9; break;
+            default: continue;
+        }
+
+        hid->press(numpadKey);
+        delay(bruceConfig.badUSBBLEKeyDelay);
+        hid->release(numpadKey);
+        delay(bruceConfig.badUSBBLEKeyDelay);
+    }
+
+    hid->release(KEY_LEFT_ALT);
+    delay(bruceConfig.badUSBBLEKeyDelay);
+}
+
+void sendAltString(HIDInterface *hid, const String &text) {
+    for (int i = 0; i < text.length(); i++) {
+        uint8_t charCode = (uint8_t)text[i];
+        sendAltChar(hid, charCode);
+        delay(bruceConfig.badUSBBLEKeyDelay);
+    }
+}
+
+// ============================================================================
+// DISPLAY FUNCTIONS
+// ============================================================================
+
+void printTextAtPosition(uint16_t xOffset, uint16_t yOffset, const String &text) {
+    uint16_t currentTextCursorX = tft.getCursorX();
+    uint16_t currentTextCursorY = tft.getCursorY();
+
+    uint16_t x = FP * 6 * xOffset + 2 + BORDER_OFFSET_FROM_SCREEN_EDGE;
+    uint16_t y = FP * 8 * yOffset + 2 + STATUS_BAR_HEIGHT;
+
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.secColor);
+    tft.setCursor(x, y);
+    tft.fillRect(x, y, tftWidth - x - BORDER_OFFSET_FROM_SCREEN_EDGE * 2, FP * 8, bruceConfig.bgColor);
+    tft.print(text);
+    tft.setCursor(currentTextCursorX, currentTextCursorY);
+}
+
+void printStatusBadUSBBLE(const String &text) { printTextAtPosition(8, 2, text); }
+
+void printDecimalTime(uint32_t timeElapsed) { printTextAtPosition(10, 3, formatTimeDecimal(timeElapsed)); }
+
+void printHeaderBadUSBBLE(const String &bad_script) {
+    tft.fillScreen(bruceConfig.bgColor);
+    drawMainBorder();
+
+    tft.setTextSize(FP);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.drawCentreString("BadUSB/BLE", tftWidth / 2, FP + STATUS_BAR_HEIGHT);
+
+    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE * 2, FP * 8 * 1 + 2 + STATUS_BAR_HEIGHT);
+    tft.print("Script: ");
+    tft.setTextColor(bruceConfig.secColor);
+    tft.print(bad_script.substring(bad_script.lastIndexOf("/") + 1));
+
+    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE * 2, FP * 8 * 2 + 2 + STATUS_BAR_HEIGHT);
+    tft.setTextColor(bruceConfig.priColor);
+    tft.println("Status:");
+}
+
+void printTFTBadUSBBLE(const String &text, uint16_t color, bool newline) {
+    if (!bruceConfig.badUSBBLEShowOutput) return;
+
+    static int bottomHalfStartY = tftHeight / 2;
+    const int leftX = BORDER_OFFSET_FROM_SCREEN_EDGE * 2;
+    const int rightLimit = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE * 2;
+    const int lineHeight = 9;
+
+    int cursorX = tft.getCursorX();
+    if (cursorX < leftX || cursorX > rightLimit) { cursorX = leftX; }
+
+    if (currentOutputY == 0 || currentOutputY > tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE * 2 - lineHeight) {
+        tft.fillRect(
+            leftX,
+            bottomHalfStartY,
+            rightLimit - leftX,
+            tftHeight - bottomHalfStartY - BORDER_OFFSET_FROM_SCREEN_EDGE * 2,
+            bruceConfig.bgColor
+        );
+        currentOutputY = bottomHalfStartY;
+        cursorX = leftX;
+    }
+
+    tft.setCursor(cursorX, currentOutputY);
+    tft.setTextColor(color);
+    tft.setTextSize(FP);
+
+    int charWidth = 6 * FP;
+    int availableWidth = rightLimit - cursorX;
+    int maxChars = availableWidth / charWidth;
+
+    String textToPrint = text;
+    if (text.length() > maxChars) { textToPrint = text.substring(0, maxChars); }
+
+    if (newline) {
+        tft.println(textToPrint);
+        currentOutputY += lineHeight;
+    } else {
+        tft.print(textToPrint);
+    }
+}
+
+// ============================================================================
+// BUTTON HANDLING FUNCTIONS
+// ============================================================================
+
+bool waitForButtonPress() {
+    bool exitPressed = false;
+    bool selectPressed = false;
+    while (!selectPressed && !exitPressed) {
+        selectPressed = check(SelPress);
+        exitPressed = check(EscPress);
+        delay(50);
+    }
+    return selectPressed;
+}
+
+bool handlePauseResume() {
+    while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+    printStatusBadUSBBLE("Paused - " + String(BTN_ALIAS) + " to resume");
+    if (!waitForButtonPress()) {
+        printStatusBadUSBBLE("Canceled");
+        return false;
+    }
+    printStatusBadUSBBLE("Running");
+    return true;
+}
+
+// ============================================================================
+// PRESENTER MODE - BLE Presentation Remote
+// ============================================================================
+
+void PresenterMode(HIDInterface *&hid, bool ble) {
+    // Double cleanup before starting
+    if (ble) safeCleanupDuckyBLE(hid);
+    ducky_startKb(hid, ble, 3); // functionId 3 = Presenter
+
+    displayTextLine("Pairing...");
+
+    while (!hid->isConnected() && !check(EscPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+
+    if (!hid->isConnected()) {
+        displayWarning("Canceled", true);
+        returnToMenu = true;
+        return;
+    }
+
+    BLEConnected = true;
+
+    int currentSlide = 1;
+    int lastDisplayedSlide = 0;
+    unsigned long startTime = 0;
+    unsigned long lastDisplayedSeconds = 0;
+    bool timerStarted = false;
+
+    auto drawStaticUI = [&]() {
+        tft.fillScreen(bruceConfig.bgColor);
+
+        tft.setTextSize(FM);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("PRESENTER", tftWidth / 2, 10, 1);
+
+        tft.drawFastHLine(10, 35, tftWidth - 20, bruceConfig.priColor);
+
+        tft.setTextSize(FM);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("Time", tftWidth / 2, tftHeight / 2 + 15, 1);
+
+        tft.setTextSize(FP);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, tftHeight - 15, 1);
+    };
+
+    // Tuned for text size 4 at LW=6/LH=8 defaults; scaled proportionally for other boards.
+    const int slideSize = FG + 1;
+    const int slideClearH = 40 * slideSize / 4;
+    const int slideClearY = tftHeight / 2 - 35 * slideSize / 4;
+    const int slideDrawY = tftHeight / 2 - 30 * slideSize / 4;
+
+    auto updateSlideDisplay = [&]() {
+        tft.fillRect(0, slideClearY, tftWidth, slideClearH, bruceConfig.bgColor);
+
+        tft.setTextSize(slideSize);
+        tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
+        String slideStr = "Slide " + String(currentSlide);
+        tft.drawCentreString(slideStr, tftWidth / 2, slideDrawY, 1);
+        lastDisplayedSlide = currentSlide;
+    };
+
+    auto updateTimerDisplay = [&]() {
+        unsigned long elapsed = 0;
+        if (timerStarted) { elapsed = (millis() - startTime) / 1000; }
+
+        int hours = elapsed / 3600;
+        int minutes = (elapsed % 3600) / 60;
+        int seconds = elapsed % 60;
+
+        char timeBuffer[16];
+        if (hours > 0) {
+            snprintf(timeBuffer, sizeof(timeBuffer), "%d:%02d:%02d", hours, minutes, seconds);
+        } else {
+            snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", minutes, seconds);
+        }
+
+        const int timerSize = FG;
+        const int timerClearY = tftHeight / 2 + 30 * timerSize / 3;
+        const int timerClearH = 30 * timerSize / 3;
+        const int timerDrawY = tftHeight / 2 + 35 * timerSize / 3;
+        tft.fillRect(0, timerClearY, tftWidth, timerClearH, bruceConfig.bgColor);
+        tft.setTextSize(timerSize);
+        tft.setTextColor(timerStarted ? TFT_GREEN : TFT_DARKGREY, bruceConfig.bgColor);
+        tft.drawCentreString(timeBuffer, tftWidth / 2, timerDrawY, 1);
+
+        lastDisplayedSeconds = elapsed;
+    };
+
+    drawStaticUI();
+    updateSlideDisplay();
+    updateTimerDisplay();
+
+    while (1) {
+        bool slideChanged = false;
+
+        if (check(SelPress)) {
+            delay(50);
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_RIGHT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                currentSlide++;
+                slideChanged = true;
+            }
+            delay(150);
+        } else if (check(NextPress)) {
+            delay(50);
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_RIGHT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                currentSlide++;
+                slideChanged = true;
+            }
+            delay(150);
+        } else if (check(PrevPress)) {
+            delay(50);
+            if (!timerStarted) {
+                startTime = millis();
+                timerStarted = true;
+                updateTimerDisplay();
+                hid->releaseAll();
+                delay(50);
+            } else {
+                hid->press(KEY_LEFT_ARROW);
+                delay(80);
+                hid->releaseAll();
+                if (currentSlide > 1) currentSlide--;
+                slideChanged = true;
+            }
+            delay(150);
+        }
+
+        if (slideChanged) {
+            updateSlideDisplay();
+            updateTimerDisplay();
+        }
+
+        if (timerStarted) {
+            unsigned long currentSeconds = (millis() - startTime) / 1000;
+            if (currentSeconds != lastDisplayedSeconds) { updateTimerDisplay(); }
+        }
+
+        if (check(EscPress)) break;
+
+        delay(10);
+    }
+
+    hid->releaseAll();
+    if (ble) safeCleanupDuckyBLE(hid);
+    returnToMenu = true;
+}
+#endif

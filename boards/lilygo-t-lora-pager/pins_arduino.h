@@ -23,6 +23,30 @@
 // Battery charger
 #define BQ25896_I2C_ADDRESS 0x6B
 
+/*
+Expand(XL9555) GPIO0	Haptic Driver Enable	❌
+Expand(XL9555) GPIO1	Audio Power Amplifier Enable	❌
+Expand(XL9555) GPIO2	Keyboard RESET	❌
+Expand(XL9555) GPIO3	LoRa Power supply Enable	❌
+Expand(XL9555) GPIO4	GNSS Power supply Enable	❌
+Expand(XL9555) GPIO5	NFC Power supply Enable	❌
+Expand(XL9555) GPIO6	Display RESET (No connect)	❌
+Expand(XL9555) GPIO7	GNSS RESET	❌
+Expand(XL9555) GPIO10	Keyboard Power supply Enable	❌
+Expand(XL9555) GPIO11	External 12-Pin socket	✅️
+Expand(XL9555) GPIO12	SD Insert Detect	❌
+Expand(XL9555) GPIO14	SD Power supply Enable
+
+ PowerManage Channel
+Channel	Peripherals
+Expand(XL9555) GPIO0	DRV2605 Enable
+Expand(XL9555) GPIO1	Speaker
+Expand(XL9555) GPIO3	LoRa
+Expand(XL9555) GPIO4	GNSS
+Expand(XL9555) GPIO5	NFC
+Expand(XL9555) GPIO8	Keyboard
+Expand(XL9555) GPIO14	SD Card
+*/
 // IO Expander
 #define EXPANDS_DRV_EN 0
 #define EXPANDS_AMP_EN 1
@@ -31,27 +55,33 @@
 #define EXPANDS_GPS_EN 4
 #define EXPANDS_NFC_EN 5
 #define EXPANDS_GPS_RST 7
-#define EXPANDS_KB_EN 8
-#define EXPANDS_GPIO_EN 9
-#define EXPANDS_SD_DET 10
-#define EXPANDS_SD_PULLEN 11
-#define EXPANDS_SD_EN 12
+#define EXPANDS_KB_PWR 8
+#define EXPANDS_KB_EN 10
+#define EXPANDS_GPIO_EN 11
+#define EXPANDS_SD_DET 12
+#define EXPANDS_SD_EN 14
 
 #define IO_EXPANDER_PCA9555
+// to make GPS stays turned on all the time
+// making Wardrive start way faster
+// comment the next line
 #define IO_EXP_GPS EXPANDS_GPS_EN
-// Main I2C Bus
+#define IO_EXP_NFC EXPANDS_NFC_EN
+//  Main SPI Bus
 #define SPI_SS_PIN 21
 #define SPI_MOSI_PIN 34
 #define SPI_MISO_PIN 33
 #define SPI_SCK_PIN 35
 static const uint8_t SS = SPI_SS_PIN;
 static const uint8_t MOSI = SPI_MOSI_PIN;
-static const uint8_t SCK = SPI_MISO_PIN;
-static const uint8_t MISO = SPI_SCK_PIN;
+static const uint8_t SCK = SPI_SCK_PIN;
+static const uint8_t MISO = SPI_MISO_PIN;
 
 // Set Main I2C Bus
 #define GROVE_SDA 3
 #define GROVE_SCL 2
+#define SYS_I2C_SDA 3
+#define SYS_I2C_SCL 2
 static const uint8_t SDA = GROVE_SDA;
 static const uint8_t SCL = GROVE_SCL;
 
@@ -69,6 +99,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define TFT_SCLK SPI_SCK_PIN
 #define TFT_CS 38
 #define TFT_DC 37
+#define TOUCH_CS -1
 #define SPI_FREQUENCY 80000000
 #define SPI_READ_FREQUENCY 20000000
 
@@ -113,6 +144,14 @@ static const uint8_t SCL = GROVE_SCL;
 #define W5500_MISO_PIN SPI_MISO_PIN
 #define W5500_INT_PIN 43
 
+// Lora setup pins
+#define LORA_SCK SPI_SCK_PIN
+#define LORA_MISO SPI_MISO_PIN
+#define LORA_MOSI SPI_MOSI_PIN
+#define LORA_CS 36
+#define LORA_RST 47
+#define LORA_DIO0 14
+
 // Serial
 #define SERIAL_TX 43
 #define SERIAL_RX 44
@@ -141,7 +180,7 @@ static const uint8_t RX = SERIAL_RX;
 #define BTN_ACT LOW
 
 // IR
-#define LED -1
+#define TXLED -1
 #define TXLED -1
 #define RXLED -1
 #define LED_ON HIGH
@@ -151,7 +190,6 @@ static const uint8_t RX = SERIAL_RX;
 #define FM_SI4713
 
 // RFID
-#define HAS_ST25R3916
 #define RFID125_RX_PIN SERIAL_RX
 #define RFID125_TX_PIN SERIAL_TX
 
@@ -159,6 +197,13 @@ static const uint8_t RX = SERIAL_RX;
 // TODO:
 // #define PN532_RF_REST 45
 // #define PN532_IRQ 17
+
+// RTC
+#define HAS_RTC
+#define RTC_SDA GROVE_SDA
+#define RTC_SCL GROVE_SCL
+#define RTC_INTERRUPT_PIN 1
+#define HAS_RTC_PCF85063A
 
 // BadUSB
 #define USB_as_HID 1
@@ -168,17 +213,25 @@ static const uint8_t RX = SERIAL_RX;
 #define DEEPSLEEP_PIN_ACT LOW
 
 #define CAPS_LOCK 0x00
-#define SHIFT 0x1c
-#define KEY_LEFT_SHIFT 0x1c
+#define KEY_SHIFT 0x1c
 #define KEY_FN 0x14
-#define KEY_BACKSPACE 0x1d
-#define KEY_ENTER 0x13
+#define KEY_BACKSPACE 0x08
+#define KEY_ENTER 0x0D
+#define KEY_TAB 0x2b
 
 // Interrupt IO
 #define RTC_INT 1
 #define NFC_INT 5
 #define SENSOR_INT 8
 #define NFC_CS 39
+
+// NFC ST25R3916
+#define HAS_ST25R3916
+#define ST25R_MISO SPI_MISO_PIN
+#define ST25R_MOSI SPI_MOSI_PIN
+#define ST25R_SCLK SPI_SCK_PIN
+#define ST25R_CS 39
+#define ST25R_IRQ 5
 
 // Audio ES8311
 #define AUDIO_I2S_WS 18
@@ -191,6 +244,8 @@ static const uint8_t RX = SERIAL_RX;
 // TODO: Need to implement ES8311
 #define HAS_NS4168_SPKR
 #define HAS_ES8311
+#define ES8311_CODEC 1
+#define ES8311_ADDR 0x18
 #define BCLK 11
 #define WCLK 18
 #define DOUT 45
@@ -198,7 +253,7 @@ static const uint8_t RX = SERIAL_RX;
 
 // Mic
 // TODO: Need to implement ES8311
-#define PIN_WS 18
+#define PIN_BCLK 18
 #define PIN_CLK 11
 #define PIN_DATA 17
 

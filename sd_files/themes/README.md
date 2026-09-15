@@ -6,7 +6,8 @@ Themes are supposed to change the UI experience of the User by allowing you to c
 * If displaying the Labels on the Main Menu
 * Setting the Primary Font color
 * Setting the Secondary Font Color (Non selected submenu item)
-* Setting the Background Color.
+* Setting the Background Color
+* Setting the LED color and effects
 
 ## Images
 Bruce accepts **.bmp** **.jpg** **.gif** and **.png** (not available on LITE_VERSION) to be used in the Main menu, but the bigger they are, greater will be the time to draw them on screen, **please, try to keep them small**.
@@ -43,15 +44,21 @@ Theme settings are stored in a **.json** file, following this structure:
   "border":0,
   "label":0,
   "boot_img":"boot.gif",
-  "boot_sound":"boot.wav"
+  "boot_sound":"boot.wav",
+  "ledBright": 100,
+  "ledColor": "960064",
+  "ledEffect": 0,
+  "ledEffectSpeed": 3,
+  "ledEffectDirection": 1
 }
 ```
-* Colors: Codes are in **RGB565**, 16bit pattern, so you need to convert it using [this tool](https://rgbcolorpicker.com/565).
+* Colors (excluding LED): Codes are in **RGB565**, 16bit pattern, so you need to convert it using [this tool](https://rgbcolorpicker.com/565).
+* LED Colors: Codes are in HEX.
 * border: 0 or 1, 1 to keep UI Borders
 * label: 0 or 1, 1 to use UI Labels (Use 50px smaller images in this case)
 
 ## Theme creator
-You can use **Theme_Builder.html** to setup and prepare your images and .json file, it will give you a .zip file that you **need to unzip** somewhere in your device, LittleFS or SD Card.
+You can use [Bruce Theme Builder](https://bruce.computer/build_theme.html) to setup and prepare your images, settings and .json file, it will give you a .zip file that you **need to unzip** somewhere in your device, LittleFS or SD Card.
 
 ## Setting a Theme
 Config > UI Theme > (Choose FS) > select the .json file and the theme will be set.

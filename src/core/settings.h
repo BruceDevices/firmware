@@ -4,6 +4,7 @@
 #include "config.h"
 #include "configPins.h"
 #include <NTPClient.h>
+#include <globals.h>
 
 void _setBrightness(uint8_t brightval) __attribute__((weak));
 
@@ -16,6 +17,8 @@ int gsetRotation(bool set = false);
 void setBrightnessMenu();
 
 void setUIColor();
+
+void setMainMenuStyleMenu();
 
 bool setCustomUIColorMenu();
 
@@ -47,6 +50,8 @@ void setEvilAllowSetSsid();
 
 void setEvilPasswordMode();
 
+void setEvilGatewayIp();
+
 void setRFModuleMenu();
 
 void setRFFreqMenu();
@@ -61,7 +66,7 @@ void setDimmerTimeMenu();
 
 void setClock();
 
-void runClockLoop();
+void runClockLoop(bool showMenuHint = false);
 
 int gsetIrTxPin(bool set = false);
 
@@ -73,13 +78,13 @@ int gsetRfTxPin(bool set = false);
 
 int gsetRfRxPin(bool set = false);
 
-void runClockLoop();
-
 void setSoundConfig();
 
 void setSoundVolume();
 
+#ifdef HAS_RGB_LED
 void setLedBlinkConfig();
+#endif
 
 void setWifiStartupConfig();
 
@@ -89,12 +94,27 @@ void setGpsBaudrateMenu();
 
 void setNetworkCredsMenu();
 
+void setBadUSBBLEMenu();
+void setBadUSBBLEKeyboardLayoutMenu();
+void setBadUSBBLEKeyDelayMenu();
+void setBadUSBBLEShowOutputMenu();
+
 void setSPIPinsMenu(BruceConfigPins::SPIPins &value);
+
+void setUARTPinsMenu(BruceConfigPins::UARTPins &value);
+
+void setI2CPinsMenu(BruceConfigPins::I2CPins &value);
 
 void setTheme();
 
 void setMacAddressMenu();
 
+#if !defined(LITE_VERSION)
 void enableBLEAPI();
+
+bool appStoreInstalled();
+
+void installAppStoreJS();
+#endif
 
 #endif

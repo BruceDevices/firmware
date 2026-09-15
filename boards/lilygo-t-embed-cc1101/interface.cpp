@@ -1,12 +1,14 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <bq27220.h>
 #include <globals.h>
 #include <interface.h>
 
-#include <RotaryEncoder.h>
-// extern RotaryEncoder encoder;
-extern RotaryEncoder *encoder;
-IRAM_ATTR void checkPosition();
+// Rotary encoder
+#include <rotary_decoder.h>
+extern RotaryDecoder *encoder;
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 // Battery libs
 #if defined(T_EMBED_1101)
@@ -52,37 +54,34 @@ void _setup_gpio() {
     digitalWrite(TFT_CS, HIGH);
     pinMode(SDCARD_CS, OUTPUT);
     digitalWrite(SDCARD_CS, HIGH);
-    pinMode(44, OUTPUT); // NRF24 on Plus
-    digitalWrite(44, HIGH);
+    pinMode(NRF24_SS_PIN, OUTPUT); // NRF24 on Plus
+    digitalWrite(NRF24_SS_PIN, HIGH);
+
+    pinMode(NRF24_CE_PIN, OUTPUT); // put nRF24 in standby
+    digitalWrite(NRF24_CE_PIN, LOW);
 
     // Power chip pin
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH); // Power on CC1101 and LED
     bool pmu_ret = false;
-    Wire.begin(GROVE_SDA, GROVE_SCL);
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    setSysI2CBus(&Wire); // PPM/bq27220 live on the default Wire object (GROVE == sys_i2c on this variant)
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", (int)PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
+        // https://github.com/Xinyuan-LilyGO/T-Embed-CC1101/blob/3e6df69af51befdbd5c96761aca28b9a784413eb/examples/factory_test/factory_test.ino#L399-L425
+
+        PPM.resetDefault();
         PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(832);
-        PPM.getChargerConstantCurr();
-        Serial.printf("getChargerConstantCurr: %d mA\n", (int)PPM.getChargerConstantCurr());
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
     }
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
     // Start with default IR, RF and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = PN532_I2C_MODULE;
-    bruceConfig.irRx = 1;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_I2C_MODULE;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.irTx = 2;
 #else
-    pinMode(BAT_PIN, INPUT); // Battery value
-    Wire.begin(GROVE_SDA, GROVE_SCL);
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
     Wire.beginTransmission(0x40);
     if (Wire.endTransmission() == 0) {
         Serial.println("ES7210 Online, No CC1101 version");
@@ -91,13 +90,13 @@ void _setup_gpio() {
         Serial.println("Probably CC1101 exists");
         bruceConfigPins.CC1101_bus.cs = GPIO_NUM_17;
         bruceConfigPins.CC1101_bus.io0 = GPIO_NUM_18;
-        bruceConfig.rfModule = CC1101_SPI_MODULE;
+        bruceConfigPins.rfModule = CC1101_SPI_MODULE;
 
         //* If it does not exist, then the CC1101 shield may exist, so there is no need for Wire to exist.
         Wire.endTransmission();
         Wire.end();
     }
-    bruceConfig.rfidModule = PN532_SPI_MODULE;
+    bruceConfigPins.rfidModule = PN532_SPI_MODULE;
 
 #endif
 
@@ -105,30 +104,23 @@ void _setup_gpio() {
     pinMode(BK_BTN, INPUT);
 #endif
     pinMode(ENCODER_KEY, INPUT);
-    // use TWO03 mode when PIN_IN1, PIN_IN2 signals are both LOW or HIGH in latch position.
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::TWO03);
-
-    // register interrupt routine
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
 }
 
 /***************************************************************************************
 ** Function name: getBattery()
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
+#if defined(USE_BQ27220_VIA_I2C)
 int getBattery() {
     int percent = 0;
-#if defined(USE_BQ27220_VIA_I2C)
     percent = bq.getChargePcnt();
-#elif defined(T_EMBED)
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_4);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-#endif
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
+#endif
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
@@ -144,23 +136,33 @@ void _setBrightness(uint8_t brightval) {
     }
 }
 
-// RotaryEncoder encoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::TWO03);
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() {
-    encoder->tick(); // just call tick() to check the state.
-}
-
 /*********************************************************************
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = millis();  // debauce for buttons
+    static unsigned long tm = millis();  // debounce for buttons
     static unsigned long tm2 = millis(); // delay between Select and encoder (avoid missclick)
-    static int _last_dir = 0;
+    static unsigned long lastEncoderMoveMs = 0;
+    static int posDifference = 0;
+    static int lastPos = 0;
     bool sel = !BTN_ACT;
     bool esc = !BTN_ACT;
-    _last_dir = (int)encoder->getDirection();
+
+    int newPos = encoder->getPosition();
+    if (newPos != lastPos) {
+        posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
+        lastPos = newPos;
+        lastEncoderMoveMs = millis();
+    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
+        // Drop any stale queued steps once the encoder has stopped moving.
+        posDifference = 0;
+    }
 
     if (millis() - tm > 200 || LongPress) {
         sel = digitalRead(SEL_BTN);
@@ -168,21 +170,21 @@ void InputHandler(void) {
         esc = digitalRead(BK_BTN);
 #endif
     }
-    if (_last_dir != 0 || sel == BTN_ACT || esc == BTN_ACT) {
+    if (posDifference != 0 || sel == BTN_ACT || esc == BTN_ACT) {
         if (!wakeUpScreen()) AnyKeyPress = true;
         else return;
     }
-    if (_last_dir > 0) {
-        _last_dir = 0;
+    if (posDifference > 0) {
         PrevPress = true;
+        posDifference--;
 #ifdef HAS_ENCODER_LED
         EncoderLedChange = -1;
 #endif
         tm2 = millis();
     }
-    if (_last_dir < 0) {
-        _last_dir = 0;
+    if (posDifference < 0) {
         NextPress = true;
+        posDifference++;
 #ifdef HAS_ENCODER_LED
         EncoderLedChange = 1;
 #endif
@@ -190,14 +192,14 @@ void InputHandler(void) {
     }
 
     if (sel == BTN_ACT && millis() - tm2 > 200) {
-        _last_dir = 0;
+        posDifference = 0;
         SelPress = true;
         tm = millis();
     }
     if (esc == BTN_ACT) {
         AnyKeyPress = true;
         EscPress = true;
-        Serial.println("EscPressed");
+        // Serial.println("EscPressed");
         tm = millis();
     }
 }
@@ -211,7 +213,7 @@ void powerOff() {
 void powerDownNFC() {
     Adafruit_PN532 nfc = Adafruit_PN532(17, 45);
     bool i2c_check = check_i2c_address(PN532_I2C_ADDRESS);
-    nfc.setInterface(GROVE_SDA, GROVE_SCL);
+    nfc.setInterface(SYS_I2C_SDA, SYS_I2C_SCL);
     nfc.begin();
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (i2c_check || versiondata) {
@@ -222,47 +224,154 @@ void powerDownNFC() {
 }
 
 void powerDownCC1101() {
-    if (!initRfModule("rx", bruceConfig.rfFreq)) { Serial.println("Can't init CC1101"); }
+    if (!initRfModule("rx", bruceConfigPins.rfFreq)) { Serial.println("Can't init CC1101"); }
 
     ELECHOUSE_cc1101.goSleep();
 }
 
+/*********************************************************************
+** Function: checkReboot
+** location: mykeyboard.cpp
+** Btn logic to restart the device (ESP.restart) or deep sleep
+**********************************************************************/
 void checkReboot() {
 #ifdef T_EMBED_1101
-    int countDown;
-    /* Long press power off */
-    if (digitalRead(BK_BTN) == BTN_ACT) {
-        uint32_t time_count = millis();
-        while (digitalRead(BK_BTN) == BTN_ACT) {
-            // Display poweroff bar only if holding button
-            if (millis() - time_count > 500) {
-                tft.setTextSize(1);
-                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-                countDown = (millis() - time_count) / 1000 + 1;
-                if (countDown < 4)
-                    tft.drawCentreString("DeepSleep in " + String(countDown) + "/3", tftWidth / 2, 12, 1);
-                else {
+    // Early exit if button not pressed
+    if (digitalRead(BK_BTN) != BTN_ACT) return;
+
+    // Constants for better readability
+    const int SLEEP_TIMEOUT = 3;
+    const int RESTART_TIMEOUT = 5;
+    const int DISPLAY_DELAY = 500;
+    const char *SLEEP_TEXT = "DEEP SLEEP IN 3/3";
+    const char *RESTART_TEXT = "RESTART IN 5/5";
+
+    // Calculate banner dimensions once
+    const int maxTextWidth = tft.textWidth(SLEEP_TEXT, 1);
+    const int bannerX = tftWidth / 2 - maxTextWidth / 2 - 5;
+    const int bannerY = 12;
+    const int bannerWidth = maxTextWidth + 10;
+    const int bannerHeight = tft.fontHeight(1);
+
+    // Helper function to clear banner area
+    auto clearBanner = [&]() { tft.fillRect(bannerX, 7, bannerWidth, 18, bruceConfig.bgColor); };
+
+    // Helper function to clear text line only
+    auto clearTextLine = [&]() {
+        tft.fillRect(bannerX, bannerY, bannerWidth, bannerHeight, bruceConfig.bgColor);
+    };
+
+    uint32_t time_count = millis();
+    bool isRestartMode = false;
+    bool previousMode = false;
+    int countDown = 0;
+    bool bannerInitialized = false;
+
+    while (digitalRead(BK_BTN) == BTN_ACT) {
+        // Check if SEL_BTN is pressed for restart mode
+        isRestartMode = (digitalRead(SEL_BTN) == BTN_ACT);
+
+        // Handle mode change: reset timer and clear display
+        if (isRestartMode != previousMode && bannerInitialized) {
+            clearBanner();
+            time_count = millis();
+            countDown = 0;
+            bannerInitialized = false;
+            previousMode = isRestartMode;
+            delay(50);
+            continue;
+        }
+
+        previousMode = isRestartMode;
+
+        // Only show countdown after initial delay
+        if (millis() - time_count <= DISPLAY_DELAY) {
+            delay(10);
+            continue;
+        }
+
+        // Initialize banner on first display
+        if (!bannerInitialized) {
+            clearBanner();
+            bannerInitialized = true;
+        }
+
+        // Calculate current countdown value
+        int newCountDown = (millis() - time_count - DISPLAY_DELAY) / 1000 + 1;
+
+        // Only update display if countdown changed OR mode just initialized
+        if (newCountDown != countDown || !bannerInitialized) {
+            countDown = newCountDown;
+
+            // Initialize banner on first display
+            if (!bannerInitialized) {
+                clearBanner();
+                bannerInitialized = true;
+            }
+
+            tft.setTextSize(1);
+
+            if (isRestartMode) {
+                // RESTART MODE: 5 seconds
+                if (countDown >= RESTART_TIMEOUT + 1) {
+                    // Execute restart
+                    tft.fillScreen(bruceConfig.bgColor);
+                    tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+                    tft.drawCentreString("RESTARTING...", tftWidth / 2, tftHeight / 2, 2);
+                    delay(1000);
+                    ESP.restart();
+                }
+
+                // Display countdown
+                tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+                clearTextLine();
+                tft.drawCentreString(
+                    "RESTART IN " + String(countDown) + "/" + String(RESTART_TIMEOUT),
+                    tftWidth / 2,
+                    bannerY,
+                    1
+                );
+
+            } else {
+                // DEEP SLEEP MODE: Normal text, 3 seconds
+                if (countDown >= SLEEP_TIMEOUT + 1) {
+                    // Execute deep sleep
                     tft.fillScreen(bruceConfig.bgColor);
                     while (digitalRead(BK_BTN) == BTN_ACT);
                     delay(200);
                     powerDownNFC();
                     powerDownCC1101();
                     tft.sleep(true);
+                    delay(1000); // Delay for debouncing ;)
                     digitalWrite(PIN_POWER_ON, LOW);
                     esp_sleep_enable_ext0_wakeup(GPIO_NUM_6, LOW);
                     esp_deep_sleep_start();
                 }
-                delay(10);
+
+                // Display countdown
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                clearTextLine();
+                tft.drawCentreString(
+                    "DEEP SLEEP IN " + String(countDown) + "/" + String(SLEEP_TIMEOUT),
+                    tftWidth / 2,
+                    bannerY,
+                    1
+                );
             }
         }
 
-        // Clear text after releasing the button
-        delay(30);
-        if (millis() - time_count > 500)
-            tft.fillRect(tftWidth / 2 - 9 * LW, 12, 18 * LW, tft.fontHeight(1), bruceConfig.bgColor);
+        delay(10);
+    }
+
+    // Clear banner after button release
+    delay(30);
+    if (millis() - time_count > DISPLAY_DELAY) {
+        clearBanner();
+        drawStatusBar();
     }
 #endif
 }
+
 /***************************************************************************************
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging

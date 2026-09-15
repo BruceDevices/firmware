@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
@@ -9,7 +10,11 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    M5.begin();          // Need to test if SDCard inits with the new setup
+    M5.begin(); // Need to test if SDCard inits with the new setup
+    setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     pinMode(GPIO_NUM_0, OUTPUT);
 }
 
@@ -21,7 +26,7 @@ void _setup_gpio() {
 int getBattery() {
     int percent = 0;
     percent = M5.Power.getBatteryLevel();
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
+    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 }
 
 /*********************************************************************
@@ -38,28 +43,31 @@ void _setBrightness(uint8_t brightval) { M5.Display.setBrightness(brightval); }
 void InputHandler(void) {
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
     auto t = M5.Touch.getDetail();
     if (t.isPressed() || t.isHolding()) {
         tm = millis();
-        if (bruceConfig.rotation == 3) {
-            t.y = (tftHeight + 20) - t.y;
+        if (bruceConfigPins.rotation == 3) {
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
             t.x = tftWidth - t.x;
         }
-        if (bruceConfig.rotation == 0) {
+        if (bruceConfigPins.rotation == 0) {
             int tmp = t.x;
             t.x = tftWidth - t.y;
             t.y = tmp;
         }
-        if (bruceConfig.rotation == 2) {
+        if (bruceConfigPins.rotation == 2) {
             int tmp = t.x;
             t.x = t.y;
-            t.y = (tftHeight + 20) - tmp;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
         }
         if (!wakeUpScreen()) AnyKeyPress = true;
         else return;
 
         // Touch point global variable
+        Serial.printf("Touch at x: %d  y: %d\n", t.x, t.y);
         touchPoint.x = t.x;
         touchPoint.y = t.y;
         touchPoint.pressed = true;
@@ -78,7 +86,7 @@ void goToDeepSleep() { M5.Power.deepSleep(); }
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}
 

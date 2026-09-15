@@ -49,7 +49,7 @@ void sleepModeOn() {
 
 void sleepModeOff() {
     isSleeping = false;
-    setCpuFrequencyMhz(240);
+    setCpuFrequencyMhz(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
 
     panelSleep(false); // wake the screen back up
 

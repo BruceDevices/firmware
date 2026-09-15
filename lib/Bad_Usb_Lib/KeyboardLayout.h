@@ -5,7 +5,7 @@
   only in Keyboard.cpp and the keyboard layout files. Layout files map
   ASCII character codes to keyboard scan codes (technically, to USB HID
   Usage codes), possibly altered by the SHIFT or ALT_GR modifiers.
-  Non-ACSII characters (anything outside the 7-bit range NUL..DEL) are
+  Non-ASCII characters (anything outside the 7-bit range NUL..DEL) are
   not supported.
 
   == Creating your own layout ==
@@ -61,7 +61,8 @@
 
 #include <Arduino.h>
 
+// Modifier keys for _asciimap[] table (not to be used directly)
 #define SHIFT 0x80
-#define ALT_GR 0xc0
+#define ALT_GR 0x40
 #define ISO_KEY 0x64
 #define ISO_REPLACEMENT 0x32

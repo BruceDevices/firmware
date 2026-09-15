@@ -118,7 +118,7 @@ void TFT_eSPI::loadFont(String fontName, bool flash)
     fontFile.seek(0, fs::SeekSet);
   }
 #else
-  // Avoid unused varaible warning
+  // Avoid unused variable warning
   fontName = fontName;
   flash = flash;
 #endif

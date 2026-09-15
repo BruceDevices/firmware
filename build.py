@@ -1,4 +1,5 @@
 from pathlib import Path
+import csv
 from SCons.Script import Import
 
 # Import PlatformIO's SCons environment
@@ -16,6 +17,8 @@ BOOT_OFFSETS = {
     "esp32":   0x1000,  # ESP32
     "esp32s3": 0x0000,  # ESP32-S3
     "esp32c5": 0x2000,  # ESP32-C5
+    "esp32c6": 0x0000,  # ESP32-C6
+    "esp32p4": 0x2000,  # ESP32-P4
 }
 boot_offset = BOOT_OFFSETS.get(mcu, 0x0000)  # safe fallback
 
@@ -58,8 +61,47 @@ def _merge_bins_callback(target, source, env):
     # Quote paths for Windows safety
     def q(p): return f"\"{p}\""
 
+    # ---- Read partition CSV to get test partition size and ota_0 offset ----
+    part_csv_name = board_config.get("build.partitions") or env.GetProjectOption(
+        "board_build.partitions", default=""
+    )
+    part_csv = proj_dir / part_csv_name if part_csv_name else proj_dir / "partitions.csv"
+    ota_size = None
+    ota0_offset = None
+    if part_csv.exists():
+        with open(part_csv, newline="") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row or row[0].startswith("#"):
+                    continue
+                cols = [c.strip() for c in row]
+                if len(cols) < 5:
+                    continue
+                name, ptype, subtype, offset, size = cols[:5]
+                subtype = subtype.lower()
+                if subtype == "ota_0" and ota_size is None:
+                    try:
+                        ota_size = int(size, 0)
+                        ota0_offset = int(offset, 0)
+                    except ValueError:
+                        pass
+
+    # ---- Firmware size check against test partition ----
+    if ota_size:
+        fw_size = app_bin.stat().st_size
+        percent = (fw_size / ota_size) * 100 if ota_size else 0
+        bar_len = 20
+        filled = int(bar_len * fw_size / ota_size)
+        bar = "=" * filled + " " * (bar_len - filled)
+        print(
+            f"BRUCE: [{bar}] {percent:.1f}% (used 0x{fw_size:X} bytes of 0x{ota_size:X} of OTA partition)"
+        )
+        if fw_size > ota_size:
+            print("[merge_bin] Error: firmware.bin exceeds OTA partition size")
+            env.Exit(1)
+
     cmd = " ".join([
-        "pio pkg exec -p \"tool-esptoolpy\" -- esptool.py",
+        q(python_exe), "-m", "platformio", "pkg", "exec", "-p", q("tool-esptoolpy"), "--", "esptool.py",
         "--chip", chip_arg,
         "merge-bin",
         "--output", q(out_bin),
@@ -73,12 +115,21 @@ def _merge_bins_callback(target, source, env):
     rc = env.Execute(cmd)
     if rc != 0:
         print(f"[merge_bin] Failed with exit code {rc}")
+        env.Exit(rc)
     else:
         try:
             size = out_bin.stat().st_size
         except FileNotFoundError:
             size = 0
         print(f"[merge_bin] Success -> {out_bin} ({size} bytes)")
+        if ota0_offset:
+            if size < (ota0_offset + ota_size):
+                print("[Final bin] Valid bin to upload")
+            else:
+                print(
+                    f"[Final bin] Error: bin size 0x{size:X} exceeds ota_0 offset 0x{(ota0_offset+ota_size):X}"
+                )
+                env.Exit(1)
 
 # Automatically run after firmware.bin is generated
 senv.AddPostAction(str(app_bin), _merge_bins_callback)

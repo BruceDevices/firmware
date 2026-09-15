@@ -1,0 +1,40 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-DARDUINO_ESP32_DEV",
+      "-DFREENOVE_FNK0103",
+      "-DARDUINO_RUNNING_CORE=1",
+      "-DARDUINO_EVENT_RUNNING_CORE=1"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "40000000L",
+    "flash_mode": "dio",
+    "mcu": "esp32",
+    "variant": "pinouts"
+  },
+  "connectivity": [
+    "wifi",
+    "bluetooth"
+  ],
+  "debug": {
+    "openocd_board": "esp-wroom-32.cfg"
+  },
+  "frameworks": [
+    "arduino",
+    "espidf"
+  ],
+  "name": "Freenove FNK0103",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 4194304,
+    "require_upload_port": true,
+    "speed": 460800
+  },
+  "url": "https://docs.freenove.com/projects/fnk0103/",
+  "vendor": "Freenove"
+}

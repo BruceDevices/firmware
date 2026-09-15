@@ -187,7 +187,18 @@
 
     async function connect(){
       try{
-        const filters = [{usbVendorId:0x303A}]; // Espressif (opcional)
+        const filters = [
+          { usbVendorId: 0x303A }, // Espressif (ESP32-C5, etc.)
+          { usbVendorId: 0x1A86 }, // CH340-based ESP32
+          { usbVendorId: 0x10C4 }, // Silicon Labs CP210x
+          { usbVendorId: 0x1001 },
+          { usbVendorId: 0x8119 },
+          { usbVendorId: 0x239A },
+          { usbVendorId: 0x811B },
+          { usbVendorId: 0x011B },
+          { usbVendorId: 0x811C },
+          { usbVendorId: 0x82D4 }
+        ];
         port = await navigator.serial.requestPort({ filters });
         await port.open({
           baudRate: Number(ui.baud.value),

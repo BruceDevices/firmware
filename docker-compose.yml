@@ -1,0 +1,19 @@
+services:
+  platformio_build:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ci
+    working_dir: /work
+    volumes:
+      - .:/work
+      - pio_home:/root/.platformio
+      - pio_build:/work/.pio
+    environment:
+      # Optional overrides:
+      - PIO_ENVS=m5stack-cplus2
+      - PLATFORMIO_CORE_DIR=/root/.platformio
+    command: ["bash", "docker/run_all_envs.sh"]
+
+volumes:
+  pio_home:
+  pio_build:

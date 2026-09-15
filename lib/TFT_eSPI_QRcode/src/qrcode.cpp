@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <cstdlib>
 #include "qrcode.h"
 #include "qrencode.h"
 
@@ -8,7 +9,7 @@ int screenwidth;
 int screenheight;
 int multiply = 2;
 
-QRcode::QRcode(TFT_eSPI *tft)
+QRcode::QRcode(tft_display *tft)
 {
   this->tft = tft;
 }
@@ -52,6 +53,7 @@ void QRcode::create(String message)
   // create QR code
   tft->fillScreen(TFT_WHITE);
   message.toCharArray((char *)strinbuf, 260);
+  qrframe = (unsigned char *)malloc(600);
   qrencode();
   // print QR Code
   for (byte x = 0; x < WD; x += 2)
@@ -84,4 +86,6 @@ void QRcode::create(String message)
       }
     }
   }
+  free(qrframe);
+  qrframe = 0;
 }

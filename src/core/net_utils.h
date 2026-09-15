@@ -1,4 +1,3 @@
-#include <ESPping.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 

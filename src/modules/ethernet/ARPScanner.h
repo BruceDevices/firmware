@@ -1,6 +1,6 @@
 #ifndef ARP_SCANNER_H
 #define ARP_SCANNER_H
-
+#if !defined(LITE_VERSION)
 #include "Arduino.h"
 #include "IPAddress.h"
 #include "modules/wifi/scan_hosts.h"
@@ -30,3 +30,4 @@ public:
 
 void run_arp_scanner();
 #endif // ARP_SCANNER_H
+#endif

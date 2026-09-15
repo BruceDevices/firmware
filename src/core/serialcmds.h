@@ -3,8 +3,9 @@
 
 #include <Arduino.h>
 
-void handleSerialCommands();
+extern TaskHandle_t serialcmdsTaskHandle;
 
-void startSerialCommandsHandlerTask();
+void startSerialCommandsHandlerTask(bool initQueues = false);
 
+bool parseSerialCommand(const String &command, bool waitForResponse = true);
 #endif

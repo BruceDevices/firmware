@@ -1,4 +1,5 @@
 #include "TouchDrvGT911.hpp"
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
@@ -47,8 +48,8 @@ void ISR_rst() {
 }
 
 #define LILYGO_KB_SLAVE_ADDRESS 0x55
-#define KB_I2C_SDA 18
-#define KB_I2C_SCL 8
+#define KB_I2C_SDA 18 // SYS_I2C_SDA
+#define KB_I2C_SCL 8  // SYS_I2C_SCL
 #define SEL_BTN 0
 #define UP_BTN 3
 #define DW_BTN 15
@@ -62,8 +63,9 @@ void ISR_rst() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    delay(500); // time to ESP32C3 start and enable the keyboard
-    if (!Wire.begin(KB_I2C_SDA, KB_I2C_SCL)) Serial.println("Fail starting ESP32-C3 keyboard");
+    delay(500);           // time to ESP32C3 start and enable the keyboard
+    setSysI2CBus(&Wire1); // Keyboard + GT911 touch both live on the default Wire object
+    if (!Wire1.begin(SYS_I2C_SDA, SYS_I2C_SCL)) Serial.println("Fail starting ESP32-C3 keyboard");
 
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
@@ -71,7 +73,7 @@ void _setup_gpio() {
 
     pinMode(BOARD_TOUCH_INT, INPUT);
     touch.setPins(-1, BOARD_TOUCH_INT);
-    if (!touch.begin(Wire, GT911_SLAVE_ADDRESS_L)) {
+    if (!touch.begin(Wire1, GT911_SLAVE_ADDRESS_L)) {
         Serial.println("Failed to find GT911 - check your wiring!");
     }
     // Set touch max xy
@@ -95,24 +97,10 @@ void _setup_gpio() {
     attachInterrupt(R_BTN, ISR_right, FALLING);
 
 #ifdef T_DECK_PLUS
-    bruceConfig.gpsBaudrate = 38400;
+    bruceConfigPins.gpsBaudrate = 38400;
 #endif
 }
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    int percent = 0;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_4);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
-}
-bool isCharging() { return false; }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
 ** Location: main.cpp
@@ -125,7 +113,7 @@ void _post_setup_gpio() {
     // Brightness control must be initialized after tft in this case @Pirata
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BRIGHT_CHANNEL, 255);
+    ledcWrite(TFT_BL, 255);
 }
 /*********************************************************************
 ** Function: setBrightness
@@ -141,8 +129,8 @@ void _setBrightness(uint8_t brightval) {
     else if (brightval == 0) dutyCycle = 0;
     else dutyCycle = ((brightval * 255) / 100);
 
-    log_i("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BRIGHT_CHANNEL, dutyCycle); // Channel 0
+    // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
+    ledcWrite(TFT_BL, dutyCycle);
 }
 /*********************************************************************
 ** Function: InputHandler
@@ -154,34 +142,40 @@ void InputHandler(void) {
     TouchPointPro t;
     uint8_t touched = 0;
     uint8_t rot = 5;
-    if (rot != bruceConfig.rotation) {
-        if (bruceConfig.rotation == 1) {
+
+#ifdef NORMAL_T_DECK
+    bool isPlus = false;
+#else
+    bool isPlus = true;
+#endif
+    if (rot != bruceConfigPins.rotation) {
+        if (bruceConfigPins.rotation == 1) {
             touch.setMaxCoordinates(320, 240);
             touch.setSwapXY(true);
-            touch.setMirrorXY(true, true);
+            touch.setMirrorXY(!isPlus, true);
         }
-        if (bruceConfig.rotation == 3) {
+        if (bruceConfigPins.rotation == 3) {
             touch.setMaxCoordinates(320, 240);
             touch.setSwapXY(true);
-            touch.setMirrorXY(false, false);
+            touch.setMirrorXY(isPlus, false);
         }
-        if (bruceConfig.rotation == 0) {
+        if (bruceConfigPins.rotation == 0) {
             touch.setMaxCoordinates(240, 320);
             touch.setSwapXY(false);
-            touch.setMirrorXY(false, true);
+            touch.setMirrorXY(false, !isPlus);
         }
-        if (bruceConfig.rotation == 2) {
+        if (bruceConfigPins.rotation == 2) {
             touch.setMaxCoordinates(240, 320);
             touch.setSwapXY(false);
-            touch.setMirrorXY(true, false);
+            touch.setMirrorXY(true, isPlus);
         }
-        rot = bruceConfig.rotation;
+        rot = bruceConfigPins.rotation;
     }
     touched = touch.getPoint(&t.x, &t.y);
     delay(1);
-    Wire.requestFrom(LILYGO_KB_SLAVE_ADDRESS, 1);
-    while (Wire.available() > 0) {
-        keyValue = Wire.read();
+    Wire1.requestFrom(LILYGO_KB_SLAVE_ADDRESS, 1);
+    while (Wire1.available() > 0) {
+        keyValue = Wire1.read();
         delay(1);
     }
     if (millis() - tm < 200 && !LongPress) return;
@@ -244,7 +238,7 @@ void InputHandler(void) {
     if ((millis() - tm) > 190 || LongPress) { // one reading each 190ms
         if (touched) {
 
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x, t.y, bruceConfig.rotation);
+            // Serial.printf("\nPressed x=%d , y=%d, rot: %d", t.x, t.y, bruceConfigPins.rotation);
             tm = millis();
 
             if (!wakeUpScreen()) AnyKeyPress = true;
@@ -271,6 +265,6 @@ void powerOff() {}
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}

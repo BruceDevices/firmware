@@ -1,4 +1,5 @@
 #include "theme.h"
+#include "core/led_control.h"
 #include "display.h"
 
 struct ThemeEntry {
@@ -16,7 +17,7 @@ FS *BruceTheme::themeFS(void) {
     else if (theme.fs == 2) return &SD;
     return &LittleFS; // always get back to safety
 }
-bool BruceTheme::openThemeFile(FS *fs, String filepath) {
+bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSettings) {
 
     if (fs == nullptr) return true;
     if (!fs->exists(filepath)) return false;
@@ -37,7 +38,7 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
         return false;
     }
     themePath = filepath;
-    String baseThemePath = themePath.substring(0, themePath.lastIndexOf('/')) + "/";
+    String baseThemePath = filepath.substring(0, filepath.lastIndexOf('/')) + "/";
 
     ThemeEntry entries[] = {
         {"wifi",        &theme.wifi,        theme.paths.wifi       },
@@ -56,7 +57,8 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
         {"connect",     &theme.connect,     theme.paths.connect    },
         {"config",      &theme.config,      theme.paths.config     },
         {"boot_img",    &theme.boot_img,    theme.paths.boot_img   },
-        {"boot_sound",  &theme.boot_sound,  theme.paths.boot_sound }
+        {"boot_sound",  &theme.boot_sound,  theme.paths.boot_sound },
+        {"lora",        &theme.lora,        theme.paths.lora       }
     };
 
     JsonObject _th = jsonDoc.as<JsonObject>();
@@ -65,25 +67,42 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
             String path = baseThemePath + _th[entry.key].as<String>();
             if (fs->exists(path)) {
                 *entry.flag = true;
-                entry.path = _th[entry.key].as<String>();
+                entry.path = path;
+                // Pre-cache PNGs into BIN files to avoid runtime decoding and allocations
+                if (path.endsWith(".png") || path.endsWith(".PNG")) { preparePngBin(*fs, path); }
             } else {
                 log_w("THEME: file not found: %s", entry.key);
             }
         }
     }
 
-    uint16_t _priColor = bruceConfig.priColor;
-    uint16_t _secColor = bruceConfig.secColor;
-    uint16_t _bgColor = bruceConfig.bgColor;
+    file.close();
 
-    if (!_th["priColor"].isNull()) { _priColor = strtoul(_th["priColor"], nullptr, 16); }
-    if (!_th["secColor"].isNull()) { _secColor = strtoul(_th["secColor"], nullptr, 16); }
-    if (!_th["bgColor"].isNull()) { _bgColor = strtoul(_th["bgColor"], nullptr, 16); }
     if (!_th["border"].isNull()) { theme.border = _th["border"].as<int>(); }
     if (!_th["label"].isNull()) { theme.label = _th["label"].as<int>(); }
+    if (!_th["gifDuration"].isNull()) { theme.gifDuration = _th["gifDuration"].as<int>(); }
 
-    file.close();
-    _setUiColor(_priColor, &_secColor, &_bgColor);
+    if (overwriteConfigSettings) {
+        uint16_t _priColor = bruceConfig.priColor;
+        uint16_t _secColor = bruceConfig.secColor;
+        uint16_t _bgColor = bruceConfig.bgColor;
+
+        if (!_th["priColor"].isNull()) { _priColor = strtoul(_th["priColor"], nullptr, 16); }
+        if (!_th["secColor"].isNull()) { _secColor = strtoul(_th["secColor"], nullptr, 16); }
+        if (!_th["bgColor"].isNull()) { _bgColor = strtoul(_th["bgColor"], nullptr, 16); }
+        _setUiColor(_priColor, &_secColor, &_bgColor);
+
+#ifdef HAS_RGB_LED
+        if (!_th["ledBright"].isNull()) { bruceConfig.ledBright = _th["ledBright"].as<int>(); }
+        if (!_th["ledColor"].isNull()) { bruceConfig.ledColor = strtoul(_th["ledColor"], nullptr, 16); }
+        if (!_th["ledEffect"].isNull()) { bruceConfig.ledEffect = _th["ledEffect"].as<int>(); }
+        if (!_th["ledEffectSpeed"].isNull()) { bruceConfig.ledEffectSpeed = _th["ledEffectSpeed"].as<int>(); }
+        if (!_th["ledEffectDirection"].isNull()) {
+            bruceConfig.ledEffectDirection = _th["ledEffectDirection"].as<int>();
+        }
+        ledSetup();
+#endif
+    }
 
     if (fs == &LittleFS) theme.fs = 1;
     else if (fs == &SD) theme.fs = 2;
@@ -93,8 +112,28 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath) {
 }
 
 bool BruceTheme::validateImgFile(FS *fs, String filepath) {
-    // Think of a way to check if the images are at maximum height of tftHeight
-    // this size is the maximun value to be shown on screen without overlapping the status bar.
+    // Validate theme image files
+    // Check if file exists
+    if (fs == nullptr || filepath.isEmpty()) return false;
+    if (!fs->exists(filepath)) return false;
+    
+    // Check file is not empty
+    File file = fs->open(filepath, FILE_READ);
+    if (!file) return false;
+    
+    size_t fileSize = file.size();
+    file.close();
+    
+    // Reject obviously invalid files (too small to be valid images)
+    if (fileSize < 64) return false;
+    
+    // Reject unreasonably large files (likely not intended as menu icons)
+    // Menu icons should be small - 500KB is plenty for even high-res icons
+    const size_t MAX_ICON_SIZE = 500 * 1024;
+    if (fileSize > MAX_ICON_SIZE) return false;
+    
+    // For more advanced validation (checking actual image dimensions), 
+    // we would need to decode the image. For now, basic checks above.
     return true;
 }
 

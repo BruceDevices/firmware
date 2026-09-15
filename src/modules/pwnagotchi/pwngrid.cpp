@@ -8,9 +8,11 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 20/09 - Changed from DynamicJsonDocument json[2048] to JsonDocument json, to avoid stack smashing errors
 (firgers crossed)
 */
-
+#if !defined(LITE_VERSION)
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
+#include "core/wifi/wifi_common.h"
+#include <algorithm>
 
 uint8_t pwngrid_friends_tot = 0;
 std::vector<pwngrid_peer> pwngrid_peers;
@@ -59,23 +61,17 @@ void add_new_peer(JsonDocument &json, signed int rssi) {
 }
 
 // Delete pwngrid peers
+void clearPwngridPeers() {
+    pwngrid_peers.clear();
+    pwngrid_friends_tot = 0;
+    pwngrid_last_friend_name = "";
+}
 void delete_peer_gone() { // Delete peers wigh pwngrid_peers.gone = true
-    std::vector<int>
-        peer_gone; // Create a vector of integers to save the index value of the element to be deleted
-    int index = 0;
-    for (const auto &peer_list : pwngrid_peers) {
-        if (peer_list.gone) peer_gone.push_back(index); // Saves the index value into the vector
-        index++;
-    }
-    std::reverse(
-        peer_gone.begin(), peer_gone.end()
-    ); // Reverse the vector to iterate from the end to the beginning
-    for (auto ind : peer_gone) {
-        pwngrid_peers.erase(pwngrid_peers.begin() + ind); // Delete the peer from the list
-        // Update counter;
-        pwngrid_friends_tot = pwngrid_peers.size();
-    }
-    peer_gone.clear();
+    auto it = std::remove_if(pwngrid_peers.begin(), pwngrid_peers.end(), [](const pwngrid_peer &p) {
+        return p.gone;
+    });
+    if (it != pwngrid_peers.end()) { pwngrid_peers.erase(it, pwngrid_peers.end()); }
+    pwngrid_friends_tot = pwngrid_peers.size();
 }
 
 // Had to remove Radiotap headers, since its automatically added
@@ -98,7 +94,7 @@ const int raw_beacon_len = sizeof(pwngrid_beacon_raw);
 
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
-esp_err_t pwngridAdvertise(uint8_t channel, String face) {
+esp_err_t pwngridAdvertise(uint8_t channel, const String &face) {
     static uint8_t _chan = 1;
     JsonDocument pal_json;
     String pal_json_str = "";
@@ -165,7 +161,7 @@ esp_err_t pwngridAdvertise(uint8_t channel, String face) {
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_wifi.html#_CPPv417esp_wifi_80211_tx16wifi_interface_tPKvib
     esp_err_t result;
     for (int i = 0; i < 3; i++) {
-        result = esp_wifi_80211_tx(WIFI_IF_AP, pwngrid_beacon_frame, frame_len, false);
+        result = wifiRawTx(WIFI_IF_AP, pwngrid_beacon_frame, frame_len);
         if (result != ESP_OK) {
             ESP_LOGE("pwngrid", "Failed sending advertising: %s", esp_err_to_name(result));
         }
@@ -278,8 +274,9 @@ void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
             if (src == "de:ad:be:ef:de:ad") {
                 // Just grab the first 255 bytes of the pwnagotchi beacon
                 // because that is where the name is
+                essid.reserve(len > 38 ? len - 38 : 0);
                 for (int i = 38; i < len; i++) {
-                    if (isAscii(snifferPacket->payload[i])) { essid.concat((char)snifferPacket->payload[i]); }
+                    if (isAscii(snifferPacket->payload[i])) { essid += (char)snifferPacket->payload[i]; }
                 }
 
                 JsonDocument sniffed_json; // ArduinoJson v6s
@@ -311,6 +308,7 @@ const wifi_promiscuous_filter_t filter = {
 };
 
 void initPwngrid() {
+    ensureWifiPlatform();
     wifi_init_config_t WIFI_INIT_CONFIG = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&WIFI_INIT_CONFIG);
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
@@ -323,3 +321,4 @@ void initPwngrid() {
     esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
     vTaskDelay(1 / portTICK_RATE_MS);
 }
+#endif

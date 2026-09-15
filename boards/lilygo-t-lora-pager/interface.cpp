@@ -1,21 +1,16 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
+#include "core/utils.h"
 #include <Wire.h>
 #include <bq27220.h>
 #include <globals.h>
 #include <interface.h>
 
 // Rotary encoder
-#include <RotaryEncoder.h>
-extern RotaryEncoder *encoder;
-IRAM_ATTR void checkPosition();
-RotaryEncoder *encoder = nullptr;
-IRAM_ATTR void checkPosition() {
-    encoder->tick(); // just call tick() to check the state.
-}
-
-// GPIO expander
-#include <ExtensionIOXL9555.hpp>
-ExtensionIOXL9555 io;
+#include <rotary_decoder.h>
+extern RotaryDecoder *encoder;
+RotaryDecoder *encoder = nullptr;
+void pollEncoder(void) { encoder->poll(); }
 
 // Charger chip
 #define XPOWERS_CHIP_BQ25896
@@ -42,6 +37,11 @@ Adafruit_TCA8418 *keyboard;
 SensorDRV2605 drv;
 void hapticTest(uint8_t effect);
 uint8_t effect = 1;
+
+// Audio
+#include "AudioBoard.h"
+DriverPins PinsAudioBoardES8311;
+AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
 
 // Keyboard
 bool fn_key_pressed = false;
@@ -88,10 +88,10 @@ const KeyValue_t _key_value_map[KB_ROWS][KB_COLS] = {
      {'b', 'B', '!'},
      {'n', 'N', ','},
      {'m', 'M', '.'},
-     {SHIFT, SHIFT, CAPS_LOCK},
+     {KEY_SHIFT, KEY_SHIFT, CAPS_LOCK},
      {KEY_BACKSPACE, KEY_BACKSPACE, '#'}},
 
-    {{' ', ' ', ' '}}
+    {{' ', ' ', KEY_TAB}}
 };
 
 char getKeyChar(uint8_t k) {
@@ -110,7 +110,7 @@ int handleSpecialKeys(uint8_t k, bool pressed) {
     char keyVal = _key_value_map[k / 10][k % 10].value_first;
     switch (keyVal) {
         case KEY_FN: fn_key_pressed = !fn_key_pressed; return 1;
-        case KEY_LEFT_SHIFT: {
+        case KEY_SHIFT: {
             shift_key_pressed = pressed;
             if (fn_key_pressed && shift_key_pressed) { caps_lock = !caps_lock; }
             return 1;
@@ -120,6 +120,33 @@ int handleSpecialKeys(uint8_t k, bool pressed) {
     return 0;
 }
 
+void initPeripherals() {
+    if (ioExpander.init()) {
+        const uint8_t expands[] = {
+            EXPANDS_DRV_EN,
+            EXPANDS_AMP_EN,
+            EXPANDS_KB_RST,
+            EXPANDS_LORA_EN,
+            EXPANDS_GPS_EN,
+            EXPANDS_NFC_EN,
+            EXPANDS_GPS_RST,
+            EXPANDS_KB_PWR,
+            EXPANDS_KB_EN,
+            EXPANDS_GPIO_EN,
+            EXPANDS_SD_EN
+        };
+        for (auto pin : expands) {
+            ioExpander.pinMode(pin, OUTPUT);
+            ioExpander.digitalWrite(pin, HIGH);
+            delay(1);
+        }
+        ioExpander.pinMode(EXPANDS_SD_DET, INPUT);
+        Serial.println("Initializing expander OK");
+    } else {
+        Serial.println("Initializing expander failed");
+    }
+    delay(50);
+}
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Description:   initial setup for the device
@@ -128,6 +155,7 @@ void _setup_gpio() {
 
     pinMode(SEL_BTN, INPUT);
     pinMode(BK_BTN, INPUT);
+    pinMode(ST25R_IRQ, INPUT);
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
@@ -143,67 +171,29 @@ void _setup_gpio() {
 
     pinMode(LORA_RST, OUTPUT);
     digitalWrite(LORA_RST, HIGH);
+    setSysI2CBus(&Wire); // PMU/keyboard/RTC/codec all live on the default Wire object
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
+    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
 
     // Power management
     bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, GROVE_SDA, GROVE_SCL, BQ25896_SLAVE_ADDRESS);
+    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
     if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
-        PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(832);
-        PPM.getChargerConstantCurr();
-        Serial.printf("getChargerConstantCurr: %d mA\n", PPM.getChargerConstantCurr());
+        // https://github.com/Xinyuan-LilyGO/LilyGoLib/blob/a64fc6ca94757baa5401ad71b39fb7f92cd1a7e9/src/LilyGo_LoRa_Pager.cpp#L442-L452
+        PPM.resetDefault();
+
+        PPM.setChargeTargetVoltage(4288);
+        PPM.setChargerConstantCurr(704);
         PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
     }
 
     // Battery gauge
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
+    initPeripherals();
 
-    // IO Expander
-    // TODO: Needs updating to use the same interface as the other IO Expanders (io_expander ioExpander)
-    // if (ioExpander.init(IO_EXPANDER_ADDRESS, &Wire)) {
-    //     const uint8_t expands[] = {
-    //         EXPANDS_KB_RST,
-    //         EXPANDS_KB_EN,
-    //         EXPANDS_SD_EN,
-    //         EXPANDS_DRV_EN,
-    //         EXPANDS_AMP_EN, // Audio
-    //     };
-    //     for (auto pin : expands) {
-    //         ioExpander.pinMode(pin, OUTPUT);
-    //         ioExpander.digitalWrite(pin, HIGH);
-    //         delay(1);
-    //     }
-    //     ioExpander.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    //     ioExpander.digitalWrite(EXPANDS_DRV_EN, LOW);
-    // } else {
-    //     Serial.println("Initializing expander failed");
-    // }
-    if (io.begin(Wire, IO_EXPANDER_ADDRESS)) {
-        const uint8_t expands[] = {
-            EXPANDS_KB_RST,
-            EXPANDS_KB_EN,
-            EXPANDS_SD_EN,
-            EXPANDS_DRV_EN,
-            EXPANDS_AMP_EN, // Audio
-        };
-        for (auto pin : expands) {
-            io.pinMode(pin, OUTPUT);
-            io.digitalWrite(pin, HIGH);
-            delay(1);
-        }
-        io.pinMode(EXPANDS_SD_PULLEN, INPUT);
-    } else {
-        Serial.println("Initializing expander failed");
-    }
-
-    // Initalise keyboard
+    // Initialise keyboard
     keyboard = new Adafruit_TCA8418();
     if (!keyboard->begin(KB_I2C_ADDRESS, &Wire)) {
         Serial.println("Failed to find Keyboard");
@@ -215,32 +205,53 @@ void _setup_gpio() {
     keyboard->flush();
 
     // Start with default IR, RF, GPS and RFID Configs, replace old
-    bruceConfig.rfModule = CC1101_SPI_MODULE;
-    bruceConfig.rfidModule = ST25R3916_SPI_MODULE;
-    bruceConfig.irRx = 1;
-    bruceConfig.gpsBaudrate = 38400;
+    bruceConfigPins.rfModule = CC1101_SPI_MODULE;
+    bruceConfigPins.rfidModule = ST25R3916_SPI_MODULE;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.gpsBaudrate = 38400;
 
     // Encoder
     pinMode(ENCODER_KEY, INPUT);
-    encoder = new RotaryEncoder(ENCODER_INA, ENCODER_INB, RotaryEncoder::LatchMode::FOUR3);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INA), checkPosition, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(ENCODER_INB), checkPosition, CHANGE);
+    pinMode(ENCODER_INA, INPUT_PULLUP);
+    pinMode(ENCODER_INB, INPUT_PULLUP);
+    encoder = new RotaryDecoder();
+    encoder->begin(ENCODER_INB, ENCODER_INA, 4);
 
     // Haptic driver
     if (!drv.begin(Wire, SDA, SCL)) {
         Serial.println("Failed to find DRV2605.");
-        while (1) { delay(1000); }
-    }
-    Serial.println("Init DRV2605 Sensor success!");
-    drv.selectLibrary(1);
-    drv.setMode(SensorDRV2605::MODE_INTTRIG);
-    drv.useERM();
+    } else {
+        Serial.println("Init DRV2605 Sensor success!");
+        drv.selectLibrary(1);
+        drv.setMode(SensorDRV2605::MODE_INTTRIG);
+        drv.useERM();
 
-    // Startup buzz
-    drv.setWaveform(0, 70);
-    drv.setWaveform(1, 0);
-    drv.run();
+        // Startup buzz
+        drv.setWaveform(0, 70);
+        drv.setWaveform(1, 0);
+        drv.run();
+    }
+
+    // Audio
+    // https://github.com/meshtastic/firmware/blob/ee6449746bf8c5358b8adbde05b96e2b2d04f450/src/platform/extra_variants/t_lora_pager/variant.cpp
+    // AudioDriverLogger.begin(Serial, AudioDriverLogLevel::Debug);
+    // I2C: function, scl, sda
+    PinsAudioBoardES8311.addI2C(PinFunction::CODEC, Wire);
+    // I2S: function, mclk, bck, ws, data_out, data_in
+    PinsAudioBoardES8311.addI2S(
+        PinFunction::CODEC, AUDIO_I2S_MCLK, AUDIO_I2S_SCK, AUDIO_I2S_WS, AUDIO_I2S_SDOUT, AUDIO_I2S_SDIN
+    );
+
+    // configure codec
+    CodecConfig cfg;
+    cfg.input_device = ADC_INPUT_LINE1;
+    cfg.output_device = DAC_OUTPUT_ALL;
+    cfg.i2s.bits = BIT_LENGTH_16BITS;
+    cfg.i2s.rate = RATE_44K;
+    board.begin(cfg);
 }
+
+void _post_setup_gpio() { initPeripherals(); }
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -284,7 +295,9 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = millis();
-    static int _last_dir = 0;
+    static unsigned long lastEncoderMoveMs = 0;
+    static int posDifference = 0;
+    static int lastPos = 0;
     bool sel = !BTN_ACT;
     bool esc = !BTN_ACT;
 
@@ -293,42 +306,73 @@ void InputHandler(void) {
 
     if (millis() - tm < 500) return;
 
-    _last_dir = (int)encoder->getDirection();
+    int newPos = encoder->getPosition();
+    if (newPos != lastPos) {
+        posDifference += (newPos - lastPos);
+        // Independent running total for consumers that want to apply the
+        // full pending backlog in one pass instead of one step at a time
+        // (see drainRotarySteps() in globals.h). Never cleared by the
+        // stale-drop below -- it's drained exactly, not time-limited.
+        RotaryNetSteps += (newPos - lastPos);
+        lastPos = newPos;
+        lastEncoderMoveMs = millis();
+    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
+        // Drop any stale queued steps once the encoder has stopped moving.
+        posDifference = 0;
+    }
+
     sel = digitalRead(SEL_BTN);
     esc = digitalRead(BK_BTN);
 
     if (keyboard->available() > 0) {
-        int keyValue = keyboard->getEvent();
-        bool pressed = keyValue & 0x80;
-        keyValue &= 0x7F;
-        keyValue--;
-        if (keyValue / 10 < 4) {
-            if (handleSpecialKeys(keyValue, pressed) > 0) goto END;
+        keyStroke pendingKey;
+        bool keyPulse = false;
+        bool hapticPulse = false;
+
+        // Drain the full TCA8418 FIFO so quick taps are handled immediately.
+        while (keyboard->available() > 0) {
+            int keyValue = keyboard->getEvent();
+            bool pressed = keyValue & 0x80;
+            keyValue &= 0x7F;
+            keyValue--;
+
+            if (keyValue / 10 >= 4) continue;
+            if (handleSpecialKeys(keyValue, pressed) > 0) continue;
+
             keyVal = getKeyChar(keyValue);
-        }
-        if (pressed && !wakeUpScreen() && keyVal != '\0') {
-            KeyStroke.Clear();
-            KeyStroke.hid_keys.push_back(keyVal);
+            if (!pressed || keyVal == '\0') continue;
+            if (wakeUpScreen()) continue;
+
+            pendingKey.hid_keys.push_back(keyVal);
             if (keyVal == KEY_BACKSPACE) {
-                KeyStroke.del = true;
+                pendingKey.del = true;
                 EscPress = true;
             }
             if (keyVal == KEY_ENTER) {
-                KeyStroke.enter = true;
+                pendingKey.enter = true;
                 SelPress = true;
             }
-            if (keyVal == KEY_FN) KeyStroke.fn = true;
-            KeyStroke.word.push_back(keyVal);
-            KeyStroke.pressed = true;
+            if (keyVal == KEY_FN) pendingKey.fn = true;
+            pendingKey.word.push_back(keyVal);
+            keyPulse = true;
+            hapticPulse = true;
+        }
 
-            // Haptic feedback
-            drv.setWaveform(0, 81);
-            drv.setWaveform(1, 0);
-            drv.run();
+        if (keyPulse) {
+            pendingKey.pressed = true;
+            KeyStroke = pendingKey;
+
+            if (hapticPulse) {
+                drv.setWaveform(0, 81);
+                drv.setWaveform(1, 0);
+                drv.run();
+            }
+        } else {
+            KeyStroke.Clear();
         }
     } else KeyStroke.Clear();
 
-    if (_last_dir != 0 || sel == BTN_ACT || esc == BTN_ACT || KeyStroke.enter) {
+    if (posDifference != 0 || sel == BTN_ACT || esc == BTN_ACT || KeyStroke.enter) {
         if (!wakeUpScreen()) {
             AnyKeyPress = true;
 
@@ -337,8 +381,14 @@ void InputHandler(void) {
             drv.setWaveform(1, 0);
             drv.run();
 
-            if (_last_dir < 0) PrevPress = true;
-            if (_last_dir > 0) NextPress = true;
+            if (posDifference > 0) {
+                PrevPress = true;
+                posDifference--;
+            }
+            if (posDifference < 0) {
+                NextPress = true;
+                posDifference++;
+            }
             if (sel == BTN_ACT) SelPress = true;
             if (esc == BTN_ACT) EscPress = true;
         } else goto END;
@@ -359,3 +409,17 @@ bool isCharging() { return bq.getIsCharging(); }
 #else
 bool isCharging() { return false; }
 #endif
+
+/*********************************************************************
+** Function: _setup_codec_speaker
+** location: modules/others/audio.cpp
+** Handles audio CODEC to enable/disable speaker
+**********************************************************************/
+void _setup_codec_speaker(bool enable) {}
+
+/*********************************************************************
+** Function: _setup_codec_mic
+** location: modules/others/mic.cpp
+** Handles audio CODEC to enable/disable microphone
+**********************************************************************/
+void _setup_codec_mic(bool enable) {}

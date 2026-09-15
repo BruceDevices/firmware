@@ -1,4 +1,24 @@
+var display = require('display');
+var keyboard = require('keyboard');
+var ir = require('ir');
+var serial = require('serial');
+var badusb = require('badusb');
 
+var fillScreen = display.fill;
+var drawString = display.drawString;
+var print = display.print;
+var getAnyPress = keyboard.getAnyPress;
+var serialReadln = serial.readln;
+var irRead = ir.read;
+var badusbSetup = badusb.setup;
+var badusbPress = badusb.press;
+var badusbHold = badusb.hold;
+var badusbRelease = badusb.release;
+var badusbReleaseAll = badusb.releaseAll;
+var badusbPrint = badusb.print;
+var badusbPrintln = badusb.println;
+var badusbPressRaw = badusb.pressRaw;
+var badusbRunFile = badusb.runFile;
 
 // flirc-like IR2Keyboard script
 // use any IR remote to send commands to your pc

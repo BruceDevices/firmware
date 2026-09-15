@@ -1,0 +1,5 @@
+:root {
+  --color: #ad007b;
+  --sec-color: #ce6db5;
+  --background: #000000;
+}

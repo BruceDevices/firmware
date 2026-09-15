@@ -1,6 +1,6 @@
 #ifndef ARP_SPOOFER_H
 #define ARP_SPOOFER_H
-
+#if !defined(LITE_VERSION)
 #include "Arduino.h"
 #include "FS.h"
 #include "modules/wifi/scan_hosts.h"
@@ -29,4 +29,5 @@ public:
     ~ARPSpoofer();
 };
 
+#endif
 #endif

@@ -1,4 +1,5 @@
 #include "CYD28_TouchscreenR.h"
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Arduino.h>
@@ -28,16 +29,20 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
-    CC_NRF_SPI.begin(XPT2046_SPI_BUS_SCLK_IO_NUM, XPT2046_SPI_BUS_MISO_IO_NUM, XPT2046_SPI_BUS_MOSI_IO_NUM);
-    if (!touch.begin(&CC_NRF_SPI)) { Serial.println("Touchscreen initialization failed!"); }
-    ELECHOUSE_cc1101.setSPIinstance(&CC_NRF_SPI);
+    if (!touch.begin(acquireSPIBus(
+            (gpio_num_t)XPT2046_SPI_BUS_SCLK_IO_NUM,
+            (gpio_num_t)XPT2046_SPI_BUS_MISO_IO_NUM,
+            (gpio_num_t)XPT2046_SPI_BUS_MOSI_IO_NUM
+        ))) {
+        Serial.println("Touchscreen initialization failed!");
+    }
 #define TFT_BRIGHT_CHANNEL 0
 #define TFT_BRIGHT_Bits 8
 #define TFT_BRIGHT_FREQ 5000
     // Brightness control must be initialized after tft in this case @Pirata
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BRIGHT_CHANNEL, 255);
+    ledcWrite(TFT_BL, 255);
 }
 
 /*********************************************************************
@@ -55,7 +60,7 @@ void _setBrightness(uint8_t brightval) {
     else dutyCycle = ((brightval * 255) / 100);
 
     // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BRIGHT_CHANNEL, dutyCycle); // Channel 0
+    ledcWrite(TFT_BL, dutyCycle);
 }
 
 /*********************************************************************
@@ -70,23 +75,23 @@ void InputHandler(void) {
         if (touch.touched()) {
             auto t = touch.getPointScaled();
             // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d", t.x, t.y);
-            if (bruceConfig.rotation == 3) {
+            if (bruceConfigPins.rotation == 3) {
                 // t.y = t.y;
                 t.x = tftWidth - t.x;
             }
-            if (bruceConfig.rotation == 1) {
-                t.y = (tftHeight + 20) - t.y;
+            if (bruceConfigPins.rotation == 1) {
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
                 // t.x = t.x;
             }
-            if (bruceConfig.rotation == 0) {
+            if (bruceConfigPins.rotation == 0) {
                 int tmp = t.x;
                 t.x = t.y;
                 t.y = tmp;
             }
-            if (bruceConfig.rotation == 2) {
+            if (bruceConfigPins.rotation == 2) {
                 int tmp = t.x;
                 t.x = tftWidth - t.y;
-                t.y = (tftHeight + 20) - tmp;
+                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
             }
             // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n", t.x, t.y);
 
@@ -117,20 +122,6 @@ void powerOff() {
 /*********************************************************************
 ** Function: checkReboot
 ** location: mykeyboard.cpp
-** Btn logic to tornoff the device (name is odd btw)
+** Btn logic to turn off the device (name is odd btw)
 **********************************************************************/
 void checkReboot() {}
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() {
-    uint8_t percent;
-    uint32_t volt = analogReadMilliVolts(GPIO_NUM_5);
-    float mv = volt;
-    percent = (mv - 3300) * 100 / (float)(4150 - 3350);
-
-    return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
-}

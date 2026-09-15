@@ -4,7 +4,7 @@
  * @version 0.1
  * @date 2025-05-15
  */
-
+#if !defined(LITE_VERSION)
 #include "ARPoisoner.h"
 #include "Arduino.h"
 #include "core/display.h"
@@ -79,6 +79,7 @@ void ARPoisoner::loop() {
             }
 
             for (int i = 1; i < 255; i++) {
+                if (AnyKeyPress) break;
                 victimIP[3] = i;
                 for (int i = 0; i < 6; i++) {
                     victimMAC[i] = random(256); // Create random MAC to all hosts
@@ -161,3 +162,4 @@ void ARPoisoner::sendARPPacket(
         pcapFile.flush();
     }
 }
+#endif

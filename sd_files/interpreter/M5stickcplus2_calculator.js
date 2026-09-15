@@ -1,3 +1,19 @@
+var displayApi = require('display');
+var keyboardApi = require('keyboard');
+
+var width = displayApi.width;
+var height = displayApi.height;
+var color = displayApi.color;
+var drawFillRect = displayApi.drawFillRect;
+var drawRect = displayApi.drawRect;
+var drawString = displayApi.drawString;
+var setTextColor = displayApi.setTextColor;
+var setTextSize = displayApi.setTextSize;
+
+var getPrevPress = keyboardApi.getPrevPress;
+var getNextPress = keyboardApi.getNextPress;
+var getSelPress = keyboardApi.getSelPress;
+
 var screenWidth = width();
 var screenHeight = height();
 

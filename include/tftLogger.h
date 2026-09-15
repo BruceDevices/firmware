@@ -1,9 +1,8 @@
 #ifndef __DISPLAY_LOGER
 #define __DISPLAY_LOGER
-#include <precompiler_flags.h> //need to fetch the device Settings that are not in platformio.ini file
 #ifdef HAS_SCREEN
-#include <TFT_eSPI.h>
-#define BRUCE_TFT_DRIVER TFT_eSPI
+#include <display/tft.h>
+#define BRUCE_TFT_DRIVER tft_display
 #else
 #include <VectorDisplay.h>
 #define BRUCE_TFT_DRIVER SerialDisplayClass
@@ -35,20 +34,29 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
 
     SCREEN_INFO = 99 // 99
 };
+#if defined(BOARD_HAS_PSRAM)
 #define MAX_LOG_ENTRIES 64
 #define MAX_LOG_SIZE 128
-#define MAX_LOG_IMAGES 3
+#define MAX_LOG_IMAGES 1
 #define MAX_LOG_IMG_PATH 512
+#else
+#define MAX_LOG_ENTRIES 40
+#define MAX_LOG_SIZE 64
+#define MAX_LOG_IMAGES 1
+#define MAX_LOG_IMG_PATH 256
+#endif
 #define LOG_PACKET_HEADER 0xAA
+
 struct tftLog {
     uint8_t data[MAX_LOG_SIZE];
 };
 class tft_logger : public BRUCE_TFT_DRIVER {
 private:
-    tftLog log[MAX_LOG_ENTRIES];
-    char images[MAX_LOG_IMAGES][MAX_LOG_IMG_PATH];
+    tftLog *log = nullptr;
+    char (*images)[MAX_LOG_IMG_PATH] = nullptr;
     uint8_t logWriteIndex = 0;
     uint8_t logCount = 0;
+    bool isSleeping = false;
     bool logging = false;
     bool _logging = false;
     void clearLog();
@@ -56,12 +64,38 @@ private:
     TaskHandle_t asyncSerialTask = NULL;
     QueueHandle_t asyncSerialQueue = NULL;
     static void asyncSerialTaskFunc(void *pv);
+    inline uint8_t currentTextSize() const {
+#if defined(HAS_SCREEN)
+        return getTextSize();
+#else
+        return textsize;
+#endif
+    }
+    inline uint16_t currentTextColor() const {
+#if defined(HAS_SCREEN)
+        return getTextColor();
+#else
+        return textcolor;
+#endif
+    }
+    inline uint16_t currentTextBgColor() const {
+#if defined(HAS_SCREEN)
+        return getTextBgColor();
+#else
+        return textbgcolor;
+#endif
+    }
 
 public:
     tft_logger(int16_t w = TFT_WIDTH, int16_t h = TFT_HEIGHT);
     virtual ~tft_logger();
     void setLogging(bool _log = true);
     bool inline getLogging(void) { return logging; };
+
+    // Disables tft writings on the display,
+    // Commands wont be passed to the display if isSleeping==true
+    // display will still be logged, in order to keep WebUI Navigator working
+    void inline setSleepMode(bool mode) { isSleeping = mode; }
 
     void getBinLog(uint8_t *outBuffer, size_t &outSize);
     bool removeLogEntriesInsideRect(int rx, int ry, int rw, int rh);
@@ -141,6 +175,7 @@ protected:
         tftLog l;
         memcpy(l.data, buffer, pos);
         pushLogIfUnique(l);
+        if (isSleeping) return;
         logging = false;
     }
     void restoreLogger();

@@ -1,11 +1,18 @@
 #include "net_utils.h"
-
-#include <ESPping.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <sstream>
 
-bool internetConnection() { return Ping.ping(IPAddress(8, 8, 8, 8)); }
+bool internetConnection() {
+    WiFiClient client;
+    const char *host = "8.8.8.8"; // Google DNS
+    const uint16_t port = 53;     // DNS Port
+
+    if (client.connect(host, port)) {
+        client.stop();
+        return true; // Connected
+    } else return false;
+}
 
 String getManufacturer(const String &mac) {
     if (!internetConnection()) { return "NO_INTERNET_ACCESS"; }
@@ -70,6 +77,8 @@ String ipToString(const uint8_t *ip) {
 // Função para converter MAC para string
 String macToString(const uint8_t *mac) {
     char buf[18];
-    sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(
+        buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
     return String(buf);
 }

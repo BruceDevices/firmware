@@ -1,3 +1,22 @@
+var display = require('display');
+var keyboard = require('keyboard');
+
+var width = display.width;
+var height = display.height;
+var color = display.color;
+var fillScreen = display.fill;
+var drawFillRect = display.drawFillRect;
+var drawRect = display.drawRect;
+var drawString = display.drawString;
+var setTextColor = display.setTextColor;
+var setTextSize = display.setTextSize;
+
+var getPrevPress = keyboard.getPrevPress;
+var getNextPress = keyboard.getNextPress;
+var getSelPress = keyboard.getSelPress;
+var getEscPress = keyboard.getEscPress;
+var getAnyPress = keyboard.getAnyPress;
+
 var playerX = 160;
 var playerY = 130;
 var playerTargetX = 160;

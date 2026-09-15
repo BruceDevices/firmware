@@ -1,3 +1,12 @@
+var display = require('display');
+var serialApi = require('serial');
+
+var println = display.println;
+var drawFillRect = display.drawFillRect;
+var color = display.color;
+var gifOpen = display.gifOpen;
+var serialPrintln = serialApi.println;
+
 function main() {
   // gifOpen - Returns GIF. If it returns null, it means there was an error opening the file.
   const patrick = gifOpen('littlefs', '/gifs/half_patrick.gif');

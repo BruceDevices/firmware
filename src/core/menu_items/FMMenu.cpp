@@ -18,11 +18,7 @@ void FMMenu::optionsMenu() {
 
     loopOptions(options, MENU_TYPE_SUBMENU, "FM");
 }
-void FMMenu::drawIconImg() {
-    drawImg(
-        *bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.fm), 0, imgCenterY, true
-    );
-}
+
 void FMMenu::drawIcon(float scale) {
     clearIconArea();
     int iconW = scale * 80;
