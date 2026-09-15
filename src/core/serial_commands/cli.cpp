@@ -5,6 +5,7 @@
 #include "gpio_commands.h"
 #include "interpreter_commands.h"
 #include "ir_commands.h"
+#include "led_commands.h"
 #include "power_commands.h"
 #include "rf_commands.h"
 #include "rfid_commands.h"
@@ -53,6 +54,9 @@ void SerialCli::setup() {
 #endif
 #ifdef HAS_SCREEN
     createScreenCommands(&_cli);
+#endif
+#ifdef HAS_RGB_LED
+    createLedCommands(&_cli);
 #endif
 #if defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN)
     createSoundCommands(&_cli);

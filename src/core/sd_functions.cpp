@@ -610,13 +610,11 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
         }
     }
 
-    Opt_Coord coord;
     String result = "";
     const short PAGE_JUMP_SIZE = (tftHeight - 20) / (LH * FM);
     bool reload = false;
-    bool redraw = true;
+    bool exit = false;
     int index = 0;
-    int maxFiles = 0;
     String Folder = rootPath;
     String PreFolder = rootPath;
     tft.drawPixel(0, 0, 0);
@@ -628,364 +626,254 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             return "";
         }
     }
-    bool exit = false;
-    // returnToMenu=true;  // make sure menu is redrawn when quitting in any point
-
+    std::vector<Option> sdOptions;
+    auto rebuildSdOptions = [&]() {
+        sdOptions.clear();
+        for (auto &f : fileList) {
+            String label = f.filename + (f.folder && !f.operation ? "/" : "");
+            Option opt(label, []() {});
+            // Matches the colors the old listFiles() drew: folders dimmer than files, "> Back" in
+            // ALCOLOR; plain files keep drawOptions()'s default (fgcolor) by leaving hasColor unset.
+            if (f.operation) {
+                opt.hasColor = true;
+                opt.color = ALCOLOR;
+            } else if (f.folder) {
+                opt.hasColor = true;
+                opt.color = getColorVariation(bruceConfig.priColor);
+            }
+            sdOptions.push_back(opt);
+        }
+    };
     readFs(fs, Folder, allowed_ext);
+    rebuildSdOptions();
 
-    maxFiles = fileList.size() - 1; // discount the >back operator
-    LongPress = false;
-    unsigned long LongPressTmp = millis();
     while (1) {
-#ifdef HAS_ENCODER
-        delay(4);
-#else
-        delay(10);
-#endif
-        // if(returnToMenu) break; // stop this loop and retur to the previous loop
-        if (exit) break; // stop this loop and retur to the previous loop
+        if (exit) break; // stop this loop and return to the previous loop
 
-        if (redraw) {
-            if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || reload) {
-                index = 0;
-                tft.fillScreen(bruceConfig.bgColor);
+        if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || reload) {
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
+            Serial.println("reload to read: " + Folder);
+            readFs(fs, Folder, allowed_ext);
+            rebuildSdOptions();
+            PreFolder = Folder;
+            if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index >= (int)sdOptions.size()) index = 0;
+            reload = false;
+        }
+        if (sdOptions.size() < 2) {
+            readFs(fs, Folder, allowed_ext);
+            rebuildSdOptions();
+        }
+        index = loopOptions(sdOptions, MENU_TYPE_REGULAR, "", index, false, true, PAGE_JUMP_SIZE, false);
+
+        if (index < 0) { // ESC
+        BACK_FOLDER:
+            if (Folder == "/") break;
+            Folder = Folder.substring(0, Folder.lastIndexOf('/'));
+            if (Folder == "") Folder = "/";
+            Serial.println("Going to folder: " + Folder);
+            index = 0;
+            continue;
+        }
+
+        bool isFolder = fileList[index].folder == true && fileList[index].operation == false;
+        bool isBack = fileList[index].operation == true;
+
+        if (filePicker && !isFolder && !isBack) {
+            result = Folder + (Folder == "/" ? "" : "/") + fileList[index].filename;
+            break;
+        }
+
+        LongPress = true;
+        unsigned long LongPressTmp = millis();
+        while (millis() - LongPressTmp < 500) { vTaskDelay(pdMS_TO_TICKS(10)); }
+        LongPress = false;
+        bool longPressDetected = check(SelPress);
+
+        if (isBack) {
+            if (longPressDetected) {
+                options = {
+                    {"New Folder", [=, &fs]() { createFolder(fs, Folder); }},
+                };
+                if (fileToCopy != "") options.push_back({"Paste", [=, &fs]() { pasteFile(fs, Folder); }});
+                options.push_back({"Close Menu", [&]() { yield(); }});
+                options.push_back({"Main Menu", [&]() { exit = true; }});
+                loopOptions(options);
                 tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                Serial.println("reload to read: " + Folder);
-                readFs(fs, Folder, allowed_ext);
-                PreFolder = Folder;
-                maxFiles = fileList.size() - 1;
-                if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index > maxFiles) index = 0;
-                reload = false;
-            }
-            if (fileList.size() < 2) readFs(fs, Folder, allowed_ext);
-
-            coord = listFiles(index, fileList);
-#if defined(HAS_TOUCH)
-            TouchFooter();
-#endif
-            redraw = false;
-        }
-        displayScrollingText(fileList[index].filename, coord);
-
-        // !PrevPress enables EscPress on 3Btn devices to be used in Serial Navigation
-        // This condition is important for StickCPlus, Core and other 3 Btn devices
-        if (EscPress && PrevPress) EscPress = false;
-        char pressed_letter;
-        if (check(EscPress)) goto BACK_FOLDER;
-
-#ifdef HAS_KEYBOARD
-        pressed_letter = checkLetterShortcutPress();
-
-        // check letter shortcuts
-        if (pressed_letter > 0) {
-            // Serial.println(pressed_letter);
-            if (tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                // already selected, go to the next
-                index += 1;
-                // check if index is still valid
-                if (index <= maxFiles && tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                    redraw = true;
-                    continue;
-                }
-            }
-            // else look again from the start
-            for (int i = 0; i < maxFiles; i++) {
-                if (tolower(fileList[i].filename.c_str()[0]) == pressed_letter) { // check if 1st char matches
-                    index = i;
-                    redraw = true;
-                    break; // quit on 1st match
-                }
-            }
-        }
-#endif
-
-#ifdef HAS_ENCODER
-        {
-            int32_t rotarySteps = drainRotarySteps();
-            if (rotarySteps != 0) {
-                check(PrevPress);
-                check(NextPress);
-                check(UpPress);
-                check(DownPress);
-                while (rotarySteps > 0) {
-                    if (index == 0) index = maxFiles;
-                    else if (index > 0) index--;
-                    rotarySteps--;
-                    redraw = true;
-                }
-                while (rotarySteps < 0) {
-                    if (index == maxFiles) index = 0;
-                    else index++;
-                    rotarySteps++;
-                    redraw = true;
-                }
-                vTaskDelay(4 / portTICK_PERIOD_MS);
-                PrevPress = false;
-                NextPress = false;
-                UpPress = false;
-                DownPress = false;
-            }
-        }
-#endif
-
-        if (check(PrevPress) || check(UpPress)) {
-            if (index == 0) index = maxFiles;
-            else if (index > 0) index--;
-            redraw = true;
-        }
-        /* DW Btn to next item */
-        if (check(NextPress) || check(DownPress)) {
-            if (index == maxFiles) index = 0;
-            else index++;
-            redraw = true;
-        }
-
-        if (check(NextPagePress)) {
-            index += PAGE_JUMP_SIZE;
-            if (index > maxFiles) index = maxFiles - 1; // check bounds
-            redraw = true;
-            continue;
-        }
-        if (check(PrevPagePress)) {
-            index -= PAGE_JUMP_SIZE;
-            if (index < 0) index = 0; // check bounds
-            redraw = true;
-            continue;
-        }
-        /* Select to install */
-        if (LongPress || SelPress) {
-            if (!LongPress) {
-                LongPress = true;
-                LongPressTmp = millis();
-            }
-            if (LongPress && millis() - LongPressTmp < 500) goto WAITING;
-            LongPress = false;
-
-            if (check(SelPress)) {
-                if (fileList[index].folder == true && fileList[index].operation == false) {
-                    options = {
-                        {"New Folder", [=]() { createFolder(fs, Folder); }                                 },
-                        {"Rename",
-                         [=]() {
-                             renameFile(fs, Folder + fileList[index].filename, fileList[index].filename);
-                         }                                                                                 },
-                        {"Delete",     [=]() { deleteFromSd(fs, Folder + "/" + fileList[index].filename); }},
-                        {"Close Menu", [&]() { yield(); }                                                  },
-                        {"Main Menu",  [&]() { exit = true; }                                              },
-                    };
-                    while (check(SelPress)) {
-                        vTaskDelay(pdMS_TO_TICKS(1));
-                    } // wait for SEL release to avoid repeated activations
-                    loopOptions(options);
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                    reload = true;
-                    redraw = true;
-                } else if (fileList[index].folder == false && fileList[index].operation == false) {
-                    goto Files;
-                } else {
-                    options = {
-                        {"New Folder", [=]() { createFolder(fs, Folder); }},
-                    };
-                    if (fileToCopy != "") options.push_back({"Paste", [=]() { pasteFile(fs, Folder); }});
-                    options.push_back({"Close Menu", [&]() { yield(); }});
-                    options.push_back({"Main Menu", [&]() { exit = true; }});
-                    while (check(SelPress)) {
-                        vTaskDelay(pdMS_TO_TICKS(1));
-                    } // wait for SEL release to avoid repeated activations
-                    loopOptions(options);
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                    reload = true;
-                    redraw = true;
-                }
+                reload = true;
             } else {
-            Files:
-                if (fileList[index].folder == true && fileList[index].operation == false) {
-                    Folder = Folder + (Folder == "/" ? "" : "/") +
-                             fileList[index].filename; // Folder=="/"? "":"/" +
-                    // Debug viewer
-                    Serial.println(Folder);
-                    while (check(SelPress)) {
-                        vTaskDelay(pdMS_TO_TICKS(1));
-                    } // wait for SEL release to avoid repeated activations
-                    redraw = true;
-                } else if (fileList[index].folder == false && fileList[index].operation == false) {
-                    // Save the file/folder info to Clear memory to allow other functions to work better
-                    String filepath = Folder + (Folder == "/" ? "" : "/") + fileList[index].filename; //
-                    String filename = fileList[index].filename;
-                    // Debug viewer
-                    Serial.println(filepath + " --> " + filename);
-                    fileList.clear(); // Clear memory to allow other functions to work better
+                goto BACK_FOLDER;
+            }
+        } else if (isFolder) {
+            if (longPressDetected) {
+                options = {
+                    {"New Folder", [=, &fs]() { createFolder(fs, Folder); }},
+                    {"Rename",
+                     [=, &fs]() {
+                         renameFile(fs, Folder + fileList[index].filename, fileList[index].filename);
+                     }},
+                    {"Delete", [=, &fs]() { deleteFromSd(fs, Folder + "/" + fileList[index].filename); }},
+                    {"Close Menu", [&]() { yield(); }},
+                    {"Main Menu", [&]() { exit = true; }},
+                };
+                loopOptions(options);
+                tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
+                reload = true;
+            } else {
+                Folder = Folder + (Folder == "/" ? "" : "/") + fileList[index].filename;
+                Serial.println(Folder);
+                index = 0;
+            }
+        } else {
+            String filepath = Folder + (Folder == "/" ? "" : "/") + fileList[index].filename;
+            String filename = fileList[index].filename;
+            Serial.println(filepath + " --> " + filename);
+            fileList.clear();  // Clear memory to allow other functions to work better
+            sdOptions.clear(); // its parallel display list too
 
-                    options = {
-                        {"View File",  [=, &fs]() { viewFile(fs, filepath); }            },
-                        {"File Info",  [=, &fs]() { fileInfo(fs, filepath); }            },
-                        {"Rename",     [=, &fs]() { renameFile(fs, filepath, filename); }},
-                        {"Copy",       [=, &fs]() { copyFile(fs, filepath); }            },
-                        {"Delete",     [=, &fs]() { deleteFromSd(fs, filepath); }        },
-                        {"New Folder", [=, &fs]() { createFolder(fs, Folder); }          },
-                    };
-                    if (fileToCopy != "") options.push_back({"Paste", [=, &fs]() { pasteFile(fs, Folder); }});
-                    if (&fs == &SD)
-                        options.push_back({"Copy->LittleFS", [=]() { copyToFs(SD, LittleFS, filepath); }});
-                    if (&fs == &LittleFS && sdcardMounted)
-                        options.push_back({"Copy->SD", [=]() { copyToFs(LittleFS, SD, filepath); }});
+            options = {
+                {"View File",  [=, &fs]() { viewFile(fs, filepath); }            },
+                {"File Info",  [=, &fs]() { fileInfo(fs, filepath); }            },
+                {"Rename",     [=, &fs]() { renameFile(fs, filepath, filename); }},
+                {"Copy",       [=, &fs]() { copyFile(fs, filepath); }            },
+                {"Delete",     [=, &fs]() { deleteFromSd(fs, filepath); }        },
+                {"New Folder", [=, &fs]() { createFolder(fs, Folder); }          },
+            };
+            if (fileToCopy != "") options.push_back({"Paste", [=, &fs]() { pasteFile(fs, Folder); }});
+            if (&fs == &SD)
+                options.push_back({"Copy->LittleFS", [=]() { copyToFs(SD, LittleFS, filepath); }});
+            if (&fs == &LittleFS && sdcardMounted)
+                options.push_back({"Copy->SD", [=]() { copyToFs(LittleFS, SD, filepath); }});
 
-                    // custom file formats commands added in front
-                    if (filepath.endsWith(".jpg") || filepath.endsWith(".gif") || filepath.endsWith(".bmp") ||
-                        filepath.endsWith(".png"))
-                        options.insert(options.begin(), {"View Image", [&]() {
-                                                             drawImg(fs, filepath, 0, 0, true, -1);
-                                                             delay(750);
-                                                             while (!check(AnyKeyPress))
-                                                                 vTaskDelay(10 / portTICK_PERIOD_MS);
-                                                         }});
-                    if (filepath.endsWith(".ir")) {
-                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
-                                                             delay(200);
-                                                             chooseCmdIrFile(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
-                                                             delay(200);
-                                                             txIrFile(&fs, filepath);
-                                                         }});
-                    }
-                    if (filepath.endsWith(".sub"))
-                        options.insert(options.begin(), {"Subghz Tx", [&]() {
-                                                             delay(200);
-                                                             RfCodes data{};
+            // custom file formats commands added in front
+            if (filepath.endsWith(".jpg") || filepath.endsWith(".gif") || filepath.endsWith(".bmp") ||
+                filepath.endsWith(".png"))
+                options.insert(options.begin(), {"View Image", [&]() {
+                                                     drawImg(fs, filepath, 0, 0, true, -1);
+                                                     delay(750);
+                                                     while (!check(AnyKeyPress))
+                                                         vTaskDelay(10 / portTICK_PERIOD_MS);
+                                                 }});
+            if (filepath.endsWith(".ir")) {
+                options.insert(options.begin(), {"IR Choose cmd", [&]() {
+                                                     delay(200);
+                                                     chooseCmdIrFile(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
+                                                     delay(200);
+                                                     txIrFile(&fs, filepath);
+                                                 }});
+            }
+            if (filepath.endsWith(".sub"))
+                options.insert(options.begin(), {"Subghz Tx", [&]() {
+                                                     delay(200);
+                                                     RfCodes data{};
 
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                 txSubFile(data);
-                                                         }});
-                    if (filepath.endsWith(".csv")) {
-                        options.insert(options.begin(), {"Wigle Upload", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"Wigle Up All", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload_all(&fs, Folder);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Upload", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Up All", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload_all(&fs, Folder);
-                                                         }});
-                    }
+                                                     if (readSubFile(&fs, filepath, data)) txSubFile(data);
+                                                 }});
+            if (filepath.endsWith(".csv")) {
+                options.insert(options.begin(), {"Wigle Upload", [&]() {
+                                                     delay(200);
+                                                     Wigle wigle;
+                                                     wigle.upload(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"Wigle Up All", [&]() {
+                                                     delay(200);
+                                                     Wigle wigle;
+                                                     wigle.upload_all(&fs, Folder);
+                                                 }});
+                options.insert(options.begin(), {"WDG Upload", [&]() {
+                                                     delay(200);
+                                                     WDGoWars wdg;
+                                                     wdg.upload(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"WDG Up All", [&]() {
+                                                     delay(200);
+                                                     WDGoWars wdg;
+                                                     wdg.upload_all(&fs, Folder);
+                                                 }});
+            }
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-                    if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
-                        options.insert(options.begin(), {"JS Script Run", [&]() {
-                                                             delay(200);
-                                                             run_bjs_script_headless(fs, filepath);
-                                                             exit = true;
-                                                         }});
-                    }
+            if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
+                options.insert(options.begin(), {"JS Script Run", [&]() {
+                                                     delay(200);
+                                                     run_bjs_script_headless(fs, filepath);
+                                                     exit = true;
+                                                 }});
+            }
 #endif
 #if defined(USB_as_HID)
-                    if (filepath.endsWith(".txt")) {
-                        options.push_back({"BadUSB Run", [&]() {
-                                               ducky_startKb(hid_usb, false);
-                                               key_input(fs, filepath, hid_usb);
-                                               delete hid_usb;
-                                               hid_usb = nullptr;
-                                               // TODO: reinit serial port
-                                           }});
-                        options.push_back({"USB HID Type", [&]() {
-                                               String t = readSmallFile(fs, filepath);
-                                               displayRedStripe("Typing");
-                                               key_input_from_string(t);
-                                           }});
-                    }
-                    if (filepath.endsWith(".enc")) { // encrypted files
-                        options.insert(
-                            options.begin(), {"Decrypt+Type", [&]() {
-                                                  String plaintext = readDecryptedFile(fs, filepath);
-                                                  if (plaintext.length() == 0)
-                                                      return displayError(
-                                                          "Decryption failed", true
-                                                      ); // file is too big or cannot read, or cancelled
-                                                  // else
-                                                  plaintext.trim(); // remove newlines
-                                                  key_input_from_string(plaintext);
-                                              }}
-                        );
-                    }
-#endif
-                    if (filepath.endsWith(".enc")) { // encrypted files
-                        options.insert(
-                            options.begin(), {"Decrypt+Show", [&]() {
-                                                  String plaintext = readDecryptedFile(fs, filepath);
-                                                  delay(200);
-                                                  if (plaintext.length() == 0)
-                                                      return displayError("Decryption failed", true);
-                                                  plaintext.trim(); // remove newlines
-                                                                    // if(plaintext.length()<..)
-                                                  displaySuccess(plaintext, true);
-                                                  // else
-                                                  // TODO: show in the text viewer
-                                              }}
-                        );
-                    }
-#if defined(HAS_NS4168_SPKR)
-                    if (isAudioFile(filepath))
-                        options.insert(options.begin(), {"Play Audio", [&]() {
-                                                             delay(200);
-                                                             check(AnyKeyPress);
-                                                             // playAudioFile(&fs, filepath);
-                                                             musicPlayerUI(&fs, filepath);
-                                                         }});
-#endif
-                    // generate qr codes from small files (<3K)
-                    size_t filesize = getFileSize(fs, filepath);
-                    // Serial.println(filesize);
-                    if (filesize < SAFE_STACK_BUFFER_SIZE && filesize > 0) {
-                        options.push_back({"QR code", [&]() {
-                                               delay(200);
-                                               qrcode_display(readSmallFile(fs, filepath));
-                                           }});
-                        options.push_back({"CRC32", [&]() {
-                                               delay(200);
-                                               displaySuccess(crc32File(fs, filepath), true);
-                                           }});
-                        options.push_back({"MD5", [&]() {
-                                               delay(200);
-                                               displaySuccess(md5File(fs, filepath), true);
-                                           }});
-                    }
-                    options.push_back({"Close Menu", [&]() { yield(); }});
-                    options.push_back({"Main Menu", [&]() { exit = true; }});
-                    if (!filePicker) {
-                        while (check(SelPress)) {
-                            vTaskDelay(pdMS_TO_TICKS(1));
-                        } // wait for SEL release to avoid repeated activations
-                        loopOptions(options);
-                    } else {
-                        result = filepath;
-                        break;
-                    }
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                    reload = true;
-                    redraw = true;
-                } else {
-                BACK_FOLDER:
-                    if (Folder == "/") break;
-                    Folder = Folder.substring(0, Folder.lastIndexOf('/'));
-                    if (Folder == "") Folder = "/";
-                    Serial.println("Going to folder: " + Folder);
-                    index = 0;
-                    redraw = true;
-                }
-                redraw = true;
+            if (filepath.endsWith(".txt")) {
+                options.push_back({"BadUSB Run", [&]() {
+                                       ducky_startKb(hid_usb, false);
+                                       key_input(fs, filepath, hid_usb);
+                                       delete hid_usb;
+                                       hid_usb = nullptr;
+                                       // TODO: reinit serial port
+                                   }});
+                options.push_back({"USB HID Type", [&]() {
+                                       String t = readSmallFile(fs, filepath);
+                                       displayRedStripe("Typing");
+                                       key_input_from_string(t);
+                                   }});
             }
-        WAITING:
-            delay(10);
+            if (filepath.endsWith(".enc")) { // encrypted files
+                options.insert(options.begin(), {"Decrypt+Type", [&]() {
+                                                     String plaintext = readDecryptedFile(fs, filepath);
+                                                     if (plaintext.length() == 0)
+                                                         return displayError(
+                                                             "Decryption failed", true
+                                                         ); // file is too big or cannot read, or cancelled
+                                                     // else
+                                                     plaintext.trim(); // remove newlines
+                                                     key_input_from_string(plaintext);
+                                                 }});
+            }
+#endif
+            if (filepath.endsWith(".enc")) { // encrypted files
+                options.insert(options.begin(), {"Decrypt+Show", [&]() {
+                                                     String plaintext = readDecryptedFile(fs, filepath);
+                                                     delay(200);
+                                                     if (plaintext.length() == 0)
+                                                         return displayError("Decryption failed", true);
+                                                     plaintext.trim(); // remove newlines
+                                                                       // if(plaintext.length()<..)
+                                                     displaySuccess(plaintext, true);
+                                                     // else
+                                                     // TODO: show in the text viewer
+                                                 }});
+            }
+#if defined(HAS_NS4168_SPKR)
+            if (isAudioFile(filepath))
+                options.insert(options.begin(), {"Play Audio", [&]() {
+                                                     delay(200);
+                                                     check(AnyKeyPress);
+                                                     // playAudioFile(&fs, filepath);
+                                                     musicPlayerUI(&fs, filepath);
+                                                 }});
+#endif
+            // generate qr codes from small files (<3K)
+            size_t filesize = getFileSize(fs, filepath);
+            // Serial.println(filesize);
+            if (filesize < SAFE_STACK_BUFFER_SIZE && filesize > 0) {
+                options.push_back({"QR code", [&]() {
+                                       delay(200);
+                                       qrcode_display(readSmallFile(fs, filepath));
+                                   }});
+                options.push_back({"CRC32", [&]() {
+                                       delay(200);
+                                       displaySuccess(crc32File(fs, filepath), true);
+                                   }});
+                options.push_back({"MD5", [&]() {
+                                       delay(200);
+                                       displaySuccess(md5File(fs, filepath), true);
+                                   }});
+            }
+            options.push_back({"Close Menu", [&]() { yield(); }});
+            options.push_back({"Main Menu", [&]() { exit = true; }});
+            loopOptions(options);
+            tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
+            reload = true;
         }
     }
     fileList.clear();
@@ -1007,7 +895,6 @@ void viewFile(FS &fs, const String &filepath) {
 
     area.show();
 }
-
 /*********************************************************************
 **  Function: checkLittleFsSize
 **  Check if there are more then 4096 bytes available for storage

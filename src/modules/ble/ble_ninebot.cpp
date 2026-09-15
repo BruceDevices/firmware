@@ -96,7 +96,7 @@ void BLENinebot::clientDisconnect() {
 }
 
 void BLENinebot::setup() {
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     NimBLEDevice::init("");

@@ -183,8 +183,20 @@ uint32_t helpCallback(cmd *c) {
     serialDevice->println("  say <text>   - Text-To-Speech (speaker required).");
 
     serialDevice->println("\nUI Commands:");
-    serialDevice->println("  led <r/g/b> <0-255>    - Change the UI main color.");
-    serialDevice->println("  clock                 - Show the clock UI.");
+    serialDevice->println("  screen color rgb <r> <g> <b>  - Change the UI main color.");
+    serialDevice->println("  screen color hex <RRGGBB>     - Change the UI main color.");
+    serialDevice->println("  screen brightness <0-255>     - Change the screen backlight.");
+    serialDevice->println("  clock                         - Show the clock UI.");
+
+#ifdef HAS_RGB_LED
+    serialDevice->println("\nRGB LED Commands:");
+    serialDevice->println("  led <r/g/b> <0-255>      - Change a single channel of the RGB LED.");
+    serialDevice->println("  led rgb <r> <g> <b>      - Change the RGB LED color.");
+    serialDevice->println("  led hex <RRGGBB>         - Change the RGB LED color.");
+    serialDevice->println("  led brightness <0-100>   - Change the RGB LED brightness.");
+    serialDevice->println("  led effect <0-9>         - Change the RGB LED effect (0 = solid color).");
+    serialDevice->println("  led off                  - Turn the RGB LED off.");
+#endif
 
     serialDevice->println("\nPower Management:");
     serialDevice->println("  power <off/reboot/sleep>  - General power management.");

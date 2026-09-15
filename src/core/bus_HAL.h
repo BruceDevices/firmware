@@ -28,6 +28,12 @@ TwoWire *getSysI2CBus();
 TwoWire *acquireI2CBus(int8_t sda, int8_t scl);
 TwoWire *acquireI2CBus();
 
+// Board-specific escape hatch for devices that need a non-hardware I2C transport (for example,
+// a software bus when the only hardware controller is reserved for sys_i2c). Most boards use the
+// weak defaults in bus_HAL.cpp.
+TwoWire *acquireBoardI2CBus(int8_t sda, int8_t scl);
+bool releaseBoardI2CBus(TwoWire *wire);
+
 // Ends the i2c_bus TwoWire instance started by acquireI2CBus(), unless it turned out to be the
 // same physical bus as sys_i2c (which must stay on).
 void releaseI2CBus();

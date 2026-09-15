@@ -239,6 +239,17 @@ bool initRfModule(String mode, float frequency) {
     if (!frequency) frequency = bruceConfigPins.rfFreq;
 
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+#ifdef CAP_CC1101_POWER_EN
+        // M5Stack Cap CC1101: POWER_EN gates the whole cap, and the cap's ST25R3916
+        // hangs off this same SPI bus, so park its CS high before we talk to the radio.
+        if (bruceConfigPins.CC1101_bus.cs == (gpio_num_t)CAP_CC1101_SS_PIN) {
+            pinMode(CAP_NFC_SS_PIN, OUTPUT);
+            digitalWrite(CAP_NFC_SS_PIN, HIGH);
+            pinMode(CAP_CC1101_POWER_EN, OUTPUT);
+            digitalWrite(CAP_CC1101_POWER_EN, HIGH);
+            vTaskDelay(10 / portTICK_PERIOD_MS); // cap DC-DC needs a moment
+        }
+#endif
         SPIClass *ccSpi = acquireSPIBus(
             bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
         );
@@ -412,6 +423,28 @@ void setMHZ(float frequency) {
             digitalWrite(CC1101_SW0_PIN, HIGH);
             antenna = 2;
             vTaskDelay(10 / portTICK_PERIOD_MS); // time to settle the antenna signal
+        }
+#endif
+#ifdef CAP_CC1101_SW0_PIN
+        // M5Stack Cap CC1101 antenna path: the SP3T switches are driven by RF_SW0 (a GPIO) and
+        // RF_SW1, which is the CC1101's own GDO2 pin - not routed to the ESP32, so it is forced
+        // high/low through IOCFG2. Written on every call because Init() resets IOCFG2.
+        // Truth table taken from M5's driver (uiflow libs/cap/cc1101.py); the docs' table lists
+        // different SW0/SW1 values for 315/433 MHz - if one band comes out deaf, swap them here.
+        // also: only fires through this setMHZ() wrapper. rf_jammer's direct
+        // ELECHOUSE_cc1101.setMHZ() hops bypass it, so hopping across a band boundary keeps the
+        // old antenna path. Route those through the wrapper if cross-band jamming is ever needed.
+        if (bruceConfigPins.CC1101_bus.cs == (gpio_num_t)CAP_CC1101_SS_PIN) {
+            static uint8_t capBand = 200; // 200 = unknown, forces a settle delay on first use
+            uint8_t band = frequency < 374 ? 0 : (frequency < 650.5 ? 1 : 2); // 315 / 433 / 868-915
+            pinMode(CAP_CC1101_SW0_PIN, OUTPUT);
+            digitalWrite(CAP_CC1101_SW0_PIN, band == 0 ? LOW : HIGH);
+            // 0x2F = GDO2 forced low, 0x6F = same with the output inverted, i.e. forced high.
+            ELECHOUSE_cc1101.SpiWriteReg(CC1101_IOCFG2, band == 1 ? 0x2F : 0x6F);
+            if (band != capBand) {
+                capBand = band;
+                vTaskDelay(10 / portTICK_PERIOD_MS); // time to settle the antenna signal
+            }
         }
 #endif
         const bool preciseCalibration = (bruceConfigPins.rfFxdFreq);

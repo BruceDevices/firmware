@@ -3,7 +3,7 @@
 ScrollableTextArea::ScrollableTextArea(const String &title)
     : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
       _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
-      _height(tftHeight - 4 - BORDER_PAD_X - BORDER_PAD_Y) {
+      _height(tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - BORDER_PAD_X - BORDER_PAD_Y) {
     drawMainBorder();
 
     if (!_title.isEmpty()) {

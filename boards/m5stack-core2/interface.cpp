@@ -50,7 +50,7 @@ void InputHandler(void) {
     if (t.isPressed() || t.isHolding()) {
         tm = millis();
         if (bruceConfigPins.rotation == 3) {
-            t.y = (tftHeight + 20) - t.y;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
             t.x = tftWidth - t.x;
         }
         if (bruceConfigPins.rotation == 0) {
@@ -61,12 +61,13 @@ void InputHandler(void) {
         if (bruceConfigPins.rotation == 2) {
             int tmp = t.x;
             t.x = t.y;
-            t.y = (tftHeight + 20) - tmp;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
         }
         if (!wakeUpScreen()) AnyKeyPress = true;
         else return;
 
         // Touch point global variable
+        Serial.printf("Touch at x: %d  y: %d\n", t.x, t.y);
         touchPoint.x = t.x;
         touchPoint.y = t.y;
         touchPoint.pressed = true;

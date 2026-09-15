@@ -109,22 +109,30 @@ struct Option {
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
 
+    bool hasColor = false;
+    uint16_t color = 0;
+
+    // On-screen bounding box of this item in its most recent draw, for tap-to-select hit-testing
+    // (see loopOptions()). Populated by drawOptions()/drawGridCell(); zero/unused otherwise.
+    uint16_t x = 0, y = 0, w = 0, h = 0;
+    bool contain(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
+
     Option(
         const char *lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,
-        bool en = true
+        bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr),
-          hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 
     Option(
         const String &lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) =
             nullptr, // hover lambda returns true if it already handled rendering
-        void *ptr = nullptr, bool hvrd = false, bool en = true
+        void *ptr = nullptr, bool hvrd = false, bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr),
-          hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!
@@ -172,6 +180,10 @@ struct TouchPoint {
 };
 
 extern TouchPoint touchPoint;
+// true (default): touchHeatMap() maps taps anywhere on screen into zone-based Prev/Sel/Next/Esc/Up/Down,
+// same as physical buttons. A screen that wants to hit-test raw taps itself (e.g. tap-to-select in
+// loopOptions) sets this false while it runs; the TouchFooter band keeps working either way.
+extern volatile bool touchZoneOutsideFooterEnabled;
 extern keyStroke KeyStroke;
 extern std::vector<Option> options;
 

@@ -29,6 +29,7 @@
  */
 
 #include "ble_spam.h"
+#include "ble_p4_compat.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/radio_mem.h"

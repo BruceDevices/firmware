@@ -56,6 +56,7 @@ volatile int EncoderLedChange = 0;
 #endif
 
 TouchPoint touchPoint;
+volatile bool touchZoneOutsideFooterEnabled = true;
 
 keyStroke KeyStroke;
 
@@ -156,7 +157,8 @@ tft_sprite draw = tft_sprite(&tft);
 volatile int tftWidth = TFT_HEIGHT;
 #ifdef HAS_TOUCH
 volatile int tftHeight =
-    TFT_WIDTH - 20; // 20px to draw the TouchFooter(), were the btns are being read in touch devices.
+    TFT_WIDTH - TOUCH_FOOTER_HEIGHT; // reserved to draw the TouchFooter(), were the btns are being read in
+                                      // touch devices.
 #else
 volatile int tftHeight = TFT_WIDTH;
 #endif
@@ -220,6 +222,14 @@ void _pre_storage_gpio() __attribute__((weak));
 void _pre_storage_gpio() {}
 
 /*********************************************************************
+ **  Function: _late_setup_gpio()
+ **  Sets up a weak (empty) function for board fixes that must run
+ **  Runs right before animation
+ *********************************************************************/
+void _late_setup_gpio() __attribute__((weak));
+void _late_setup_gpio() {}
+
+/*********************************************************************
  **  Function: setup_gpio
  **  Setup GPIO pins
  *********************************************************************/
@@ -249,7 +259,7 @@ void begin_tft() {
     tft.setRotation(bruceConfigPins.rotation);
     tftWidth = tft.width();
 #ifdef HAS_TOUCH
-    tftHeight = tft.height() - 20;
+    tftHeight = tft.height() - TOUCH_FOOTER_HEIGHT;
 #else
     tftHeight = tft.height();
 #endif
@@ -546,6 +556,7 @@ void setup() {
     );
 #endif
     // #endif
+    _late_setup_gpio();
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {

@@ -502,10 +502,10 @@ String generalKeyboard(
     // so these do not change
     /*---------------------------------------------------------------------------------------*/
 
-    const int PAD = 2;
-    const int KBLH = 6 + LH * FM;
+    const int PAD = FP + 1;
+    const int KBLH = (BORDER_OFFSET_FROM_SCREEN_EDGE + 1) + LH * FM;
     const int counter_height = LH * FP;
-    const int top_button_text_y = 2 + (KBLH - LH * FM) / 2;
+    const int top_button_text_y = (FP + 1) + (KBLH - LH * FM) / 2;
     const int counter_y = KBLH + 4;
     const int textbox_y = KBLH + counter_height + 5;
     const int textbox_text_y = textbox_y + 2;
@@ -684,13 +684,15 @@ String generalKeyboard(
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
             String chars_counter = String(current_text.length()) + "/" + String(max_size);
             tft.fillRect(
-                tftWidth - ((chars_counter.length() * LW * FP) + 20),
+                tftWidth - ((chars_counter.length() * LW * FP) + 2 * BORDER_PAD_X),
                 counter_y,
-                (chars_counter.length() * LW * FP) + 20,
+                (chars_counter.length() * LW * FP) + 2 * BORDER_PAD_X,
                 LH * FP,
                 bruceConfig.bgColor
             ); // clear previous text
-            tft.drawString(chars_counter, tftWidth - ((chars_counter.length() * LW * FP) + 10), counter_y);
+            tft.drawString(
+                chars_counter, tftWidth - ((chars_counter.length() * LW * FP) + BORDER_PAD_X), counter_y
+            );
 
             // Prints the title of the textbox, it should report what the user has to write in it
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), 0x5AAB);
@@ -782,14 +784,14 @@ String generalKeyboard(
             tft.setTextSize(FP);
             if (current_text.length() > (max_FP_size)) {
                 cursor_y = textbox_text_y + LH * FP;
-                cursor_x = 5 + (current_text.length() - max_FP_size) * LW * FP;
+                cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + (current_text.length() - max_FP_size) * LW * FP;
             } else {
                 cursor_y = textbox_text_y;
-                cursor_x = 5 + current_text.length() * LW * FP;
+                cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + current_text.length() * LW * FP;
             }
         } else {
             cursor_y = textbox_text_y;
-            cursor_x = 5 + current_text.length() * LW * FM;
+            cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + current_text.length() * LW * FM;
         }
         // Prioritize Serial Input for navigation
         if (SerialCmdPress) { // only for Remote Control, if no type of input was detected on device

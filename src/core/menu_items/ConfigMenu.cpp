@@ -66,6 +66,7 @@ void ConfigMenu::displayUIMenu() {
             {"Brightness",  [this]() { setBrightnessMenu(); }               },
             {"Dim Time",    [this]() { setDimmerTimeMenu(); }               },
             {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
+            {"Menu Layout", [this]() { setMainMenuStyleMenu(); }            },
             {"UI Color",    [this]() { setUIColor(); }                      },
             {"UI Theme",    [this]() { setTheme(); }                        },
             {"Back",        []() {}                                         },
