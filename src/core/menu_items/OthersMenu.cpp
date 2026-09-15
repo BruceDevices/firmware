@@ -6,6 +6,7 @@
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/clicker.h"
 #include "modules/others/ibutton.h"
+#include "modules/others/BruceLM/bruce_lm.h"
 #include "modules/others/mic.h"
 #include "modules/others/qrcode_menu.h"
 #include "modules/others/tururururu.h"
@@ -16,6 +17,7 @@ void OthersMenu::optionsMenu() {
     options = {
         {"QRCodes",      qrcode_menu                  },
         {"Megalodon",    shark_setup                  },
+        {"BruceLM",      bruceLM_setup                },
 
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
         {"Microphone",   [this]() { micMenu(); }      }, //@deveclipse
