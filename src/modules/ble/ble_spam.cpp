@@ -623,7 +623,7 @@ struct BleSpamAttackOption {
 
 struct BleSpamConfig {
     uint32_t adv_ms = 5;
-    uint32_t gap_ms = 5;
+    uint32_t gap_ms = 0;
     BleSpamTxPower tx_power = BLE_SPAM_TX_MAX;
     BleSpamMacRandMode mac_rand_mode = BLE_SPAM_MAC_EVERY_PACKET;
 };
@@ -815,8 +815,13 @@ static uint32_t bleSpamMacRandDivisor(BleSpamMacRandMode mode) {
     }
 }
 
-static uint32_t bleSpamClampMs(uint32_t ms) {
-    if (ms < 1) return 1;
+static uint32_t bleSpamClampAdvMs(uint32_t ms) {
+    if (ms < 5) return 5;
+    if (ms > 10000) return 10000;
+    return ms;
+}
+
+static uint32_t bleSpamClampGapMs(uint32_t ms) {
     if (ms > 10000) return 10000;
     return ms;
 }
@@ -831,6 +836,23 @@ static BleSpamMacRandMode bleSpamClampMacMode(uint8_t value) {
     return static_cast<BleSpamMacRandMode>(value);
 }
 
+// Next press decrements the tx power index (toward MAX), Prev increments it
+// (toward LOW) — matches the existing mod-4 direction, just clamped at the
+// ends instead of wrapping around like adv/gap ms already don't wrap.
+static BleSpamTxPower bleSpamAdjustTxPower(BleSpamTxPower value, int direction) {
+    int next = static_cast<int>(value) - direction;
+    if (next < 0) next = 0;
+    if (next > BLE_SPAM_TX_LOW) next = BLE_SPAM_TX_LOW;
+    return static_cast<BleSpamTxPower>(next);
+}
+
+static BleSpamMacRandMode bleSpamAdjustMacMode(BleSpamMacRandMode value, int direction) {
+    int next = static_cast<int>(value) + direction;
+    if (next < 0) next = 0;
+    if (next > BLE_SPAM_MAC_EVERY_50) next = BLE_SPAM_MAC_EVERY_50;
+    return static_cast<BleSpamMacRandMode>(next);
+}
+
 static BleSpamConfig bleSpamLoadConfig() {
     BleSpamConfig config;
 #if defined(BLE_SPAM_HAS_PREFERENCES)
@@ -839,7 +861,7 @@ static BleSpamConfig bleSpamLoadConfig() {
         uint8_t tx_init = prefs.getUChar("tx_init", 0);
         if (tx_init == 0) {
             config.adv_ms = 5;
-            config.gap_ms = 5;
+            config.gap_ms = 0;
             config.mac_rand_mode = BLE_SPAM_MAC_EVERY_PACKET;
             config.tx_power = BLE_SPAM_TX_MAX;
             prefs.putUInt("adv_ms", config.adv_ms);
@@ -848,8 +870,8 @@ static BleSpamConfig bleSpamLoadConfig() {
             prefs.putUChar("tx_power", static_cast<uint8_t>(config.tx_power));
             prefs.putUChar("tx_init", 1);
         } else {
-            config.adv_ms = bleSpamClampMs(prefs.getUInt("adv_ms", config.adv_ms));
-            config.gap_ms = bleSpamClampMs(prefs.getUInt("gap_ms", config.gap_ms));
+            config.adv_ms = bleSpamClampAdvMs(prefs.getUInt("adv_ms", config.adv_ms));
+            config.gap_ms = bleSpamClampGapMs(prefs.getUInt("gap_ms", config.gap_ms));
             config.mac_rand_mode = bleSpamClampMacMode(prefs.getUChar("mac_rand", config.mac_rand_mode));
             config.tx_power = bleSpamClampTxPower(prefs.getUChar("tx_power", config.tx_power));
         }
@@ -863,8 +885,8 @@ static void bleSpamSaveConfig(const BleSpamConfig &config) {
 #if defined(BLE_SPAM_HAS_PREFERENCES)
     Preferences prefs;
     if (prefs.begin("ble_spam", false)) {
-        prefs.putUInt("adv_ms", bleSpamClampMs(config.adv_ms));
-        prefs.putUInt("gap_ms", bleSpamClampMs(config.gap_ms));
+        prefs.putUInt("adv_ms", bleSpamClampAdvMs(config.adv_ms));
+        prefs.putUInt("gap_ms", bleSpamClampGapMs(config.gap_ms));
         prefs.putUChar("tx_power", static_cast<uint8_t>(config.tx_power));
         prefs.putUChar("mac_rand", static_cast<uint8_t>(config.mac_rand_mode));
         prefs.putUChar("tx_init", 1);
@@ -874,21 +896,27 @@ static void bleSpamSaveConfig(const BleSpamConfig &config) {
 }
 
 static uint32_t bleSpamMsStep(uint32_t ms) {
-    // <= (not <) so stepping away from 20 in either direction uses step 1 —
-    // otherwise decrementing from exactly 20 used the 10-199 bracket's step
-    // (10) and jumped straight to 10, skipping 11-19, while incrementing from
-    // 19 stayed on step 1. Keeps the whole 10-20 range at increments of 1.
-    if (ms <= 20) return 1;
+    if (ms < 20) return 1;
     if (ms < 200) return 10;
     if (ms < 1000) return 50;
     return 500;
 }
 
-static uint32_t bleSpamAdjustMs(uint32_t ms, int direction) {
+// Always lands on round multiples of the current bracket's step (20, 30, 40,
+// ... 200, 250, ... 1000, 1500, ...) instead of drifting by whatever offset
+// the value happened to start at. Incrementing/decrementing use the step of
+// the bracket on the far side of the crossing so 19->20 and 20->19 both move
+// by 1, while 20->30 and 30->20 both move by 10, etc.
+static uint32_t bleSpamAdjustMs(uint32_t ms, int direction, uint32_t minMs) {
     if (direction == 0) return ms;
-    uint32_t step = bleSpamMsStep(ms);
-    int32_t next = static_cast<int32_t>(ms) + direction * static_cast<int32_t>(step);
-    if (next < 1) next = 1;
+    uint32_t step = direction > 0 ? bleSpamMsStep(ms) : bleSpamMsStep(ms > 0 ? ms - 1 : 0);
+    int64_t next = static_cast<int64_t>(ms) + direction * static_cast<int64_t>(step);
+    if (direction > 0) {
+        next = (next / static_cast<int64_t>(step)) * static_cast<int64_t>(step);
+    } else {
+        next = ((next + static_cast<int64_t>(step) - 1) / static_cast<int64_t>(step)) * static_cast<int64_t>(step);
+    }
+    if (next < static_cast<int64_t>(minMs)) next = static_cast<int64_t>(minMs);
     if (next > 10000) next = 10000;
     return static_cast<uint32_t>(next);
 }
@@ -1795,31 +1823,31 @@ bleSpamConfigScreen(const BleSpamSelection &selection, BleSpamConfig &config, bo
         if (editState.editing) {
             if (check(NextPress)) {
                 if (editState.edit_row == 0) {
-                    config.adv_ms = bleSpamAdjustMs(config.adv_ms, 1);
+                    config.adv_ms = bleSpamAdjustMs(config.adv_ms, 1, 5);
                     configChanged = true;
                 } else if (editState.edit_row == 1) {
-                    config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1);
+                    config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1, 0);
                     configChanged = true;
                 } else if (editState.edit_row == 2) {
-                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
+                    config.tx_power = bleSpamAdjustTxPower(config.tx_power, 1);
                     configChanged = true;
                 } else if (editState.edit_row == 3) {
-                    config.mac_rand_mode = static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 1) % 8);
+                    config.mac_rand_mode = bleSpamAdjustMacMode(config.mac_rand_mode, 1);
                     configChanged = true;
                 }
                 redrawRows = true;
             } else if (check(PrevPress)) {
                 if (editState.edit_row == 0) {
-                    config.adv_ms = bleSpamAdjustMs(config.adv_ms, -1);
+                    config.adv_ms = bleSpamAdjustMs(config.adv_ms, -1, 5);
                     configChanged = true;
                 } else if (editState.edit_row == 1) {
-                    config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1);
+                    config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1, 0);
                     configChanged = true;
                 } else if (editState.edit_row == 2) {
-                    config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
+                    config.tx_power = bleSpamAdjustTxPower(config.tx_power, -1);
                     configChanged = true;
                 } else if (editState.edit_row == 3) {
-                    config.mac_rand_mode = static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 7) % 8);
+                    config.mac_rand_mode = bleSpamAdjustMacMode(config.mac_rand_mode, -1);
                     configChanged = true;
                 }
                 redrawRows = true;
@@ -2036,27 +2064,29 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
             if (editState.editing) {
                 if (check(NextPress)) {
                     if (editState.edit_row == 0) {
-                        config.adv_ms = bleSpamAdjustMs(config.adv_ms, 1);
+                        config.adv_ms = bleSpamAdjustMs(config.adv_ms, 1, 5);
                     } else if (editState.edit_row == 1) {
-                        config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1);
+                        config.gap_ms = bleSpamAdjustMs(config.gap_ms, 1, 0);
                     } else if (editState.edit_row == 2) {
-                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 3) % 4);
+                        config.tx_power = bleSpamAdjustTxPower(config.tx_power, 1);
+                        bleSpamApplyTxPower(config.tx_power);
+                        runState.applied_power = config.tx_power;
                     } else if (editState.edit_row == 3) {
-                        config.mac_rand_mode =
-                            static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 1) % 8);
+                        config.mac_rand_mode = bleSpamAdjustMacMode(config.mac_rand_mode, 1);
                         runState.mac_initialized = false;
                     }
                     configDirty = true;
                 } else if (check(PrevPress)) {
                     if (editState.edit_row == 0) {
-                        config.adv_ms = bleSpamAdjustMs(config.adv_ms, -1);
+                        config.adv_ms = bleSpamAdjustMs(config.adv_ms, -1, 5);
                     } else if (editState.edit_row == 1) {
-                        config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1);
+                        config.gap_ms = bleSpamAdjustMs(config.gap_ms, -1, 0);
                     } else if (editState.edit_row == 2) {
-                        config.tx_power = static_cast<BleSpamTxPower>((config.tx_power + 1) % 4);
+                        config.tx_power = bleSpamAdjustTxPower(config.tx_power, -1);
+                        bleSpamApplyTxPower(config.tx_power);
+                        runState.applied_power = config.tx_power;
                     } else if (editState.edit_row == 3) {
-                        config.mac_rand_mode =
-                            static_cast<BleSpamMacRandMode>((config.mac_rand_mode + 7) % 8);
+                        config.mac_rand_mode = bleSpamAdjustMacMode(config.mac_rand_mode, -1);
                         runState.mac_initialized = false;
                     }
                     configDirty = true;
