@@ -268,6 +268,7 @@ void boot_screen() {
     tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
     tft.setTextSize(FP);
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
+    tft.drawCentreString("mod by Fall", tftWidth / 2, 37, 1);
     tft.setTextSize(FM);
     tft.drawCentreString(
         "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1

