@@ -280,17 +280,27 @@ void EMVReader::read_afl(EMVCard *card, std::vector<uint8_t> *afl) {
                 Serial.println("PAN parsed with workaround");
                 return;
             } else {
-                memcpy(card->pan, container.data(), container.size()); // Copy data from TLV to struct
+                card->pan = (uint8_t *)malloc(container.size());
+                if (card->pan) {
+                    memcpy(card->pan, container.data(), container.size()); // Copy data from TLV to struct
+                    card->pan_len = container.size();
+                }
                 container.clear();
                 if (Tlv.GetValue("5F25", &container) != OK) { // Get ValidFrom date
                     parse_validfrom(&afl_content, card);
                     parse_validto(&afl_content, card);
                 } else {
-                    memcpy(card->validfrom, container.data(), container.size());
+                    card->validfrom = (uint8_t *)malloc(container.size());
+                    if (card->validfrom) {
+                        memcpy(card->validfrom, container.data(), container.size());
+                    }
                     if (Tlv.GetValue("5F24", &container) != OK) { // Get ValidTo date
                         parse_validto(&afl_content, card);
                     } else {
-                        memcpy(card->validto, container.data(), container.size());
+                        card->validto = (uint8_t *)malloc(container.size());
+                        if (card->validto) {
+                            memcpy(card->validto, container.data(), container.size());
+                        }
                     }
                 }
                 Serial.println("PAN parsed without workaround");
