@@ -1,7 +1,12 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "i2c_js.h"
 
+#include "core/bus_HAL.h"
 #include "helpers_js.h"
+
+// Bus acquired by i2c.begin() and reused by every other native_i2c_* call until the script
+// re-runs i2c.begin() with different pins (or a fresh interpreter run acquires it again).
+static TwoWire *jsI2CBus = nullptr;
 
 static void i2c_require_ready(JSContext *ctx) {
     JSValue global = JS_GetGlobalObject(ctx);
@@ -22,9 +27,9 @@ JSValue native_i2c_begin(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     if (sda < 0 || scl < 0) return JS_ThrowRangeError(ctx, "i2c.begin: pins must be >= 0");
     if (hz < 1000 || hz > 1000000) return JS_ThrowRangeError(ctx, "i2c.begin: hz must be 1k..1MHz");
 
-    Wire.begin(sda, scl, hz);
-    Wire.setClock(hz);
-    Wire.setTimeOut(50);
+    jsI2CBus = acquireI2CBus((int8_t)sda, (int8_t)scl);
+    jsI2CBus->setClock(hz);
+    jsI2CBus->setTimeOut(50);
 
     JSValue global = JS_GetGlobalObject(ctx);
     JS_SetPropertyStr(ctx, global, "\xffi2c_ready", JS_NewBool(true));
@@ -36,8 +41,8 @@ JSValue native_i2c_scan(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
     JSValue arr = JS_NewArray(ctx, 127);
     uint32_t idx = 0;
     for (uint8_t a = 1; a < 127; a++) {
-        Wire.beginTransmission(a);
-        if (Wire.endTransmission(true) == 0) { JS_SetPropertyUint32(ctx, arr, idx++, JS_NewInt32(ctx, a)); }
+        jsI2CBus->beginTransmission(a);
+        if (jsI2CBus->endTransmission(true) == 0) { JS_SetPropertyUint32(ctx, arr, idx++, JS_NewInt32(ctx, a)); }
     }
     return arr;
 }
@@ -67,9 +72,9 @@ JSValue native_i2c_write(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     bool sendStop = true;
     if (argc > 2) sendStop = JS_ToBool(ctx, argv[2]);
 
-    Wire.beginTransmission((uint8_t)addr);
-    Wire.write(buf, (size_t)len);
-    uint8_t err = Wire.endTransmission(sendStop);
+    jsI2CBus->beginTransmission((uint8_t)addr);
+    jsI2CBus->write(buf, (size_t)len);
+    uint8_t err = jsI2CBus->endTransmission(sendStop);
     return JS_NewInt32(ctx, err);
 }
 
@@ -79,9 +84,9 @@ JSValue native_i2c_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
     int len = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
     if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, &len, argv[1]);
-    size_t got = Wire.requestFrom((uint8_t)addr, (uint8_t)len, (uint8_t)true);
+    size_t got = jsI2CBus->requestFrom((uint8_t)addr, (uint8_t)len, (uint8_t)true);
     std::vector<uint8_t> buf(got);
-    for (size_t i = 0; i < got && Wire.available(); i++) buf[i] = Wire.read();
+    for (size_t i = 0; i < got && jsI2CBus->available(); i++) buf[i] = jsI2CBus->read();
     // TODO: Create JS_NewArrayBufferCopy in MicroQuickJS
     // JSValue arrbuf = JS_NewArrayBufferCopy(ctx, (const uint8_t *)buf.data(), got);
     // return arrbuf;
@@ -115,14 +120,14 @@ JSValue native_i2c_write_read(JSContext *ctx, JSValue *this_val, int argc, JSVal
     int wait = 0;
     if (argc > 3 && JS_IsNumber(ctx, argv[3])) JS_ToInt32(ctx, &wait, argv[3]);
 
-    Wire.beginTransmission((uint8_t)addr);
-    Wire.write(wbuf, (size_t)wlen);
-    uint8_t err = Wire.endTransmission(false);
+    jsI2CBus->beginTransmission((uint8_t)addr);
+    jsI2CBus->write(wbuf, (size_t)wlen);
+    uint8_t err = jsI2CBus->endTransmission(false);
     if (err != 0) { return JS_NewInt32(ctx, -err); }
     if (wait > 0) delay(wait);
-    size_t got = Wire.requestFrom((uint8_t)addr, (uint8_t)rlen, (uint8_t)true);
+    size_t got = jsI2CBus->requestFrom((uint8_t)addr, (uint8_t)rlen, (uint8_t)true);
     std::vector<uint8_t> buf(got);
-    for (size_t i = 0; i < got && Wire.available(); i++) buf[i] = Wire.read();
+    for (size_t i = 0; i < got && jsI2CBus->available(); i++) buf[i] = jsI2CBus->read();
     // TODO: Create JS_NewArrayBufferCopy in MicroQuickJS
     // JSValue arrbuf = JS_NewArrayBufferCopy(ctx, (const uint8_t *)buf.data(), got);
     // return arrbuf;

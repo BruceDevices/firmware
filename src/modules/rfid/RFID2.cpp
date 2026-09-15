@@ -7,39 +7,123 @@
  */
 
 #include "RFID2.h"
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
 #include "core/sd_functions.h"
-#include <MFRC522DriverI2C.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522Hack.h>
+#include <algorithm>
 
 #define RFID2_I2C_ADDRESS 0x28
+#define WS1850S_VERSION 0x15
+
+namespace {
+class BruceMFRC522DriverI2C : public MFRC522Driver {
+public:
+    BruceMFRC522DriverI2C(const byte slaveAdr, TwoWire &wire) : _slaveAdr(slaveAdr), _wire(wire) {}
+
+    bool init() override { return true; }
+
+    void PCD_WriteRegister(const PCD_Register reg, const byte value) override {
+        _wire.beginTransmission(_slaveAdr);
+        _wire.write(i2cRegisterAddress(reg));
+        _wire.write(value);
+        _wire.endTransmission();
+    }
+
+    void PCD_WriteRegister(const PCD_Register reg, const byte count, byte *const values) override {
+        _wire.beginTransmission(_slaveAdr);
+        _wire.write(i2cRegisterAddress(reg));
+        _wire.write(values, count);
+        _wire.endTransmission();
+    }
+
+    byte PCD_ReadRegister(const PCD_Register reg) override {
+        _wire.beginTransmission(_slaveAdr);
+        _wire.write(i2cRegisterAddress(reg));
+        _wire.endTransmission();
+
+        if (_wire.requestFrom(_slaveAdr, (uint8_t)1) != 1) return 0xFF;
+        return (uint8_t)_wire.read();
+    }
+
+    void PCD_ReadRegister(
+        const PCD_Register reg, const byte count, byte *const values, const byte rxAlign = 0
+    ) override {
+        if (count == 0 || values == nullptr) return;
+
+        _wire.beginTransmission(_slaveAdr);
+        _wire.write(i2cRegisterAddress(reg));
+        _wire.endTransmission();
+        _wire.requestFrom(_slaveAdr, count);
+
+        byte index = 0;
+        while (_wire.available() && index < count) {
+            byte value = (byte)_wire.read();
+            if (index == 0 && rxAlign) {
+                byte mask = 0;
+                for (byte i = rxAlign; i <= 7; i++) mask |= (1 << i);
+                values[0] = (values[index] & ~mask) | (value & mask);
+            } else {
+                values[index] = value;
+            }
+            index++;
+        }
+    }
+
+private:
+    static byte i2cRegisterAddress(const PCD_Register reg) { return (byte)reg; }
+
+    const byte _slaveAdr;
+    TwoWire &_wire;
+};
+} // namespace
 
 RFID2::RFID2(bool use_i2c) : _use_i2c(use_i2c) {
-    if (use_i2c)
-        _driver =
-            new MFRC522DriverI2C{RFID2_I2C_ADDRESS, bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl};
-    else _driver = new MFRC522DriverSPI{ss_pin, SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN};
-    mfrc522.SetDriver(*_driver);
+    if (use_i2c) {
+        _i2cWire = acquireI2CBus();
+        if (_i2cWire != nullptr) _driver = new BruceMFRC522DriverI2C{RFID2_I2C_ADDRESS, *_i2cWire};
+    } else {
+        _driver = new MFRC522DriverSPI{ss_pin, SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN};
+    }
+    if (_driver != nullptr) mfrc522.SetDriver(*_driver);
 }
 
-RFID2::~RFID2() { delete _driver; }
+RFID2::~RFID2() {
+    delete _driver;
+    if (_use_i2c) releaseI2CBus();
+}
 
 bool RFID2::begin() {
-    bool i2c_check = check_i2c_address(RFID2_I2C_ADDRESS);
+    bool i2c_check = false;
+    if (_use_i2c && _i2cWire != nullptr) {
+        _i2cWire->beginTransmission(RFID2_I2C_ADDRESS);
+        i2c_check = _i2cWire->endTransmission() == 0;
+    }
 
-    mfrc522.PCD_Init();
+    if (_driver == nullptr) return false;
 
+    bool init_ok = mfrc522.PCD_Init();
+    if (_use_i2c) mfrc522.PCD_SetAntennaGain(MFRC522::PCD_RxGain::RxGain_max);
+    byte raw_version = _driver->PCD_ReadRegister(MFRC522::PCD_Register::VersionReg);
     MFRC522::PCD_Version version = mfrc522.PCD_GetVersion();
 
-    return i2c_check || version != MFRC522::PCD_Version::Version_Unknown;
+    if (_use_i2c) {
+        return i2c_check && (raw_version == WS1850S_VERSION ||
+                             (init_ok && version != MFRC522::PCD_Version::Version_Unknown));
+    }
+    return init_ok && version != MFRC522::PCD_Version::Version_Unknown;
 }
 
 bool RFID2::PICC_IsNewCardPresent() {
     byte bufferATQA[2];
     byte bufferSize = sizeof(bufferATQA);
     byte result = mfrc522.PICC_RequestA(bufferATQA, &bufferSize);
+    if (result != MFRC522::StatusCode::STATUS_OK && result != MFRC522::StatusCode::STATUS_COLLISION) {
+        bufferSize = sizeof(bufferATQA);
+        result = mfrc522.PICC_WakeupA(bufferATQA, &bufferSize);
+    }
     bool bl_result =
         (result == MFRC522::StatusCode::STATUS_OK || result == MFRC522::StatusCode::STATUS_COLLISION);
     if (bl_result) {
@@ -59,9 +143,17 @@ int RFID2::read(int cardBaudRate) {
 
     if (!PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return TAG_NOT_PRESENT;
 
-    displayInfo("Reading data blocks...");
-    pageReadStatus = read_data_blocks();
-    pageReadSuccess = pageReadStatus == SUCCESS;
+    byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+    if (piccType == MFRC522::PICC_Type::PICC_TYPE_ISO_14443_4) {
+        pageReadStatus = NOT_IMPLEMENTED;
+        pageReadSuccess = false;
+        mfrc522.PICC_HaltA();
+        return NOT_IMPLEMENTED;
+    } else {
+        displayInfo("Reading data blocks...");
+        pageReadStatus = read_data_blocks();
+        pageReadSuccess = pageReadStatus == SUCCESS;
+    }
     format_data();
     set_uid();
     return SUCCESS;
@@ -147,18 +239,19 @@ int RFID2::load() {
     return SUCCESS;
 }
 
-int RFID2::save(String filename) {
+int RFID2::save(const String &filename) {
     FS *fs;
     if (!getFsStorage(fs)) return FAILURE;
 
+    String fname = filename;
     if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
-    if ((*fs).exists("/BruceRFID/" + filename + ".rfid")) {
+    if ((*fs).exists("/BruceRFID/" + fname + ".rfid")) {
         int i = 1;
-        filename += "_";
-        while ((*fs).exists("/BruceRFID/" + filename + String(i) + ".rfid")) i++;
-        filename += String(i);
+        fname += "_";
+        while ((*fs).exists("/BruceRFID/" + fname + String(i) + ".rfid")) i++;
+        fname += String(i);
     }
-    File file = (*fs).open("/BruceRFID/" + filename + ".rfid", FILE_WRITE);
+    File file = (*fs).open("/BruceRFID/" + fname + ".rfid", FILE_WRITE);
 
     if (!file) { return FAILURE; }
 
@@ -354,6 +447,7 @@ int RFID2::read_mifare_classic_data_sector(byte sector) {
 }
 
 int RFID2::authenticate_mifare_classic(byte block) {
+    bruceConfig.ensureMifareKeysLoaded();
     byte statusA = 0;
     byte statusB = 0;
 
@@ -578,6 +672,27 @@ int RFID2::erase_data_blocks() {
 int RFID2::write_ndef_blocks() {
     byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
     if (piccType != MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+
+    if (!rawNdefRecord.empty()) {
+        // Record shapes ndefMessage can't hold (MIME/WSC Wi-Fi records, etc.) -
+        // TLV-wrap (0x03 LEN <record> 0xFE) and page-write generically instead
+        // of reading the fixed Text/URI struct fields below.
+        if (rawNdefRecord.size() > 254) return FAILURE; // single-byte TLV length only
+        size_t ndef_size = rawNdefRecord.size() + 3;
+        size_t payload_size = ndef_size % 4 == 0 ? ndef_size : ndef_size + (4 - (ndef_size % 4));
+        std::vector<uint8_t> ndef_payload(payload_size, 0);
+        ndef_payload[0] = 0x03;
+        ndef_payload[1] = static_cast<uint8_t>(rawNdefRecord.size());
+        std::copy(rawNdefRecord.begin(), rawNdefRecord.end(), ndef_payload.begin() + 2);
+        ndef_payload[ndef_size - 1] = 0xFE;
+
+        for (size_t i = 0; i < payload_size; i += 4) {
+            int block = 4 + (i / 4);
+            byte status = mfrc522.MIFARE_Ultralight_Write((byte)block, ndef_payload.data() + i, 4);
+            if (status != MFRC522::StatusCode::STATUS_OK) return FAILURE;
+        }
+        return SUCCESS;
+    }
 
     byte ndef_size = ndefMessage.messageSize + 3;
     byte payload_size = ndef_size % 4 == 0 ? ndef_size : ndef_size + (4 - (ndef_size % 4));

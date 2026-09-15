@@ -77,7 +77,7 @@ extern StartupApp startupApp;
 
 extern char timeStr[16];
 extern SPIClass sdcardSPI;
-extern SPIClass CC_NRF_SPI;
+extern SPIClass AUX_SPI;
 extern bool clock_set;
 extern time_t localTime;
 extern struct tm *timeInfo;
@@ -109,13 +109,30 @@ struct Option {
     void *hoverPointer;
     bool hovered; // return to the remote (webui or app) if it is hovered on the loopoptions
 
+    bool hasColor = false;
+    uint16_t color = 0;
+
+    // On-screen bounding box of this item in its most recent draw, for tap-to-select hit-testing
+    // (see loopOptions()). Populated by drawOptions()/drawGridCell(); zero/unused otherwise.
+    uint16_t x = 0, y = 0, w = 0, h = 0;
+    bool contain(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
+
     Option(
-        String lbl, const std::function<void()> &op, bool sel = false,
+        const char *lbl, const std::function<void()> &op, bool sel = false,
+        bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,
+        bool en = true, bool hasClr = false, uint16_t clr = 0
+    )
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
+
+    Option(
+        const String &lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) =
             nullptr, // hover lambda returns true if it already handled rendering
-        void *ptr = nullptr, bool hvrd = false, bool en = true
+        void *ptr = nullptr, bool hvrd = false, bool en = true, bool hasClr = false, uint16_t clr = 0
     )
-        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd) {}
+        : label(lbl), operation(op), selected(sel), enabled(en), hover(hov), hoverPointer(ptr), hovered(hvrd),
+          hasColor(hasClr), color(clr) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!
@@ -139,9 +156,9 @@ struct keyStroke { // DO NOT CHANGE IT!!!!!
         fn = false;
         del = false;
         enter = false;
-        bool alt = false;
-        bool ctrl = false;
-        bool gui = false;
+        alt = false;
+        ctrl = false;
+        gui = false;
         modifiers = 0;
         word.clear();
         hid_keys.clear();
@@ -163,11 +180,15 @@ struct TouchPoint {
 };
 
 extern TouchPoint touchPoint;
+// true (default): touchHeatMap() maps taps anywhere on screen into zone-based Prev/Sel/Next/Esc/Up/Down,
+// same as physical buttons. A screen that wants to hit-test raw taps itself (e.g. tap-to-select in
+// loopOptions) sets this false while it runs; the TouchFooter band keeps working either way.
+extern volatile bool touchZoneOutsideFooterEnabled;
 extern keyStroke KeyStroke;
 extern std::vector<Option> options;
 
 template <typename R, typename... Args>
-std::function<void()> lambdaHelper(R (*callback)(Args...), Args... args) {
+std::function<void()> lambdaHelper(R (*callback)(Args...), std::decay_t<Args>... args) {
     return [=]() { (void)callback(args...); };
 }
 
@@ -219,11 +240,39 @@ extern String menuOptionLabel;
 extern volatile int EncoderLedChange;
 #endif
 
+// Net pending rotary encoder steps, independent from NextPress/PrevPress,
+// so a consumer can apply a whole backlog at once instead of one per redraw.
+extern volatile int32_t RotaryNetSteps;
+
+#ifdef HAS_ENCODER
+static inline int32_t drainRotarySteps() {
+    int32_t steps = RotaryNetSteps;
+    RotaryNetSteps -= steps;
+    return steps;
+}
+#endif
+
 extern TaskHandle_t xHandle;
 extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
 #ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
+#ifdef HAS_ENCODER
+    // NextPress/PrevPress here are rotary-encoder-derived, not raw mechanical
+    // button reads -- the encoder's own quadrature decode already rejects
+    // bounce, so the extra software debounce delay below is redundant for
+    // these two flags and only adds latency to every scroll step. Skip it
+    // for them; every other flag (SelPress, EscPress, etc.) keeps the
+    // original suspend+delay+resume debounce untouched.
+    if (&btn == &NextPress || &btn == &PrevPress) {
+        if (resetButtonStatus) {
+            btn = false;
+            AnyKeyPress = false;
+            SerialCmdPress = false;
+        }
+        return true;
+    }
+#endif
     vTaskSuspend(xHandle);
     if (resetButtonStatus) {
         btn = false;

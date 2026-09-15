@@ -15,16 +15,18 @@ public:
     WDGoWars();
     ~WDGoWars();
 
-    bool upload(FS *fs, String filepath, bool auto_delete = true);
-    bool upload_all(FS *fs, String folder, bool auto_delete = true);
+    bool upload(FS *fs, const String &filepath, bool auto_delete = true);
+    bool upload_all(FS *fs, const String &folder, bool auto_delete = true);
 
 private:
     const char *host = "wdgwars.pl";
     const char *upload_path = "/api/upload-csv";
 
     bool _check_api_key(void);
-    bool _upload_file(File file, String upload_message);
-    void _send_upload_headers(WiFiClientSecure &client, String filename, int filesize, String boundary);
+    bool _upload_file(File file, const String &upload_message);
+    void _send_upload_headers(
+        WiFiClientSecure &client, const String &filename, int filesize, const String &boundary
+    );
     void _display_banner(void);
 };
 

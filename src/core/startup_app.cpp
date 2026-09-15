@@ -37,7 +37,10 @@ StartupApp::StartupApp() {
 #if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
-    _startupApps["Wardriving"] = []() { Wardriving(); };
+    _startupApps["Wardriving"] = []() { Wardriving(true, true); };
+    _startupApps["WardrivingNoRadio"] = []() { Wardriving(); };
+    _startupApps["WardrivingBTEOnly"] = []() { Wardriving(false, true); };
+    _startupApps["WardrivingWifiOnly"] = []() { Wardriving(true, false); };
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {

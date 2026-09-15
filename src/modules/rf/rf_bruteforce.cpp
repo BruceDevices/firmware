@@ -103,10 +103,10 @@ void rf_bruteforce() {
         const BruteProtocol &proto = brute_protocols[brute_protocol_idx];
         int option = 0;
         options = {
+            {"Start", [&]() { option = 4; }},
             {"Frequency: " + String(brute_frequency, 2), [&]() { option = 1; }},
             {String("Protocol: ") + proto.name, [&]() { option = 2; }},
             {"Repeats: " + String(brute_repeats), [&]() { option = 3; }},
-            {"Start", [&]() { option = 4; }},
             {"Main Menu", [&]() { option = 5; }},
         };
         loopOptions(options);
@@ -119,5 +119,6 @@ void rf_bruteforce() {
             case 5: return;
             default: return; // EscPress
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }

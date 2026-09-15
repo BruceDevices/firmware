@@ -284,6 +284,7 @@ void mic_test_one_task() {
         tft.pushImage(displayX, displayY, displayWidth, displayHeight, frameBuffer);
         wakeUpScreen();
         if (check(SelPress) || check(EscPress)) break;
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
     i2s_channel_disable(i2s_chan);
 
@@ -770,7 +771,7 @@ void mic_record_app() {
             setBrightness(10, false);
             tft.fillScreen(TFT_BLACK);
             tft.setTextColor(TFT_RED);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
             tft.setCursor(5, 5);
             tft.print(".");
         } else {

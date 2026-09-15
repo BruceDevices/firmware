@@ -12,6 +12,7 @@ extern "C" {
 #include "globals_js.h"
 
 char *script = NULL;
+size_t scriptSize = 0;
 char *scriptDirpath = NULL;
 char *scriptName = NULL;
 
@@ -62,6 +63,20 @@ void interpreterHandler(void *pvParameters) {
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
 
+    log_d("Script length: %zu\n", scriptSize);
+
+    // JS_LoadBytecode requires no atoms to have been defined in RAM yet, so bytecode
+    // must be loaded before any global variables/functions are registered below.
+    bool isBytecode = JS_IsBytecode((const uint8_t *)script, scriptSize);
+    JSValue val = JS_UNDEFINED;
+    if (isBytecode) {
+        if (JS_RelocateBytecode(ctx, (uint8_t *)script, scriptSize) != 0) {
+            print_errorMessage("Invalid or incompatible bytecode file");
+        } else {
+            val = JS_LoadBytecode(ctx, (const uint8_t *)script);
+        }
+    }
+
     js_timers_init(ctx);
 
     // Set global variables
@@ -86,10 +101,11 @@ void interpreterHandler(void *pvParameters) {
 
     printMemoryUsage("context created");
 
-    size_t scriptSize = strlen(script);
-    log_d("Script length: %zu\n", scriptSize);
-
-    JSValue val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
+    if (isBytecode) {
+        if (!JS_IsException(val)) { val = JS_Run(ctx, val); }
+    } else {
+        val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
+    }
 
     run_timers(ctx);
 
@@ -144,7 +160,7 @@ void run_bjs_script() {
         };
         loopOptions(options);
     }
-    filename = loopSD(*fs, true, "BJS|JS");
+    filename = loopSD(*fs, true, "BJS|JS|BIN");
     vTaskDelay(pdMS_TO_TICKS(200));
     if (filename == "") { return; }
     run_bjs_script_headless(*fs, filename);
@@ -153,6 +169,7 @@ void run_bjs_script() {
 bool run_bjs_script_headless(char *code) {
     script = code;
     if (script == NULL) { return false; }
+    scriptSize = strlen(code);
     scriptDirpath = strdup("/scripts");
     scriptName = strdup("index.js");
 
@@ -162,13 +179,18 @@ bool run_bjs_script_headless(char *code) {
     return true;
 }
 
-bool run_bjs_script_headless(FS &fs, String filename) {
-    script = readBigFile(&fs, filename);
+bool run_bjs_script_headless(FS &fs, const String &filename) {
+    script = readBigFile(&fs, filename, true, &scriptSize);
     if (script == NULL) { return false; }
 
     int slash = filename.lastIndexOf('/');
-    scriptName = strdup(filename.c_str() + slash + 1);
-    scriptDirpath = strndup(filename.c_str(), slash);
+    if (slash < 0) {
+        scriptDirpath = strdup("/");
+        scriptName = strdup(filename.c_str());
+    } else {
+        scriptName = strdup(filename.c_str() + slash + 1);
+        scriptDirpath = strndup(filename.c_str(), slash == 0 ? 1 : slash);
+    }
     returnToMenu = true;
     interpreter_state = 1;
     startInterpreterTask();
@@ -193,7 +215,8 @@ String getScriptsFolder(FS *&fs) {
     return "";
 }
 
-std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupScript, int rememberedIndex) {
+std::vector<Option>
+getScriptsOptionsList(const String &currentPath, bool saveStartupScript, int rememberedIndex) {
     std::vector<Option> opt = {};
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     FS *fs;
@@ -243,7 +266,7 @@ std::vector<Option> getScriptsOptionsList(String currentPath, bool saveStartupSc
             int dotIndex = nameOnly.lastIndexOf(".");
             String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
             ext.toUpperCase();
-            if (ext != "JS" && ext != "BJS") continue;
+            if (ext != "JS" && ext != "BJS" && ext != "BIN") continue;
 
             String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
             opt.push_back({entry_title.c_str(), [=]() {

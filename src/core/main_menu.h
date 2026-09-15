@@ -47,10 +47,42 @@ public:
     std::vector<MenuItemInterface *> getItems(void) { return _menuItems; }
     void hideAppsMenu();
 
+    // Grid layout rendering (bruceConfig.mainMenuStyle == MAIN_MENU_GRID)
+    void drawGrid(int index);
+    int gridIndexOf(MenuItemInterface *item);
+
+    // Registered as gridPageTapHandler (see display.h) so loopOptions() can offer a page-up/down
+    // tap zone without depending on this header. Returns true and writes newIndex when (x, y)
+    // landed in the zone; currentIndex is used to keep roughly the same column on the new page.
+    bool handleGridPageTap(int x, int y, int currentIndex, int &newIndex);
+
 private:
+    struct GridLayout {
+        int x = 0;
+        int y = 0;
+        int cellW = 0;
+        int cellH = 0;
+        int cols = 1;
+        int rows = 1;
+        int visibleRows = 1;
+        int iconBox = 0;
+        int labelSize = 1;
+    };
+
+    void buildGridLayout(int itemCount);
+    void drawGridCell(int index, bool selected);
+    void drawGridScrollBar();
+
     int _currentIndex = 0;
     int _totalItems = 0;
     std::vector<MenuItemInterface *> _menuItems;
+
+    GridLayout _grid;
+    int _gridItemCount = 0;
+    int _gridScroll = 0;
+    int _gridLastIndex = -1;
+    uint8_t _gridRotation = ROTATION;
+    bool _gridRedrawAll = true;
 };
 extern MainMenu mainMenu;
 

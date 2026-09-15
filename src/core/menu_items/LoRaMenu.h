@@ -14,7 +14,7 @@ public:
     void optionsMenu(void);
     void drawIcon(float scale);
     bool hasTheme() { return bruceConfig.theme.lora; }
-    String themePath() { return bruceConfig.theme.paths.lora; }
+    const String& themePath() override { return bruceConfig.theme.paths.lora; }
 
 private:
     void configMenu(void);

@@ -4,8 +4,8 @@
 #include "core/utils.h" // to return optionsJSON
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
+#include "core/bus_HAL.h"
 #include "modules/badusb_ble/ducky_typer.h"
-#include <Wire.h>
 #include <globals.h>
 
 uint32_t uptimeCallback(cmd *c) {
@@ -56,7 +56,7 @@ uint32_t dateCallback(cmd *c) {
 uint32_t i2cCallback(cmd *c) {
     // scan for connected i2c modules
     // derived from https://learn.adafruit.com/scanning-i2c-addresses/arduino
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    TwoWire *Wire = acquireI2CBus();
     byte error, address;
     int nDevices;
     serialDevice->println("Scanning...");
@@ -65,8 +65,8 @@ uint32_t i2cCallback(cmd *c) {
         // The i2c_scanner uses the return value of
         // the Write.endTransmisstion to see if
         // a device did acknowledge to the address.
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
+        Wire->beginTransmission(address);
+        error = Wire->endTransmission();
         if (error == 0) {
             serialDevice->print("I2C device found at address 0x");
             if (address < 16) serialDevice->print("0");
@@ -78,6 +78,7 @@ uint32_t i2cCallback(cmd *c) {
             serialDevice->println(address, HEX);
         }
     }
+    releaseI2CBus();
 
     if (nDevices == 0) {
         serialDevice->println("No I2C devices found");
@@ -182,8 +183,20 @@ uint32_t helpCallback(cmd *c) {
     serialDevice->println("  say <text>   - Text-To-Speech (speaker required).");
 
     serialDevice->println("\nUI Commands:");
-    serialDevice->println("  led <r/g/b> <0-255>    - Change the UI main color.");
-    serialDevice->println("  clock                 - Show the clock UI.");
+    serialDevice->println("  screen color rgb <r> <g> <b>  - Change the UI main color.");
+    serialDevice->println("  screen color hex <RRGGBB>     - Change the UI main color.");
+    serialDevice->println("  screen brightness <0-255>     - Change the screen backlight.");
+    serialDevice->println("  clock                         - Show the clock UI.");
+
+#ifdef HAS_RGB_LED
+    serialDevice->println("\nRGB LED Commands:");
+    serialDevice->println("  led <r/g/b> <0-255>      - Change a single channel of the RGB LED.");
+    serialDevice->println("  led rgb <r> <g> <b>      - Change the RGB LED color.");
+    serialDevice->println("  led hex <RRGGBB>         - Change the RGB LED color.");
+    serialDevice->println("  led brightness <0-100>   - Change the RGB LED brightness.");
+    serialDevice->println("  led effect <0-9>         - Change the RGB LED effect (0 = solid color).");
+    serialDevice->println("  led off                  - Turn the RGB LED off.");
+#endif
 
     serialDevice->println("\nPower Management:");
     serialDevice->println("  power <off/reboot/sleep>  - General power management.");
@@ -275,7 +288,7 @@ uint32_t navCallback(cmd *c) {
             AnyKeyPress = true;
             SerialCmdPress = true;
             *var = true;
-            if (!LongPress) vTaskDelay(190 / portTICK_PERIOD_MS);
+            if (!LongPress) break;
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -405,7 +418,7 @@ uint32_t loaderCallback(cmd *c) {
         );
         return false;
     }
-    
+
     // TODO: close: Closes the running application.
     // TODO: info: Displays the loader’s state.
     return false;

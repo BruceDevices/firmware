@@ -401,7 +401,7 @@ void renderJammerUI(JammerState &state) {
 
     // Calculate layout dimensions based on screen size
     int contentWidth = tftWidth - 20;
-    int yStart = 35;
+    int yStart = BORDER_PAD_Y;
     int ySpacing = 10;
     int rightColumnX = tftWidth / 2 + 10;
 
@@ -429,7 +429,7 @@ void renderJammerUI(JammerState &state) {
     }
 
     // Display current status with highlighting for selected setting
-    int curY = yStart + 20;
+    int curY = yStart + LH * FM + 4;
     tft.setCursor(10, curY);
     tft.setTextSize(FP);
     tft.setTextColor((state.settingIndex == 0) ? TFT_YELLOW : bruceConfig.priColor, bruceConfig.bgColor);
@@ -467,7 +467,7 @@ void renderJammerUI(JammerState &state) {
 
     // Display exit instruction in top-right corner
     tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-    tft.setCursor(tftWidth - 70, 30);
+    tft.setCursor(tftWidth - 70, BORDER_PAD_Y);
     tft.print("[ESC] Exit");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 

@@ -57,9 +57,11 @@ static const uint8_t LP_TX = 11;
 // UART
 #define SERIAL_TX 11
 #define SERIAL_RX 12
+
 // I2C
-#define GROVE_SDA 8
-#define GROVE_SCL 9
+#define GROVE_SDA 9
+#define GROVE_SCL 8
+
 // SPI
 #define SPI_SCK_PIN 6
 #define SPI_MOSI_PIN 7

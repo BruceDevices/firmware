@@ -9,7 +9,7 @@
 #endif
 
 extern unsigned char strinbuf[];
-extern unsigned char qrframe[];
+extern unsigned char *qrframe;
 
 extern unsigned char  WD, WDB;
 #include "qrbits.h"

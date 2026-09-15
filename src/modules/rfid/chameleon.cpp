@@ -85,6 +85,7 @@ void Chameleon::loop() {
             case HF_SAVE_MODE: saveFileHF(); break;
             case HF_LOAD_MODE: loadFileHF(); break;
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
