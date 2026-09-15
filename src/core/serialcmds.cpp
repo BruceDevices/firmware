@@ -63,7 +63,10 @@ void _serialCmdsTaskLoop(void *pvParameters) {
     Serial.begin(115200);
     while (1) {
         handleSerialCommands(serialCli);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // handleSerialCommands() runs one command per pass, so a burst queued by
+        // the BLE app used to pay the full idle tick between each one. Still always
+        // yields, just sooner when there is more input waiting.
+        vTaskDelay(pdMS_TO_TICKS(serialDevice->available() ? 1 : 10));
     }
 }
 

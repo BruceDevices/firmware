@@ -90,14 +90,14 @@ int gsetRotation(bool set) {
     if (result & 0b01) { // if 1 or 3
         tftWidth = TFT_HEIGHT;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_WIDTH - 20;
+        tftHeight = TFT_WIDTH - TOUCH_FOOTER_HEIGHT;
 #else
         tftHeight = TFT_WIDTH;
 #endif
     } else { // if 2 or 0
         tftWidth = TFT_WIDTH;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_HEIGHT - 20;
+        tftHeight = TFT_HEIGHT - TOUCH_FOOTER_HEIGHT;
 #else
         tftHeight = TFT_HEIGHT;
 #endif
@@ -259,6 +259,24 @@ void setUIColor() {
         int selectedOption = loopOptions(options, idx);
         if (selectedOption == -1 || selectedOption == options.size() - 1) return;
     }
+}
+
+/*********************************************************************
+**  Function: setMainMenuStyleMenu
+**  Choose how the main menu presents the modules
+**********************************************************************/
+void setMainMenuStyleMenu() {
+    options = {
+        {"Carousel",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_CAROUSEL); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_CAROUSEL},
+        {"Grid",
+         []() { bruceConfig.setMainMenuStyle(MAIN_MENU_GRID); },
+         bruceConfig.mainMenuStyle == MAIN_MENU_GRID    },
+    };
+    addOptionToMainMenu();
+
+    loopOptions(options, bruceConfig.mainMenuStyle);
 }
 
 uint16_t alterOneColorChannel565(uint16_t color, int newR, int newG, int newB) {
@@ -633,6 +651,9 @@ void setRFModuleMenu() {
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
         if (bruceConfigPins.CC1101_bus.mosi == GPIO_NUM_26) idx = 2;
 #endif
+#ifdef CAP_CC1101_SS_PIN
+        if (bruceConfigPins.CC1101_bus.cs == (gpio_num_t)CAP_CC1101_SS_PIN) idx = 2;
+#endif
     }
 
     options = {
@@ -642,6 +663,9 @@ void setRFModuleMenu() {
         {"CC1101 (Shared SPI)", [&pins_setup]() { pins_setup = 2; }},
 #else
         {"CC1101", [&]() { result = CC1101_SPI_MODULE; }},
+#endif
+#ifdef CAP_CC1101_SS_PIN
+        {"CC1101 M5 Cap", [&pins_setup]() { pins_setup = 3; }},
 #endif
         /* WIP:
          * #ifdef USE_CC1101_VIA_PCA9554
@@ -691,6 +715,27 @@ void setRFModuleMenu() {
             );
 #endif
         }
+#ifdef CAP_CC1101_SS_PIN
+        else if (pins_setup == 3) {
+            // M5Stack Cap CC1101: shares the default SPI port with the SD card and the cap's
+            // own ST25R3916. https://docs.m5stack.com/en/cap/Cap_CC1101
+            result = CC1101_SPI_MODULE;
+            bruceConfigPins.setCC1101Pins(
+                {(gpio_num_t)SPI_SCK_PIN,
+                 (gpio_num_t)SPI_MISO_PIN,
+                 (gpio_num_t)SPI_MOSI_PIN,
+                 (gpio_num_t)CAP_CC1101_SS_PIN,
+                 (gpio_num_t)CAP_CC1101_GDO0_PIN,
+                 GPIO_NUM_NC}
+            );
+        }
+#endif
+        // initRfModule() dispatches on rfModule, so the pin presets have to already say CC1101 or
+        // it takes the single-pin path and reports success without ever probing the chip - which
+        // is the whole point of the "not found" + wiring QR below. Left alone for the plain
+        // "CC1101" entry, which is still selectable blind so the pins can be set afterwards.
+        // Not saved yet: the error path below falls back to M5_RF_MODULE and saves that instead.
+        if (pins_setup > 0) bruceConfigPins.rfModule = CC1101_SPI_MODULE;
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
             deinitRfModule();
@@ -766,6 +811,24 @@ void setRFIDModuleMenu() {
         {"ST25R3916 I2C",
          [=]() { bruceConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
          bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+#ifdef CAP_NFC_SS_PIN
+        // M5Stack Cap CC1101: its NFC half is an ST25R3916 on the default SPI port.
+        // https://docs.m5stack.com/en/cap/Cap_CC1101
+        {"CC1101 M5 Cap",
+         [=]() {
+             bruceConfigPins.setSR25RPins(
+                 {(gpio_num_t)SPI_SCK_PIN,
+                  (gpio_num_t)SPI_MISO_PIN,
+                  (gpio_num_t)SPI_MOSI_PIN,
+                  (gpio_num_t)CAP_NFC_SS_PIN,
+                  (gpio_num_t)CAP_NFC_IRQ_PIN,
+                  GPIO_NUM_NC}
+             );
+             bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE);
+         },
+         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE &&
+             bruceConfigPins.ST25R_bus.cs == (gpio_num_t)CAP_NFC_SS_PIN},
+#endif
 #endif
     };
     loopOptions(options, bruceConfigPins.rfidModule);
@@ -1014,7 +1077,7 @@ void runClockLoop(bool showMenuHint) {
 
             // "OK to show menu" hint management
             if (hintVisible && (millis() - hintStartTime < 5000)) {
-                tft.setTextSize(1);
+                tft.setTextSize(FP);
                 tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
             } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
                 // Clear hint after 5 seconds
@@ -1681,6 +1744,15 @@ void enableBLEAPI() {
     }
 
     ble_api_enabled = !ble_api_enabled;
+
+    // Give the user visual feedback about the new state, otherwise the toggle
+    // looks like it does nothing and gets pressed repeatedly (which cycles the
+    // BLE stack setup/teardown and can corrupt the GATT table).
+    if (ble_api_enabled) {
+        displayInfo("BLE API ON > Advertising as 'Bruce'", true);
+    } else {
+        displayInfo("BLE API OFF", true);
+    }
 }
 
 bool appStoreInstalled() {
@@ -1696,8 +1768,8 @@ bool appStoreInstalled() {
 #include <HTTPClient.h>
 void installAppStoreJS() {
 
-    if (WiFi.status() != WL_CONNECTED) { wifiConnectMenu(WIFI_STA); }
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) { wifiConnectMenu(WIFI_STA); }
+    if (!WiFi.isConnected()) {
         displayWarning("WiFi not connected", true);
         return;
     }

@@ -12,6 +12,7 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
 #include "core/wifi/wifi_common.h"
+#include <algorithm>
 
 uint8_t pwngrid_friends_tot = 0;
 std::vector<pwngrid_peer> pwngrid_peers;
@@ -66,22 +67,11 @@ void clearPwngridPeers() {
     pwngrid_last_friend_name = "";
 }
 void delete_peer_gone() { // Delete peers wigh pwngrid_peers.gone = true
-    std::vector<int>
-        peer_gone; // Create a vector of integers to save the index value of the element to be deleted
-    int index = 0;
-    for (const auto &peer_list : pwngrid_peers) {
-        if (peer_list.gone) peer_gone.push_back(index); // Saves the index value into the vector
-        index++;
-    }
-    std::reverse(
-        peer_gone.begin(), peer_gone.end()
-    ); // Reverse the vector to iterate from the end to the beginning
-    for (auto ind : peer_gone) {
-        pwngrid_peers.erase(pwngrid_peers.begin() + ind); // Delete the peer from the list
-        // Update counter;
-        pwngrid_friends_tot = pwngrid_peers.size();
-    }
-    peer_gone.clear();
+    auto it = std::remove_if(pwngrid_peers.begin(), pwngrid_peers.end(), [](const pwngrid_peer &p) {
+        return p.gone;
+    });
+    if (it != pwngrid_peers.end()) { pwngrid_peers.erase(it, pwngrid_peers.end()); }
+    pwngrid_friends_tot = pwngrid_peers.size();
 }
 
 // Had to remove Radiotap headers, since its automatically added
@@ -284,8 +274,9 @@ void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
             if (src == "de:ad:be:ef:de:ad") {
                 // Just grab the first 255 bytes of the pwnagotchi beacon
                 // because that is where the name is
+                essid.reserve(len > 38 ? len - 38 : 0);
                 for (int i = 38; i < len; i++) {
-                    if (isAscii(snifferPacket->payload[i])) { essid.concat((char)snifferPacket->payload[i]); }
+                    if (isAscii(snifferPacket->payload[i])) { essid += (char)snifferPacket->payload[i]; }
                 }
 
                 JsonDocument sniffed_json; // ArduinoJson v6s

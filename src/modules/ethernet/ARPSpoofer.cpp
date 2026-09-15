@@ -171,7 +171,7 @@ void ARPSpoofer::sendARPPacket(
     // Enviar o pacote
     netif->linkoutput(netif, p);
     pbuf_free(p);
-    Serial.println("Pacote ARP enviado!");
+    Serial.println("ARP Packet sent!");
 
     // Capturar o pacote no arquivo PCAP
     if (pcapFile) {

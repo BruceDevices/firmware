@@ -174,10 +174,10 @@ void showDeviceInfo() {
     area.addLine("MAC addr: " + String(WiFi.macAddress()));
     String localIP = WiFi.localIP().toString();
     String softAPIP = WiFi.softAPIP().toString();
-    String ipStatus = (WiFi.status() == WL_CONNECTED) ? (localIP != "0.0.0.0"    ? localIP
-                                                         : softAPIP != "0.0.0.0" ? softAPIP
-                                                                                 : "No valid IP")
-                                                      : "Not connected";
+    String ipStatus = (WiFi.isConnected()) ? (localIP != "0.0.0.0"    ? localIP
+                                              : softAPIP != "0.0.0.0" ? softAPIP
+                                                                      : "No valid IP")
+                                           : "Not connected";
     area.addLine("IP address: " + ipStatus);
     area.addLine("");
     area.addLine("[STORAGE]");
@@ -251,21 +251,26 @@ void touchHeatMap(struct TouchPoint t) {
     int third_x = tftWidth / 3;
     int third_y = tftHeight / 3;
 
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y > third_y) PrevPress = true;
+    // The footer band always reads as PREV/SEL/NEXT (the labels TouchFooter() draws there).
+    // Everything above it is opt-out via touchZoneOutsideFooterEnabled, so a screen that wants to
+    // hit-test raw taps itself (see loopOptions()) can turn zone-reading off without losing the footer.
+    if (t.y <= tftHeight && !touchZoneOutsideFooterEnabled) return;
+
+    if (t.x > third_x * 0 && t.x < third_x * 1) PrevPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && ((t.y > third_y && t.y < third_y * 2) || t.y > tftHeight))
         SelPress = true;
-    if (t.x > third_x * 2 && t.x < third_x * 3) NextPress = true;
-    if (t.x > third_x * 0 && t.x < third_x * 1 && t.y < third_y) EscPress = true;
+    if (t.x > third_x * 2 && t.x < third_x * 3 && t.y > third_y) NextPress = true;
+    if (t.x > third_x * 2 && t.x < third_x * 3 && t.y < third_y) EscPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && t.y < third_y) UpPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && t.y > third_y * 2 && t.y < third_y * 3) DownPress = true;
     /*
                         Touch area Map
                 ________________________________ 0
-                |   Esc   |   UP    |         |
-                |_________|_________|         |_> third_y
+                |         |   UP    |   Esc   |
+                |         |_________|_________|_> third_y
                 |         |   Sel   |         |
-                |         |_________|  Next   |_> third_y*2
-                |  Prev   |  Down   |         |
+                |  Prev   |_________|  Next   |_> third_y*2
+                |         |  Down   |         |
                 |_________|_________|_________|_> third_y*3
                 |__Prev___|___Sel___|__Next___| 20 pixel touch area where the touchFooter is drawn
                 0         L third_x |         |

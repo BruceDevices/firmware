@@ -502,10 +502,10 @@ String generalKeyboard(
     // so these do not change
     /*---------------------------------------------------------------------------------------*/
 
-    const int PAD = 2;
-    const int KBLH = 6 + LH * FM;
+    const int PAD = FP + 1;
+    const int KBLH = (BORDER_OFFSET_FROM_SCREEN_EDGE + 1) + LH * FM;
     const int counter_height = LH * FP;
-    const int top_button_text_y = 2 + (KBLH - LH * FM) / 2;
+    const int top_button_text_y = (FP + 1) + (KBLH - LH * FM) / 2;
     const int counter_y = KBLH + 4;
     const int textbox_y = KBLH + counter_height + 5;
     const int textbox_text_y = textbox_y + 2;
@@ -684,13 +684,15 @@ String generalKeyboard(
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
             String chars_counter = String(current_text.length()) + "/" + String(max_size);
             tft.fillRect(
-                tftWidth - ((chars_counter.length() * LW * FP) + 20),
+                tftWidth - ((chars_counter.length() * LW * FP) + 2 * BORDER_PAD_X),
                 counter_y,
-                (chars_counter.length() * LW * FP) + 20,
+                (chars_counter.length() * LW * FP) + 2 * BORDER_PAD_X,
                 LH * FP,
                 bruceConfig.bgColor
             ); // clear previous text
-            tft.drawString(chars_counter, tftWidth - ((chars_counter.length() * LW * FP) + 10), counter_y);
+            tft.drawString(
+                chars_counter, tftWidth - ((chars_counter.length() * LW * FP) + BORDER_PAD_X), counter_y
+            );
 
             // Prints the title of the textbox, it should report what the user has to write in it
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), 0x5AAB);
@@ -782,14 +784,14 @@ String generalKeyboard(
             tft.setTextSize(FP);
             if (current_text.length() > (max_FP_size)) {
                 cursor_y = textbox_text_y + LH * FP;
-                cursor_x = 5 + (current_text.length() - max_FP_size) * LW * FP;
+                cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + (current_text.length() - max_FP_size) * LW * FP;
             } else {
                 cursor_y = textbox_text_y;
-                cursor_x = 5 + current_text.length() * LW * FP;
+                cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + current_text.length() * LW * FP;
             }
         } else {
             cursor_y = textbox_text_y;
-            cursor_x = 5 + current_text.length() * LW * FM;
+            cursor_x = BORDER_OFFSET_FROM_SCREEN_EDGE + current_text.length() * LW * FM;
         }
         // Prioritize Serial Input for navigation
         if (SerialCmdPress) { // only for Remote Control, if no type of input was detected on device
@@ -1204,7 +1206,9 @@ String generalKeyboard(
                     while (rotarySteps < 0) {
                         if (EscPress) {
                             y++;
-                        } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
+                        } else if (
+                            (x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)
+                        ) {
                             y++;
                             x = 0;
                         } else x++;
@@ -1227,6 +1231,11 @@ String generalKeyboard(
                         }
 
                         rotarySteps++;
+                        yield();
+                        PrevPress = false;
+                        NextPress = false;
+                        UpPress = false;
+                        DownPress = false;
                         redraw = true;
                     }
                     while (rotarySteps > 0) {
@@ -1259,79 +1268,11 @@ String generalKeyboard(
                         }
 
                         rotarySteps--;
-                        redraw = true;
-                    }
-                } else {
-                    /* NEXT "Btn" to move forward on th X axis (to the right) */
-                    // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
-                    if (check(NextPress) && touchPoint.pressed == false) {
-                        if (EscPress) {
-                            y++;
-                        } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
-                            // if we are at the end of the current line
-                            y++;   // next line
-                            x = 0; // reset to first key
-                        } else x++;
-
-                        if (y >= KeyboardHeight)
-                            y = -1; // if we are at the end of the keyboard, then return to the top
-
-                        // If we move to a new line using the ESC-press navigation and the previous x coordinate
-                        // is greater than the number of available buttons_strings on the new line, reset x to
-                        // avoid out-of-bounds behavior, this can only happen when switching to the first line, as
-                        // the others have all the same number of keys
-                        if (y == -1 && x >= buttons_number) x = 0;
-
-                        // Skip over keys with '\0' value
-                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                            while (keys[y][x][caps] == '\0') {
-                                x++;
-                                if (x >= KeyboardWidth) {
-                                    x = 0;
-                                    y++;
-                                    if (y >= KeyboardHeight) {
-                                        y = -1;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        redraw = true;
-                    }
-                    /* PREV "Btn" to move backwards on th X axis (to the left) */
-                    if (check(PrevPress) && touchPoint.pressed == false) {
-                        if (EscPress) {
-                            y--;
-                        } else if (x <= 0) {
-                            y--;
-                            if (y == -1) x = buttons_number - 1;
-                            else x = KeyboardWidth - 1;
-                        } else x--;
-
-                        if (y < -1) { // go back to the bottom right of the keyboard
-                            y = KeyboardHeight - 1;
-                            x = KeyboardWidth - 1;
-                        }
-                        // else if (y == -1 && x >= buttons_number) x = buttons_number - 1;
-                        // else if (x < 0) x = KeyboardWidth - 1;
-
-                        // Skip over keys with '\0' value when moving backwards
-                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                            while (keys[y][x][caps] == '\0') {
-                                x--;
-                                if (x < 0) {
-                                    x = KeyboardWidth - 1;
-                                    y--;
-                                    if (y < 0) {
-                                        y = -1;
-                                        x = buttons_number - 1;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
+                        vTaskDelay(4 / portTICK_PERIOD_MS);
+                        PrevPress = false;
+                        NextPress = false;
+                        UpPress = false;
+                        DownPress = false;
                         redraw = true;
                     }
                 }

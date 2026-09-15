@@ -747,7 +747,7 @@ void configureWebServer() {
 **********************************************************************/
 void startWebUi(bool mode_ap) {
     bool keepWifiConnected = false;
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) {
         if (mode_ap) wifiConnectMenu(WIFI_AP);
         else wifiConnectMenu(WIFI_STA);
     } else {

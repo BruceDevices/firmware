@@ -34,6 +34,10 @@
 #include "../xk404/pins_arduino.h"
 #elif REAPER
 #include "../reaper/pins_arduino.h"
+#elif Mako
+#include "../Mako/pins_arduino.h"
+#elif Pebble
+#include "../Pebble/pins_arduino.h"
 #elif T_WATCH_S3
 #include "../lilygo-t-watch-s3/pins_arduino.h"
 #elif T_DISPLAY_S3_PRO
@@ -56,4 +60,6 @@
 #include "../ESP32-C5/pins_arduino.h"
 #elif NM_CYD_ESP32C5
 #include "../nm-cyd-c5/pins_arduino.h"
+#elif CONFIG_IDF_TARGET_ESP32P4
+#include "../m5stack-tab5/pins_arduino.h"
 #endif

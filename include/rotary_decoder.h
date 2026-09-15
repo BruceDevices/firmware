@@ -53,6 +53,7 @@
 // direction logic -- posDifference > 0 => PrevPress, etc. -- was tuned
 // against). Flipping it here, once, keeps direction correct without
 // touching any per-board InputHandler() code.
+// clang-format off
 static const int8_t ROTARY_DECODER_ENC_TABLE[16] = {
     /*          new: 00  01  10  11  */
     /* old 00 */  0, +1, -1,  0,
@@ -60,7 +61,7 @@ static const int8_t ROTARY_DECODER_ENC_TABLE[16] = {
     /* old 10 */ +1,  0,  0, -1,
     /* old 11 */  0, -1, +1,  0,
 };
-
+// clang-format on
 class RotaryDecoder {
 public:
     void begin(uint8_t pinA, uint8_t pinB, uint8_t stepsPerDetent = 2) {
@@ -70,7 +71,7 @@ public:
         bool a = digitalRead(_pinA);
         bool b = digitalRead(_pinB);
         _abState = (a << 1) | b;
-        _accum = 0;
+        _rawPosition = 0;
         _position = 0;
     }
 
@@ -89,25 +90,33 @@ public:
 
         if (delta == 0) return; // invalid transition (bounce) -- skip it
 
-        _accum += delta;
-
-        if (_accum >= _stepsPerDetent) {
-            _accum = 0;
-            _position++;
-        } else if (_accum <= -_stepsPerDetent) {
-            _accum = 0;
-            _position--;
-        }
+        // Raw quarter-step counter, never reset -- position is always the
+        // floor division of this by stepsPerDetent. Since _rawPosition mod
+        // stepsPerDetent lines up exactly with the physical cycle position
+        // regardless of path taken to get there, this commits a step the
+        // instant enough net valid transitions have been seen, works the
+        // same for stepsPerDetent == 2 or == 4, and never throws away
+        // leftover sub-detent progress the way resetting an accumulator on
+        // threshold would (that reset was losing/misaligning steps whenever
+        // a poll pass missed a sample or caught trailing contact bounce).
+        _rawPosition += delta;
+        _position = floorDiv(_rawPosition, (int32_t)_stepsPerDetent);
     }
 
     int32_t getPosition() { return _position; }
 
 private:
+    static int32_t floorDiv(int32_t a, int32_t b) {
+        int32_t q = a / b;
+        if ((a % b != 0) && ((a < 0) != (b < 0))) q--;
+        return q;
+    }
+
     uint8_t _pinA = 0;
     uint8_t _pinB = 0;
     uint8_t _stepsPerDetent = 2;
     uint8_t _abState = 0;
-    int8_t _accum = 0;
+    int32_t _rawPosition = 0;
     // Written by the dedicated encoder-poll task, read by InputHandler()
     // on a different task -- must be volatile so the reader can't cache
     // a stale value across the task boundary. Single 32-bit aligned word,

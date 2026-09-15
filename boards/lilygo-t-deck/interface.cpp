@@ -173,9 +173,9 @@ void InputHandler(void) {
     }
     touched = touch.getPoint(&t.x, &t.y);
     delay(1);
-    Wire.requestFrom(LILYGO_KB_SLAVE_ADDRESS, 1);
-    while (Wire.available() > 0) {
-        keyValue = Wire.read();
+    Wire1.requestFrom(LILYGO_KB_SLAVE_ADDRESS, 1);
+    while (Wire1.available() > 0) {
+        keyValue = Wire1.read();
         delay(1);
     }
     if (millis() - tm < 200 && !LongPress) return;

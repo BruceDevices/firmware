@@ -28,15 +28,19 @@ void sendCustomRF() {
     returnToMenu = true; // make sure menu is redrawn when quitting in any point
 
     options = {
-        {"Recent",   [&]() { selected_code = selectRecentRfMenu(); }},
-        {"LittleFS", [&]() { filesystem = &LittleFS; }              },
+        {"Recent",   [&]() { yield(); }               },
+        {"LittleFS", [&]() { filesystem = &LittleFS; }},
     };
-    if (setupSdCard()) options.insert(options.begin(), {"SD Card", [&]() { filesystem = &SD; }});
+    if (setupSdCard()) options.insert(options.begin() + 1, {"SD Card", [&]() { filesystem = &SD; }});
 
     loopOptions(options);
 
-    if (filesystem == NULL) {                                           // recent menu was selected
-        if (selected_code.filepath != "") sendRfCommand(selected_code); // a code was selected
+    if (filesystem == NULL) {
+        selected_code = selectRecentRfMenu();
+        while (selected_code.frequency != 0) {
+            if (selected_code.filepath != "") sendRfCommand(selected_code); // a code was selected
+            selected_code = selectRecentRfMenu();                           // recent menu was selected
+        }
         return;
         // no need to proceed, go back
     }
@@ -60,7 +64,7 @@ void sendCustomRF() {
 
         if (!readSubFile(filesystem, filepath, data)) continue;
 
-        if (data.protocol == "RcSwitch") {
+        if (data.protocol == "RcSwitch" || data.protocol == "KeeLoq") {
             loopEmulate(data);
         } else {
             txSubFile(data);
@@ -195,8 +199,8 @@ void loopEmulate(RfCodes &data) {
                 sendRfCommand(data);
                 data.keeloq_step(num_steps_keeloq);
                 keeloq_save(data);
-                display_info(data);
             }
+            display_info(data);
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -369,6 +373,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
                              Serial.println(protocol);
                            */
 
+    if (!hideDefaultUI) { displayTextLine("Sending.."); }
     // Radio preset name (configures modulation, bandwidth, filters, etc.).
     /*  supported flipper presets:
         FuriHalSubGhzPresetIDLE, // < default configuration
@@ -463,7 +468,6 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
         transmittimings[transmittimings_idx] = 0; // termination
 
         // send rf command
-        if (!hideDefaultUI) { displayTextLine("Sending.."); }
         rfTransmitRawTimings(transmittimings);
         free(transmittimings);
     } else if (protocol == "BinRAW") {
@@ -477,7 +481,6 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
     else if (protocol == "KeeLoq") {
         // KeeLoq has dedicated framing (see rf_keeloq_durations). `rfcode.key` is
         // the 64-bit rolling code already assembled by keeloq_step.
-        if (!hideDefaultUI) { displayTextLine("Sending.."); }
         rf_tx_keeloq(rfcode.key, num_signal_repeat);
     }
 

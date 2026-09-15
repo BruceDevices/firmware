@@ -3,6 +3,27 @@
 #include "core/utils.h"
 #include <M5Unified.h>
 #include <interface.h>
+#include <soc/gpio_reg.h>
+#include <soc/gpio_sig_map.h>
+
+static void setupCoreS3SharedSpiPins() {
+    pinMode(TFT_CS, OUTPUT);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    digitalWrite(SDCARD_CS, HIGH);
+
+    // CoreS3 shares the display D/C pin with SPI MISO. M5.begin() and the first
+    // TFT_eSPI draw happen before storage is mounted, so release GPIO35 back to
+    // MISO at the pre-storage hook. TFT_eSPI switches it to D/C only while TFT CS is active.
+#if defined(USE_HSPI_PORT)
+    pinMatrixInAttach(TFT_MISO, SPI3_Q_IN_IDX, false);
+    *(volatile uint32_t *)GPIO_FUNC35_OUT_SEL_CFG_REG = SPI3_Q_OUT_IDX;
+#else
+    pinMatrixInAttach(TFT_MISO, FSPIQ_IN_IDX, false);
+    *(volatile uint32_t *)GPIO_FUNC35_OUT_SEL_CFG_REG = FSPIQ_OUT_IDX;
+#endif
+    *(volatile uint32_t *)GPIO_ENABLE1_W1TC_REG = 1u << (TFT_MISO - 32);
+}
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -18,6 +39,8 @@ void _setup_gpio() {
     _rtc.setWire(getSysI2CBus());
 #endif
 }
+
+void _pre_storage_gpio() { setupCoreS3SharedSpiPins(); }
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -52,7 +75,7 @@ void InputHandler(void) {
         tm = millis();
 
         if (bruceConfigPins.rotation == 3) {
-            t.y = (tftHeight + 20) - t.y;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
             t.x = tftWidth - t.x;
         }
         if (bruceConfigPins.rotation == 0) {
@@ -63,7 +86,7 @@ void InputHandler(void) {
         if (bruceConfigPins.rotation == 2) {
             int tmp = t.x;
             t.x = t.y;
-            t.y = (tftHeight + 20) - tmp;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
         }
 
         if (!wakeUpScreen()) AnyKeyPress = true;

@@ -29,9 +29,8 @@ void listenTcpPort() {
     WiFiServer server(portNumberInt);
     server.begin();
 
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-    tft.println("Listening on:");
-    tft.setCursor(10, tft.getCursorY());
+    padprintln("");
+    padprint("Listening on:");
     tft.print(WiFi.localIP().toString().c_str());
     tft.println(":" + portNumber);
 
@@ -57,15 +56,20 @@ void listenTcpPort() {
                     tft.setTextSize(FP);
                     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                     tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-                    if (keyString.length() > 0) {
+                    if (keyString.length() > 0 && keyString != "\x1B") {
+                        if (tft.getCursorY() > tftHeight - 3 * LH * FP) {
+                            drawMainBorderWithTitle("LISTEN TCP");
+                            padprint(keyString);
+                        }
                         client.print(keyString);
                         Serial.print(keyString);
                     }
                 } else {
                     if (client.available()) {
-                        char incomingChar = client.read();
-                        tft.print(incomingChar);
-                        Serial.print(incomingChar);
+                        String incomingData = client.readString();
+                        if (tft.getCursorY() > tftHeight - 3 * LH * FP) drawMainBorderWithTitle("LISTEN TCP");
+                        padprint(incomingData);
+                        Serial.print(incomingData);
                     }
                     if (check(SelPress)) { inputMode = true; }
                 }
@@ -87,7 +91,10 @@ void listenTcpPort() {
 void clientTCP() {
     if (!wifiConnected) wifiConnectMenu();
 
-    String serverIP = num_keyboard("", 15, "Enter server IP");
+    String _ip = WiFi.localIP().toString();
+    _ip = _ip.substring(0, _ip.lastIndexOf('.')) + ".";
+
+    String serverIP = num_keyboard(_ip, 15, "Enter server IP");
     if (serverIP == "\x1B") return;
     String portString = num_keyboard("", 5, "Enter server Port");
     if (portString == "\x1B") return;
@@ -103,9 +110,7 @@ void clientTCP() {
     tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-    tft.println("Connecting to:");
-    tft.setCursor(10, tft.getCursorY());
+    padprintln("Connecting to:");
     tft.println(serverIP + ":" + portString);
 
     if (!client.connect(serverIP.c_str(), portNumber)) {
@@ -113,8 +118,7 @@ void clientTCP() {
         return;
     }
 
-    tft.setCursor(10, tft.getCursorY());
-    tft.println("Connected!");
+    padprintln("Connected!");
     Serial.println("Connected to server");
 
     while (client.connected()) {
@@ -125,15 +129,18 @@ void clientTCP() {
             tft.setTextSize(FP);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-            if (keyString.length() > 0) {
+            if (keyString.length() > 0 && keyString != "\x1B") {
+                if (tft.getCursorY() > tftHeight - 3 * LH * FP) drawMainBorderWithTitle("LISTEN TCP");
+                padprint(keyString);
                 client.print(keyString);
                 Serial.print(keyString);
             }
         } else {
             if (client.available()) {
-                char incomingChar = client.read();
-                tft.print(incomingChar);
-                Serial.print(incomingChar);
+                String incomingData = client.readString();
+                if (tft.getCursorY() > tftHeight - 3 * LH * FP) drawMainBorderWithTitle("LISTEN TCP");
+                padprint(incomingData);
+                Serial.print(incomingData);
             }
             if (check(SelPress)) { inputMode = true; }
         }

@@ -17,6 +17,13 @@ void _setup_gpio();
 void _post_setup_gpio();
 
 /***************************************************************************************
+** Function name: _pre_storage_gpio()
+** Location: main.cpp
+** Description:   board gpio setup that must run after the first TFT use and before storage
+***************************************************************************************/
+void _pre_storage_gpio();
+
+/***************************************************************************************
 ** Function name: getBattery()
 ** location: display.cpp
 ** Description:   Delivers the battery value from 1-100

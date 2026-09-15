@@ -23,7 +23,7 @@ EvilPortal::EvilPortal(
     dnsServer = &sharedEvilPortalDnsServer();
 
     _originalWifiMode = WiFi.getMode();
-    _wifiWasConnected = (WiFi.status() == WL_CONNECTED);
+    _wifiWasConnected = WiFi.isConnected();
 
     if (!setup()) return;
     cleanlyStopWebUiForWiFiFeature();
@@ -853,13 +853,13 @@ bool EvilPortal::verifyCreds(String &Ssid, String &Password) {
     WiFi.begin(Ssid, Password);
 
     int i = 1;
-    while (WiFi.status() != WL_CONNECTED) {
+    while (!WiFi.isConnected()) {
         if (i > 12) break;
         vTaskDelay(500 / portTICK_PERIOD_MS);
         i++;
     }
 
-    if (WiFi.status() == WL_CONNECTED) { isConnected = true; }
+    if (WiFi.isConnected()) { isConnected = true; }
 
     WiFi.disconnect(false);
     _deauth = temp;

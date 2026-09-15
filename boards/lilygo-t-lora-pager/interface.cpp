@@ -215,7 +215,7 @@ void _setup_gpio() {
     pinMode(ENCODER_INA, INPUT_PULLUP);
     pinMode(ENCODER_INB, INPUT_PULLUP);
     encoder = new RotaryDecoder();
-    encoder->begin(ENCODER_INA, ENCODER_INB, 4);
+    encoder->begin(ENCODER_INB, ENCODER_INA, 4);
 
     // Haptic driver
     if (!drv.begin(Wire, SDA, SCL)) {
@@ -381,13 +381,13 @@ void InputHandler(void) {
             drv.setWaveform(1, 0);
             drv.run();
 
-            if (posDifference < 0) {
-                PrevPress = true;
-                posDifference++;
-            }
             if (posDifference > 0) {
-                NextPress = true;
+                PrevPress = true;
                 posDifference--;
+            }
+            if (posDifference < 0) {
+                NextPress = true;
+                posDifference++;
             }
             if (sel == BTN_ACT) SelPress = true;
             if (esc == BTN_ACT) EscPress = true;

@@ -87,7 +87,7 @@ void rf_waterfall_run() {
             int x = i * (screen_width / 4);
             float f_freq = f_start + (f_end - f_start) * i / 4.0;
             tft.setCursor(x, 0);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
 
             if (i == 0 && selected_item == 0) {
                 tft.setTextColor(TFT_PINK, TFT_BLACK);
@@ -182,7 +182,7 @@ void rf_waterfall_run() {
             max_freq = temp_max_freq;
             tft.fillRect(0, 10, screen_width, 10, TFT_BLACK);
             tft.setCursor(3, 10);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
             tft.setTextColor(TFT_YELLOW, TFT_BLACK);
             tft.printf("%d dBm @ %.3f", max_rssi, max_freq);
 

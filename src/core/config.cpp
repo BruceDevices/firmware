@@ -1,6 +1,7 @@
 #include "config.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
+#include <algorithm>
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -67,6 +68,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["wdgwarsApiKey"] = wdgwarsApiKey;
     setting["devMode"] = devMode;
     setting["colorInverted"] = colorInverted;
+    setting["mainMenuStyle"] = mainMenuStyle;
 
     setting["badUSBBLEKeyboardLayout"] = badUSBBLEKeyboardLayout;
     setting["badUSBBLEKeyDelay"] = badUSBBLEKeyDelay;
@@ -385,6 +387,12 @@ void BruceConfig::fromFile(bool checkFS) {
         count++;
         log_e("Fail");
     }
+    if (!setting["mainMenuStyle"].isNull()) {
+        mainMenuStyle = setting["mainMenuStyle"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
 
     if (!setting["badUSBBLEKeyboardLayout"].isNull()) {
         badUSBBLEKeyboardLayout = setting["badUSBBLEKeyboardLayout"].as<int>();
@@ -482,6 +490,7 @@ void BruceConfig::validateConfig() {
     validateMifareKeysItems();
     validateDevModeValue();
     validateColorInverted();
+    validateMainMenuStyle();
     validateBadUSBBLEKeyboardLayout();
     validateBadUSBBLEKeyDelay();
     validateEvilEndpointCreds();
@@ -665,6 +674,8 @@ String BruceConfig::getWifiPassword(const String &ssid) const {
     return "";
 }
 
+bool BruceConfig::hasWifiCredential(const String &ssid) const { return wifi.find(ssid) != wifi.end(); }
+
 void BruceConfig::addEvilWifiName(String value) {
     evilWifiNames.insert(value);
     saveFile();
@@ -782,6 +793,17 @@ void BruceConfig::validateColorInverted() {
     if (colorInverted > 1) colorInverted = 1;
 }
 
+void BruceConfig::setMainMenuStyle(int value) {
+    mainMenuStyle = value;
+    validateMainMenuStyle();
+    saveFile();
+}
+
+void BruceConfig::validateMainMenuStyle() {
+    if (mainMenuStyle < MAIN_MENU_CAROUSEL || mainMenuStyle > MAIN_MENU_GRID)
+        mainMenuStyle = MAIN_MENU_CAROUSEL;
+}
+
 void BruceConfig::setBadUSBBLEKeyboardLayout(int value) {
     badUSBBLEKeyboardLayout = value;
     validateBadUSBBLEKeyboardLayout();
@@ -824,8 +846,15 @@ void BruceConfig::validateMifareKeysItems() {
 }
 
 void BruceConfig::addDisabledMenu(String value) {
-    // TODO: check if duplicate
+    if (std::find(disabledMenus.begin(), disabledMenus.end(), value) != disabledMenus.end()) return;
     disabledMenus.push_back(value);
+    saveFile();
+}
+
+void BruceConfig::removeDisabledMenu(String value) {
+    auto it = std::find(disabledMenus.begin(), disabledMenus.end(), value);
+    if (it == disabledMenus.end()) return;
+    disabledMenus.erase(it);
     saveFile();
 }
 

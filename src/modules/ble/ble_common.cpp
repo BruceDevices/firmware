@@ -66,11 +66,15 @@ char strAddl[200];
 void ble_info(const String &name, const String &address, const String &signal) {
     drawMainBorder();
     tft.setTextColor(bruceConfig.priColor);
-    tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);
-    tft.drawString("Name: " + name, 10, 48);
-    tft.drawString("Adresse: " + address, 10, 66);
-    tft.drawString("Signal: " + String(signal) + " dBm", 10, 84);
-    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, tftHeight - 20, 1);
+    int rowStep = LH * FP + 10;
+    int row1Y = BORDER_PAD_Y + FM * LH + 4;
+    tft.drawCentreString("-=Information=-", tftWidth / 2, BORDER_PAD_Y, SMOOTH_FONT);
+    tft.drawString("Name: " + name, BORDER_PAD_X, row1Y);
+    tft.drawString("Adresse: " + address, BORDER_PAD_X, row1Y + rowStep);
+    tft.drawString("Signal: " + String(signal) + " dBm", BORDER_PAD_X, row1Y + 2 * rowStep);
+    tft.drawCentreString(
+        "   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, tftHeight - BORDER_PAD_X - LH * FP, 1
+    );
 
     delay(300);
     while (!check(SelPress)) {
@@ -182,7 +186,8 @@ void ble_scan() {
 
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
-    bleWasActiveBefore = bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
+    bleWasActiveBefore =
+        bleWasActiveBefore || BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0;
 #endif
 
     if (!ble_scan_setup() || pBLEScan == nullptr) {
@@ -202,7 +207,7 @@ void ble_scan() {
             const NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
             if (!advertisedDevice) continue;
 
-            String bt_title;
+            String bt_title = "";
             String bt_name;
             String bt_address;
             String bt_signal;
@@ -212,35 +217,27 @@ void ble_scan() {
             bt_signal = String(advertisedDevice->getRSSI());
 
             if (bt_name.isEmpty()) bt_name = "<no name>";
-            bt_title = bt_name;
+            else bt_title = bt_name;
             if (bt_title.isEmpty()) bt_title = bt_address;
 
             if (options.size() < MAX_DISPLAY_DEVICES) {
-                options.emplace_back(bt_title.c_str(), [=]() {
-                    ble_info(bt_name, bt_address, bt_signal);
-                });
+                options.emplace_back(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
                 processedCount++;
             }
         }
 
-        if (options.size() >= MAX_DISPLAY_DEVICES) {
-            options.emplace_back("... and more devices", nullptr);
-        }
+        if (options.size() >= MAX_DISPLAY_DEVICES) { options.emplace_back("... and more devices", nullptr); }
     } catch (...) {
         displayError("BLE scan error");
         pBLEScan->clearResults();
         return;
     }
 
-    if (pBLEScan) {
-        pBLEScan->stop();
-    }
+    if (pBLEScan) { pBLEScan->stop(); }
 
     if (!bleWasActiveBefore) {
 #if !defined(LITE_VERSION)
-        if (!BLEStateManager::isBLEActive()) {
-            stopBLEStack();
-        }
+        if (!BLEStateManager::isBLEActive()) { stopBLEStack(); }
 #else
         stopBLEStack();
 #endif
@@ -301,7 +298,12 @@ void disPlayBLESend() {
     uint8_t senddata[2] = {0};
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
+    int contentY = STATUS_BAR_HEIGHT - 4;
+    int contentH = tftHeight - contentY - 10;
+    int textX = BORDER_PAD_X + 2;
+    int rowStep = FM * LH + 9;
+    int row1Y = contentY + FM * LH + 8;
 
     if (!pServer) {
         if (!initBLEServer()) {
@@ -322,16 +324,16 @@ void disPlayBLESend() {
     while (!check(EscPress)) {
         if (deviceConnected) {
             if (!wasConnected) {
-                tft.fillRect(10, 26, tftWidth - 20, tftHeight - 36, TFT_BLACK);
-                drawBLE_beacon(180, 28, TFT_BLUE);
+                tft.fillRect(BORDER_PAD_X, contentY, tftWidth - 2 * BORDER_PAD_X, contentH, TFT_BLACK);
+                drawBLE_beacon(180, contentY + 2, TFT_BLUE);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 tft.setTextSize(FM);
-                tft.setCursor(12, 50);
+                tft.setCursor(textX, row1Y);
                 tft.printf("BLE Send\n");
                 tft.setTextSize(FM);
             }
-            tft.fillRect(10, 100, tftWidth - 20, 28, TFT_BLACK);
-            tft.setCursor(12, 100);
+            tft.fillRect(BORDER_PAD_X, row1Y + 2 * rowStep, tftWidth - 2 * BORDER_PAD_X, LH * FM + 12, TFT_BLACK);
+            tft.setCursor(textX, row1Y + 2 * rowStep);
             if (senddata[0] % 4 == 0) {
                 tft.printf("0x%02X>    ", senddata[0]);
             } else if (senddata[0] % 4 == 1) {
@@ -353,16 +355,16 @@ void disPlayBLESend() {
         } else {
             if (wasConnected or first_run) {
                 first_run = false;
-                tft.fillRect(10, 26, tftWidth - 20, tftHeight - 36, TFT_BLACK);
+                tft.fillRect(BORDER_PAD_X, contentY, tftWidth - 2 * BORDER_PAD_X, contentH, TFT_BLACK);
                 tft.setTextSize(FM);
-                tft.setCursor(12, 50);
+                tft.setCursor(textX, row1Y);
                 tft.setTextColor(TFT_RED);
                 tft.printf("BLE disconnect\n");
-                tft.setCursor(12, 75);
+                tft.setCursor(textX, row1Y + rowStep);
                 tft.setTextColor(tft.color565(18, 150, 219));
 
                 tft.printf(String("Name:" + blename + "\n").c_str());
-                tft.setCursor(12, 100);
+                tft.setCursor(textX, row1Y + 2 * rowStep);
                 tft.printf("UUID:1bc68b2a\n");
                 drawBLE_beacon(180, 40, TFT_DARKGREY);
             }
@@ -390,9 +392,7 @@ void ble_test() {
 
     disPlayBLESend();
 
-    if (pServer) {
-        pServer->getAdvertising()->stop();
-    }
+    if (pServer) { pServer->getAdvertising()->stop(); }
     stopBLEStack();
 
     printf("Quit ble test\n");

@@ -147,8 +147,6 @@ void InputHandler(void) {
     static bool dwLongFired = false;
     unsigned long now = millis();
     if (now - tm < 200 && !LongPress) return;
-    if (!wakeUpScreen()) AnyKeyPress = true;
-    else return;
 
     bool selPressed = (digitalRead(SEL_BTN) == BTN_ACT);
     bool dwPressed = dw_is_down;
@@ -157,7 +155,12 @@ void InputHandler(void) {
     unsigned long dwPressStart = dw_press_ms;
     unsigned long dwFirstRelease = dw_first_release_ms;
 
-    AnyKeyPress = selPressed || dwPressed;
+    bool dwNextReady = dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs;
+
+    if (!(selPressed || dwPressed || dwDoubleReady || dwNextReady)) return;
+
+    if (!wakeUpScreen()) AnyKeyPress = true;
+    else return;
 
     if (selPressed) {
         SelPress = true;
@@ -181,7 +184,7 @@ void InputHandler(void) {
         dw_double_ready = false;
         dw_waiting = false;
         tm = now;
-    } else if (dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs) {
+    } else if (dwNextReady) {
         NextPress = true;
         dw_waiting = false;
         tm = now;

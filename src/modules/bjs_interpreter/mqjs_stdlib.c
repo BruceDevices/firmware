@@ -500,6 +500,19 @@ static const JSPropDef js_gpio[] = {
 
 const JSClassDef js_gpio_obj = JS_OBJECT_DEF("GPIO", js_gpio);
 
+/* UART module */
+static const JSPropDef js_uart[] = {
+    JS_CFUNC_DEF("begin", 3, native_uart_begin),
+    JS_CFUNC_DEF("write", 1, native_uart_write),
+    JS_CFUNC_DEF("read", 1, native_uart_read),
+    JS_CFUNC_DEF("available", 0, native_uart_available),
+    JS_CFUNC_DEF("flush", 0, native_uart_flush),
+    JS_CFUNC_DEF("end", 0, native_uart_end),
+    JS_PROP_END,
+};
+
+const JSClassDef js_uart_obj = JS_OBJECT_DEF("UART", js_uart);
+
 /* I2C module */
 static const JSPropDef js_i2c[] = {
     JS_CFUNC_DEF("begin", 3, native_i2c_begin),
@@ -852,6 +865,7 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("serial", &js_serial_obj),
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),
     JS_PROP_CLASS_DEF("subghz", &js_subghz_obj),
+    JS_PROP_CLASS_DEF("uart", &js_uart_obj),
     JS_PROP_CLASS_DEF("wifi", &js_wifi_obj),
     JS_PROP_CLASS_DEF("ble", &js_ble_obj),
     JS_PROP_CLASS_DEF("nrf24", &js_nrf24_obj),

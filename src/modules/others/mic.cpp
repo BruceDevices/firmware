@@ -771,7 +771,7 @@ void mic_record_app() {
             setBrightness(10, false);
             tft.fillScreen(TFT_BLACK);
             tft.setTextColor(TFT_RED);
-            tft.setTextSize(1);
+            tft.setTextSize(FP);
             tft.setCursor(5, 5);
             tft.print(".");
         } else {

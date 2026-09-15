@@ -75,6 +75,9 @@
 #ifndef FG                  // LArge Font -> Fonte Grande
   #define FG 3
 #endif
+#ifndef TOUCH_FOOTER_HEIGHT
+  #define TOUCH_FOOTER_HEIGHT (LH * FM + 2 * (FP + 4))
+#endif
 #ifndef ROTATION
   #define ROTATION 1
 #endif
@@ -202,6 +205,30 @@
 
 #ifndef NRF24_MOSI_PIN
 #define NRF24_MOSI_PIN -1
+#endif
+
+#ifndef BAD_TX
+#define BAD_TX GROVE_SDA
+#endif
+
+#ifndef BAD_RX
+#define BAD_RX GROVE_SCL
+#endif
+
+#ifndef SPI_SS_PIN
+#define SPI_SS_PIN -1
+#endif
+
+#ifndef SPI_SCK_PIN
+#define SPI_SCK_PIN -1
+#endif
+
+#ifndef SPI_MOSI_PIN
+#define SPI_MOSI_PIN -1
+#endif
+
+#ifndef SPI_MISO_PIN
+#define SPI_MISO_PIN -1
 #endif
 
 #ifndef NRF24_SS_PIN
