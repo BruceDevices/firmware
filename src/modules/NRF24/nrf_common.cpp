@@ -43,6 +43,22 @@ bool nrf_start(NRF24_MODE mode) {
 
     if (!CHECK_NRF_SPI(mode)) return result;
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // CC1101, NRF24 and LoRa share SCK/MISO/MOSI on the 3-in-1 board.
+    // Keep every inactive device deselected before talking to NRF24.
+    if (bruceConfigPins.CC1101_bus.cs != GPIO_NUM_NC) {
+        pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+        digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    }
+
+#if !defined(LITE_VERSION)
+    if (bruceConfigPins.LoRa_bus.cs != GPIO_NUM_NC) {
+        pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
+        digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
+    }
+#endif
+#endif
+
     // Always re-assert CE LOW and CS HIGH before begin() — these pins
     // may have been left in an indeterminate state by the previous session,
     // especially after stopConstCarrier() which can leave CE HIGH internally.
