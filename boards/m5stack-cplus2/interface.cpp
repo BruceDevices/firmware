@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include <interface.h>
 
@@ -7,6 +8,10 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    setSysI2CBus(&Wire1); // BM8563 RTC lives on Wire1
+#if defined(HAS_RTC)
+    _rtc.setWire(getSysI2CBus());
+#endif
     pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
@@ -68,8 +73,11 @@ void InputHandler(void) {
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
+    if (upPressed && dwPressed) {
+        EscPress = true;
+        return;
+    }
     PrevPress = upPressed;
-    EscPress = upPressed;
     NextPress = dwPressed;
     SelPress = selPressed;
 }

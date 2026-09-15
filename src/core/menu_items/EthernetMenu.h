@@ -15,7 +15,7 @@ public:
     void optionsMenu(void);
     void drawIcon(float scale);
     bool hasTheme() { return bruceConfig.theme.ethernet; }
-    String themePath() { return bruceConfig.theme.paths.ethernet; }
+    const String& themePath() override { return bruceConfig.theme.paths.ethernet; }
 };
 
 #endif

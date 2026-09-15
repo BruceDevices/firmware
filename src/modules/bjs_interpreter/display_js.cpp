@@ -834,6 +834,13 @@ JSValue native_pushSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 
 JSValue native_createSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
 #if defined(HAS_SCREEN)
+    JSValue obj = JS_NewObjectClassUser(ctx, JS_CLASS_SPRITE);
+    if (JS_IsException(obj)) return obj;
+
+    SpriteData *d = (SpriteData *)malloc(sizeof(SpriteData));
+    if (!d) return JS_ThrowOutOfMemory(ctx);
+
+#if defined(BOARD_HAS_PSRAM)
     int16_t width = tft.width();
     int16_t height = tft.height();
     uint8_t colorDepth = 16;
@@ -842,11 +849,6 @@ JSValue native_createSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue
     if (argc > 1 && JS_IsNumber(ctx, argv[1])) JS_ToInt32(ctx, (int *)&height, argv[1]);
     if (argc > 2 && JS_IsNumber(ctx, argv[2])) JS_ToInt32(ctx, (int *)&colorDepth, argv[2]);
 
-    JSValue obj = JS_NewObjectClassUser(ctx, JS_CLASS_SPRITE);
-    if (JS_IsException(obj)) return obj;
-
-    SpriteData *d = (SpriteData *)malloc(sizeof(SpriteData));
-    if (!d) return JS_ThrowOutOfMemory(ctx);
     d->sprite = new tft_sprite(static_cast<tft_display *>(&tft));
     if (!d->sprite) {
         free(d);
@@ -854,6 +856,10 @@ JSValue native_createSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue
     }
     d->sprite->setColorDepth(colorDepth);
     d->sprite->createSprite(width, height, frames);
+#else
+    // No PSRAM: create a dummy sprite object that draws directly on the global tft display
+    d->sprite = NULL;
+#endif
 
     // set opaque pointer so finalizer can free C resources
     JS_SetOpaque(ctx, obj, d);

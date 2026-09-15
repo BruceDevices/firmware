@@ -17,6 +17,13 @@ void _setup_gpio();
 void _post_setup_gpio();
 
 /***************************************************************************************
+** Function name: _pre_storage_gpio()
+** Location: main.cpp
+** Description:   board gpio setup that must run after the first TFT use and before storage
+***************************************************************************************/
+void _pre_storage_gpio();
+
+/***************************************************************************************
 ** Function name: getBattery()
 ** location: display.cpp
 ** Description:   Delivers the battery value from 1-100
@@ -37,6 +44,16 @@ void _setBrightness(uint8_t brightval);
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void);
+
+/*********************************************************************
+** Function: pollEncoder
+** location: interface.cpp (per board)
+** Samples the rotary encoder A/B lines unconditionally, every task tick,
+** decoupled from AnyKeyPress consumption -- mirrors how the Flipper
+** port's encoder_poll() is never gated behind whether the previous
+** input event was consumed. No-op on boards without HAS_ENCODER.
+**********************************************************************/
+void __attribute__((weak)) pollEncoder(void);
 
 
 /*********************************************************************

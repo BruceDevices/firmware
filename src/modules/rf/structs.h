@@ -30,6 +30,7 @@ struct RfCodes {
     uint32_t fix = 0;
     uint32_t hop = 0;
     uint32_t encrypted = 0;
+    uint32_t seed = 0; // secure/erreka learning; 0 = derive from serial
     uint8_t btn = 0;
     String mf_name = "Unknown";
     String protocol = "";

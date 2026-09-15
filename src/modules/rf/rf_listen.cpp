@@ -57,6 +57,7 @@ void rf_listen() {
 
         if (check(EscPress)) break;
         if (check(SelPress)) break;
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) {

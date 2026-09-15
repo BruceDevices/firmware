@@ -29,7 +29,7 @@ String calculate_crc(String input) {
     return crc_str;
 }
 
-void qrcode_display(String qrcodeUrl) {
+void qrcode_display(const String &qrcodeUrl) {
 #ifdef HAS_SCREEN
     QRcode qrcode(&tft);
     qrcode.init();

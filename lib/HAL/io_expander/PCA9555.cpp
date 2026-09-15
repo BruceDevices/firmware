@@ -11,14 +11,15 @@ bool PCA9555::begin(uint8_t address, TwoWire *wire) {
     _i2caddr = address;
     _wire = wire;
 
-    output_state[0] = 0;
-    output_state[1] = 0;
-    direction_state[0] = 0xFF; // all as inputs
-    direction_state[1] = 0xFF;
+    uint8_t dummy = 0;
+    if (!readRegister(PCA9555_INPUT_PORT0, dummy)) return false;
 
-    // test communication
-    uint8_t dummy;
-    return readRegister(PCA9555_INPUT_PORT0, dummy);
+    if (!readRegister(PCA9555_OUTPUT_PORT0, output_state[0])) output_state[0] = 0;
+    if (!readRegister(PCA9555_OUTPUT_PORT0 + 1, output_state[1])) output_state[1] = 0;
+    if (!readRegister(PCA9555_CONFIG_PORT0, direction_state[0])) direction_state[0] = 0xFF;
+    if (!readRegister(PCA9555_CONFIG_PORT0 + 1, direction_state[1])) direction_state[1] = 0xFF;
+
+    return true;
 }
 
 bool PCA9555::outputGPIO(uint16_t pins) {

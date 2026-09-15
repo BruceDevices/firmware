@@ -23,9 +23,7 @@ void OthersMenu::optionsMenu() {
 
 // New consolidated BadUSB & HID submenu
 #if !defined(LITE_VERSION)
-#if defined(USB_as_HID)
         {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
-#endif
 #endif
 
 #ifndef LITE_VERSION

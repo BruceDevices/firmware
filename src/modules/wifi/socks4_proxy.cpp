@@ -113,7 +113,10 @@ void socks4Proxy(uint16_t port) {
             server.stop();
             return;
         }
-        if (!client) continue;
+        if (!client) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+            continue;
+        }
 
         connCount++;
         client.setNoDelay(true);

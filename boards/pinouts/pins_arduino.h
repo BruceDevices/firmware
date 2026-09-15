@@ -34,12 +34,18 @@
 #include "../xk404/pins_arduino.h"
 #elif REAPER
 #include "../reaper/pins_arduino.h"
+#elif Mako
+#include "../Mako/pins_arduino.h"
+#elif Pebble
+#include "../Pebble/pins_arduino.h"
 #elif T_WATCH_S3
 #include "../lilygo-t-watch-s3/pins_arduino.h"
 #elif T_DISPLAY_S3_PRO
 #include "../lilygo-t-display-s3-pro/pins_arduino.h"
 #elif TTGO
 #include "../lilygo-t-display-ttgo/pins_arduino.h"
+#elif LILYGO_T4
+#include "../lilygo-t4/pins_arduino.h"
 #elif MARAUDER_TOUCH
 #include "../marauder-touch/pins_arduino.h"
 #elif MARAUDER_MINI
@@ -54,4 +60,8 @@
 #include "../ESP32-C5/pins_arduino.h"
 #elif NM_CYD_ESP32C5
 #include "../nm-cyd-c5/pins_arduino.h"
+#elif FREENOVE_FNK0103
+#include "../freenove-fnk0103/pins_arduino.h"
+#elif CONFIG_IDF_TARGET_ESP32P4
+#include "../m5stack-tab5/pins_arduino.h"
 #endif

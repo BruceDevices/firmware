@@ -88,6 +88,21 @@ uint32_t hexStringToDecimal(const char *hexString) {
     return decimal;
 }
 
+// Like hexStringToDecimal but 64-bit wide and separator-agnostic: accumulates
+// every hex nibble found (spaces/tabs ignored), so it parses both the Flipper
+// "AA BB CC DD EE FF 00 11" key format and a compact "AABBCC..." string. Needed
+// because protocol keys can exceed 32 bits (Holtek 40, PhoenixV2 52, KeeLoq 64).
+uint64_t hexStringToU64(const char *hexString) {
+    uint64_t value = 0;
+    for (const char *p = hexString; *p; p++) {
+        char c = *p;
+        bool isHex = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+        if (!isHex) continue; // skip spaces and any separators
+        value = (value << 4) | (uint64_t)hexCharToDecimal(c);
+    }
+    return value;
+}
+
 char *dec2binWzerofill(uint64_t Dec, unsigned int bitLength) {
     // Allocate memory dynamically for safety
     char *bin = (char *)malloc(bitLength + 1);

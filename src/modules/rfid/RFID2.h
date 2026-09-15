@@ -10,6 +10,7 @@
 #include <MFRC522Driver.h>
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522v2.h>
+#include <Wire.h>
 
 class RFID2 : public RFIDInterface {
 public:
@@ -35,11 +36,12 @@ public:
     int write(int cardBaudRate = 0);
     int write_ndef();
     int load();
-    int save(String filename);
+    int save(const String &filename);
 
 private:
     bool _use_i2c;
-    MFRC522Driver *_driver;
+    TwoWire *_i2cWire = nullptr;
+    MFRC522Driver *_driver = nullptr;
     MFRC522DriverPinSimple ss_pin = MFRC522DriverPinSimple(SPI_SS_PIN);
 
     /////////////////////////////////////////////////////////////////////////////////////

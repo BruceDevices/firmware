@@ -40,11 +40,13 @@ public:
     bool touched();
     CYD28_TS_Point getPointScaled();
     void setRotation(uint8_t n) { rotation = n % 4; }
+    void setWire(TwoWire *wire) { _wire = wire; }
 
 private:
     const int16_t sizeX_px;
     const int16_t sizeY_px;
     uint8_t rotation=1;
+    TwoWire *_wire = &Wire;
     uint8_t i2c_read(uint8_t addr);
     uint8_t i2c_read_continuous(uint8_t addr, uint8_t *data, uint32_t length);
     void i2c_write(uint8_t addr, uint8_t data);

@@ -61,9 +61,9 @@ static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
     if (buffer == nullptr || len <= 0) return false;
     if (!ensureKarmaApInterface(channel)) return false;
 
-    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_AP, buffer, len, false);
+    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
     if (err != ESP_OK) {
-        Serial.printf("[KARMA] esp_wifi_80211_tx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
+        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
         return false;
     }
 
@@ -1767,7 +1767,9 @@ void checkPortals() {
     lastPortalHeartbeat = now;
 }
 
-void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName) {
+void launchBackgroundPortal(
+    const String &ssid, uint8_t channel, const String &templateName, const String &templateFile
+) {
     if (activePortal != nullptr) return;
     if (ssid.isEmpty() || ssid == "*WILDCARD*") return;
 
@@ -1781,7 +1783,7 @@ void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &t
     portal->clientFingerprint = 0;
     portal->portalId = generatePortalId(templateName);
 
-    portal->instance = new (std::nothrow) EvilPortal(ssid, channel, false, false, true, true);
+    portal->instance = new (std::nothrow) EvilPortal(ssid, channel, false, false, true, true, templateFile);
     if (portal->instance == nullptr) {
         delete portal;
         return;
@@ -1808,7 +1810,7 @@ void loadPortalTemplates() {
     portalTemplates.clear();
     portalTemplates.push_back({"Google Login", "", true, false});
     portalTemplates.push_back({"Router Update", "", true, true});
-    if (LittleFS.begin()) {
+    if (setupLittleFS()) {
         if (!LittleFS.exists("/PortalTemplates")) LittleFS.mkdir("/PortalTemplates");
         if (LittleFS.exists("/PortalTemplates")) {
             File root = LittleFS.open("/PortalTemplates");
@@ -1828,7 +1830,6 @@ void loadPortalTemplates() {
                 file = root.openNextFile();
             }
         }
-        LittleFS.end();
     }
     FS *fs = nullptr;
     if (getFsStorage(fs) && fs == &SD) {
@@ -1923,7 +1924,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
              directOptions.push_back(
                  {"LittleFS", [=]() {
                       drawMainBorderWithTitle("BROWSE LITTLEFS");
-                      if (LittleFS.begin()) {
+                      if (setupLittleFS()) {
                           String templateFile = loopSD(LittleFS, true, "HTML", "/");
                           if (templateFile.length() > 0) {
                               PortalTemplate customTmpl;
@@ -1953,7 +1954,6 @@ bool selectPortalTemplate(bool isInitialSetup) {
                                   delay(1000);
                               }
                           }
-                          LittleFS.end();
                       } else {
                           displayTextLine("LittleFS error!");
                           delay(1000);
@@ -1984,7 +1984,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
     return templateSelected;
 }
 
-void saveCredentialsToFile(String ssid, String password) {
+void saveCredentialsToFile(const String &ssid, const String &password) {
     FS *saveFs = nullptr;
     if (!getFsStorage(saveFs)) return;
     String filename = "/ProbeData/credentials.txt";
@@ -2005,7 +2005,7 @@ void saveCredentialsToFile(String ssid, String password) {
 
 void launchTieredEvilPortal(PendingPortal &portal) {
     Serial.printf("[TIER-%d] Launching background portal for %s\n", portal.tier, portal.ssid.c_str());
-    launchBackgroundPortal(portal.ssid, portal.channel, portal.templateName);
+    launchBackgroundPortal(portal.ssid, portal.channel, portal.templateName, portal.templateFile);
 
     if (portal.isCloneAttack) cloneAttacksLaunched++;
     else autoPortalsLaunched++;
@@ -2113,7 +2113,7 @@ void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd)
         return;
     }
     Serial.printf("[MANUAL] Launching background portal for %s (ch%d)\n", ssid.c_str(), channel);
-    launchBackgroundPortal(ssid, channel, selectedTemplate.name);
+    launchBackgroundPortal(ssid, channel, selectedTemplate.name, selectedTemplate.filename);
 }
 
 void handleBroadcastResponse(const String &ssid, const String &mac) {
@@ -2427,16 +2427,19 @@ void updateKarmaDisplay() {
     if (currentTime - last_time > 1000) {
         last_time = currentTime;
 
-        tft.fillRect(10, 45, tftWidth - 20, tftHeight - 70, bruceConfig.bgColor);
-        tft.setTextSize(1);
+        tft.fillRect(
+            BORDER_PAD_X, BORDER_PAD_Y, tftWidth - 2 * BORDER_PAD_X, tftHeight - BORDER_PAD_Y - 25,
+            bruceConfig.bgColor
+        );
+        tft.setTextSize(FP);
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
-        int y = 45;
-        tft.setCursor(10, y);
+        int y = BORDER_PAD_Y;
+        tft.setCursor(BORDER_PAD_X, y);
 
         if (karmaPaused) {
             tft.setTextColor(TFT_RED, bruceConfig.bgColor);
-            tft.setCursor(10, y);
+            tft.setCursor(BORDER_PAD_X, y);
             tft.print("KARMA PAUSED");
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             y += LH + 2;
@@ -2769,9 +2772,9 @@ void karma_setup() {
                 {"Enhanced Stats",
                  [&]() {
                      drawMainBorderWithTitle("ADVANCED STATS");
-                     int y = 45;
-                     tft.setTextSize(1);
-                     tft.setCursor(10, y);
+                     int y = BORDER_PAD_Y;
+                     tft.setTextSize(FP);
+                     tft.setCursor(BORDER_PAD_X, y);
                      padprint("Total: " + String(totalProbes));
                      padprintln("Unique: " + String(uniqueClients), 10);
                      padprint("Karma: " + String(karmaResponsesSent));
@@ -2983,20 +2986,24 @@ void karma_setup() {
                          {"Database Info",
                  [&]() {
                               drawMainBorderWithTitle("SSID DATABASE");
-                              int y = 60;
-                              tft.setTextSize(1);
-                              tft.fillRect(10, 40, tftWidth - 20, 100, bruceConfig.bgColor);
+                              int rowStep = LH * FP + 7;
+                              int y = BORDER_PAD_Y + FM * LH;
+                              tft.setTextSize(FP);
+                              tft.fillRect(
+                                  BORDER_PAD_X, y - LH * FP, tftWidth - 2 * BORDER_PAD_X, 3 * rowStep + LH * FP,
+                                  bruceConfig.bgColor
+                              );
                               size_t total = SSIDDatabase::getCount();
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Total SSIDs: " + String(total));
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Cached: streaming");
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Progress: " + broadcastAttack.getProgressString());
-                              tft.setCursor(10, tftHeight - 20);
+                              tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP);
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) delay(50);
                           }},
@@ -3172,31 +3179,32 @@ void karma_setup() {
                      broadcastOptions.push_back(
                          {"Show Stats", [&]() {
                               drawMainBorderWithTitle("BROADCAST STATS");
-                              int y = 40;
-                              tft.setTextSize(1);
+                              int rowStep = LH * FP + 7;
+                              int y = BORDER_PAD_Y;
+                              tft.setTextSize(FP);
                               size_t totalSSIDs = SSIDDatabase::getCount();
                               size_t currentPos = broadcastAttack.getCurrentPosition();
                               float progress = broadcastAttack.getProgressPercent();
                               BroadcastStats stats = broadcastAttack.getStats();
 
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Total SSIDs: " + String(totalSSIDs));
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Progress: " + String(progress, 1) + "%");
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Broadcasts: " + String(stats.totalBroadcasts));
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print("Responses: " + String(stats.totalResponses));
-                              tft.setCursor(10, y);
-                              y += 15;
+                              tft.setCursor(BORDER_PAD_X, y);
+                              y += rowStep;
                               tft.print(
                                   "Status: " + String(broadcastAttack.isActive() ? "ACTIVE" : "INACTIVE")
                               );
-                              tft.setCursor(10, tftHeight - 20);
+                              tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP);
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) {
                                   if (check(PrevPress)) break;
@@ -3256,9 +3264,9 @@ void karma_setup() {
                 {"Show Stats",
                  [&]() {
                      drawMainBorderWithTitle("KARMA STATS");
-                     int y = 45;
-                     tft.setTextSize(1);
-                     tft.setCursor(10, y);
+                     int y = BORDER_PAD_Y;
+                     tft.setTextSize(FP);
+                     tft.setCursor(BORDER_PAD_X, y);
                      padprint("Probes: " + String(totalProbes));
                      padprintln("Uniq Clients: " + String(uniqueClients), 11);
                      padprint("Responses: " + String(karmaResponsesSent));

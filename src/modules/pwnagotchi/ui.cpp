@@ -26,7 +26,7 @@ uint8_t menu_current_cmd = 0;
 uint8_t menu_current_opt = 0;
 
 void initUi() {
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.fillScreen(bruceConfig.bgColor);
     tft.setTextColor(bruceConfig.priColor);
 
@@ -72,10 +72,10 @@ void drawTime() {
     tft.drawString(right_str, display_w, 3);
 }
 
-void drawFooterData(uint8_t friends_run, uint8_t friends_tot, String last_friend_name, signed int rssi) {
+void drawFooterData(uint8_t friends_run, uint8_t friends_tot, const String &last_friend_name, signed int rssi) {
     tft.drawPixel(0, 0, 0);
     tft.fillRect(0, canvas_bot_h + 1, display_w - 50, canvas_bot_h + 10, bruceConfig.bgColor);
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor);
     tft.setTextDatum(TL_DATUM);
 
@@ -117,7 +117,7 @@ void updateUi(bool show_toolbars) {
 
 void drawTopCanvas() {
     // prepare canvas
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextDatum(TL_DATUM);
     char buffer[32];
@@ -131,7 +131,7 @@ void drawTopCanvas() {
 
 void drawBottomCanvas() {
     // prepare canvas
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextDatum(TR_DATUM);
     // draw screen
@@ -141,7 +141,7 @@ void drawBottomCanvas() {
     tft.drawLine(0, canvas_bot_h, display_w, canvas_bot_h, bruceConfig.priColor);
 }
 
-void drawMood(String face, String phrase, bool broken) {
+void drawMood(const String &face, const String &phrase, bool broken) {
     // prepare canvas
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FG + 1);
@@ -152,7 +152,7 @@ void drawMood(String face, String phrase, bool broken) {
     tft.drawCentreString(face, canvas_center_x, canvas_h / 3, SMOOTH_FONT);
     // prepare canvas
     tft.setTextDatum(BC_DATUM);
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     // draw screen
     tft.drawPixel(0, 0, 0);
     tft.drawCentreString(phrase, canvas_center_x, canvas_h - 30, SMOOTH_FONT);

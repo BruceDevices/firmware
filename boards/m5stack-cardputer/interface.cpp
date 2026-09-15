@@ -126,9 +126,31 @@ void _post_setup_gpio() {
         Keyboard.begin();
         return;
     }
+    bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
+    bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
+
     bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
+
+    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)13;
+    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+
+    bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
+    bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
+
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
     tca.matrix(7, 8);
     tca.flush();

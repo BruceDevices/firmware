@@ -21,6 +21,32 @@ uint32_t settingsCallback(cmd *c) {
         return true;
     }
 
+    // Pin/device settings live in bruceConfigPins, which is not part of
+    // bruceConfig.toJson(); handle them before the bruceConfig whitelist check
+    // below (otherwise they are wrongly rejected as "Invalid field name").
+    {
+        bool isPinField = true;
+        if (setting_name == "bleName") bruceConfigPins.setBleName(setting_value);
+        else if (setting_name == "irTx") bruceConfigPins.setIrTxPin(setting_value.toInt());
+        else if (setting_name == "irTxRepeats")
+            bruceConfigPins.setIrTxRepeats(static_cast<uint8_t>(setting_value.toInt()));
+        else if (setting_name == "irRx") bruceConfigPins.setIrRxPin(setting_value.toInt());
+        else if (setting_name == "rfTx") bruceConfigPins.setRfTxPin(setting_value.toInt());
+        else if (setting_name == "rfRx") bruceConfigPins.setRfRxPin(setting_value.toInt());
+        else if (setting_name == "rfModule")
+            bruceConfigPins.setRfModule(static_cast<RFModules>(setting_value.toInt()));
+        else if (setting_name == "rfFreq") bruceConfigPins.setRfFreq(setting_value.toFloat());
+        else if (setting_name == "rfFxdFreq") bruceConfigPins.setRfFxdFreq(setting_value.toInt());
+        else if (setting_name == "rfScanRange") bruceConfigPins.setRfScanRange(setting_value.toInt());
+        else if (setting_name == "rfidModule")
+            bruceConfigPins.setRfidModule(static_cast<RFIDModules>(setting_value.toInt()));
+        else isPinField = false;
+        if (isPinField) {
+            serialDevice->println(setting_name + " = " + setting_value);
+            return true;
+        }
+    }
+
     if (setting[setting_name].isNull()) {
         serialDevice->println("Invalid field name: " + setting_name);
         return false;
@@ -58,21 +84,6 @@ uint32_t settingsCallback(cmd *c) {
             setting_value.substring(setting_value.indexOf(",") + 1)
         );
     }
-    if (setting_name == "bleName") bruceConfigPins.setBleName(setting_value);
-    if (setting_name == "irTx") bruceConfigPins.setIrTxPin(setting_value.toInt());
-    if (setting_name == "irTxRepeats")
-        bruceConfigPins.setIrTxRepeats(static_cast<uint8_t>(setting_value.toInt()));
-    if (setting_name == "irRx") bruceConfigPins.setIrRxPin(setting_value.toInt());
-    if (setting_name == "rfTx") bruceConfigPins.setRfTxPin(setting_value.toInt());
-    if (setting_name == "rfRx") bruceConfigPins.setRfRxPin(setting_value.toInt());
-    if (setting_name == "rfModule")
-        bruceConfigPins.setRfModule(static_cast<RFModules>(setting_value.toInt()));
-    if (setting_name == "rfFreq" && setting_value.toFloat())
-        bruceConfigPins.setRfFreq(setting_value.toFloat());
-    if (setting_name == "rfFxdFreq") bruceConfigPins.setRfFxdFreq(setting_value.toInt());
-    if (setting_name == "rfScanRange") bruceConfigPins.setRfScanRange(setting_value.toInt());
-    if (setting_name == "rfidModule")
-        bruceConfigPins.setRfidModule(static_cast<RFIDModules>(setting_value.toInt()));
     if (setting_name == "wigleBasicToken") bruceConfig.setWigleBasicToken(setting_value);
     if (setting_name == "wdgwarsApiKey") bruceConfig.setWdgwarsApiKey(setting_value);
     if (setting_name == "devMode") bruceConfig.setDevMode(setting_value.toInt());
