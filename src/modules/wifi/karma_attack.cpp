@@ -897,7 +897,9 @@ static size_t countEvilPortalCreds() {
 String generateUniqueFilename(FS &fs, bool compressed) {
     String basePath = "/ProbeData/";
     String baseName = compressed ? "karma_compressed_" : "probe_capture_";
-    String extension = compressed ? ".bin" : ".txt";
+    // .csv, because that is what the text format is: a header row and one
+    // comma-separated record per probe. A .txt made every viewer guess.
+    String extension = compressed ? ".bin" : ".csv";
     if (!fs.exists(basePath)) fs.mkdir(basePath);
     int counter = 1;
     String filename;
@@ -3453,10 +3455,7 @@ String saveProbesToFile(FS &fs, bool compressed) {
     } else {
         File file = fs.open(filename, FILE_WRITE);
         if (file) {
-            // UptimeMs rather than Timestamp: probe.timestamp is millis() since
-            // boot, not a wall clock, and calling it a timestamp invited it to
-            // be read as one.
-            file.println("UptimeMs,MAC,RSSI,Channel,SSID");
+            file.println("MAC,RSSI,Channel,SSID");
             int count = bufferWrapped ? MAX_PROBE_BUFFER : probeBufferIndex;
             for (int i = 0; i < count; i++) {
                 int idx = bufferWrapped ? (probeBufferIndex + i) % MAX_PROBE_BUFFER : i;
@@ -3468,12 +3467,7 @@ String saveProbesToFile(FS &fs, bool compressed) {
                     String ssid = probe.ssid;
                     ssid.replace("\"", "\"\"");
                     file.printf(
-                        "%lu,%s,%d,%d,\"%s\"\n",
-                        probe.timestamp,
-                        probe.mac,
-                        probe.rssi,
-                        probe.channel,
-                        ssid.c_str()
+                        "%s,%d,%d,\"%s\"\n", probe.mac, probe.rssi, probe.channel, ssid.c_str()
                     );
                 }
             }
