@@ -185,8 +185,10 @@ typedef struct {
     uint16_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
-    uint16_t baseDuration;
-    uint16_t extendedDuration;
+    // Widened to 32 bit: these hold milliseconds and overflowed a uint16_t
+    // (extendedDuration = 180000 silently became 48928).
+    uint32_t baseDuration;
+    uint32_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure

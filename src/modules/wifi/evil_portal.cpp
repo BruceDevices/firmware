@@ -31,7 +31,14 @@ EvilPortal::EvilPortal(
     if (!_backgroundMode) { loop(); }
 }
 
-EvilPortal::~EvilPortal() {}
+EvilPortal::~EvilPortal() {
+    // The DNS server is a process-wide singleton shared by every portal
+    // instance and nothing used to stop it on teardown, so once a Karma portal
+    // was destroyed it kept answering queries with a softAP address that no
+    // longer existed, until the next portal happened to call start() again.
+    webServer.end();
+    if (dnsServer != nullptr) dnsServer->stop();
+}
 
 void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *request) {
     AsyncResponseStream *response = request->beginResponseStream("text/html");
