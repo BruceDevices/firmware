@@ -3457,19 +3457,39 @@ String saveProbesToFile(FS &fs, bool compressed) {
         if (file) {
             file.println("MAC,RSSI,Channel,SSID");
             int count = bufferWrapped ? MAX_PROBE_BUFFER : probeBufferIndex;
+
+            // One row per (client, ESSID). A phone repeats the same directed
+            // probe every few seconds, so the raw buffer holds the same pair
+            // many times over and the file said nothing the first row had not
+            // already said. The sighting kept is the strongest one, which is
+            // the best estimate of how close the client came and carries the
+            // channel it was heard best on. Rows stay in first-seen order.
+            std::vector<int> rows;
+            rows.reserve(count);
             for (int i = 0; i < count; i++) {
                 int idx = bufferWrapped ? (probeBufferIndex + i) % MAX_PROBE_BUFFER : i;
                 const ProbeRequest &probe = probeBuffer[idx];
-                if (!probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*")) {
-                    // An SSID is 32 arbitrary bytes, quotes included, so the
-                    // field is quoted and embedded quotes are doubled per RFC
-                    // 4180. Otherwise one crafted ESSID shifts every column.
-                    String ssid = probe.ssid;
-                    ssid.replace("\"", "\"\"");
-                    file.printf(
-                        "%s,%d,%d,\"%s\"\n", probe.mac, probe.rssi, probe.channel, ssid.c_str()
-                    );
+                if (probeSSIDEmpty(probe) || probeSSIDEquals(probe, "*WILDCARD*")) continue;
+
+                bool merged = false;
+                for (int &kept : rows) {
+                    const ProbeRequest &seen = probeBuffer[kept];
+                    if (strcmp(seen.mac, probe.mac) != 0 || strcmp(seen.ssid, probe.ssid) != 0) continue;
+                    if (probe.rssi > seen.rssi) kept = idx;
+                    merged = true;
+                    break;
                 }
+                if (!merged) rows.push_back(idx);
+            }
+
+            for (int idx : rows) {
+                const ProbeRequest &probe = probeBuffer[idx];
+                // An SSID is 32 arbitrary bytes, quotes included, so the field
+                // is quoted and embedded quotes are doubled per RFC 4180.
+                // Otherwise one crafted ESSID shifts every column.
+                String ssid = probe.ssid;
+                ssid.replace("\"", "\"\"");
+                file.printf("%s,%d,%d,\"%s\"\n", probe.mac, probe.rssi, probe.channel, ssid.c_str());
             }
             file.close();
             written = true;
