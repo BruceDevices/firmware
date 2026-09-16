@@ -287,7 +287,8 @@ enum KarmaMode {
 // Function prototypes
 void karma_setup();
 void clearProbes();
-void saveProbesToFile(FS &fs, bool compressed);
+// Returns the path written, or "" if nothing could be saved.
+String saveProbesToFile(FS &fs, bool compressed);
 void sendProbeResponse(const String &ssid, const String &mac, uint8_t channel);
 void sendDeauth(const String &mac, uint8_t channel, bool broadcast);
 void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd);
