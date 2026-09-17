@@ -57,7 +57,7 @@
 	"Custom Boards": [
 		{ "id": "Awok-Mini", "name": "AWOK dual Mini v2", "family": "ESP32" },
 		{ "id": "Awok-Touch", "name": "AWOK dual touch v2", "family": "ESP32" },
-		{ "id": "Lilka", "name": "Lilka", "family": "ESP32-S3" },
+		{ "id": "lilka", "name": "Lilka", "family": "ESP32-S3" },
 		{ "id": "Marauder-Mini", "name": "Marauder Mini", "family": "ESP32" },
 		{ "id": "Marauder-V4-V6", "name": "Marauder V4 or V6", "family": "ESP32" },
 		{ "id": "Marauder-v61", "name": "Marauder V6.x", "family": "ESP32" },
