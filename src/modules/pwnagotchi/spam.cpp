@@ -380,6 +380,15 @@ void send_pwnagotchi_beacon_main() {
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+
+    // Hide the AP so the IDF default SoftAP ESP_XXXXXX is not broadcast; WIFI_IF_AP stays up for raw TX
+    wifi_config_t ap_config = {};
+    ap_config.ap.ssid_hidden = 1;
+    ap_config.ap.max_connection = 1;
+    ap_config.ap.authmode = WIFI_AUTH_OPEN;
+    ap_config.ap.beacon_interval = 60000;
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // Load faces and names from the file
