@@ -108,7 +108,7 @@ static const uint8_t SS   = 16; // SD CS
 // ===== IR (extension header) =====
 // RXLED is the default IR-RX pin (used by interface.cpp irRx); the lists let
 // the user pick the pin from the Bruce menu.
-#define RXLED 21
+#define RXLED 14
 #define TXLED 21
 #define LED_ON  HIGH
 #define LED_OFF LOW
