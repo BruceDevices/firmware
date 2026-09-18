@@ -448,7 +448,7 @@ void lorachat() {
 // check the saving and loading
 void changeusername() {
     tft.fillScreen(TFT_BLACK);
-    String username = keyboard(username, 64, "");
+    String username = keyboard("", 64, "Username:");
     if (username == "" || username == "\x1B") return;
     File file = LittleFS.open("/lora_settings.json", "r");
     JsonDocument doc;
