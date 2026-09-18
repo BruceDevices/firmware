@@ -4,6 +4,9 @@
 #include <Keyboard.h>
 #include <Wire.h>
 #include <interface.h>
+#if SOC_USB_OTG_SUPPORTED && CONFIG_TINYUSB_ENABLED
+#include <USB.h>
+#endif
 
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
@@ -87,6 +90,10 @@ void _setup_gpio() {
     pinMode(5, OUTPUT);
     // Set GPIO5 HIGH for SD card compatibility (thx for the tip @bmorcelli & 7h30th3r0n3)
     digitalWrite(5, HIGH);
+
+#if SOC_USB_OTG_SUPPORTED && CONFIG_TINYUSB_ENABLED
+    USB.usbPower(500);
+#endif
 }
 volatile bool kb_interrupt = false;
 void IRAM_ATTR gpio_isr_handler(void *arg) {
