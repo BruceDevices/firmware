@@ -107,7 +107,7 @@ void BLENinebot::setup() {
 
     pClient = NimBLEDevice::createClient();
     pClient->setClientCallbacks(new ScooterClientCallbacks(), false);
-    pClient->setConnectTimeout(3);
+    pClient->setConnectTimeout(3 * 1000);
 
     delay(CMD_DELAY);
     loop();
