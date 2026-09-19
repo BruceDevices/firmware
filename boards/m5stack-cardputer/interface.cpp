@@ -3,6 +3,10 @@
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
 #include <Wire.h>
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#endif
 #include <interface.h>
 
 // Cardputer and 1.1 keyboard
@@ -94,6 +98,62 @@ void IRAM_ATTR gpio_isr_handler(void *arg) {
     // static long i = 0;
     // Serial.printf("interrupt %ld\n", i++);
 }
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+// Cardputer ADV 3-in-1 expansion:
+// GPIO8 = TCA8418 SDA / NRF24 CE
+// GPIO9 = TCA8418 SCL / NRF24 CS
+//
+// The keyboard and NRF24 cannot own these pins simultaneously.  A mutex
+// serializes the board-specific GPIO8/9 multiplexer.  NRF24 code can hold
+// the mutex during a receive window while the keyboard task uses a non-
+// blocking try-lock and leaves its interrupt pending for the next gap.
+static SemaphoreHandle_t adv3in1MuxMutexHandle() {
+    static SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+    return mutex;
+}
+
+
+void adv3in1Nrf24CriticalBegin() {
+    SemaphoreHandle_t mutex = adv3in1MuxMutexHandle();
+    if (mutex != nullptr) xSemaphoreTake(mutex, portMAX_DELAY);
+}
+
+void adv3in1Nrf24CriticalEnd() {
+    SemaphoreHandle_t mutex = adv3in1MuxMutexHandle();
+    if (mutex != nullptr) xSemaphoreGive(mutex);
+}
+
+
+static bool adv3in1KeyboardTryBegin() {
+    SemaphoreHandle_t mutex = adv3in1MuxMutexHandle();
+    if (mutex == nullptr) return false;
+    if (xSemaphoreTake(mutex, 0) == pdTRUE) return true;
+    return false;
+}
+
+static void adv3in1KeyboardEnd() {
+    SemaphoreHandle_t mutex = adv3in1MuxMutexHandle();
+    if (mutex != nullptr) xSemaphoreGive(mutex);
+}
+
+static void setAdvSharedPinsToNrfIdle() {
+    // Release the I2C controller before using GPIO8/9 as NRF24 pins.
+    Wire1.end();
+
+    // NRF24 CE inactive.
+    pinMode(TCA8418_SDA_PIN, OUTPUT);
+    digitalWrite(TCA8418_SDA_PIN, LOW);
+
+    // NRF24 CS inactive.
+    pinMode(TCA8418_SCL_PIN, OUTPUT);
+    digitalWrite(TCA8418_SCL_PIN, HIGH);
+}
+
+static void setAdvSharedPinsToI2c() {
+    Wire1.begin(TCA8418_SDA_PIN, TCA8418_SCL_PIN);
+    delay(5);
+}
+#endif
 void _post_setup_gpio() {
     // Initialize TCA8418 I2C keyboard controller
     Serial.println("DEBUG: Cardputer ADV - Initializing TCA8418 keyboard");
@@ -133,6 +193,21 @@ void _post_setup_gpio() {
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // Cardputer ADV + CC1101/NRF24/LoRa 3-in-1 expansion.
+    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)15;
+    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)13;
+
+    bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
+    bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
+    bruceConfigPins.NRF24_bus.cs = (gpio_num_t)9;
+    bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)8;
+#else
+    // Preserve the existing Cardputer ADV runtime defaults.
     bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
     bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
@@ -144,19 +219,41 @@ void _post_setup_gpio() {
     bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
     bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
     bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
+#endif
 
+#if !defined(CARDPUTER_ADV_3IN1_MUX)
     pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+#endif
+
     pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
     pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
-    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
+    // Finish TCA8418 keyboard initialization first.
     tca.matrix(7, 8);
     tca.flush();
+
     pinMode(11, INPUT);
-    attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
+    attachInterruptArg(
+        digitalPinToInterrupt(11),
+        gpio_isr_handler,
+        nullptr,
+        CHANGE
+    );
+
     tca.enableInterrupts();
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    // Create the mux mutex during board setup, before the input task starts
+    // competing with NRF24 operations.
+    (void)adv3in1MuxMutexHandle();
+
+    // Keyboard initialization is finished.
+    // GPIO8/9 can now return to NRF24 idle mode.
+    setAdvSharedPinsToNrfIdle();
+#endif
 }
 
 /*********************************************************************
@@ -220,6 +317,16 @@ void InputHandler(void) {
         keyStroke key;
 
         if (kb_interrupt || digitalRead(11) == LOW) {
+            bool keyboardMuxReady = true;
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+            keyboardMuxReady = adv3in1KeyboardTryBegin();
+#endif
+
+            if (keyboardMuxReady) {
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+                setAdvSharedPinsToI2c();
+#endif
+
             if (!kb_interrupt && digitalRead(11) == LOW) {
                 detachInterrupt(digitalPinToInterrupt(11));
                 attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
@@ -351,6 +458,12 @@ void InputHandler(void) {
             tca.writeRegister(TCA8418_REG_INT_STAT, 1);
             int intstat = tca.readRegister(TCA8418_REG_INT_STAT);
             if ((intstat & 0x01) == 0) { kb_interrupt = false; }
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+            setAdvSharedPinsToNrfIdle();
+            adv3in1KeyboardEnd();
+#endif
+            }
         }
 
         unsigned long now = millis();
@@ -503,7 +616,17 @@ void _setup_codec_speaker(bool enable) {
     };
     static constexpr const uint8_t disabled_bulk_data[] = {0};
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1Nrf24CriticalBegin();
+    setAdvSharedPinsToI2c();
+#endif
+
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    setAdvSharedPinsToNrfIdle();
+    adv3in1Nrf24CriticalEnd();
+#endif
 }
 
 /*********************************************************************
@@ -540,5 +663,15 @@ void _setup_codec_mic(bool enable) {
         0
     };
 
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    adv3in1Nrf24CriticalBegin();
+    setAdvSharedPinsToI2c();
+#endif
+
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+
+#if defined(CARDPUTER_ADV_3IN1_MUX)
+    setAdvSharedPinsToNrfIdle();
+    adv3in1Nrf24CriticalEnd();
+#endif
 }
