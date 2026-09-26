@@ -377,6 +377,10 @@ void initCC1101once(SPIClass *SSPI) {
     return;
 }
 
+static bool isCapCC1101() {
+    return bruceConfigPins.CC1101_bus.cs == 5 && bruceConfigPins.CC1101_bus.io0 == 15;
+}
+
 void setMHZ(float frequency) {
     if (frequency > 928 || frequency < 280) {
         frequency = 433.92;
@@ -423,7 +427,7 @@ void setMHZ(float frequency) {
         if (preciseCalibration && previousMode != 0) ELECHOUSE_cc1101.setSidle();
 
         ELECHOUSE_cc1101.setMHZ(frequency);
-
+        if (isCapCC1101()) capCC1101SetBand(frequency); // <- adicionar
         if (preciseCalibration) {
             cc1101ApplyPreciseCalibration(frequency, isTxProfile);
 
