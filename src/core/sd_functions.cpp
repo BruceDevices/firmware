@@ -512,12 +512,8 @@ bool sortList(const FileList &a, const FileList &b) {
     if (a.folder != b.folder) {
         return a.folder > b.folder; // true if a is a folder and b is not
     }
-    // Order items alphabetically
-    String fa = a.filename.c_str();
-    fa.toUpperCase();
-    String fb = b.filename.c_str();
-    fb.toUpperCase();
-    return fa < fb;
+    // Order items alphabetically — strcasecmp avoids heap allocations on every comparison
+    return strcasecmp(a.filename.c_str(), b.filename.c_str()) < 0;
 }
 
 /***************************************************************************************
@@ -549,19 +545,22 @@ bool checkExt(String ext, String pattern) {
 ** Description:   read files/folders from a folder
 ***************************************************************************************/
 void readFs(FS &fs, const String &folder, const String &allowed_ext) {
-    int allFilesCount = 0;
     fileList.clear();
     FileList object;
 
     File root = fs.open(folder);
     if (!root || !root.isDirectory()) { return; }
 
+    int iteration = 0;
     while (true) {
+        // Yield every 50 entries so the task watchdog (TWDT) doesn't fire on
+        // large SD cards with hundreds of files.
+        if (++iteration % 50 == 0) vTaskDelay(1);
+
         bool isDir;
         String fullPath = root.getNextFileName(&isDir);
         String nameOnly = fullPath.substring(fullPath.lastIndexOf("/") + 1);
         if (fullPath == "") { break; }
-        // Serial.printf("Path: %s (isDir: %d)\n", fullPath.c_str(), isDir);
 
         if (isDir) {
             object.filename = nameOnly;
