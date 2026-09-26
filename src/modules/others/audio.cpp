@@ -762,10 +762,14 @@ void _tone(unsigned int frequency, unsigned long duration) {
 }
 
 // ===== ASYNC UI BEEP =====
-// I2S needs ~500ms to become audible after AudioOutputI2S creation.
-// A background task absorbs that warmup so the UI never blocks, and a
-// time-offset bell waveform ensures the audible part starts right as the
-// hardware becomes ready.
+// Root cause of "no sound": AudioGeneratorWAV::begin() always calls
+// output->begin() → i2s_new_channel() — no guard. So I2S is torn down
+// and rebuilt on every beep, causing ~500ms amp warmup every time.
+//
+// Fix: bypass AudioGeneratorWAV entirely. Keep one persistent AudioOutputI2S
+// (begin() called once at task start). Push bell samples directly via
+// ConsumeSample(). I2S clock and NS4168 amp stay warm between beeps —
+// all beeps after the first are instantaneous.
 
 struct BeepRequest {
     unsigned int freq;
@@ -775,71 +779,63 @@ struct BeepRequest {
 static QueueHandle_t g_beepQueue = nullptr;
 
 static void uiBeepTask(void *) {
-    BeepRequest req;
-    // Keep the AudioOutputI2S alive between beeps so the ~500ms I2S/amp warmup
-    // only happens once (first beep). All subsequent beeps are near-instant
-    // because the hardware pipeline stays warm.
-    // The instance is destroyed if main audio takes over I2S.
-    AudioOutputI2S *persistOut = nullptr;
+    // Pre-warm I2S + NS4168 amp at task start (in background, before first keypress).
+    _setup_codec_speaker(true);
+    AudioOutputI2S *out = createConfiguredAudioOutput();
+    if (out) {
+        out->begin(); // installs I2S channel once; amp needs ~500ms to settle
+        // Play silence to let the amp come out of pop-suppression standby.
+        const int warmupFrames = 44100 * 600 / 1000; // 600ms
+        int16_t z[2] = {0, 0};
+        for (int i = 0; i < warmupFrames; i++) {
+            while (!out->ConsumeSample(z)) taskYIELD();
+        }
+        // Drain any stale beep requests queued during warmup.
+        BeepRequest dummy;
+        while (xQueueReceive(g_beepQueue, &dummy, 0) == pdTRUE) {}
+    }
 
+    BeepRequest req;
     for (;;) {
         if (xQueueReceive(g_beepQueue, &req, portMAX_DELAY) != pdTRUE) continue;
         if (!bruceConfig.soundEnabled) continue;
 
-        // If main audio grabbed I2S, drop our cached instance so it can use the peripheral.
+        // Main audio is using I2S — release our channel so it can proceed.
         if (isAudioPlaying()) {
-            if (persistOut) { persistOut->stop(); delete persistOut; persistOut = nullptr; }
+            if (out) { out->stop(); delete out; out = nullptr; }
             continue;
         }
 
-        const bool firstBeep = (persistOut == nullptr);
-        if (firstBeep) {
+        // Recreate output if it was released for main audio (warmup will recur once).
+        if (!out) {
             _setup_codec_speaker(true);
-            persistOut = createConfiguredAudioOutput();
-            if (!persistOut) continue;
-            // begin() warms up I2S + amp; only needed once.
-            persistOut->begin();
+            out = createConfiguredAudioOutput();
+            if (!out) continue;
+            out->begin();
         } else {
-            // Refresh gain in case volume changed between beeps.
-            persistOut->SetGain(bruceConfig.soundVolume / AUDIO_VOLUME_MAX);
+            out->SetGain(bruceConfig.soundVolume / AUDIO_VOLUME_MAX);
         }
 
-        // First beep: offset waveform past warmup so bell is audible immediately.
-        // All later beeps: start waveform at t=0 (hardware already warm → instant).
-        const float WARMUP_S = firstBeep ? 0.50f : 0.0f;
-        float totalSec = WARMUP_S + req.ms / 1000.0f;
-        float hz = (float)req.freq;
-        float volumeScale = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
+        // Generate bell waveform and push directly to I2S — no AudioGeneratorWAV.
+        const float SR = 44100.0f;
+        const int total = (int)(SR * req.ms / 1000.0f);
+        const float hz  = (float)req.freq;
+        const float vol = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
 
-        AudioFileSourceFunction *file = new AudioFileSourceFunction(totalSec);
-        if (!file) { persistOut->stop(); delete persistOut; persistOut = nullptr; continue; }
-
-        file->addAudioGenerators([volumeScale, hz, WARMUP_S](const float time) -> float {
-            if (time < WARMUP_S) return 0.0f;
-            float t = time - WARMUP_S;
-            float decay = expf(-9.0f * t);
-            float v = sinf(TWO_PI * hz * t) + 0.25f * sinf(TWO_PI * hz * 2.756f * t);
-            return v * decay * volumeScale;
-        });
-
-        AudioGeneratorWAV *wav = new AudioGeneratorWAV();
-        if (!wav) { delete file; persistOut->stop(); delete persistOut; persistOut = nullptr; continue; }
-
-        if (!wav->begin(file, persistOut)) {
-            delete wav; delete file;
-            persistOut->stop(); delete persistOut; persistOut = nullptr;
-            continue;
+        for (int i = 0; i < total; i++) {
+            // Bail early if a newer beep arrived or main audio started.
+            if ((i & 0xFF) == 0) {
+                if (uxQueueMessagesWaiting(g_beepQueue) > 0) break;
+                if (isAudioPlaying()) { out->stop(); delete out; out = nullptr; break; }
+            }
+            float t = i / SR;
+            float v = (sinf(TWO_PI * hz * t) + 0.25f * sinf(TWO_PI * hz * 2.756f * t))
+                      * expf(-9.0f * t) * vol;
+            int16_t s = (int16_t)(v * 32767.0f);
+            int16_t samples[2] = {s, s};
+            while (!out->ConsumeSample(samples)) taskYIELD();
         }
-
-        while (wav->isRunning()) {
-            if (!wav->loop()) break;
-            if (uxQueueMessagesWaiting(g_beepQueue) > 0) { wav->stop(); break; }
-            vTaskDelay(pdMS_TO_TICKS(1));
-        }
-
-        delete wav;
-        delete file;
-        // Keep persistOut alive — do NOT stop or delete it here.
+        // out stays alive — I2S clock and amp remain warm for the next beep.
     }
 }
 
