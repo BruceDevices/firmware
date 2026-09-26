@@ -18,4 +18,8 @@ void i2c_bulk_write(TwoWire *wire, uint8_t addr, const uint8_t *bulk_data);
 void printMemoryUsage(const char *msg = "");
 String repeatString(int length, String character);
 String formatBytes(uint64_t bytes);
+
+// Short UI feedback beep — no-op when sound is disabled or no speaker present.
+// nav: ~1000Hz/30ms  |  sel: ~1400Hz/50ms  (caller chooses)
+void uiBeep(unsigned int freq = 1000, unsigned long ms = 30);
 #endif

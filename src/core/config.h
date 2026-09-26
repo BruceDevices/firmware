@@ -43,7 +43,7 @@ public:
     bool dst = false;
     bool clock24hr = true;
     int soundEnabled = 1;
-    int soundVolume = 100;
+    int soundVolume = 70;
     int wifiAtStartup = 0;
     int instantBoot = 0;
     String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
@@ -51,7 +51,7 @@ public:
 #ifdef HAS_RGB_LED
     // Led
     int ledBright = 50;
-    uint32_t ledColor = 0x960064;
+    uint32_t ledColor = 0xFF6600; // orange RGB888
     int ledBlinkEnabled = 1;
     int ledEffect = 0;
     int ledEffectSpeed = 5;

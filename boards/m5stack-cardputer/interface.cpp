@@ -553,6 +553,11 @@ void checkReboot() {}
 **********************************************************************/
 void _setup_codec_speaker(bool enable) {
     if (!UseTCA8418) return;
+    // disabled_bulk_data = {0} is a no-op on hardware (ES8311 stays powered).
+    // So only the enable path needs guarding — once initialized, never re-init.
+    static bool codecInitialized = false;
+    if (enable && codecInitialized) return;
+    if (enable) codecInitialized = true;
 
     static constexpr const uint8_t enabled_bulk_data[] = {
         2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON

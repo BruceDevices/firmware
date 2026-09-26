@@ -666,7 +666,7 @@ int loopOptions(
 #ifdef HAS_KEYBOARD
                 check(PrevPress);
                 int prevEnabled = findNextEnabled(index, -1);
-                if (prevEnabled >= 0) index = prevEnabled;
+                if (prevEnabled >= 0) { index = prevEnabled; uiBeep(900, 25); }
                 redraw = true;
 #else
                 long _tmp = millis();
@@ -708,6 +708,7 @@ int loopOptions(
                 if (nextEnabled >= 0) {
                     if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
                     index = nextEnabled;
+                    uiBeep(900, 25);
                 }
                 redraw = true;
             }
@@ -730,6 +731,7 @@ int loopOptions(
             }
             if (chosen >= options.size() || !options[chosen].enabled) continue;
             Serial.println("Selected: " + String(options[chosen].label));
+            uiBeep(1400, 40);
             options[chosen].operation();
             break;
         }

@@ -3,8 +3,9 @@
 #include "sd_functions.h"
 #include <ArduinoJson.h>
 
-#define DEFAULT_PRICOLOR 0xA80F
-#define DEFAULT_SECCOLOR 0xCB76
+// Orange UI: RGB(255,165,0) → RGB565 = 0xFD20
+#define DEFAULT_PRICOLOR 0xFD20
+#define DEFAULT_SECCOLOR (DEFAULT_PRICOLOR - 0x2000)
 
 struct themeFiles {
     String wifi = "";

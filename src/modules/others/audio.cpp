@@ -750,3 +750,11 @@ void _tone(unsigned int frequency, unsigned long duration) {
 #endif
 #endif
 }
+
+void uiBeep(unsigned int freq, unsigned long ms) {
+    // Delegates to _tone which handles BUZZ_PIN / HAS_NS4168_SPKR / nothing.
+    // With the _setup_codec_speaker cache, the I2S codec is only initialized
+    // once per session, so every beep after the first is fast.
+    _tone(freq, ms);
+}
+
