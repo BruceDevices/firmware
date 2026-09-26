@@ -197,7 +197,7 @@ void ConfigMenu::advancedMenu() {
     while (true) {
         std::vector<Option> localOptions = {
 #ifdef TCA8418_I2C_ADDR
-            {String("HW Profile: ") + hwProfileName(loadHWProfile()),
+            {String("HW Profile: ") + hwProfileName(loadHWProfile()), // label auto-updates on menu rebuild
              [this]() { hwProfileMenu(); }                         },
 #endif
             {"Set Device pins", [this]() { pinsMenu(); }           },
@@ -367,23 +367,20 @@ void ConfigMenu::switchToUARTSerial() {
 **  Hardware profile selection (Cardputer-Adv only)
 **********************************************************************/
 #ifdef TCA8418_I2C_ADDR
-void ConfigMenu::hwProfileMenu() {
-    while (true) {
-        HWProfile current = loadHWProfile();
-        std::vector<Option> localOptions;
-        for (int i = 0; i < HW_PROFILE_COUNT; i++) {
-            HWProfile p = static_cast<HWProfile>(i);
-            String label = String(i == current ? "> " : "  ") + hwProfileName(p);
-            localOptions.push_back({label.c_str(), [=]() {
-                saveHWProfile(p);
-                applyHWProfile(p);
-            }});
-        }
-        localOptions.push_back({"Back", []() {}});
+static void setProfileAndApply(uint8_t prof) {
+    saveHWProfile(prof);
+    applyHWProfile(prof);
+    displaySuccess(String("Profile: ") + hwProfileName(prof));
+}
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "HW Profile");
-        if (selected == -1 || selected == (int)localOptions.size() - 1) return;
-    }
+void ConfigMenu::hwProfileMenu() {
+    options = {
+        {"Cap CC1101",    [=]() { setProfileAndApply(HW_CAP_CC1101); }},
+        {"Cap LoRa-1262", [=]() { setProfileAndApply(HW_CAP_LORA);   }},
+        {"Stock/Shield",  [=]() { setProfileAndApply(HW_STOCK);      }},
+    };
+    loopOptions(options);
+    options.clear();
 }
 #endif
 

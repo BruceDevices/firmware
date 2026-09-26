@@ -81,8 +81,8 @@ inline void mapRawKeyToPhysical(uint8_t keyvalue, uint8_t &row, uint8_t &col) {
 /***************************************************************************************
 ** Hardware profile helpers (Cap CC1101 / Cap LoRa / Stock)
 ***************************************************************************************/
-const char *hwProfileName(HWProfile p) {
-    switch (p) {
+const char *hwProfileName(uint8_t prof) {
+    switch (prof) {
         case HW_CAP_CC1101: return "Cap CC1101";
         case HW_CAP_LORA:   return "Cap LoRa (beta)";
         case HW_STOCK:      return "Stock";
@@ -90,28 +90,28 @@ const char *hwProfileName(HWProfile p) {
     }
 }
 
-HWProfile loadHWProfile() {
+uint8_t loadHWProfile() {
     Preferences prefs;
     prefs.begin("bruce_hw", /*readOnly=*/true);
     uint8_t v = prefs.getUChar("profile", HW_CAP_CC1101);
     prefs.end();
-    return v < HW_PROFILE_COUNT ? static_cast<HWProfile>(v) : HW_CAP_CC1101;
+    return v < HW_PROFILE_COUNT ? v : HW_CAP_CC1101;
 }
 
-void saveHWProfile(HWProfile p) {
+void saveHWProfile(uint8_t prof) {
     Preferences prefs;
     prefs.begin("bruce_hw", /*readOnly=*/false);
-    prefs.putUChar("profile", static_cast<uint8_t>(p));
+    prefs.putUChar("profile", prof);
     prefs.end();
 }
 
-void applyHWProfile(HWProfile p) {
+void applyHWProfile(uint8_t prof) {
     // SPI bus is shared across all Cap variants
     bruceConfigPins.CC1101_bus.sck  = (gpio_num_t)40;
     bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
     bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
 
-    switch (p) {
+    switch (prof) {
         case HW_CAP_CC1101:
             // M5-U219: CS=G5, GDO0=G15; G13 is RF_SW0 (band switch), not CS.
             // GPS moved to G1/G2 to free G13/G15 for the Cap.

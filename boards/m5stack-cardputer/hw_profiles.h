@@ -13,13 +13,13 @@ enum HWProfile : uint8_t {
     HW_PROFILE_COUNT
 };
 
-const char *hwProfileName(HWProfile p);
+const char *hwProfileName(uint8_t prof);
 
 // NVS load/save (namespace "bruce_hw", key "profile")
-HWProfile loadHWProfile();
-void      saveHWProfile(HWProfile p);
+uint8_t loadHWProfile();
+void    saveHWProfile(uint8_t prof);
 
 // Apply pin assignments for the given profile to bruceConfigPins.
 // Called at boot from _post_setup_gpio() and immediately from the menu when the
 // user picks a new profile (so it takes effect without a reboot).
-void applyHWProfile(HWProfile p);
+void applyHWProfile(uint8_t prof);
