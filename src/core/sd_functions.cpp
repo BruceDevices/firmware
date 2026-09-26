@@ -551,11 +551,15 @@ void readFs(FS &fs, const String &folder, const String &allowed_ext) {
     File root = fs.open(folder);
     if (!root || !root.isDirectory()) { return; }
 
-    int iteration = 0;
+    // Feed the TWDT at least every 100ms regardless of how slow the SD card is.
+    // Counting iterations is unreliable — each getNextFileName() can take
+    // 10-100ms on FAT32, so a fixed interval can silently hit the 5s timeout.
+    unsigned long lastYield = millis();
     while (true) {
-        // Yield every 50 entries so the task watchdog (TWDT) doesn't fire on
-        // large SD cards with hundreds of files.
-        if (++iteration % 50 == 0) vTaskDelay(1);
+        if (millis() - lastYield >= 100) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+            lastYield = millis();
+        }
 
         bool isDir;
         String fullPath = root.getNextFileName(&isDir);
