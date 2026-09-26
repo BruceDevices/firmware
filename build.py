@@ -33,7 +33,7 @@ boot_bin = build_dir / "bootloader.bin"
 part_bin = build_dir / "partitions.bin"
 app_bin  = build_dir / "firmware.bin"
 
-out_bin  = proj_dir / f"Bruce-{pioenv}.bin"
+out_bin  = proj_dir / "BruceCustomJomar.jomar"
 
 # Esptool from PlatformIO + Python executable
 esptool_pkg = senv.PioPlatform().get_package_dir("tool-esptoolpy")
