@@ -43,7 +43,7 @@ public:
     bool dst = false;
     bool clock24hr = true;
     int soundEnabled = 1;
-    int soundVolume = 70;
+    int soundVolume = 50;
     int wifiAtStartup = 0;
     int instantBoot = 0;
     String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
