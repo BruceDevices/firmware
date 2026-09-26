@@ -195,6 +195,7 @@ void begin_storage() {
     bool checkFS = setupSdCard();
     bruceConfig.fromFile(checkFS);
     bruceConfigPins.fromFile(checkFS);
+    bruceConfig.loadDefaultsFromSD();
 }
 
 /*********************************************************************

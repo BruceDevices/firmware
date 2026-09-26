@@ -116,6 +116,7 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////
     void saveFile();
     void fromFile(bool checkFS = true);
+    void loadDefaultsFromSD();
     void factoryReset();
     void validateConfig();
     JsonDocument toJson() const;

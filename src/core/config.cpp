@@ -436,6 +436,77 @@ void BruceConfig::fromFile(bool checkFS) {
     log_i("Using config from file");
 }
 
+/*********************************************************************
+** Function: loadDefaultsFromSD
+** Reads /defaults.conf from the SD card and applies the values to
+** bruceConfig, then saves so the settings persist without the SD card.
+**
+** File format (create on a PC, copy to SD root as /defaults.conf):
+**   # lines starting with # are ignored
+**   soundVolume=75      (0-100)
+**   bright=80           (0-100)
+**   dimmerSet=30        (seconds before screen dims; 0=never)
+**   priColor=07E0       (RGB565 hex, UI primary colour)
+**   bgColor=0000        (RGB565 hex, UI background colour)
+**   ledColor=FF0000     (RGB888 hex, LED colour — ignored if no LED)
+**********************************************************************/
+void BruceConfig::loadDefaultsFromSD() {
+    File f = SD.open("/defaults.conf", FILE_READ);
+    if (!f) return;
+
+    bool changed = false;
+    // Collect color overrides — _setUiColor must be called once with both values
+    // because it resets bgColor to 0 whenever background pointer is null.
+    bool hasPriColor = false, hasBgColor = false;
+    uint16_t newPri = priColor, newBg = bgColor;
+
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.isEmpty() || line.startsWith("#")) continue;
+
+        int eq = line.indexOf('=');
+        if (eq < 1) continue;
+        String key = line.substring(0, eq);
+        String val = line.substring(eq + 1);
+        key.trim();
+        val.trim();
+
+        if (key == "soundVolume") {
+            soundVolume = constrain(val.toInt(), 0, 100);
+            changed = true;
+        } else if (key == "bright") {
+            bright = (uint8_t)constrain(val.toInt(), 0, 100);
+            changed = true;
+        } else if (key == "dimmerSet") {
+            dimmerSet = val.toInt();
+            validateDimmerValue();
+            changed = true;
+        } else if (key == "priColor") {
+            newPri = (uint16_t)strtoul(val.c_str(), nullptr, 16);
+            hasPriColor = true;
+            changed = true;
+        } else if (key == "bgColor") {
+            newBg = (uint16_t)strtoul(val.c_str(), nullptr, 16);
+            hasBgColor = true;
+            changed = true;
+#ifdef HAS_RGB_LED
+        } else if (key == "ledColor") {
+            ledColor = strtoul(val.c_str(), nullptr, 16);
+            changed = true;
+#endif
+        }
+    }
+    f.close();
+
+    if (hasPriColor || hasBgColor) _setUiColor(newPri, nullptr, &newBg);
+
+    if (changed) {
+        log_i("defaults.conf applied from SD");
+        saveFile();
+    }
+}
+
 void BruceConfig::saveFile() {
     FS *fs = &LittleFS;
     JsonDocument jsonDoc = toJson();
