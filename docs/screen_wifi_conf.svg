@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+  <!-- Background -->
+  <rect width="480" height="270" fill="#000000"/>
+
+  <!-- Top border + title bar -->
+  <rect x="10" y="10" width="460" height="250" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
+  <rect x="10" y="10" width="460" height="36" fill="#FFA600"/>
+  <text x="240" y="35" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">WiFi — from SD</text>
+
+  <!-- wifi.conf label -->
+  <text x="30" y="78" font-family="monospace" font-size="16" fill="#888888">📄 /wifi.conf</text>
+
+  <!-- File content box -->
+  <rect x="24" y="88" width="432" height="110" fill="#111111" rx="4" stroke="#444444" stroke-width="1"/>
+  <text x="38" y="112" font-family="monospace" font-size="18" fill="#FFA600">ssid=</text>
+  <text x="110" y="112" font-family="monospace" font-size="18" fill="#FFFFFF">MinhaRede</text>
+  <text x="38" y="138" font-family="monospace" font-size="18" fill="#FFA600">password=</text>
+  <text x="158" y="138" font-family="monospace" font-size="18" fill="#FFFFFF">minhasenha</text>
+  <!-- blank line indicator -->
+  <text x="38" y="158" font-family="monospace" font-size="14" fill="#444444">← linha em branco separa redes</text>
+  <text x="38" y="180" font-family="monospace" font-size="18" fill="#FFA600">ssid=</text>
+  <text x="110" y="180" font-family="monospace" font-size="18" fill="#FFFFFF">OutraRede</text>
+
+  <!-- Status note -->
+  <text x="30" y="224" font-family="monospace" font-size="16" fill="#44AA44">✓ password carregada do SD automaticamente</text>
+
+  <!-- Screen border -->
+  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+</svg>

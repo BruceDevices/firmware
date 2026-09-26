@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+  <!-- Background -->
+  <rect width="480" height="270" fill="#000000"/>
+
+  <!-- Title bar -->
+  <rect x="10" y="10" width="460" height="250" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
+  <rect x="10" y="10" width="460" height="36" fill="#FFA600"/>
+  <text x="240" y="35" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">Pinout por Perfil</text>
+
+  <!-- Header row -->
+  <text x="30"  y="72" font-family="monospace" font-size="15" fill="#888888">Perfil</text>
+  <text x="175" y="72" font-family="monospace" font-size="15" fill="#888888">CS</text>
+  <text x="230" y="72" font-family="monospace" font-size="15" fill="#888888">GDO0</text>
+  <text x="310" y="72" font-family="monospace" font-size="15" fill="#888888">GPS RX/TX</text>
+  <line x1="20" y1="78" x2="460" y2="78" stroke="#444444" stroke-width="1"/>
+
+  <!-- Row 1: Cap CC1101 — highlight -->
+  <rect x="12" y="82" width="456" height="38" fill="#1A1A00" rx="2"/>
+  <text x="30"  y="107" font-family="monospace" font-size="16" fill="#FFA600">Cap CC1101</text>
+  <text x="175" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
+  <text x="230" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G15</text>
+  <text x="310" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G1/G2</text>
+
+  <!-- Row 2: Cap LoRa -->
+  <text x="30"  y="148" font-family="monospace" font-size="16" fill="#FFA600">Cap LoRa</text>
+  <text x="175" y="148" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
+  <text x="230" y="148" font-family="monospace" font-size="16" fill="#888888">—</text>
+  <text x="310" y="148" font-family="monospace" font-size="16" fill="#FFFFFF">G15/G13</text>
+  <text x="30"  y="168" font-family="monospace" font-size="13" fill="#555555">(SX1262; beta)</text>
+
+  <!-- Row 3: Stock -->
+  <text x="30"  y="208" font-family="monospace" font-size="16" fill="#FFA600">Stock</text>
+  <text x="175" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G13</text>
+  <text x="230" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
+  <text x="310" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G15/G13</text>
+
+  <!-- SPI note -->
+  <text x="30" y="248" font-family="monospace" font-size="13" fill="#555555">SPI compartilhado: SCK=G40 MISO=G39 MOSI=G14</text>
+
+  <!-- Screen border -->
+  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+</svg>

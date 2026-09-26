@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+  <!-- Background -->
+  <rect width="480" height="270" fill="#000000"/>
+
+  <!-- Top border + title bar -->
+  <rect x="10" y="10" width="460" height="250" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
+  <rect x="10" y="10" width="460" height="36" fill="#FFA600"/>
+  <text x="240" y="35" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">Profile: Cap CC1101</text>
+
+  <!-- Menu item 1 — selected (highlight) -->
+  <rect x="12" y="76" width="456" height="46" fill="#FFA600" rx="2"/>
+  <text x="240" y="107" font-family="monospace" font-size="24" fill="#000000" text-anchor="middle" font-weight="bold">Cap CC1101</text>
+
+  <!-- Menu item 2 -->
+  <text x="240" y="158" font-family="monospace" font-size="24" fill="#FFA600" text-anchor="middle">Cap LoRa-1262</text>
+
+  <!-- Menu item 3 -->
+  <text x="240" y="208" font-family="monospace" font-size="24" fill="#FFA600" text-anchor="middle">Stock/Shield</text>
+
+  <!-- Selection indicator left -->
+  <polygon points="26,99 40,90 40,108" fill="#000000"/>
+
+  <!-- Screen border -->
+  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+</svg>

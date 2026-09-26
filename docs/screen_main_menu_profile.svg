@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+  <!-- Background -->
+  <rect width="480" height="270" fill="#000000"/>
+
+  <!-- Status bar -->
+  <rect x="0" y="0" width="480" height="52" fill="#111111"/>
+  <text x="12" y="34" font-family="monospace" font-size="20" fill="#FFA600">BRUCE</text>
+  <!-- Battery icon -->
+  <rect x="430" y="12" width="36" height="18" rx="3" fill="none" stroke="#FFA600" stroke-width="2"/>
+  <rect x="466" y="17" width="4" height="8" rx="1" fill="#FFA600"/>
+  <rect x="432" y="14" width="22" height="14" rx="2" fill="#FFA600"/>
+  <!-- WiFi icon -->
+  <text x="390" y="34" font-family="monospace" font-size="18" fill="#FFA600">📶</text>
+  <!-- Time -->
+  <text x="190" y="34" font-family="monospace" font-size="20" fill="#888888">12:34</text>
+
+  <!-- Left arrow -->
+  <polyline points="28,180 14,162 28,144" fill="none" stroke="#FFA600" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right arrow -->
+  <polyline points="452,180 466,162 452,144" fill="none" stroke="#FFA600" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ===== CHIP ICON ===== -->
+  <!-- Pins left -->
+  <rect x="144" y="116" width="20" height="10" fill="#FFA600"/>
+  <rect x="144" y="132" width="20" height="10" fill="#FFA600"/>
+  <rect x="144" y="148" width="20" height="10" fill="#FFA600"/>
+  <!-- Pins right -->
+  <rect x="316" y="116" width="20" height="10" fill="#FFA600"/>
+  <rect x="316" y="132" width="20" height="10" fill="#FFA600"/>
+  <rect x="316" y="148" width="20" height="10" fill="#FFA600"/>
+  <!-- Chip body border -->
+  <rect x="164" y="100" width="152" height="74" fill="#FFA600"/>
+  <!-- Chip body inner (background) -->
+  <rect x="170" y="106" width="140" height="62" fill="#000000"/>
+  <!-- Centre dot -->
+  <circle cx="240" cy="137" r="8" fill="#FFA600"/>
+
+  <!-- Title -->
+  <text x="240" y="248" font-family="monospace" font-size="22" fill="#FFA600" text-anchor="middle">Profile</text>
+
+  <!-- Screen border -->
+  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+</svg>
