@@ -56,9 +56,10 @@ void ensureWifiPlatform() {
 //   ssid=MyNetwork
 //   password=mypassword
 static String wifiPasswordFromSD(const String &ssid) {
-    if (!sdcardMounted) return "";
+    if (!sdcardMounted) { Serial.println("wifi.conf: SD not mounted"); return ""; }
     File f = SD.open("/wifi.conf", FILE_READ);
-    if (!f) return "";
+    if (!f) { Serial.println("wifi.conf: file not found"); return ""; }
+    Serial.println("wifi.conf: scanning for SSID: " + ssid);
 
     String foundSsid;
     String foundPass;
@@ -86,7 +87,7 @@ static String wifiPasswordFromSD(const String &ssid) {
         if (key.equalsIgnoreCase("ssid")) {
             foundSsid = val;
             foundPass = "";
-        } else if (key.equalsIgnoreCase("password") && foundSsid == ssid) {
+        } else if (key.equalsIgnoreCase("password") && foundSsid.equalsIgnoreCase(ssid)) {
             foundPass = val;
             break;
         }
