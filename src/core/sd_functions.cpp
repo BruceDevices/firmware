@@ -1,4 +1,5 @@
 #include "sd_functions.h"
+#include <driver/gpio.h> // gpio_reset_pin() — resets ESP32 GPIO routing matrix
 #include "bus_HAL.h"
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
@@ -90,8 +91,15 @@ bool setupSdCard(uint8_t maxFiles) {
             }
         } else {
             // SDCard on a dedicated bus: it's the anchor/owner of sdcardSPI, so start it here.
-            // Force teardown first — M5Launcher (or a prior mount attempt) may have left the
-            // SD controller in an initialised state that blocks a clean SD.begin().
+            // Reset the ESP32 GPIO routing matrix for all SD pins.
+            // M5Launcher (and other apps) leave the GPIO matrix pointing to their own SPI
+            // peripheral assignments. sdcardSPI.end() only tears down the Arduino object —
+            // it does NOT clear the hardware routing registers. gpio_reset_pin() sets each
+            // pin back to default I/O mode so sdcardSPI.begin() can re-route them cleanly.
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.SDCARD_bus.sck);
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.SDCARD_bus.miso);
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.SDCARD_bus.mosi);
+            gpio_reset_pin((gpio_num_t)bruceConfigPins.SDCARD_bus.cs);
             SD.end();
             sdcardSPI.end();
             delay(50);

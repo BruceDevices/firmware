@@ -156,9 +156,14 @@ void applyHWProfile(uint8_t prof) {
 void _setup_gpio() {
     //    Keyboard.begin();
     pinMode(0, INPUT);
-    pinMode(5, OUTPUT);
-    // Set GPIO5 HIGH for SD card compatibility (thx for the tip @bmorcelli & 7h30th3r0n3)
-    digitalWrite(5, HIGH);
+    // Set ALL SPI chip-select pins HIGH before SD card init.
+    // setupSdCard() runs before _post_setup_gpio(), so without this the NRF24/CC1101/LoRa
+    // CS pins are floating and can pull the shared SPI bus (G40/G39/G14) low, causing
+    // SD.begin() to time out or return corrupted data.
+    pinMode(5,  OUTPUT); digitalWrite(5,  HIGH); // LoRa/Cap CC1101 CS + original SD compat note
+    pinMode(6,  OUTPUT); digitalWrite(6,  HIGH); // NRF24 CS
+    pinMode(12, OUTPUT); digitalWrite(12, HIGH); // SD card CS (defensive)
+    pinMode(13, OUTPUT); digitalWrite(13, HIGH); // CC1101 CS (Stock profile)
 }
 volatile bool kb_interrupt = false;
 void IRAM_ATTR gpio_isr_handler(void *arg) {
