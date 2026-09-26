@@ -821,7 +821,7 @@ static void uiBeepTask(void *) {
 
         for (int i = 0; i < bellSmp; i++) {
             if ((i & 0xFF) == 0) {
-                if (uxQueueMessagesWaiting(g_beepQueue) > 0) goto next_beep;
+                if (uxQueueMessagesWaiting(g_beepQueue) > 0) goto flush_silence;
                 if (isAudioPlaying()) { out->stop(); delete out; out = nullptr; warm = false; goto next_beep; }
             }
             float t = i / SR;
@@ -830,6 +830,17 @@ static void uiBeepTask(void *) {
             int16_t s = (int16_t)(v * 32767.0f);
             int16_t smp[2] = {s, s};
             while (!out->ConsumeSample(smp)) taskYIELD();
+        }
+
+flush_silence:
+        // Fill all DMA buffers with zeros so the ring doesn't keep replaying
+        // the last non-zero waveform samples (default: 5 * 4608/4 = 5760 frames).
+        {
+            const int flushFrames = 5 * (4608 / 4);
+            int16_t z[2] = {0, 0};
+            for (int i = 0; i < flushFrames; i++) {
+                while (!out->ConsumeSample(z)) taskYIELD();
+            }
         }
 next_beep:;
         // out stays alive — I2S and amp remain warm for next beep.

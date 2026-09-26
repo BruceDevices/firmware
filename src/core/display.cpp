@@ -730,7 +730,6 @@ int loopOptions(
             }
             if (chosen >= options.size() || !options[chosen].enabled) continue;
             Serial.println("Selected: " + String(options[chosen].label));
-            uiBeep(3200, 150);
             options[chosen].operation();
             break;
         }

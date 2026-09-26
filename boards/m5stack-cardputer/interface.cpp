@@ -368,6 +368,8 @@ void InputHandler(void) {
 
                 if (!pressed) continue;
 
+                uiBeep(); // click sound on every physical keypress (non-blocking)
+
                 if (gui) {
                     key.gui = true;
                     key.modifier_keys.emplace_back(KEY_OPT);
