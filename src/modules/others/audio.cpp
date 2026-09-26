@@ -697,6 +697,16 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
             v *= volumeScale;
             return v;
         });
+    } else if (waveType == 2) {
+        // Bell: sine wave with exponential decay — instant attack, natural fade-out.
+        // Adding a soft 2nd partial (2.756× freq) gives the inharmonic overtone
+        // characteristic of real bells.
+        file->addAudioGenerators([volumeScale, hz](const float time) {
+            float decay = expf(-9.0f * time);
+            float v = sinf(TWO_PI * hz * time)
+                    + 0.25f * sinf(TWO_PI * hz * 2.756f * time);
+            return v * decay * volumeScale;
+        });
     }
 
     AudioGeneratorWAV *wav = new AudioGeneratorWAV();
@@ -752,9 +762,12 @@ void _tone(unsigned int frequency, unsigned long duration) {
 }
 
 void uiBeep(unsigned int freq, unsigned long ms) {
-    // Delegates to _tone which handles BUZZ_PIN / HAS_NS4168_SPKR / nothing.
-    // With the _setup_codec_speaker cache, the I2S codec is only initialized
-    // once per session, so every beep after the first is fast.
+#if defined(HAS_NS4168_SPKR)
+    // Bell sound (waveType=2): sine + exponential decay + 2nd partial.
+    // Codec stays warm after first call (see _setup_codec_speaker cache).
+    playTone(freq, ms, 2);
+#elif defined(BUZZ_PIN)
     _tone(freq, ms);
+#endif
 }
 
