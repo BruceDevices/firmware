@@ -761,11 +761,81 @@ void _tone(unsigned int frequency, unsigned long duration) {
 #endif
 }
 
+// ===== ASYNC UI BEEP =====
+// I2S needs ~500ms to become audible after AudioOutputI2S creation.
+// A background task absorbs that warmup so the UI never blocks, and a
+// time-offset bell waveform ensures the audible part starts right as the
+// hardware becomes ready.
+
+struct BeepRequest {
+    unsigned int freq;
+    unsigned long ms;
+};
+
+static QueueHandle_t g_beepQueue = nullptr;
+
+static void uiBeepTask(void *) {
+    BeepRequest req;
+    for (;;) {
+        if (xQueueReceive(g_beepQueue, &req, portMAX_DELAY) != pdTRUE) continue;
+        if (!bruceConfig.soundEnabled) continue;
+        if (isAudioPlaying()) continue; // main audio takes priority
+
+        // I2S warmup is ~500ms. Offset the waveform so silence fills the
+        // warmup window and the bell starts exactly when audio becomes audible.
+        const float WARMUP_S = 0.50f;
+        float totalSec = WARMUP_S + req.ms / 1000.0f;
+        float hz = (float)req.freq;
+        float volumeScale = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
+
+        _setup_codec_speaker(true);
+        AudioOutputI2S *out = createConfiguredAudioOutput();
+        if (!out) { _setup_codec_speaker(false); continue; }
+
+        AudioFileSourceFunction *file = new AudioFileSourceFunction(totalSec);
+        if (!file) { delete out; _setup_codec_speaker(false); continue; }
+
+        file->addAudioGenerators([volumeScale, hz, WARMUP_S](const float time) -> float {
+            if (time < WARMUP_S) return 0.0f; // silence during warmup
+            float t = time - WARMUP_S;
+            float decay = expf(-9.0f * t);
+            float v = sinf(TWO_PI * hz * t) + 0.25f * sinf(TWO_PI * hz * 2.756f * t);
+            return v * decay * volumeScale;
+        });
+
+        AudioGeneratorWAV *wav = new AudioGeneratorWAV();
+        if (!wav) { delete file; delete out; _setup_codec_speaker(false); continue; }
+
+        if (!wav->begin(file, out)) {
+            delete wav; delete file; delete out; _setup_codec_speaker(false); continue;
+        }
+
+        while (wav->isRunning()) {
+            if (!wav->loop()) break;
+            // Abandon early if a fresher beep is already queued
+            if (uxQueueMessagesWaiting(g_beepQueue) > 0) { wav->stop(); break; }
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+
+        delete wav;
+        delete file;
+        delete out;
+        _setup_codec_speaker(false);
+    }
+}
+
+static void initBeepTask() {
+    if (g_beepQueue) return;
+    g_beepQueue = xQueueCreate(1, sizeof(BeepRequest));
+    xTaskCreatePinnedToCore(uiBeepTask, "uiBeep", 4096, nullptr, 1, nullptr, AUDIO_TASK_CORE);
+}
+
 void uiBeep(unsigned int freq, unsigned long ms) {
 #if defined(HAS_NS4168_SPKR)
-    // Bell sound (waveType=2): sine + exponential decay + 2nd partial.
-    // Codec stays warm after first call (see _setup_codec_speaker cache).
-    playTone(freq, ms, 2);
+    if (!bruceConfig.soundEnabled) return;
+    initBeepTask();
+    BeepRequest req = {freq, ms};
+    xQueueOverwrite(g_beepQueue, &req);
 #elif defined(BUZZ_PIN)
     _tone(freq, ms);
 #endif
