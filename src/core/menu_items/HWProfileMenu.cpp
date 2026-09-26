@@ -1,7 +1,7 @@
 #ifdef TCA8418_I2C_ADDR
 
 #include "HWProfileMenu.h"
-#include "boards/m5stack-cardputer/hw_profiles.h"
+#include "hw_profiles.h"
 #include "core/display.h"
 #include "core/utils.h"
 
