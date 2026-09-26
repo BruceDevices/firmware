@@ -19,6 +19,9 @@
 #include "menu_items/RFMenu.h"
 #include "menu_items/ScriptsMenu.h"
 #include "menu_items/WifiMenu.h"
+#ifdef TCA8418_I2C_ADDR
+#include "menu_items/HWProfileMenu.h"
+#endif
 class MainMenu {
 public:
     FileMenu fileMenu;
@@ -35,6 +38,9 @@ public:
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     WifiMenu wifiMenu;
+#ifdef TCA8418_I2C_ADDR
+    HWProfileMenu hwProfileMenu;
+#endif
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;
     EthernetMenu ethernetMenu;

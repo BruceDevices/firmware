@@ -22,10 +22,6 @@ private:
     void powerMenu(void);
     void pinsMenu(void);
     void devMenu(void);
-#ifdef TCA8418_I2C_ADDR
-    void hwProfileMenu(void);
-#endif
-
     // Helper methods for complex operations
     void switchToUSBSerial(void);
     void switchToUARTSerial(void);

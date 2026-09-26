@@ -9,9 +9,6 @@
 #ifdef HAS_RGB_LED
 #include "core/led_control.h"
 #endif
-#ifdef TCA8418_I2C_ADDR
-#include "hw_profiles.h"
-#endif
 
 /*********************************************************************
 **  Function: optionsMenu
@@ -196,10 +193,6 @@ void ConfigMenu::systemMenu() {
 void ConfigMenu::advancedMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-#ifdef TCA8418_I2C_ADDR
-            {String("HW Profile: ") + hwProfileName(loadHWProfile()), // label auto-updates on menu rebuild
-             [this]() { hwProfileMenu(); }                         },
-#endif
             {"Set Device pins", [this]() { pinsMenu(); }           },
 #if !defined(LITE_VERSION)
             {"Toggle BLE API",  [this]() { enableBLEAPI(); }       },
@@ -362,28 +355,6 @@ void ConfigMenu::switchToUARTSerial() {
     Serial1.begin(115200, SERIAL_8N1, bruceConfigPins.uart_bus.rx, bruceConfigPins.uart_bus.tx);
     USBserial.setSerialOutput(&Serial1);
 }
-/*********************************************************************
-**  Function: hwProfileMenu
-**  Hardware profile selection (Cardputer-Adv only)
-**********************************************************************/
-#ifdef TCA8418_I2C_ADDR
-static void setProfileAndApply(uint8_t prof) {
-    saveHWProfile(prof);
-    applyHWProfile(prof);
-    displaySuccess(String("Profile: ") + hwProfileName(prof));
-}
-
-void ConfigMenu::hwProfileMenu() {
-    options = {
-        {"Cap CC1101",    [=]() { setProfileAndApply(HW_CAP_CC1101); }},
-        {"Cap LoRa-1262", [=]() { setProfileAndApply(HW_CAP_LORA);   }},
-        {"Stock/Shield",  [=]() { setProfileAndApply(HW_STOCK);      }},
-    };
-    loopOptions(options);
-    options.clear();
-}
-#endif
-
 /*********************************************************************
 **  Function: drawIcon
 **  Draw config gear icon

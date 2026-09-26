@@ -28,6 +28,9 @@ MainMenu::MainMenu() {
         &clockMenu,
         &othersMenu,
         &configMenu,
+#ifdef TCA8418_I2C_ADDR
+        &hwProfileMenu,
+#endif
     };
 
     _totalItems = _menuItems.size();
