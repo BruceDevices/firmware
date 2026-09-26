@@ -1,6 +1,133 @@
 ![Bruce Main Menu](./media/pictures/bruce_banner.jpg)
 
-# :shark: Bruce
+# :shark: Bruce — Custom Build: Cap CC1101 / Cap LoRa (M5Stack Cardputer-Adv)
+
+> **This is a custom fork of Bruce firmware** with specific support for the **M5Stack Cardputer-Adv** and its RF expansion modules (Cap CC1101 / Cap LoRa SX1262).
+> Branch: `cap-cc1101` · Fork by [@JoaoSantosBH](https://github.com/JoaoSantosBH)
+
+---
+
+## Customizações / Custom Features
+
+### Hardware Profile Selection
+
+Seleccione o módulo RF encaixado no Cardputer-Adv directamente no menu principal, sem precisar editar ficheiros ou reiniciar.
+
+| Perfil | Módulo | CS | GDO0 |
+|---|---|---|---|
+| Cap CC1101 | M5-U219 (CC1101 + NFC) | G5 | G15 |
+| Cap LoRa | SX1262 (beta) | G5 | — |
+| Stock | Shield de terceiros | G13 | G5 |
+
+O perfil é guardado em NVS e sobrevive a reboots e reflash.
+
+<p align="center">
+  <img src="./docs/screen_main_menu_profile.svg" width="320" alt="Menu principal com ícone Profile"/>
+  <img src="./docs/screen_profile_submenu.svg" width="320" alt="Submenu de selecção de perfil"/>
+</p>
+
+**Caminho:** `/Profile` → escolhe perfil → activo imediatamente
+
+---
+
+### RF Band Switching Automático (Cap CC1101)
+
+O módulo M5-U219 tem um switch analógico de 3 bandas. A banda correcta é seleccionada automaticamente ao mudar a frequência no menu RF — sem intervenção do utilizador.
+
+| Frequência | RF_SW0 (G13) | GDO2 |
+|---|---|---|
+| ≤ 350 MHz (315) | LOW | LOW |
+| 351–468 MHz (433) | LOW | HIGH |
+| > 468 MHz (868/915) | HIGH | HIGH |
+
+---
+
+### WiFi Password do SD Card
+
+Cria o ficheiro `/wifi.conf` na raiz do cartão SD. O Bruce lê a password automaticamente ao conectar — sem precisar digitar no teclado pequeno.
+
+<p align="center">
+  <img src="./docs/screen_wifi_conf.svg" width="400" alt="Formato do wifi.conf"/>
+</p>
+
+**Formato:**
+```
+ssid=MinhaRede
+password=minhasenha
+
+ssid=OutraRede
+password=outrasenha
+```
+
+---
+
+### Defaults do SD Card
+
+Cria `/defaults.conf` na raiz do SD para pré-configurar valores ao primeiro boot:
+
+```
+soundVolume=50
+bright=60
+dimmerSet=30
+priColor=FD20
+bgColor=0000
+ledColor=FF6600
+```
+
+---
+
+### Pinout por Perfil
+
+<p align="center">
+  <img src="./docs/screen_hw_profiles_pins.svg" width="480" alt="Tabela de pinos por perfil"/>
+</p>
+
+---
+
+### Outros Ajustes
+
+- **Cor laranja** como padrão para LED e UI
+- **Volume padrão: 50%** | **Brilho padrão: 50%**
+- **Som de tecla** (sino com decaimento) em cada keypress — não-bloqueante via FreeRTOS
+- **Fix SD card após M5Launcher**: reset da GPIO matrix antes de montar o SD
+
+---
+
+## Como instalar
+
+### Opção 1 — Ficheiro `.jomar` (flash completo)
+
+Após o build, o ficheiro `BruceCustomJomar.jomar` é gerado na raiz do projecto. É uma imagem completa (bootloader + partições + firmware).
+
+```sh
+esptool.py --port /dev/ttyUSB0 write_flash 0x00000 BruceCustomJomar.jomar
+```
+
+### Opção 2 — SD Card (M5Launcher)
+
+1. Renomeia `BruceCustomJomar.jomar` para `firmware.bin`
+2. Copia para a raiz do cartão SD
+3. No Cardputer, segura **G0** (tecla `\`) enquanto liga para entrar no modo de update pelo SD
+
+### Opção 3 — Build local
+
+```sh
+git clone https://github.com/JoaoSantosBH/capCC1101-m5stack.git
+cd capCC1101-m5stack
+git checkout cap-cc1101
+pio run -e m5stack-cardputer
+```
+
+---
+
+## Documentação
+
+- [`docs/CUSTOMIZACOES.md`](./docs/CUSTOMIZACOES.md) — referência completa de todas as alterações
+- [`docs/CAP_CC1101_CONTEXT.md`](./docs/CAP_CC1101_CONTEXT.md) — contexto do projecto e histórico
+
+---
+
+# :shark: Bruce (original)
 
 Bruce is a versatile ESP32 firmware packed with offensive-security tools, built to make Red Team operations fast and portable.
 
