@@ -51,9 +51,60 @@ void ensureWifiPlatform() {
     }
 }
 
+// Read password for `ssid` from /wifi.conf on the SD card.
+// File format (one block per network, blank lines ignored):
+//   ssid=MyNetwork
+//   password=mypassword
+static String wifiPasswordFromSD(const String &ssid) {
+    if (!sdcardMounted) return "";
+    File f = SD.open("/wifi.conf", FILE_READ);
+    if (!f) return "";
+
+    String foundSsid;
+    String foundPass;
+    String line;
+
+    auto parseLine = [](const String &raw, String &key, String &val) {
+        int eq = raw.indexOf('=');
+        if (eq < 1) return;
+        key = raw.substring(0, eq);
+        key.trim();
+        val = raw.substring(eq + 1);
+        val.trim();
+    };
+
+    while (f.available()) {
+        line = f.readStringUntil('\n');
+        line.trim();
+        if (line.isEmpty()) {
+            foundSsid = "";
+            foundPass = "";
+            continue;
+        }
+        String key, val;
+        parseLine(line, key, val);
+        if (key.equalsIgnoreCase("ssid")) {
+            foundSsid = val;
+            foundPass = "";
+        } else if (key.equalsIgnoreCase("password") && foundSsid == ssid) {
+            foundPass = val;
+            break;
+        }
+    }
+    f.close();
+    return foundPass;
+}
+
 bool _wifiConnect(const String &ssid, int encryption) {
     String password = bruceConfig.getWifiPassword(ssid);
-    if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
+    if (password == "" && encryption > 0) {
+        password = wifiPasswordFromSD(ssid);
+        if (password == "") {
+            password = keyboard(password, 63, "Network Password:", true);
+        } else {
+            Serial.println("wifi: password loaded from /wifi.conf");
+        }
+    }
     if (password == "\x1B") return false;
     bool connected = _connectToWifiNetwork(ssid, password);
     bool retry = false;
