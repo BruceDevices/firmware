@@ -9,6 +9,9 @@
 #ifdef HAS_RGB_LED
 #include "core/led_control.h"
 #endif
+#ifdef TCA8418_I2C_ADDR
+#include "hw_profiles.h"
+#endif
 
 /*********************************************************************
 **  Function: optionsMenu
@@ -193,6 +196,10 @@ void ConfigMenu::systemMenu() {
 void ConfigMenu::advancedMenu() {
     while (true) {
         std::vector<Option> localOptions = {
+#ifdef TCA8418_I2C_ADDR
+            {String("HW Profile: ") + hwProfileName(loadHWProfile()),
+             [this]() { hwProfileMenu(); }                         },
+#endif
             {"Set Device pins", [this]() { pinsMenu(); }           },
 #if !defined(LITE_VERSION)
             {"Toggle BLE API",  [this]() { enableBLEAPI(); }       },
@@ -355,6 +362,31 @@ void ConfigMenu::switchToUARTSerial() {
     Serial1.begin(115200, SERIAL_8N1, bruceConfigPins.uart_bus.rx, bruceConfigPins.uart_bus.tx);
     USBserial.setSerialOutput(&Serial1);
 }
+/*********************************************************************
+**  Function: hwProfileMenu
+**  Hardware profile selection (Cardputer-Adv only)
+**********************************************************************/
+#ifdef TCA8418_I2C_ADDR
+void ConfigMenu::hwProfileMenu() {
+    while (true) {
+        HWProfile current = loadHWProfile();
+        std::vector<Option> localOptions;
+        for (int i = 0; i < HW_PROFILE_COUNT; i++) {
+            HWProfile p = static_cast<HWProfile>(i);
+            String label = String(i == current ? "> " : "  ") + hwProfileName(p);
+            localOptions.push_back({label.c_str(), [=]() {
+                saveHWProfile(p);
+                applyHWProfile(p);
+            }});
+        }
+        localOptions.push_back({"Back", []() {}});
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "HW Profile");
+        if (selected == -1 || selected == (int)localOptions.size() - 1) return;
+    }
+}
+#endif
+
 /*********************************************************************
 **  Function: drawIcon
 **  Draw config gear icon

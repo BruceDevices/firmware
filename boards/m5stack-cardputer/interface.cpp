@@ -1,7 +1,9 @@
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hw_profiles.h"
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
+#include <Preferences.h>
 #include <Wire.h>
 #include <interface.h>
 
@@ -77,6 +79,76 @@ inline void mapRawKeyToPhysical(uint8_t keyvalue, uint8_t &row, uint8_t &col) {
 }
 
 /***************************************************************************************
+** Hardware profile helpers (Cap CC1101 / Cap LoRa / Stock)
+***************************************************************************************/
+const char *hwProfileName(HWProfile p) {
+    switch (p) {
+        case HW_CAP_CC1101: return "Cap CC1101";
+        case HW_CAP_LORA:   return "Cap LoRa (beta)";
+        case HW_STOCK:      return "Stock";
+        default:            return "Unknown";
+    }
+}
+
+HWProfile loadHWProfile() {
+    Preferences prefs;
+    prefs.begin("bruce_hw", /*readOnly=*/true);
+    uint8_t v = prefs.getUChar("profile", HW_CAP_CC1101);
+    prefs.end();
+    return v < HW_PROFILE_COUNT ? static_cast<HWProfile>(v) : HW_CAP_CC1101;
+}
+
+void saveHWProfile(HWProfile p) {
+    Preferences prefs;
+    prefs.begin("bruce_hw", /*readOnly=*/false);
+    prefs.putUChar("profile", static_cast<uint8_t>(p));
+    prefs.end();
+}
+
+void applyHWProfile(HWProfile p) {
+    // SPI bus is shared across all Cap variants
+    bruceConfigPins.CC1101_bus.sck  = (gpio_num_t)40;
+    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
+    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
+
+    switch (p) {
+        case HW_CAP_CC1101:
+            // M5-U219: CS=G5, GDO0=G15; G13 is RF_SW0 (band switch), not CS.
+            // GPS moved to G1/G2 to free G13/G15 for the Cap.
+            bruceConfigPins.CC1101_bus.cs  = (gpio_num_t)5;
+            bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)15;
+            bruceConfigPins.gps_bus.rx     = (gpio_num_t)1;
+            bruceConfigPins.gps_bus.tx     = (gpio_num_t)2;
+            bruceConfigPins.gpsBaudrate    = 115200;
+            break;
+
+        case HW_CAP_LORA:
+            // Cap LoRa SX1262 — NSS=G5, SPI shared (14/39/40).
+            // GPS back to G15/G13 (G13 is free; no RF_SW0 needed for LoRa).
+            // NOTE: RST/BUSY/IRQ naming in Bruce not yet validated; LoRa pins
+            //       default to ini values until confirmed.
+            bruceConfigPins.LoRa_bus.cs    = (gpio_num_t)5;
+            bruceConfigPins.LoRa_bus.sck   = (gpio_num_t)40;
+            bruceConfigPins.LoRa_bus.miso  = (gpio_num_t)39;
+            bruceConfigPins.LoRa_bus.mosi  = (gpio_num_t)14;
+            bruceConfigPins.gps_bus.rx     = (gpio_num_t)15;
+            bruceConfigPins.gps_bus.tx     = (gpio_num_t)13;
+            bruceConfigPins.gpsBaudrate    = 115200;
+            break;
+
+        case HW_STOCK:
+        default:
+            // Standard Cardputer-Adv with a third-party CC1101 shield (CS=G13, GDO0=G5).
+            bruceConfigPins.CC1101_bus.cs  = (gpio_num_t)13;
+            bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+            bruceConfigPins.gps_bus.rx     = (gpio_num_t)15;
+            bruceConfigPins.gps_bus.tx     = (gpio_num_t)13;
+            bruceConfigPins.gpsBaudrate    = 115200;
+            break;
+    }
+}
+
+/***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
 ** Description:   initial setup for the device
@@ -129,15 +201,7 @@ void _post_setup_gpio() {
     bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
     bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
 
-    bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
-    bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
-    bruceConfigPins.gpsBaudrate = 115200;
-
-    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
-    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
-    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
-    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)13;
-    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+    applyHWProfile(loadHWProfile());
 
     bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
     bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
