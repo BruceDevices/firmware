@@ -779,63 +779,60 @@ struct BeepRequest {
 static QueueHandle_t g_beepQueue = nullptr;
 
 static void uiBeepTask(void *) {
-    // Pre-warm I2S + NS4168 amp at task start (in background, before first keypress).
-    _setup_codec_speaker(true);
-    AudioOutputI2S *out = createConfiguredAudioOutput();
-    if (out) {
-        out->begin(); // installs I2S channel once; amp needs ~500ms to settle
-        // Play silence to let the amp come out of pop-suppression standby.
-        const int warmupFrames = 44100 * 600 / 1000; // 600ms
-        int16_t z[2] = {0, 0};
-        for (int i = 0; i < warmupFrames; i++) {
-            while (!out->ConsumeSample(z)) taskYIELD();
-        }
-        // Drain any stale beep requests queued during warmup.
-        BeepRequest dummy;
-        while (xQueueReceive(g_beepQueue, &dummy, 0) == pdTRUE) {}
-    }
+    AudioOutputI2S *out = nullptr;
+    bool warm = false; // true after first begin() + silence offset played
 
     BeepRequest req;
     for (;;) {
         if (xQueueReceive(g_beepQueue, &req, portMAX_DELAY) != pdTRUE) continue;
         if (!bruceConfig.soundEnabled) continue;
 
-        // Main audio is using I2S — release our channel so it can proceed.
+        // If main audio grabbed I2S, release our channel.
         if (isAudioPlaying()) {
-            if (out) { out->stop(); delete out; out = nullptr; }
+            if (out) { out->stop(); delete out; out = nullptr; warm = false; }
             continue;
         }
 
-        // Recreate output if it was released for main audio (warmup will recur once).
         if (!out) {
             _setup_codec_speaker(true);
             out = createConfiguredAudioOutput();
             if (!out) continue;
-            out->begin();
+            out->begin(); // installs I2S channel; amp needs time to settle
+            warm = false;
         } else {
             out->SetGain(bruceConfig.soundVolume / AUDIO_VOLUME_MAX);
         }
 
-        // Generate bell waveform and push directly to I2S — no AudioGeneratorWAV.
-        const float SR = 44100.0f;
-        const int total = (int)(SR * req.ms / 1000.0f);
-        const float hz  = (float)req.freq;
-        const float vol = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
+        // First beep after boot (or after main audio): amp needs ~400ms to come
+        // out of pop-suppression. Feed silence for that window, then play the bell.
+        // All subsequent beeps: hardware is already warm, play immediately.
+        const float SR       = 44100.0f;
+        const int silenceMs  = warm ? 0 : 420;
+        const int silenceSmp = (int)(SR * silenceMs / 1000.0f);
+        const int bellSmp    = (int)(SR * req.ms / 1000.0f);
+        const float hz       = (float)req.freq;
+        const float vol      = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
 
-        for (int i = 0; i < total; i++) {
-            // Bail early if a newer beep arrived or main audio started.
+        int16_t z[2] = {0, 0};
+        for (int i = 0; i < silenceSmp; i++) {
+            while (!out->ConsumeSample(z)) taskYIELD();
+        }
+        warm = true;
+
+        for (int i = 0; i < bellSmp; i++) {
             if ((i & 0xFF) == 0) {
-                if (uxQueueMessagesWaiting(g_beepQueue) > 0) break;
-                if (isAudioPlaying()) { out->stop(); delete out; out = nullptr; break; }
+                if (uxQueueMessagesWaiting(g_beepQueue) > 0) goto next_beep;
+                if (isAudioPlaying()) { out->stop(); delete out; out = nullptr; warm = false; goto next_beep; }
             }
             float t = i / SR;
             float v = (sinf(TWO_PI * hz * t) + 0.25f * sinf(TWO_PI * hz * 2.756f * t))
                       * expf(-9.0f * t) * vol;
             int16_t s = (int16_t)(v * 32767.0f);
-            int16_t samples[2] = {s, s};
-            while (!out->ConsumeSample(samples)) taskYIELD();
+            int16_t smp[2] = {s, s};
+            while (!out->ConsumeSample(smp)) taskYIELD();
         }
-        // out stays alive — I2S clock and amp remain warm for the next beep.
+next_beep:;
+        // out stays alive — I2S and amp remain warm for next beep.
     }
 }
 
