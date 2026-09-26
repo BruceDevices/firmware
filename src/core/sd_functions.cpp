@@ -90,6 +90,11 @@ bool setupSdCard(uint8_t maxFiles) {
             }
         } else {
             // SDCard on a dedicated bus: it's the anchor/owner of sdcardSPI, so start it here.
+            // Force teardown first — M5Launcher (or a prior mount attempt) may have left the
+            // SD controller in an initialised state that blocks a clean SD.begin().
+            SD.end();
+            sdcardSPI.end();
+            delay(50);
             if (!sdcardSPI.begin(
                     (int8_t)bruceConfigPins.SDCARD_bus.sck,
                     (int8_t)bruceConfigPins.SDCARD_bus.miso,
