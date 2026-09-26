@@ -776,27 +776,46 @@ static QueueHandle_t g_beepQueue = nullptr;
 
 static void uiBeepTask(void *) {
     BeepRequest req;
+    // Keep the AudioOutputI2S alive between beeps so the ~500ms I2S/amp warmup
+    // only happens once (first beep). All subsequent beeps are near-instant
+    // because the hardware pipeline stays warm.
+    // The instance is destroyed if main audio takes over I2S.
+    AudioOutputI2S *persistOut = nullptr;
+
     for (;;) {
         if (xQueueReceive(g_beepQueue, &req, portMAX_DELAY) != pdTRUE) continue;
         if (!bruceConfig.soundEnabled) continue;
-        if (isAudioPlaying()) continue; // main audio takes priority
 
-        // I2S warmup is ~500ms. Offset the waveform so silence fills the
-        // warmup window and the bell starts exactly when audio becomes audible.
-        const float WARMUP_S = 0.50f;
+        // If main audio grabbed I2S, drop our cached instance so it can use the peripheral.
+        if (isAudioPlaying()) {
+            if (persistOut) { persistOut->stop(); delete persistOut; persistOut = nullptr; }
+            continue;
+        }
+
+        const bool firstBeep = (persistOut == nullptr);
+        if (firstBeep) {
+            _setup_codec_speaker(true);
+            persistOut = createConfiguredAudioOutput();
+            if (!persistOut) continue;
+            // begin() warms up I2S + amp; only needed once.
+            persistOut->begin();
+        } else {
+            // Refresh gain in case volume changed between beeps.
+            persistOut->SetGain(bruceConfig.soundVolume / AUDIO_VOLUME_MAX);
+        }
+
+        // First beep: offset waveform past warmup so bell is audible immediately.
+        // All later beeps: start waveform at t=0 (hardware already warm → instant).
+        const float WARMUP_S = firstBeep ? 0.50f : 0.0f;
         float totalSec = WARMUP_S + req.ms / 1000.0f;
         float hz = (float)req.freq;
         float volumeScale = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
 
-        _setup_codec_speaker(true);
-        AudioOutputI2S *out = createConfiguredAudioOutput();
-        if (!out) { _setup_codec_speaker(false); continue; }
-
         AudioFileSourceFunction *file = new AudioFileSourceFunction(totalSec);
-        if (!file) { delete out; _setup_codec_speaker(false); continue; }
+        if (!file) { persistOut->stop(); delete persistOut; persistOut = nullptr; continue; }
 
         file->addAudioGenerators([volumeScale, hz, WARMUP_S](const float time) -> float {
-            if (time < WARMUP_S) return 0.0f; // silence during warmup
+            if (time < WARMUP_S) return 0.0f;
             float t = time - WARMUP_S;
             float decay = expf(-9.0f * t);
             float v = sinf(TWO_PI * hz * t) + 0.25f * sinf(TWO_PI * hz * 2.756f * t);
@@ -804,23 +823,23 @@ static void uiBeepTask(void *) {
         });
 
         AudioGeneratorWAV *wav = new AudioGeneratorWAV();
-        if (!wav) { delete file; delete out; _setup_codec_speaker(false); continue; }
+        if (!wav) { delete file; persistOut->stop(); delete persistOut; persistOut = nullptr; continue; }
 
-        if (!wav->begin(file, out)) {
-            delete wav; delete file; delete out; _setup_codec_speaker(false); continue;
+        if (!wav->begin(file, persistOut)) {
+            delete wav; delete file;
+            persistOut->stop(); delete persistOut; persistOut = nullptr;
+            continue;
         }
 
         while (wav->isRunning()) {
             if (!wav->loop()) break;
-            // Abandon early if a fresher beep is already queued
             if (uxQueueMessagesWaiting(g_beepQueue) > 0) { wav->stop(); break; }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         delete wav;
         delete file;
-        delete out;
-        _setup_codec_speaker(false);
+        // Keep persistOut alive — do NOT stop or delete it here.
     }
 }
 
