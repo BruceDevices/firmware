@@ -381,6 +381,25 @@ static bool isCapCC1101() {
     return bruceConfigPins.CC1101_bus.cs == 5 && bruceConfigPins.CC1101_bus.io0 == 15;
 }
 
+static void capCC1101SetBand(float frequency) {
+    const uint8_t RF_SW0 = 13;
+    bool sw0, sw1;
+    if (frequency <= 350) { // 315
+        sw0 = false;
+        sw1 = false;
+    } else if (frequency <= 468) { // 433
+        sw0 = false;
+        sw1 = true;
+    } else { // 868/915
+        sw0 = true;
+        sw1 = true;
+    }
+    pinMode(RF_SW0, OUTPUT);
+    digitalWrite(RF_SW0, sw0 ? HIGH : LOW);
+    // IOCFG2 = 0x2F: GDO2 fixo em LOW; 0x6F (bit de inversão): fixo em HIGH
+    ELECHOUSE_cc1101.SpiWriteReg(CC1101_IOCFG2, sw1 ? 0x6F : 0x2F);
+}
+
 void setMHZ(float frequency) {
     if (frequency > 928 || frequency < 280) {
         frequency = 433.92;
