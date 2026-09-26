@@ -37,7 +37,7 @@ public:
 
     //  Settings
     int dimmerSet = 60;
-    int bright = 100;
+    int bright = 50;
     bool automaticTimeUpdateViaNTP = true;
     float tmz = 0;
     bool dst = false;
