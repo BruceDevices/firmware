@@ -116,11 +116,18 @@ void applyHWProfile(uint8_t prof) {
         case HW_CAP_CC1101:
             // M5-U219: CS=G5, GDO0=G15; G13 is RF_SW0 (band switch), not CS.
             // GPS moved to G1/G2 to free G13/G15 for the Cap.
+            // NFC (ST25R3916): CS=G6, IRQ=G4, shared SPI (G40/G14/G39).
             bruceConfigPins.CC1101_bus.cs  = (gpio_num_t)5;
             bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)15;
             bruceConfigPins.gps_bus.rx     = (gpio_num_t)1;
             bruceConfigPins.gps_bus.tx     = (gpio_num_t)2;
             bruceConfigPins.gpsBaudrate    = 115200;
+            bruceConfigPins.ST25R_bus.sck  = (gpio_num_t)40;
+            bruceConfigPins.ST25R_bus.miso = (gpio_num_t)39;
+            bruceConfigPins.ST25R_bus.mosi = (gpio_num_t)14;
+            bruceConfigPins.ST25R_bus.cs   = (gpio_num_t)6;  // NFC_CS
+            bruceConfigPins.ST25R_bus.io0  = (gpio_num_t)4;  // NFC_IRQ
+            bruceConfigPins.rfidModule     = ST25R3916_SPI_MODULE;
             break;
 
         case HW_CAP_LORA:
