@@ -79,6 +79,7 @@ void ScrollableTextArea::show(bool force) {
         yield();
     }
     while (!check(SelPress)) {
+        if (check(EscPress)) break; // Back/Esc exits the viewer too, not just Select
         update(force);
         yield();
     }

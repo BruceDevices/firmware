@@ -94,6 +94,19 @@ portMUX_TYPE handshakeReadyMux = portMUX_INITIALIZER_UNLOCKED;
 std::set<uint64_t> handshakeBeaconLogged;
 std::map<uint64_t, HandshakeTracker> perApHandshakeTracker;
 
+// --- Observed clients per AP (powers the Client Scanner census) ---
+// apKey -> (clientKey -> info). Updated for data frames in analyzeFrame().
+// Bounded per AP and globally; stalest entry evicted on overflow.
+struct ClientInfo {
+    uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
+    uint8_t ip[4] = {0, 0, 0, 0}; // last IP seen with this MAC (0.0.0.0 = unknown)
+    uint32_t frames = 0;
+    uint32_t lastSeen = 0;
+};
+static std::map<uint64_t, std::map<uint64_t, ClientInfo>> apClients;
+static constexpr size_t MAX_CLIENTS_PER_AP = 24;
+static constexpr size_t MAX_TRACKED_APS = 48;
+
 // --- 4-way handshake frame buffer ---
 // Buffer M1, M2, and M3 in memory; flush all 4 frames when M4 arrives.
 constexpr size_t EAPOL_BUF_SIZE = 256;
@@ -194,6 +207,12 @@ static bool deauthCaptureEnabled();
 static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt);
 static String resolveSsidForFrame(FrameInfo &info, const wifi_promiscuous_pkt_t *packet);
 static void registerBeacon(const uint8_t *apAddr);
+static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4]);
+// Parse the client IP out of a data frame (ARP or IPv4 over LLC/SNAP).
+// Returns true and fills ipOut when an address belonging to client was found.
+static bool parseClientIp(
+    const uint8_t *frame, uint16_t len, const uint8_t client[6], uint8_t ipOut[4]
+);
 
 // --- New helper prototypes ---
 static void cleanupStaleBeacons();
@@ -512,6 +531,72 @@ bool sniffer_is_handshake_ready(uint64_t key) {
     return ready;
 }
 
+bool handshakeCrackable(const HandshakeTracker &hs) {
+    return (hs.msg1 && hs.msg2) || (hs.msg2 && hs.msg3);
+}
+
+bool sniffer_is_handshake_crackable(uint64_t key) {
+    auto it = perApHandshakeTracker.find(key);
+    if (it == perApHandshakeTracker.end()) return false;
+    if (sniffer_is_handshake_ready(key)) return true;
+    return handshakeCrackable(it->second);
+}
+
+bool sniffer_ap_has_partial(uint64_t key) {
+    if (sniffer_is_handshake_ready(key)) return false;
+    auto it = perApHandshakeTracker.find(key);
+    if (it == perApHandshakeTracker.end()) return false;
+    const HandshakeTracker &t = it->second;
+    return t.msg1 || t.msg2 || t.msg3;
+}
+
+uint16_t sniffer_count_clients(const uint8_t bssid[6]) {
+    if (!bssid) return 0;
+    uint64_t apKey = 0;
+    for (int i = 0; i < 6; i++) { apKey = (apKey << 8) | bssid[i]; }
+    auto it = apClients.find(apKey);
+    if (it == apClients.end()) return 0;
+    return (uint16_t)it->second.size();
+}
+
+uint32_t sniffer_total_clients() {
+    uint32_t total = 0;
+    for (const auto &kv : apClients) total += (uint32_t)kv.second.size();
+    return total;
+}
+
+uint8_t sniffer_get_client_details(uint64_t apKey, ClientDetail *out, uint8_t maxOut) {
+    if (!out || maxOut == 0) return 0;
+    auto it = apClients.find(apKey);
+    if (it == apClients.end() || it->second.empty()) return 0;
+    std::vector<const ClientInfo *> sorted;
+    sorted.reserve(it->second.size());
+    for (const auto &kv : it->second) sorted.push_back(&kv.second);
+    std::sort(sorted.begin(), sorted.end(), [](const ClientInfo *a, const ClientInfo *b) {
+        return a->frames > b->frames;
+    });
+    uint8_t n = 0;
+    for (const ClientInfo *ci : sorted) {
+        if (n >= maxOut) break;
+        memcpy(out[n].mac, ci->mac, 6);
+        memcpy(out[n].ip, ci->ip, 4);
+        out[n].frames = ci->frames;
+        n++;
+    }
+    return n;
+}
+
+uint16_t sniffer_get_beacon_frame(const uint8_t bssid[6], uint8_t *out, uint16_t outLen) {
+    if (!bssid || !out || outLen == 0) return 0;
+    uint64_t apKey = 0;
+    for (int i = 0; i < 6; i++) { apKey = (apKey << 8) | bssid[i]; }
+    auto it = beaconRawCache.find(apKey);
+    if (it == beaconRawCache.end() || it->second.len == 0) return 0;
+    uint16_t n = it->second.len < outLen ? it->second.len : outLen;
+    memcpy(out, it->second.data, n);
+    return n;
+}
+
 static void resetHandshakeTracking() {
     portENTER_CRITICAL(&handshakeReadyMux);
     handshakeReadyBssids.clear();
@@ -635,6 +720,43 @@ static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt) {
     info.isDeauth = (frameType == 0x00) && (frameSubType == 0x0C || frameSubType == 0x0A);
     info.isEapol = isItEAPOL(pkt);
 
+    if (frameType == 0x02) { // data frame: learn the client side
+        const uint8_t *client = (memcmp(addr1, bssid, 6) == 0) ? addr2 : addr1;
+        if (!(client[0] & 0x01)) { // skip broadcast/multicast
+            uint8_t ip[4] = {0, 0, 0, 0};
+            parseClientIp(frame, len, client, ip);
+            observeClient(info.apKey, client, ip);
+        }
+    }
+
+    if (frameType == 0x00 && frameSubType == 0x04 && len >= 26) {
+        // Probe request: idle clients reveal themselves by probing for known
+        // networks. Attribute directed probes (real SSID) to the matching AP
+        // so quiet clients are still counted.
+        uint8_t tagId = frame[24];
+        uint8_t tagLen = frame[25];
+        if (tagId == 0 && tagLen > 0 && tagLen <= 32 && len >= (uint16_t)(26 + tagLen)) {
+            char probed[33];
+            memcpy(probed, frame + 26, tagLen);
+            probed[tagLen] = '\0';
+            bool printable = true;
+            for (uint8_t i = 0; i < tagLen; i++) {
+                if (!isprint((unsigned char)probed[i])) {
+                    printable = false;
+                    break;
+                }
+            }
+            if (printable) {
+                for (const auto &kv : beaconSsidCache) {
+                    if (kv.second == probed) {
+                        observeClient(kv.first, frame + 10, nullptr);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     if (info.isEapol && matchesTargetAP(pkt, targetBssid)) {
         int msg = classifyEapolMessage(pkt);
         info.eapolMsgNum = msg;
@@ -665,6 +787,95 @@ static uint64_t macToKey(const void *mac) {
 }
 
 static void copyMac(uint8_t *dest, const uint8_t *src) { memcpy(dest, src, 6); }
+
+static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4]) {
+    if (!client) return;
+    const uint64_t ckey = macToKey(client);
+    auto apIt = apClients.find(apKey);
+    if (apIt == apClients.end()) {
+        // New AP: enforce the global cap first (evict stalest AP).
+        if (apClients.size() >= MAX_TRACKED_APS) {
+            auto oldestAp = apClients.begin();
+            uint32_t oldestSeen = UINT32_MAX;
+            for (auto a = apClients.begin(); a != apClients.end(); ++a) {
+                uint32_t apSeen = 0;
+                for (const auto &kv : a->second) {
+                    if (kv.second.lastSeen > apSeen) apSeen = kv.second.lastSeen;
+                }
+                if (apSeen < oldestSeen) {
+                    oldestSeen = apSeen;
+                    oldestAp = a;
+                }
+            }
+            apClients.erase(oldestAp);
+        }
+    }
+    auto &inner = apClients[apKey];
+    auto it = inner.find(ckey);
+    if (it != inner.end()) {
+        it->second.frames++;
+        it->second.lastSeen = millis();
+        if (ip && (ip[0] || ip[1] || ip[2] || ip[3])) { memcpy(it->second.ip, ip, 4); }
+        return;
+    }
+    if (inner.size() >= MAX_CLIENTS_PER_AP) {
+        auto oldest = inner.begin();
+        for (auto e = inner.begin(); e != inner.end(); ++e) {
+            if (e->second.lastSeen < oldest->second.lastSeen) oldest = e;
+        }
+        inner.erase(oldest);
+    }
+    ClientInfo ci;
+    memcpy(ci.mac, client, 6);
+    if (ip) memcpy(ci.ip, ip, 4);
+    ci.frames = 1;
+    ci.lastSeen = millis();
+    inner.emplace(ckey, ci);
+}
+
+static bool parseClientIp(const uint8_t *frame, uint16_t len, const uint8_t client[6], uint8_t ipOut[4]) {
+    if (!frame || !client || !ipOut || len < 34) return false;
+    const int qos = ((frame[0] & 0x0F) == 0x08) ? 2 : 0;
+    const int llc = 24 + qos;
+    if (len < (uint16_t)(llc + 8)) return false;
+    if (!(frame[llc] == 0xAA && frame[llc + 1] == 0xAA && frame[llc + 2] == 0x03 && frame[llc + 3] == 0x00 &&
+          frame[llc + 4] == 0x00 && frame[llc + 5] == 0x00)) {
+        return false;
+    }
+    const int nh = llc + 8; // network-layer header starts after LLC/SNAP+ethertype
+    if (len < (uint16_t)(nh + 2)) return false;
+    const uint16_t eth = ((uint16_t)frame[nh - 2] << 8) | frame[nh - 1];
+    const uint8_t *a1 = frame + 4;
+    const uint8_t *a2 = frame + 10;
+    const bool clientIsA1 = memcmp(a1, client, 6) == 0;
+    if (!clientIsA1 && memcmp(a2, client, 6) != 0) return false;
+    if (eth == 0x0806) { // ARP: sender/target protocol addresses
+        if (len < (uint16_t)(nh + 28)) return false;
+        const uint8_t *sha = frame + nh + 8;
+        const uint8_t *spa = frame + nh + 14;
+        const uint8_t *tha = frame + nh + 18;
+        const uint8_t *tpa = frame + nh + 24;
+        if (memcmp(sha, client, 6) == 0) {
+            memcpy(ipOut, spa, 4);
+            return true;
+        }
+        if (memcmp(tha, client, 6) == 0) {
+            memcpy(ipOut, tpa, 4);
+            return true;
+        }
+        return false;
+    }
+    if (eth == 0x0800) { // IPv4
+        if (len < (uint16_t)(nh + 20)) return false;
+        const uint8_t ihl = (frame[nh] & 0x0F) * 4;
+        if (ihl < 20 || len < (uint16_t)(nh + ihl)) return false;
+        const uint8_t *sip = frame + nh + 12;
+        const uint8_t *dip = frame + nh + 16;
+        memcpy(ipOut, clientIsA1 ? sip : dip, 4);
+        return true;
+    }
+    return false;
+}
 
 static void copySsidToBuffer(const String &ssid, char *buffer, size_t len) {
     if (!buffer || len == 0) return;
@@ -768,7 +979,7 @@ static void closeDeauthFile() {
 }
 
 static bool rawCaptureEnabled() { return currentMode == SnifferMode::Full && rawFileOpen && _pcap_file; }
-static bool handshakeCaptureEnabled() { return currentMode != SnifferMode::DeauthOnly; }
+static bool handshakeCaptureEnabled() { return currentMode != SnifferMode::DeauthOnly && currentMode != SnifferMode::Passive; }
 static bool deauthCaptureEnabled() {
     return currentMode == SnifferMode::DeauthOnly && deauthFileOpen && _deauth_file;
 }
@@ -890,6 +1101,7 @@ void sniffer_reset_handshake_cache() {
     resetHandshakeBeaconCache();
     perApHandshakeTracker.clear();
     eapol4WayBuffer.clear();
+    apClients.clear();
 }
 
 void printAddress(const uint8_t *addr) {

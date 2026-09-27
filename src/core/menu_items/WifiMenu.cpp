@@ -20,6 +20,7 @@
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/channel_analyzer.h"
+#include "modules/wifi/client_scanner.h"
 #include "modules/wifi/jam_detect.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
@@ -92,6 +93,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
+    options.push_back({"Client Scanner", clientScannerMenu});
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
