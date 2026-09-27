@@ -1,25 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="310" viewBox="0 0 480 310">
   <!-- Background -->
-  <rect width="480" height="270" fill="#000000"/>
+  <rect width="480" height="310" fill="#000000"/>
 
   <!-- Top border + title bar -->
-  <rect x="10" y="10" width="460" height="250" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
+  <rect x="10" y="10" width="460" height="290" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
   <rect x="10" y="10" width="460" height="36" fill="#FFA600"/>
   <text x="240" y="35" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">Profile: Cap CC1101</text>
 
   <!-- Menu item 1 — selected (highlight) -->
-  <rect x="12" y="76" width="456" height="46" fill="#FFA600" rx="2"/>
-  <text x="240" y="107" font-family="monospace" font-size="24" fill="#000000" text-anchor="middle" font-weight="bold">Cap CC1101</text>
+  <rect x="12" y="52" width="456" height="40" fill="#FFA600" rx="2"/>
+  <text x="240" y="79" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">Cap CC1101</text>
+  <polygon points="26,72 40,63 40,81" fill="#000000"/>
 
   <!-- Menu item 2 -->
-  <text x="240" y="158" font-family="monospace" font-size="24" fill="#FFA600" text-anchor="middle">Cap LoRa-1262</text>
+  <text x="240" y="124" font-family="monospace" font-size="22" fill="#FFA600" text-anchor="middle">Cap LoRa-1262</text>
 
   <!-- Menu item 3 -->
-  <text x="240" y="208" font-family="monospace" font-size="24" fill="#FFA600" text-anchor="middle">Stock/Shield</text>
+  <text x="240" y="169" font-family="monospace" font-size="22" fill="#FFA600" text-anchor="middle">Stock/Shield</text>
 
-  <!-- Selection indicator left -->
-  <polygon points="26,99 40,90 40,108" fill="#000000"/>
+  <!-- Menu item 4 -->
+  <text x="240" y="214" font-family="monospace" font-size="22" fill="#FFA600" text-anchor="middle">Grove GPS v1.1</text>
+
+  <!-- Menu item 5 -->
+  <text x="240" y="259" font-family="monospace" font-size="22" fill="#FFA600" text-anchor="middle">ADV 3in1</text>
 
   <!-- Screen border -->
-  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+  <rect x="1" y="1" width="478" height="308" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
 </svg>

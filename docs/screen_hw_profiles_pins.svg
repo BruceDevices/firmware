@@ -1,42 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="310" viewBox="0 0 560 310">
   <!-- Background -->
-  <rect width="480" height="270" fill="#000000"/>
+  <rect width="560" height="310" fill="#000000"/>
 
   <!-- Title bar -->
-  <rect x="10" y="10" width="460" height="250" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
-  <rect x="10" y="10" width="460" height="36" fill="#FFA600"/>
-  <text x="240" y="35" font-family="monospace" font-size="22" fill="#000000" text-anchor="middle" font-weight="bold">Pinout por Perfil</text>
+  <rect x="10" y="10" width="540" height="290" fill="none" stroke="#FFA600" stroke-width="2" rx="5"/>
+  <rect x="10" y="10" width="540" height="36" fill="#FFA600"/>
+  <text x="280" y="35" font-family="monospace" font-size="20" fill="#000000" text-anchor="middle" font-weight="bold">Pinout por Perfil</text>
 
   <!-- Header row -->
-  <text x="30"  y="72" font-family="monospace" font-size="15" fill="#888888">Perfil</text>
-  <text x="175" y="72" font-family="monospace" font-size="15" fill="#888888">CS</text>
-  <text x="230" y="72" font-family="monospace" font-size="15" fill="#888888">GDO0</text>
-  <text x="310" y="72" font-family="monospace" font-size="15" fill="#888888">GPS RX/TX</text>
-  <line x1="20" y1="78" x2="460" y2="78" stroke="#444444" stroke-width="1"/>
+  <text x="20"  y="68" font-family="monospace" font-size="13" fill="#888888">Perfil</text>
+  <text x="165" y="68" font-family="monospace" font-size="13" fill="#888888">CS</text>
+  <text x="210" y="68" font-family="monospace" font-size="13" fill="#888888">GDO0/IO0</text>
+  <text x="320" y="68" font-family="monospace" font-size="13" fill="#888888">GPS RX/TX</text>
+  <text x="430" y="68" font-family="monospace" font-size="13" fill="#888888">Extra</text>
+  <line x1="14" y1="73" x2="546" y2="73" stroke="#444444" stroke-width="1"/>
 
-  <!-- Row 1: Cap CC1101 — highlight -->
-  <rect x="12" y="82" width="456" height="38" fill="#1A1A00" rx="2"/>
-  <text x="30"  y="107" font-family="monospace" font-size="16" fill="#FFA600">Cap CC1101</text>
-  <text x="175" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
-  <text x="230" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G15</text>
-  <text x="310" y="107" font-family="monospace" font-size="16" fill="#FFFFFF">G1/G2</text>
+  <!-- Row 1: Cap CC1101 -->
+  <rect x="12" y="77" width="536" height="34" fill="#1A1A00" rx="2"/>
+  <text x="20"  y="99" font-family="monospace" font-size="14" fill="#FFA600">Cap CC1101</text>
+  <text x="165" y="99" font-family="monospace" font-size="14" fill="#FFFFFF">G5</text>
+  <text x="210" y="99" font-family="monospace" font-size="14" fill="#FFFFFF">G15</text>
+  <text x="320" y="99" font-family="monospace" font-size="14" fill="#FFFFFF">G1/G2</text>
+  <text x="430" y="99" font-family="monospace" font-size="13" fill="#888888">NFC:CS=G6,IRQ=G4</text>
 
   <!-- Row 2: Cap LoRa -->
-  <text x="30"  y="148" font-family="monospace" font-size="16" fill="#FFA600">Cap LoRa</text>
-  <text x="175" y="148" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
-  <text x="230" y="148" font-family="monospace" font-size="16" fill="#888888">—</text>
-  <text x="310" y="148" font-family="monospace" font-size="16" fill="#FFFFFF">G15/G13</text>
-  <text x="30"  y="168" font-family="monospace" font-size="13" fill="#555555">(SX1262; beta)</text>
+  <text x="20"  y="130" font-family="monospace" font-size="14" fill="#FFA600">Cap LoRa</text>
+  <text x="165" y="130" font-family="monospace" font-size="14" fill="#FFFFFF">G5</text>
+  <text x="210" y="130" font-family="monospace" font-size="14" fill="#888888">—</text>
+  <text x="320" y="130" font-family="monospace" font-size="14" fill="#FFFFFF">G15/G13</text>
+  <text x="430" y="130" font-family="monospace" font-size="13" fill="#888888">SX1262 beta</text>
 
   <!-- Row 3: Stock -->
-  <text x="30"  y="208" font-family="monospace" font-size="16" fill="#FFA600">Stock</text>
-  <text x="175" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G13</text>
-  <text x="230" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G5</text>
-  <text x="310" y="208" font-family="monospace" font-size="16" fill="#FFFFFF">G15/G13</text>
+  <text x="20"  y="162" font-family="monospace" font-size="14" fill="#FFA600">Stock/Shield</text>
+  <text x="165" y="162" font-family="monospace" font-size="14" fill="#FFFFFF">G13</text>
+  <text x="210" y="162" font-family="monospace" font-size="14" fill="#FFFFFF">G5</text>
+  <text x="320" y="162" font-family="monospace" font-size="14" fill="#FFFFFF">G15/G13</text>
+  <text x="430" y="162" font-family="monospace" font-size="13" fill="#888888">shield terceiros</text>
+
+  <!-- Row 4: Grove GPS -->
+  <text x="20"  y="194" font-family="monospace" font-size="14" fill="#FFA600">Grove GPS v1.1</text>
+  <text x="165" y="194" font-family="monospace" font-size="14" fill="#888888">—</text>
+  <text x="210" y="194" font-family="monospace" font-size="14" fill="#888888">—</text>
+  <text x="320" y="194" font-family="monospace" font-size="14" fill="#FFFFFF">G1/G2</text>
+  <text x="430" y="194" font-family="monospace" font-size="13" fill="#888888">MAX2659, 9600bd</text>
+
+  <!-- Row 5: ADV 3in1 — highlight -->
+  <rect x="12" y="201" width="536" height="34" fill="#001A00" rx="2"/>
+  <text x="20"  y="223" font-family="monospace" font-size="14" fill="#00FF88">ADV 3in1</text>
+  <text x="165" y="223" font-family="monospace" font-size="14" fill="#FFFFFF">G15</text>
+  <text x="210" y="223" font-family="monospace" font-size="14" fill="#FFFFFF">G13</text>
+  <text x="320" y="223" font-family="monospace" font-size="14" fill="#FFFFFF">G1/G2</text>
+  <text x="430" y="223" font-family="monospace" font-size="13" fill="#00FF88">NRF24:SS=G9,CE=G8</text>
+
+  <!-- ADV 3in1 sub-note -->
+  <text x="20"  y="244" font-family="monospace" font-size="12" fill="#555555">  LoRa CS=G5/RST=G3/DIO0=G4 · G8/G9 mux TCA8418↔NRF24</text>
 
   <!-- SPI note -->
-  <text x="30" y="248" font-family="monospace" font-size="13" fill="#555555">SPI compartilhado: SCK=G40 MISO=G39 MOSI=G14</text>
+  <text x="20" y="284" font-family="monospace" font-size="12" fill="#555555">SPI compartilhado: SCK=G40  MISO=G39  MOSI=G14</text>
+  <text x="20" y="298" font-family="monospace" font-size="12" fill="#555555">Reboot obrigatório ao mudar para/de ADV 3in1</text>
 
   <!-- Screen border -->
-  <rect x="1" y="1" width="478" height="268" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
+  <rect x="1" y="1" width="558" height="308" fill="none" stroke="#333333" stroke-width="2" rx="4"/>
 </svg>
