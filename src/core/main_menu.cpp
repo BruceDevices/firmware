@@ -124,7 +124,8 @@ int MainMenu::gridIndexOf(MenuItemInterface *item) {
 void MainMenu::buildGridLayout(int itemCount) {
     // Floor so a cell never gets too small to tap/read — this is what triggers paging, not a
     // preferred size. Scaled by FP so it still means something on high-res boards.
-    const int MIN_CELL_W = 54 * FP;
+    const int MIN_CELL_W = tftWidth / 4 * FP;
+    // const int MIN_CELL_W = 54 * FP;
     const int MIN_CELL_H = 40 * FP;
     // Right-edge column reserved for the scrollbar and the page-up/page-down tap zone (see
     // MainMenu::handleGridPageTap()) — wide enough to actually tap, not just the 3px bar itself.
@@ -133,7 +134,7 @@ void MainMenu::buildGridLayout(int itemCount) {
     if (itemCount < 1) itemCount = 1;
 
     int areaX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
-    int areaY = STATUS_BAR_HEIGHT - 2; // first line free under the status bar separator
+    int areaY = STATUS_BAR_HEIGHT - 3; // first line free under the status bar separator
     int areaW = tftWidth - 2 * areaX - PAGE_TAP_W;
     int areaH = tftHeight - areaY - areaX;
 
@@ -170,7 +171,8 @@ void MainMenu::buildGridLayout(int itemCount) {
     if (_grid.iconBox < 12) _grid.iconBox = 12;
 
     // Center whatever is left over so the grid doesn't hug the border
-    _grid.x = areaX + (areaW - _grid.cols * _grid.cellW) / 2;
+    _grid.x = (tftWidth - _grid.cols * _grid.cellW) / 2;
+    //_grid.x = areaX + (areaW - _grid.cols * _grid.cellW) / 2;
     _grid.y = areaY + (areaH - _grid.visibleRows * _grid.cellH) / 2;
 
     _gridItemCount = itemCount;
@@ -212,11 +214,7 @@ void MainMenu::drawGrid(int index) {
         }
         drawMainBorder(false);
         tft.fillRect(
-            _grid.x,
-            _grid.y,
-            _grid.cols * _grid.cellW,
-            _grid.visibleRows * _grid.cellH,
-            bruceConfig.bgColor
+            _grid.x, _grid.y, _grid.cols * _grid.cellW, _grid.visibleRows * _grid.cellH, bruceConfig.bgColor
         );
         int first = _gridScroll * _grid.cols;
         int last = min(itemCount, first + _grid.visibleRows * _grid.cols);
@@ -255,14 +253,16 @@ void MainMenu::drawGridCell(int index, bool selected) {
     uint16_t bgColor = selected ? bruceConfig.priColor : bruceConfig.bgColor;
     uint16_t fgColor = selected ? bruceConfig.bgColor : bruceConfig.priColor;
 
+    const int GUTTER = 2;
     tft.fillRect(x, y, _grid.cellW, _grid.cellH, bruceConfig.bgColor);
-    if (selected) tft.fillRoundRect(x + 1, y + 1, _grid.cellW - 2, _grid.cellH - 2, 3, bgColor);
+    if (selected)
+        tft.fillRoundRect(
+            x + GUTTER, y + GUTTER, _grid.cellW - 2 * GUTTER, _grid.cellH - 2 * GUTTER, 3, bgColor
+        );
 
     MenuItemInterface *item = static_cast<MenuItemInterface *>(options[index].hoverPointer);
     if (item)
-        item->drawIconInBox(
-            x + _grid.cellW / 2, y + 3 + _grid.iconBox / 2, _grid.iconBox, fgColor, bgColor
-        );
+        item->drawIconInBox(x + _grid.cellW / 2, y + 3 + _grid.iconBox / 2, _grid.iconBox, fgColor, bgColor);
 
     int maxChars = (_grid.cellW - 4) / (LW * _grid.labelSize);
     tft.setTextSize(_grid.labelSize);
@@ -280,7 +280,7 @@ void MainMenu::drawGridCell(int index, bool selected) {
 **  Thin indicator on the right telling there are more rows off screen
 **********************************************************************/
 void MainMenu::drawGridScrollBar() {
-    int barX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 4;
+    int barX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 6;
     int trackY = _grid.y;
     int trackH = _grid.visibleRows * _grid.cellH;
 
@@ -309,7 +309,7 @@ bool MainMenu::handleGridPageTap(int x, int y, int currentIndex, int &newIndex) 
 
     int maxScroll = _grid.rows - _grid.visibleRows;
     int targetScroll = (y < zoneY + zoneH / 2) ? max(0, _gridScroll - _grid.visibleRows)
-                                                : min(maxScroll, _gridScroll + _grid.visibleRows);
+                                               : min(maxScroll, _gridScroll + _grid.visibleRows);
 
     // Keep the same column, jump to the first row of the new page.
     int col = currentIndex % _grid.cols;

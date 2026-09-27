@@ -23,6 +23,13 @@
 // Maximum number of BLE devices to display to prevent memory issues
 #define MAX_DISPLAY_DEVICES 100
 
+// NimBLE's own default for NimBLEScan::m_maxResults (see the NimBLEScan
+// constructor). The scan object is a singleton that survives
+// BLEDevice::deinit(), so any module that changes this setting must put it
+// back -- otherwise every later scan that reads getResults() sees nothing
+// until the board is rebooted.
+#define NIMBLE_SCAN_DEFAULT_MAX_RESULTS 0xFF
+
 // Memory protection: Reduce scan time in low-memory situations
 #define SCAN_TIME_REDUCED 3
 
