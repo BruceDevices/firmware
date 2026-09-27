@@ -86,6 +86,7 @@ const char *hwProfileName(uint8_t prof) {
         case HW_CAP_CC1101: return "Cap CC1101";
         case HW_CAP_LORA:   return "Cap LoRa (beta)";
         case HW_STOCK:      return "Stock";
+        case HW_GROVE_GPS:  return "Grove GPS v1.1";
         default:            return "Unknown";
     }
 }
@@ -144,6 +145,13 @@ void applyHWProfile(uint8_t prof) {
             bruceConfigPins.gps_bus.rx     = (gpio_num_t)15;
             bruceConfigPins.gps_bus.tx     = (gpio_num_t)13;
             bruceConfigPins.gpsBaudrate    = 115200;
+            break;
+
+        case HW_GROVE_GPS:
+            // GPS Unit v1.1 (MAX2659 LNA) on Grove port — no Cap module attached.
+            bruceConfigPins.gps_bus.rx  = (gpio_num_t)1;
+            bruceConfigPins.gps_bus.tx  = (gpio_num_t)2;
+            bruceConfigPins.gpsBaudrate = 9600;
             break;
     }
 }

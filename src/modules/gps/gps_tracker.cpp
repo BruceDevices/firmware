@@ -44,6 +44,8 @@ bool GPSTracker::begin_gps() {
     GPSserial.begin(
         bruceConfigPins.gpsBaudrate, SERIAL_8N1, bruceConfigPins.gps_bus.rx, bruceConfigPins.gps_bus.tx
     );
+    vTaskDelay(300 / portTICK_PERIOD_MS); // let residual navigation key events drain from TCA8418 FIFO
+    EscPress = false;                     // dismiss any phantom Esc before entering GPS wait loop
 
     int count = 0;
     padprintln("Waiting for GPS data");

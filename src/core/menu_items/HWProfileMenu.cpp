@@ -3,20 +3,23 @@
 #include "HWProfileMenu.h"
 #include "hw_profiles.h"
 #include "core/display.h"
+#include "core/settings.h"
 #include "core/utils.h"
 
 static void setProfileAndApply(uint8_t prof) {
     saveHWProfile(prof);
     applyHWProfile(prof);
+    bruceConfigPins.saveFile(); // persist new pin assignments (GPS, CC1101, LoRa, etc.)
     displaySuccess(String("Profile: ") + hwProfileName(prof));
 }
 
 void HWProfileMenu::optionsMenu() {
     String title = String("Profile: ") + hwProfileName(loadHWProfile());
     options = {
-        {"Cap CC1101",    [=]() { setProfileAndApply(HW_CAP_CC1101); }},
-        {"Cap LoRa-1262", [=]() { setProfileAndApply(HW_CAP_LORA);   }},
-        {"Stock/Shield",  [=]() { setProfileAndApply(HW_STOCK);      }},
+        {"Cap CC1101",    [=]() { setProfileAndApply(HW_CAP_CC1101);  }},
+        {"Cap LoRa-1262", [=]() { setProfileAndApply(HW_CAP_LORA);    }},
+        {"Stock/Shield",  [=]() { setProfileAndApply(HW_STOCK);       }},
+        {"Grove GPS v1.1",[=]() { setProfileAndApply(HW_GROVE_GPS);   }},
     };
     addOptionToMainMenu();
     loopOptions(options, MENU_TYPE_SUBMENU, title.c_str());
