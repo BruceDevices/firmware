@@ -1145,124 +1145,132 @@ Opt_Coord drawOptions(
 
 /***************************************************************************************
 ** Function name: drawSubmenu
-** Description:   Função para desenhar e mostrar as opçoes de contexto
+** Description:   draw a modern styled submenu list.
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     drawStatusBar();
-    int menuSize = options.size();
+
+    const int menuSize = static_cast<int>(options.size());
+    if (menuSize <= 0) return;
+    if (index < 0 || index >= menuSize) index = 0;
+
+    // Vertical submenu list: left aligned, bordered cards, gradient-like
+    // backgrounds and a strong visual state for the currently selected item.
+    // The gradient is rendered as several horizontal bands for compatibility
+    // with TFT displays that do not provide a generic gradient primitive.
+    const int outerX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
+    const int outerW = tftWidth - 2 * outerX;
+    const int contentTop = STATUS_BAR_HEIGHT + LH * FP + 5;
+    const int contentBottom = tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - 2;
+    const int contentH = contentBottom - contentTop;
+
+    const int itemH = FM * LH + 14;
+    const int itemGap = 5;
+    const int pitch = itemH + itemGap;
+    int visibleItems = contentH / pitch;
+    if (visibleItems < 1) visibleItems = 1;
+
+    // Keep the selected item visible while scrolling through long submenus.
+    int first = index - visibleItems / 2;
+    if (first < 0) first = 0;
+    if (first + visibleItems > menuSize) first = menuSize - visibleItems;
+    if (first < 0) first = 0;
+
+    tft.fillRect(outerX, contentTop, outerW, contentH, bruceConfig.bgColor);
+
+    // Title.
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawPixel(0, 0, 0);
-    tft.fillRect(
-        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-        STATUS_BAR_HEIGHT,
-        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-        LH * FP,
-        bruceConfig.bgColor
-    );
+    tft.setTextDatum(TL_DATUM);
     tft.drawString(title, BORDER_PAD_X, STATUS_BAR_HEIGHT);
 
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
-    int selectedTextH = selectedTextSize * LH;
-    int neighborTextH = FM * LH;
-    int rowGap = FP * (LH / 2);
-    int rowPitch = FG * LH + rowGap;
-    int rowClearH = FG * LH + rowGap;
+    auto rgb565 = [](uint8_t r, uint8_t g, uint8_t b) -> uint16_t {
+        return static_cast<uint16_t>(((r & 0xF8) << 8) |
+                                     ((g & 0xFC) << 3) |
+                                     (b >> 3));
+    };
 
-    // Keep the title row intact and center the selected option in the remaining content area.
-    int contentTop = STATUS_BAR_HEIGHT + LH * FP + 4;
-    int contentBottom = tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - 1;
-    int middle = contentTop + (contentBottom - contentTop) / 2;
+    auto mixColor = [&](uint16_t a, uint16_t b, uint8_t amount) -> uint16_t {
+        uint8_t ar = ((a >> 11) & 0x1F) << 3;
+        uint8_t ag = ((a >> 5) & 0x3F) << 2;
+        uint8_t ab = (a & 0x1F) << 3;
+        uint8_t br = ((b >> 11) & 0x1F) << 3;
+        uint8_t bg = ((b >> 5) & 0x3F) << 2;
+        uint8_t bb = (b & 0x1F) << 3;
+        uint8_t r = ar + ((static_cast<int>(br) - ar) * amount) / 255;
+        uint8_t g = ag + ((static_cast<int>(bg) - ag) * amount) / 255;
+        uint8_t bl = ab + ((static_cast<int>(bb) - ab) * amount) / 255;
+        return rgb565(r, g, bl);
+    };
 
-    tft.fillRect(
-        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-        contentTop,
-        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-        contentBottom - contentTop,
-        bruceConfig.bgColor
-    );
+    const uint16_t primary = bruceConfig.priColor;
+    const uint16_t secondary = bruceConfig.secColor;
+    const uint16_t background = bruceConfig.bgColor;
 
-    int spaceAbove = middle - contentTop - neighborTextH / 2;
-    int spaceBelow = contentBottom - middle - neighborTextH / 2;
-    int neighborSpaceEachSide = spaceAbove < spaceBelow ? spaceAbove : spaceBelow;
-    int maxNeighbors = neighborSpaceEachSide > 0 ? neighborSpaceEachSide / rowPitch : 0;
-    int maxByList = (menuSize - 1) / 2;
-    int neighbors = maxNeighbors < maxByList ? maxNeighbors : maxByList;
-    if (neighbors < 0) neighbors = 0;
+    for (int row = 0; row < visibleItems; row++) {
+        const int idx = first + row;
+        if (idx >= menuSize) break;
 
-    tft.setTextSize(FM);
-    for (int k = neighbors; k >= 1; k--) {
-        int idx = ((index - k) % menuSize + menuSize) % menuSize;
-        int itemCenterY = middle - k * rowPitch;
-        int y = itemCenterY - neighborTextH / 2;
-        tft.setTextColor(options[idx].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-        tft.fillRect(
-            BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-            itemCenterY - rowClearH / 2,
-            tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-            rowClearH,
-            bruceConfig.bgColor
-        );
-        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
+        const bool selected = idx == index;
+        const bool enabled = options[idx].enabled;
+        const int x = outerX + 3;
+        const int y = contentTop + row * pitch;
+        const int w = outerW - 6;
+        const int h = itemH;
+
+        uint16_t borderColor;
+        if (!enabled) borderColor = TFT_DARKGREY;
+        else if (selected) borderColor = primary;
+        else borderColor = getColorVariation(secondary);
+
+        tft.drawRoundRect(x, y, w, h, 5, borderColor);
+
+        const uint16_t gradientStart = selected
+            ? mixColor(background, background, 45)
+            : mixColor(background, secondary, 18);
+        const uint16_t gradientEnd = selected
+            ? mixColor(background, background, 45)
+            : mixColor(background, secondary, 55);
+
+        const int innerX = x + 2;
+        const int innerY = y + 2;
+        const int innerW = w - 4;
+        const int innerH = h - 4;
+        const int bands = 6;
+
+        for (int band = 0; band < bands; band++) {
+            const uint8_t amount = static_cast<uint8_t>((band * 255) / (bands - 1));
+            const uint16_t bandColor = mixColor(gradientStart, gradientEnd, amount);
+            const int bandY = innerY + (innerH * band) / bands;
+            const int bandH = (innerH * (band + 1)) / bands - (innerH * band) / bands;
+            tft.fillRect(innerX, bandY, innerW, bandH, bandColor);
+        }
+
+        // Keep exactly the same border size for selected and unselected items.
+        // Selection is indicated only by its different background gradient and font color.
+
+        tft.setTextSize(FM);
+        String text = options[idx].label;
+        uint16_t textColor = !enabled ? TFT_DARKGREY : (selected ? primary : secondary);
+        tft.setTextColor(textColor);
+        tft.setTextDatum(ML_DATUM);
+        tft.drawString(text, x + 12, y + h / 2, SMOOTH_FONT);
+        tft.setTextDatum(TL_DATUM);
     }
 
-    // Selected item
-    tft.setTextSize(selectedTextSize);
-    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(
-        BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-        middle - rowClearH / 2,
-        tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-        rowClearH,
-        bruceConfig.bgColor
-    );
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextH / 2, SMOOTH_FONT);
-    tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
-        middle + selectedTextH / 2 + 1,
-        strlen(options[index].label.c_str()) * selectedTextSize * LW,
-        bruceConfig.priColor
-    );
-
-    tft.setTextSize(FM);
-    for (int k = 1; k <= neighbors; k++) {
-        int idx = (index + k) % menuSize;
-        int itemCenterY = middle + k * rowPitch;
-        int y = itemCenterY - neighborTextH / 2;
-        tft.setTextColor(options[idx].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-        tft.fillRect(
-            BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-            itemCenterY - rowClearH / 2,
-            tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-            rowClearH,
-            bruceConfig.bgColor
-        );
-        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
-    }
-
-    tft.fillRect(
-        tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE,
-        0,
-        BORDER_OFFSET_FROM_SCREEN_EDGE,
-        tftHeight,
-        bruceConfig.bgColor
-    );
-    tft.fillRect(
-        tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE,
-        index * tftHeight / menuSize,
-        BORDER_OFFSET_FROM_SCREEN_EDGE,
-        tftHeight / menuSize,
-        bruceConfig.priColor
-    );
+    // Thin scrollbar on the right shows the current position in the submenu.
+    tft.fillRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, 0,
+                 BORDER_OFFSET_FROM_SCREEN_EDGE, tftHeight, background);
+    const int indicatorH = max(4, tftHeight / menuSize);
+    const int indicatorY = (index * (tftHeight - indicatorH)) / max(1, menuSize - 1);
+    tft.fillRoundRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorY,
+                      BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorH, 2, primary);
 
 #if defined(HAS_TOUCH)
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    // Top-right, matching the "[ x ]" loopOptions()/drawOptions() draw for regular lists, and matching
-    // where touchHeatMap() (utils.cpp) now maps the EscPress zone.
     int escW = 5 * LW * FM + 4;
-    tft.drawString(
-        "[ x ]", tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW, BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1
-    );
+    tft.drawString("[ x ]", tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW,
+                   BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1);
     TouchFooter();
 #endif
 }
