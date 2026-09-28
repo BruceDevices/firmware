@@ -867,7 +867,7 @@ static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t
 
 static bool parseClientIp(const uint8_t *frame, uint16_t len, const uint8_t client[6], uint8_t ipOut[4]) {
     if (!frame || !client || !ipOut || len < 34) return false;
-    const int qos = ((frame[0] & 0x0F) == 0x08) ? 2 : 0;
+    const int qos = isQosDataFrame(frame) ? 2 : 0;
     const int llc = 24 + qos;
     if (len < (uint16_t)(llc + 8)) return false;
     if (!(frame[llc] == 0xAA && frame[llc + 1] == 0xAA && frame[llc + 2] == 0x03 && frame[llc + 3] == 0x00 &&
