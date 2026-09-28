@@ -15,6 +15,7 @@
 #include "menu_items/LoRaMenu.h"
 #include "menu_items/NRF24.h"
 #include "menu_items/OthersMenu.h"
+#include "menu_items/QuickAccessMenu.h"
 #include "menu_items/RFIDMenu.h"
 #include "menu_items/RFMenu.h"
 #include "menu_items/ScriptsMenu.h"
@@ -34,6 +35,7 @@ public:
     RFIDMenu rfidMenu;
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
+    QuickAccessMenu quickAccessMenu;
     WifiMenu wifiMenu;
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;

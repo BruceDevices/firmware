@@ -5,6 +5,7 @@
 
 MainMenu::MainMenu() {
     _menuItems = {
+        &quickAccessMenu,
         &wifiMenu,
         &bleMenu,
         &rfMenu,
