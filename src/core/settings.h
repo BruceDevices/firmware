@@ -63,6 +63,7 @@ void addMifareKeyMenu();
 void setSleepMode();
 
 void setDimmerTimeMenu();
+void setAutoDeepSleepMenu();
 
 void setClock();
 
