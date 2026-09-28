@@ -830,22 +830,25 @@ void deauthAllFromScan() {
         int rssi = WiFi.RSSI(i);
 
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
-        String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        String optionText = displayName + " (ch" + String(channel) + ")";
 
-        options.push_back({optionText.c_str(), [=]() {
-                               uint8_t targetMAC[6];
-                               memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
-                               int ch = WiFi.channel((uint8_t)i);
-                               WiFi.scanDelete();
+        Option opt(optionText.c_str(), [=]() {
+            uint8_t targetMAC[6];
+            memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
+            int ch = WiFi.channel((uint8_t)i);
+            WiFi.scanDelete();
 
-                               SelPress = false;
-                               EscPress = false;
-                               PrevPress = false;
-                               NextPress = false;
-                               delay(100);
+            SelPress = false;
+            EscPress = false;
+            PrevPress = false;
+            NextPress = false;
+            delay(100);
 
-                               runDeauthAll(targetMAC, ch);
-                           }});
+            runDeauthAll(targetMAC, ch);
+        });
+        opt.iconRssi = rssi;
+        opt.iconLock = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 2 : 1;
+        options.push_back(opt);
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
 
@@ -1019,22 +1022,25 @@ void showAPSelectionForClientDeauth() {
         int rssi = WiFi.RSSI(i);
 
         String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
-        String optionText = displayName + " (" + String(rssi) + "dBm|ch" + String(channel) + ")";
+        String optionText = displayName + " (ch" + String(channel) + ")";
 
-        options.push_back({optionText.c_str(), [=]() {
-                               uint8_t targetMAC[6];
-                               memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
-                               int ch = WiFi.channel((uint8_t)i);
-                               WiFi.scanDelete();
+        Option opt(optionText.c_str(), [=]() {
+            uint8_t targetMAC[6];
+            memcpy(targetMAC, WiFi.BSSID((uint8_t)i), 6);
+            int ch = WiFi.channel((uint8_t)i);
+            WiFi.scanDelete();
 
-                               SelPress = false;
-                               EscPress = false;
-                               PrevPress = false;
-                               NextPress = false;
-                               delay(100);
+            SelPress = false;
+            EscPress = false;
+            PrevPress = false;
+            NextPress = false;
+            delay(100);
 
-                               scanClientsOnAP(targetMAC, ch);
-                           }});
+            scanClientsOnAP(targetMAC, ch);
+        });
+        opt.iconRssi = rssi;
+        opt.iconLock = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 2 : 1;
+        options.push_back(opt);
     }
     options.push_back({"Back", []() { returnToMenu = true; }});
 

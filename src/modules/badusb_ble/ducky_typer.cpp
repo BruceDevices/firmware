@@ -884,7 +884,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     );
     if (!bruceConfig.badUSBBLEShowOutput) {
         tft.setTextSize(FP);
-        tft.setTextColor(TFT_RED);
+        tft.setTextColor(getColorVariation(bruceConfig.priColor, 8, -1));
         tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE * 2, tftHeight / 2);
         tft.print("Script output disabled");
     }
@@ -1003,10 +1003,10 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
             } else if (PriCmd->type != DuckyCommandType_Comment) {
                 printTFTBadUSBBLE(Command, bruceConfig.priColor);
                 if (Argument.length() > 0) {
-                    printTFTBadUSBBLE(" " + Argument, (ArgCmd == nullptr ? TFT_WHITE : TFT_WHITE), true);
-                } else printTFTBadUSBBLE("", TFT_WHITE, true);
+                    printTFTBadUSBBLE(" " + Argument, bruceConfig.priColor, true);
+                } else printTFTBadUSBBLE("", bruceConfig.priColor, true);
             } else if (PriCmd->type == DuckyCommandType_Comment) {
-                printTFTBadUSBBLE(Argument, TFT_DARKGREEN, true);
+                printTFTBadUSBBLE(Argument, getColorVariation(bruceConfig.priColor, 8, 1), true);
             }
         }
 
@@ -1461,13 +1461,7 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
     bool timerStarted = false;
 
     auto drawStaticUI = [&]() {
-        tft.fillScreen(bruceConfig.bgColor);
-
-        tft.setTextSize(FM);
-        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawCentreString("PRESENTER", tftWidth / 2, 10, 1);
-
-        tft.drawFastHLine(10, 35, tftWidth - 20, bruceConfig.priColor);
+        drawMainBorderWithTitle("PRESENTER");
 
         tft.setTextSize(FM);
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
