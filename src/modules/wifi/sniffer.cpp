@@ -106,6 +106,9 @@ struct ClientInfo {
 static std::map<uint64_t, std::map<uint64_t, ClientInfo>> apClients;
 static constexpr size_t MAX_CLIENTS_PER_AP = 24;
 static constexpr size_t MAX_TRACKED_APS = 48;
+// First channel each AP key was heard on (lets callers target APs whose
+// beacon was never decoded).
+static std::map<uint64_t, uint8_t> apFirstChannel;
 
 // --- 4-way handshake frame buffer ---
 // Buffer M1, M2, and M3 in memory; flush all 4 frames when M4 arrives.
@@ -207,7 +210,7 @@ static bool deauthCaptureEnabled();
 static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt);
 static String resolveSsidForFrame(FrameInfo &info, const wifi_promiscuous_pkt_t *packet);
 static void registerBeacon(const uint8_t *apAddr);
-static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4]);
+static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4], uint8_t channel);
 // Parse the client IP out of a data frame (ARP or IPv4 over LLC/SNAP).
 // Returns true and fills ipOut when an address belonging to client was found.
 static bool parseClientIp(
@@ -565,6 +568,24 @@ uint32_t sniffer_total_clients() {
     return total;
 }
 
+uint8_t sniffer_list_client_aps(uint8_t outBssid[][6], uint8_t outCh[], uint8_t maxOut) {
+    if (!outBssid || !outCh || maxOut == 0) return 0;
+    uint8_t n = 0;
+    for (const auto &kv : apClients) {
+        if (n >= maxOut) break;
+        if (kv.second.empty()) continue;
+        uint64_t key = kv.first;
+        for (int i = 5; i >= 0; i--) {
+            outBssid[n][i] = (uint8_t)(key & 0xFF);
+            key >>= 8;
+        }
+        auto chIt = apFirstChannel.find(kv.first);
+        outCh[n] = (chIt != apFirstChannel.end()) ? chIt->second : 0;
+        n++;
+    }
+    return n;
+}
+
 uint8_t sniffer_get_client_details(uint64_t apKey, ClientDetail *out, uint8_t maxOut) {
     if (!out || maxOut == 0) return 0;
     auto it = apClients.find(apKey);
@@ -725,7 +746,8 @@ static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt) {
         if (!(client[0] & 0x01)) { // skip broadcast/multicast
             uint8_t ip[4] = {0, 0, 0, 0};
             parseClientIp(frame, len, client, ip);
-            observeClient(info.apKey, client, ip);
+            const uint8_t curCh = (ch < sizeof(all_wifi_channels)) ? all_wifi_channels[ch] : 0;
+            observeClient(info.apKey, client, ip, curCh);
         }
     }
 
@@ -749,7 +771,9 @@ static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt) {
             if (printable) {
                 for (const auto &kv : beaconSsidCache) {
                     if (kv.second == probed) {
-                        observeClient(kv.first, frame + 10, nullptr);
+                        const uint8_t curCh =
+                            (ch < sizeof(all_wifi_channels)) ? all_wifi_channels[ch] : 0;
+                        observeClient(kv.first, frame + 10, nullptr, curCh);
                         break;
                     }
                 }
@@ -788,9 +812,10 @@ static uint64_t macToKey(const void *mac) {
 
 static void copyMac(uint8_t *dest, const uint8_t *src) { memcpy(dest, src, 6); }
 
-static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4]) {
+static void observeClient(uint64_t apKey, const uint8_t client[6], const uint8_t ip[4], uint8_t channel) {
     if (!client) return;
     const uint64_t ckey = macToKey(client);
+    if (apFirstChannel.find(apKey) == apFirstChannel.end()) { apFirstChannel[apKey] = channel; }
     auto apIt = apClients.find(apKey);
     if (apIt == apClients.end()) {
         // New AP: enforce the global cap first (evict stalest AP).
@@ -1102,6 +1127,7 @@ void sniffer_reset_handshake_cache() {
     perApHandshakeTracker.clear();
     eapol4WayBuffer.clear();
     apClients.clear();
+    apFirstChannel.clear();
 }
 
 void printAddress(const uint8_t *addr) {

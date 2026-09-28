@@ -29,6 +29,7 @@ struct ScannedAp {
     uint8_t channel;
     int32_t rssi;
     uint16_t clients;
+    bool unknown; // beacon never decoded: MAC/channel known, SSID/RSSI unknown
 };
 
 static void clientScanTeardown() {
@@ -139,7 +140,9 @@ static void showApInformation(const ScannedAp &ap) {
     ScrollableTextArea area("AP INFO");
     char macStr[18];
     macToStr(ap.bssid, macStr, sizeof(macStr));
-    area.addLine("SSID: " + (ap.ssid.length() ? ap.ssid : String("HIDDEN")));
+    area.addLine(
+        ap.unknown ? "SSID: Unknown (no beacon)" : "SSID: " + (ap.ssid.length() ? ap.ssid : String("HIDDEN"))
+    );
     area.addLine("BSSID: " + String(macStr));
     // NOTE: no vendor lookup here — getManufacturer() needs internet (HTTP API),
     // which is unavailable while promiscuously scanning unjoined networks, and
@@ -214,6 +217,7 @@ void clientScannerMenu() {
         if (ap.channel < 1 || ap.channel > 14) continue;
         ap.rssi = WiFi.RSSI(i);
         ap.clients = 0;
+        ap.unknown = false;
         aps.push_back(ap);
     }
     WiFi.scanDelete();
@@ -288,11 +292,14 @@ void clientScannerMenu() {
         while (millis() - dwellStart < CLIENT_SCAN_DWELL_MS) {
             if (millis() - lastSpin >= 200) {
                 lastSpin = millis();
+                // Same denominator as the final tally (listed APs only) so
+                // this live number always matches the summed results.
+                uint16_t liveTotal = 0;
+                for (const auto &ap : aps) { liveTotal += sniffer_count_clients(ap.bssid); }
                 tft.setCursor(10, spinY);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 tft.print(
-                    String("[") + spin[spinIdx++ % 4] + "] " + String(sniffer_total_clients()) +
-                    " clients heard   "
+                    String("[") + spin[spinIdx++ % 4] + "] " + String(liveTotal) + " clients heard   "
                 );
             }
             if (check(EscPress)) {
@@ -305,10 +312,40 @@ void clientScannerMenu() {
     }
 
     // --- Step 3: tally + sort (busiest first, then strongest signal) ---
+    // Plus APs the active scan never saw a beacon for but that still showed
+    // clients (missed beacons, 4-addr frames): recoverable because the BSSID
+    // and first-heard channel were observed.
     uint16_t totalClients = 0;
     for (auto &ap : aps) {
         ap.clients = sniffer_count_clients(ap.bssid);
         totalClients += ap.clients;
+    }
+    {
+        uint8_t unkBssid[24][6];
+        uint8_t unkCh[24];
+        uint8_t nUnk = sniffer_list_client_aps(unkBssid, unkCh, 24);
+        for (uint8_t i = 0; i < nUnk; i++) {
+            bool known = false;
+            for (const auto &ap : aps) {
+                if (memcmp(ap.bssid, unkBssid[i], 6) == 0) {
+                    known = true;
+                    break;
+                }
+            }
+            if (known) continue;
+            ScannedAp u;
+            memcpy(u.bssid, unkBssid[i], 6);
+            u.ssid = "";
+            u.authStr = "Unknown";
+            u.channel = unkCh[i];
+            u.rssi = -100;
+            u.clients = sniffer_count_clients(unkBssid[i]);
+            u.unknown = true;
+            if (u.clients > 0) {
+                aps.push_back(u);
+                totalClients += u.clients;
+            }
+        }
     }
     std::sort(aps.begin(), aps.end(), [](const ScannedAp &a, const ScannedAp &b) {
         if (a.clients != b.clients) return a.clients > b.clients;
@@ -329,7 +366,14 @@ void clientScannerMenu() {
     while (true) {
         options.clear();
         for (const auto &ap : aps) {
-            String label = ap.ssid.length() ? ap.ssid : "HIDDEN";
+            String label;
+            if (ap.unknown) {
+                char tail[7];
+                snprintf(tail, sizeof(tail), "%02X%02X%02X", ap.bssid[3], ap.bssid[4], ap.bssid[5]);
+                label = String("?") + String(tail);
+            } else {
+                label = ap.ssid.length() ? ap.ssid : "HIDDEN";
+            }
             label += " ch" + String(ap.channel) + " (" + String(ap.clients) + ")";
             Option opt(label, []() {});
             options.push_back(opt);

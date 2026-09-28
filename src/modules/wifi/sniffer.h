@@ -71,6 +71,10 @@ bool sniffer_ap_has_partial(uint64_t key);
 uint16_t sniffer_count_clients(const uint8_t bssid[6]);
 // Total distinct clients observed across all APs (for live progress).
 uint32_t sniffer_total_clients();
+// APs that have observed clients but were never in a scan list (beacon
+// missed, 4-addr/WDS frames, ...). Returns count; fills BSSIDs + the channel
+// each was first heard on. Lets callers recover clients the AP scan missed.
+uint8_t sniffer_list_client_aps(uint8_t outBssid[][6], uint8_t outCh[], uint8_t maxOut);
 // Full client detail rows (MAC + last-seen IP + frame count), same sort order.
 struct ClientDetail {
     uint8_t mac[6];
