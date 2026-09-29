@@ -1,5 +1,4 @@
 #pragma once
-#if !defined(LITE_VERSION)
 #include <Arduino.h>
 #include <FS.h>
 #include <SD.h>
@@ -46,6 +45,7 @@ enum class SnifferMode : uint8_t {
     Full,
     HandshakesOnly,
     DeauthOnly,
+    Passive, // observe-only: analyze frames (client learning) but save nothing
 };
 
 extern int num_HS;
@@ -62,6 +62,28 @@ void sniffer_wait_for_flush(uint32_t timeoutMs = 2000);
 void sniffer_reset_handshake_cache();
 void markHandshakeReady(uint64_t key);
 bool sniffer_is_handshake_ready(uint64_t bssidKey);
+// True once M1+M2 (or M2+M3) were observed for this AP.
+bool handshakeCrackable(const HandshakeTracker &hs);
+bool sniffer_is_handshake_crackable(uint64_t key);
+bool sniffer_ap_has_partial(uint64_t key);
+// Number of distinct client MACs observed on an AP (0 when none known).
+uint16_t sniffer_count_clients(const uint8_t bssid[6]);
+// Total distinct clients observed across all APs (for live progress).
+uint32_t sniffer_total_clients();
+// APs that have observed clients but were never in a scan list (beacon
+// missed, 4-addr/WDS frames, ...). Returns count; fills BSSIDs + the channel
+// each was first heard on. Lets callers recover clients the AP scan missed.
+uint8_t sniffer_list_client_aps(uint8_t outBssid[][6], uint8_t outCh[], uint8_t maxOut);
+// Full client detail rows (MAC + last-seen IP + frame count), same sort order.
+struct ClientDetail {
+    uint8_t mac[6];
+    uint8_t ip[4];
+    uint32_t frames;
+};
+uint8_t sniffer_get_client_details(uint64_t apKey, ClientDetail *out, uint8_t maxOut);
+// Copy of the last raw beacon frame seen for an AP (for IE parsing).
+// Returns bytes copied, 0 when none cached.
+uint16_t sniffer_get_beacon_frame(const uint8_t bssid[6], uint8_t *out, uint16_t outLen);
 
 extern std::set<BeaconList> registeredBeacons;
 extern std::set<String> SavedHS;
@@ -75,5 +97,3 @@ bool writeHeader(File file);
 void sniffer_setup();
 
 void sniffer(void *buf, wifi_promiscuous_pkt_type_t type);
-
-#endif

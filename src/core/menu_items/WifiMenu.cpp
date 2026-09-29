@@ -9,6 +9,7 @@
 #include "modules/ethernet/ARPScanner.h"
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
+#include "modules/wifi/client_scanner.h"
 #include "modules/wifi/evil_portal.h"
 #include "modules/wifi/karma_attack.h"
 #include "modules/wifi/netcut.h"
@@ -68,6 +69,7 @@ void WifiMenu::optionsMenu() {
                            EvilPortal();
                        }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
+    options.push_back({"Client Scanner", clientScannerMenu});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
