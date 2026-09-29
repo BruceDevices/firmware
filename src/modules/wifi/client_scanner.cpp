@@ -1,3 +1,4 @@
+#if !defined(LITE_VERSION)
 #include "client_scanner.h"
 #include "core/display.h"
 #include "core/radio_mem.h"
@@ -262,12 +263,39 @@ void clientScannerMenu() {
         // all_wifi_channels[] is 1..12, so index = channel - 1.
         ch = (channels[c] >= 1 && channels[c] <= 12) ? channels[c] - 1 : 0;
         esp_wifi_set_channel(channels[c], WIFI_SECOND_CHAN_NONE);
+        // Structured listening screen: centered channel header, giant live
+        // client counter, footer hint. Every coordinate derives from
+        // tftWidth/tftHeight so all board screen sizes render symmetrically.
         // Fresh header per channel so the progress text never floods the screen.
         drawMainBorderWithTitle("Client Scanner");
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        padprintln("");
-        padprintln("Listening ch " + String(channels[c]) + " (" + String(c + 1) + "/" + String(nCh) + ")");
-        padprintln("Esc cancels");
+        const int csCx = tftWidth / 2;
+        String chLine =
+            "CH " + String(channels[c]) + "  (" + String(c + 1) + "/" + String(nCh) + ")";
+        int chSize = FM;
+        while (chSize > FP && (int)(chLine.length() * chSize * LW) > tftWidth - 2 * BORDER_PAD_X)
+            chSize--;
+        tft.setTextSize(chSize);
+        const int chY = BORDER_PAD_Y + FM * LH + 4;
+        tft.drawCentreString(chLine, csCx, chY, SMOOTH_FONT);
+        // Giant counter zone, cleared before every redraw (see tick below).
+        int csBigSize = 4;
+        while (csBigSize > FM && 3 * csBigSize * LW > tftWidth - 2 * BORDER_PAD_X) csBigSize--;
+        const int csBigY = chY + chSize * LH + 10;
+        const int csBigH = csBigSize * LH;
+        String csCap = "clients heard";
+        int csCapSize = FM;
+        while (csCapSize > FP && (int)(csCap.length() * csCapSize * LW) > tftWidth - 2 * BORDER_PAD_X)
+            csCapSize--;
+        const int csCapY = csBigY + csBigH + 6;
+        tft.setTextSize(csCapSize);
+        tft.drawCentreString(csCap, csCx, csCapY, SMOOTH_FONT);
+        // Footer hint only when it fits below the caption (tiny screens skip it).
+        const int csHintY = tftHeight - BORDER_PAD_Y - FP * LH;
+        if (csHintY > csCapY + csCapSize * LH + 4) {
+            tft.setTextSize(FP);
+            tft.drawCentreString("Esc cancels", csCx, csHintY, SMOOTH_FONT);
+        }
         // One broadcast burst per AP on this channel: knocked clients
         // re-authenticate within the dwell below and reveal themselves.
         for (const auto &ap : aps) {
@@ -282,25 +310,31 @@ void clientScannerMenu() {
                 break;
             }
         }
-        // Live activity line: spinner + running client total, redrawn in place
-        // so the user sees the scan is alive.
+        // Live counter: spinner + running client total, redrawn in place with
+        // clear-before-draw on the counter zone so the user sees the scan is
+        // alive without ghosting. Same denominator as the final tally (listed
+        // APs only) so this live number matches the summed results.
         const char *spin = "|/-\\";
         uint8_t spinIdx = 0;
-        int16_t spinY = tft.getCursorY();
         unsigned long lastSpin = 0;
         unsigned long dwellStart = millis();
         while (millis() - dwellStart < CLIENT_SCAN_DWELL_MS) {
             if (millis() - lastSpin >= 200) {
                 lastSpin = millis();
-                // Same denominator as the final tally (listed APs only) so
-                // this live number always matches the summed results.
                 uint16_t liveTotal = 0;
                 for (const auto &ap : aps) { liveTotal += sniffer_count_clients(ap.bssid); }
-                tft.setCursor(10, spinY);
-                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-                tft.print(
-                    String("[") + spin[spinIdx++ % 4] + "] " + String(liveTotal) + " clients heard   "
+                String totLine = String(spin[spinIdx++ % 4]) + "  " + String(liveTotal);
+                int totSize = csBigSize;
+                while (totSize > FP &&
+                       (int)(totLine.length() * totSize * LW) > tftWidth - 2 * BORDER_PAD_X)
+                    totSize--;
+                tft.fillRect(
+                    BORDER_PAD_X, csBigY, tftWidth - 2 * BORDER_PAD_X, csBigH,
+                    bruceConfig.bgColor
                 );
+                tft.setTextSize(totSize);
+                tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+                tft.drawCentreString(totLine, csCx, csBigY, SMOOTH_FONT);
             }
             if (check(EscPress)) {
                 aborted = true;
@@ -308,6 +342,7 @@ void clientScannerMenu() {
             }
             vTaskDelay(150 / portTICK_PERIOD_MS);
         }
+        tft.setTextSize(FP); // restore default for menus below
         if (aborted) break;
     }
 
@@ -355,12 +390,32 @@ void clientScannerMenu() {
 
     if (aborted && aps.empty()) return;
 
+    // Result summary: big centered totals, scaled to the screen. Shown for
+    // 3.5 s so it is actually readable before the AP list takes over.
     drawMainBorderWithTitle("Client Scanner");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    padprintln("");
-    padprintln(String(aps.size()) + " APs, " + String(totalClients) + " clients heard");
-    padprintln("Quiet clients may not appear.");
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    {
+        const int rsCx = tftWidth / 2;
+        String bigLine = String(totalClients) + " clients";
+        int rsBigSize = 3;
+        while (rsBigSize > FM &&
+               (int)(bigLine.length() * rsBigSize * LW) > tftWidth - 2 * BORDER_PAD_X)
+            rsBigSize--;
+        String subLine = String(aps.size()) + " APs scanned";
+        int rsSubSize = FM;
+        while (rsSubSize > FP &&
+               (int)(subLine.length() * rsSubSize * LW) > tftWidth - 2 * BORDER_PAD_X)
+            rsSubSize--;
+        const int rsBigY = tftHeight / 2 - rsBigSize * LH;
+        tft.setTextSize(rsBigSize);
+        tft.drawCentreString(bigLine, rsCx, rsBigY, SMOOTH_FONT);
+        tft.setTextSize(rsSubSize);
+        tft.drawCentreString(subLine, rsCx, rsBigY + rsBigSize * LH + 6, SMOOTH_FONT);
+        tft.setTextSize(FP);
+        tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_Y - FP * LH);
+        padprintln("Quiet clients may not appear.");
+    }
+    vTaskDelay(3500 / portTICK_PERIOD_MS);
 
     // --- Step 4: results; selecting an AP offers Information / Capture ---
     while (true) {
@@ -399,3 +454,5 @@ void clientScannerMenu() {
         // Esc on the submenu (-1): fall through and reshow results.
     }
 }
+
+#endif // LITE_VERSION

@@ -1,6 +1,8 @@
 #ifndef __CLIENT_SCANNER_H__
 #define __CLIENT_SCANNER_H__
 
+#if !defined(LITE_VERSION)
+
 /**
  * @brief Passive WiFi client scanner (Fing-style AP client census)
  *
@@ -10,5 +12,7 @@
  * for Capture Handshake. Fully passive: no deauth frames are sent.
  */
 void clientScannerMenu();
+
+#endif // LITE_VERSION
 
 #endif
