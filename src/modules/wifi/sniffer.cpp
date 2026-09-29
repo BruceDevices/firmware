@@ -4,7 +4,6 @@
               github.com/spacehuhn
   ===========================================
 */
-#if !defined(LITE_VERSION)
 #include "sniffer.h"
 /* include all necessary libraries */
 #include "esp_wifi.h"
@@ -1722,4 +1721,3 @@ void setHandshakeSniffer() {
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_set_promiscuous_rx_cb(sniffer);
 }
-#endif

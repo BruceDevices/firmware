@@ -1,4 +1,3 @@
-#if !defined(LITE_VERSION)
 #include "client_scanner.h"
 #include "core/display.h"
 #include "core/radio_mem.h"
@@ -454,5 +453,3 @@ void clientScannerMenu() {
         // Esc on the submenu (-1): fall through and reshow results.
     }
 }
-
-#endif // LITE_VERSION

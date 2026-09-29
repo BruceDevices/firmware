@@ -9,6 +9,7 @@
 #include "modules/ethernet/ARPScanner.h"
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
+#include "modules/wifi/client_scanner.h"
 #include "modules/wifi/evil_portal.h"
 #include "modules/wifi/karma_attack.h"
 #include "modules/wifi/netcut.h"
@@ -20,7 +21,6 @@
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/channel_analyzer.h"
-#include "modules/wifi/client_scanner.h"
 #if defined(NM_CYD_ESP32C5)
 #include "modules/wifi/dual_band_analyzer.h"
 #endif
@@ -69,6 +69,7 @@ void WifiMenu::optionsMenu() {
                            EvilPortal();
                        }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
+    options.push_back({"Client Scanner", clientScannerMenu});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION
     options.push_back({"Listen TCP", listenTcpPort});
@@ -99,7 +100,6 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
-    options.push_back({"Client Scanner", clientScannerMenu});
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
