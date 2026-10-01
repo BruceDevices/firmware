@@ -326,6 +326,35 @@
         <div class="dialog-head">Uploading</div>
         <div class="dialog-body"></div>
       </div>
+      <div class="dialog zip-extract hidden">
+        <div class="dialog-head">Zip uploaded</div>
+        <div class="dialog-body">
+          <p class="zip-name"></p>
+          <p class="zip-hint">What would you like to do with this archive?</p>
+          <div class="zip-actions">
+            <button class="btn-action act-zip-extract-here">
+              Extract here
+            </button>
+            <button class="btn-action act-zip-extract-to">
+              Extract to…
+            </button>
+            <button class="btn-action act-zip-keep">Just keep the file</button>
+          </div>
+          <label class="zip-option">
+            <input type="checkbox" class="zip-delete-after" />
+            Delete .zip after extraction
+          </label>
+          <div class="zip-folder-picker hidden">
+            <p>Choose a destination folder:</p>
+            <div class="zip-folder-list"></div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-action act-dialog-close act-escape">
+            Cancel
+          </button>
+        </div>
+      </div>
       <div class="dialog settings hidden">
         <div class="dialog-head">Settings</div>
         <div class="dialog-body">
@@ -697,4 +726,4 @@
     <div class="upload-area hidden"></div>
     <script src="/index.js"></script>
   </body>
-</html>
+  </html>
