@@ -1,0 +1,101 @@
+diff -ruN a/boards/ren-phone/interface.cpp b/boards/ren-phone/interface.cpp
+--- a/boards/ren-phone/interface.cpp	2026-09-20 04:01:52.301731739 +0000
++++ b/boards/ren-phone/interface.cpp	2026-09-20 04:01:58.686380272 +0000
+@@ -13,6 +13,7 @@
+ #include "CYD28_TouchscreenR.h"
+ #include "core/bus_HAL.h"
+ #include "core/powerSave.h"
++#include "core/sd_functions.h"
+ #include "core/utils.h"
+ #include <Arduino.h>
+ #include <globals.h>
+@@ -45,9 +46,11 @@
+ // Touch calibration (XPT2046)
+ // The default CYD28_TouchR_CAL_* values are tuned for the CYD, not for this
+ // panel, so the first boot runs a 4-corner calibration. The result is stored in
+-// LittleFS. To redo it later, keep a finger on the screen while the phone boots.
++// LittleFS and on the SD card (/ren_touch.conf). To redo it later, keep a finger
++// on the screen while the phone boots.
+ // ---------------------------------------------------------------------------
+-#define REN_CAL_FILE "/renTouchCal"
++#define REN_CAL_FILE "/renTouchCal"      // LittleFS copy
++#define REN_CAL_SD_FILE "/ren_touch.conf" // SD card copy
+ #define REN_CAL_MARGIN 20
+ #define REN_CAL_TIMEOUT_MS 120000
+ #define REN_CAL_MIN_SPAN 1000 // min raw distance between the two calibrated edges
+@@ -59,13 +62,17 @@
+     return true;
+ }
+ 
+-static bool renLoadTouchCal() {
+-    File f = LittleFS.open(REN_CAL_FILE, "r");
++// Read 5 values (xmin, xmax, ymin, ymax, swap) from a calibration file.
++// Accepts "key=value" lines as well as plain numbers, one per line.
++static bool renReadCalFile(FS &fs, const char *path, int v[5]) {
++    File f = fs.open(path, FILE_READ);
+     if (!f) return false;
+-    int v[5];
+     for (int i = 0; i < 5; i++) {
+         String line = f.readStringUntil('\n');
+         line.trim();
++        int eq = line.indexOf('=');
++        if (eq >= 0) line = line.substring(eq + 1);
++        line.trim();
+         if (line.length() == 0) {
+             f.close();
+             return false;
+@@ -73,17 +80,48 @@
+         v[i] = line.toInt();
+     }
+     f.close();
+-    if (!renCalValid(v[0], v[1], v[2], v[3])) return false;
++    return renCalValid(v[0], v[1], v[2], v[3]);
++}
++
++static bool renWriteCalFile(FS &fs, const char *path, int xmin, int xmax, int ymin, int ymax, bool swap) {
++    File f = fs.open(path, FILE_WRITE);
++    if (!f) return false;
++    f.printf("xmin=%d\nxmax=%d\nymin=%d\nymax=%d\nswap=%d\n", xmin, xmax, ymin, ymax, swap ? 1 : 0);
++    f.close();
++    return true;
++}
++
++static bool renSdReady() { return sdcardMounted || setupSdCard(); }
++
++// SD card is checked first, then LittleFS. Whichever copy is missing gets re-created.
++static bool renLoadTouchCal() {
++    int v[5];
++    bool sd = renSdReady();
++    bool fromSd = sd && renReadCalFile(SD, REN_CAL_SD_FILE, v);
++    bool fromFlash = !fromSd && renReadCalFile(LittleFS, REN_CAL_FILE, v);
++    if (!fromSd && !fromFlash) return false;
++
+     touch.setCalibration(v[0], v[1], v[2], v[3], v[4] != 0);
+-    Serial.printf("Touch cal loaded: X %d..%d  Y %d..%d  swap=%d\n", v[0], v[1], v[2], v[3], v[4]);
++    Serial.printf(
++        "Touch cal loaded from %s: X %d..%d  Y %d..%d  swap=%d\n",
++        fromSd ? "SD" : "LittleFS",
++        v[0],
++        v[1],
++        v[2],
++        v[3],
++        v[4]
++    );
++    // keep both copies in sync
++    if (fromFlash && sd) renWriteCalFile(SD, REN_CAL_SD_FILE, v[0], v[1], v[2], v[3], v[4] != 0);
++    if (fromSd && !LittleFS.exists(REN_CAL_FILE)) renWriteCalFile(LittleFS, REN_CAL_FILE, v[0], v[1], v[2], v[3], v[4] != 0);
+     return true;
+ }
+ 
+ static void renSaveTouchCal(int xmin, int xmax, int ymin, int ymax, bool swap) {
+-    File f = LittleFS.open(REN_CAL_FILE, "w");
+-    if (!f) return;
+-    f.printf("%d\n%d\n%d\n%d\n%d\n", xmin, xmax, ymin, ymax, swap ? 1 : 0);
+-    f.close();
++    bool okFlash = renWriteCalFile(LittleFS, REN_CAL_FILE, xmin, xmax, ymin, ymax, swap);
++    bool sd = renSdReady();
++    bool okSd = sd && renWriteCalFile(SD, REN_CAL_SD_FILE, xmin, xmax, ymin, ymax, swap);
++    Serial.printf("Touch cal saved: LittleFS=%d SD=%d (%s)\n", okFlash, okSd, REN_CAL_SD_FILE);
+ }
+ 
+ // true while the finger stays down for ~1.2 s right at boot

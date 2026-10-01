@@ -163,7 +163,19 @@ void* TFT_eSprite::callocSprite(int16_t w, int16_t h, uint8_t frames)
   if (_bpp == 16)
   {
 #if defined (ESP32) && defined (CONFIG_SPIRAM_SUPPORT)
+    // NOTE (accretion-phone DMA patch): upstream TFT_eSPI refuses PSRAM for 16bpp
+    // sprites whenever DMA_Enabled is true, because on the original ESP32 the SPI
+    // DMA controller cannot read PSRAM directly. The ESP32-S3's GDMA controller
+    // does not have that limitation, so on this chip forcing sprites into internal
+    // RAM just because DMA is on on would only make the known internal-RAM
+    // fragmentation issues worse (Home Screen canvas, Doom, NES core, MJPEG...).
+    // ACCRETION_TFT_DMA boards keep using PSRAM as before; every other board is
+    // unaffected (DMA_Enabled stays false there, so this condition is unchanged).
+#if defined(ACCRETION_TFT_DMA)
+    if ( psramFound() && _psram_enable )
+#else
     if ( psramFound() && _psram_enable && !_tft->DMA_Enabled)
+#endif
     {
       ptr8 = ( uint8_t*) ps_calloc(frames * w * h + frames, sizeof(uint16_t));
       //Serial.println("PSRAM");

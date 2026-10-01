@@ -87,6 +87,13 @@ public:
     explicit tft_sprite(tft_display *parent);
     ~tft_sprite() = default;
 
+private:
+    // Parent display, used to reach the real TFT_eSPI object (native()) for the
+    // DMA push path below. Kept private: nothing outside this class needs it.
+    tft_display *_dmaParent = nullptr;
+
+public:
+
     using TFT_eSprite::drawCircle;
     using TFT_eSprite::drawLine;
     using TFT_eSprite::drawPixel;

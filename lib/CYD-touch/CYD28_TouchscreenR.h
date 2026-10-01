@@ -79,6 +79,13 @@ public:
   void setRotation(uint8_t n) { rotation = n % 4; }
     void setThreshold(uint16_t th) { threshold = th;}
 
+  // Runtime calibration (overrides the compile-time CYD28_TouchR_CAL_* defaults).
+  // swap = true when the panel's raw X axis runs along the screen's vertical axis.
+  void setCalibration(int16_t xmin, int16_t xmax, int16_t ymin, int16_t ymax, bool swap = false) {
+    if (xmax == xmin || ymax == ymin) return;
+    calXmin = xmin; calXmax = xmax; calYmin = ymin; calYmax = ymax; swapXY = swap;
+  }
+
   volatile bool isrWake=true;
 
 private:
@@ -88,6 +95,9 @@ private:
   void wait(uint_fast8_t del);
   void convertRawXY(int16_t *x, int16_t *y);
   uint8_t rotation=1;
+  int16_t calXmin = CYD28_TouchR_CAL_XMIN, calXmax = CYD28_TouchR_CAL_XMAX;
+  int16_t calYmin = CYD28_TouchR_CAL_YMIN, calYmax = CYD28_TouchR_CAL_YMAX;
+  bool swapXY = false;
   int16_t xraw=0, yraw=0, zraw=0;
     uint16_t threshold = CYD28_TouchR_Z_THRESH;
   uint32_t msraw=0x80000000;

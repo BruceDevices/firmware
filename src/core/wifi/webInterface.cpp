@@ -348,11 +348,10 @@ void serveWebUIFile(
 ) {
     AsyncWebServerResponse *response = nullptr;
     FS *fs = NULL;
-    if (setupSdCard()) {
-        if (SD.exists("/BruceWebUI/" + filename)) fs = &SD;
-    } else if (LittleFS.exists("/BruceWebUI/" + filename)) {
-        fs = &LittleFS;
-    }
+    // Runs in the AsyncTCP task: never (re)mount the SD card from here (slow + needs lots of stack),
+    // just use it if it is already mounted. Look in LittleFS too when the SD has no custom file.
+    if (sdcardMounted && SD.exists("/BruceWebUI/" + filename)) fs = &SD;
+    else if (LittleFS.exists("/BruceWebUI/" + filename)) fs = &LittleFS;
     if (fs) {
         response = request->beginResponse(*fs, "/BruceWebUI/" + filename, contentType);
     } else {
@@ -691,8 +690,8 @@ void configureWebServer() {
                 fs::FS *fs = useSD ? (fs::FS *)&SD : (fs::FS *)&LittleFS;
                 String fsType = useSD ? "SD" : "LittleFS";
 
-                if (useSD) {              // LittleFS is already mounted
-                    if (!setupSdCard()) { // only tries to mount SD if editting on SD
+                if (useSD) {                // LittleFS is already mounted
+                    if (!sdcardMounted) { // AsyncTCP task: do not try to mount the SD from here
                         request->send(500, "text/plain", "Failed to initialize file system: " + fsType);
                         return;
                     }

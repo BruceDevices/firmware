@@ -1,0 +1,551 @@
+diff --git a/.github/workflows/PR_All_envs.yml b/.github/workflows/PR_All_envs.yml
+index bffe623..6c1eef2 100644
+--- a/.github/workflows/PR_All_envs.yml
++++ b/.github/workflows/PR_All_envs.yml
+@@ -53,6 +53,7 @@ jobs:
+           - { env: "lilygo-t-display-S3-pro",         family: "ESP32-S3",}
+           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
+           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
++          - { env: "ren-phone",                       family: "ESP32-S3",}
+           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
+           - { env: "smoochiee-board",                 family: "ESP32-S3",}
+           - { env: "Phantom_S024R",                   family: "ESP32",}
+diff --git a/.github/workflows/buil_parallel.yml b/.github/workflows/buil_parallel.yml
+index dcca4f1..2be2f9c 100644
+--- a/.github/workflows/buil_parallel.yml
++++ b/.github/workflows/buil_parallel.yml
+@@ -75,6 +75,7 @@ jobs:
+           - { env: "lilygo-t-display-S3-pro",         family: "ESP32-S3",}
+           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
+           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
++          - { env: "ren-phone",                       family: "ESP32-S3",}
+           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
+           - { env: "elecrow-24B",                     family: "ESP32",}
+           - { env: "elecrow-28B",                     family: "ESP32",}
+diff --git a/.github/workflows/manual_build_sel_env.yml b/.github/workflows/manual_build_sel_env.yml
+index 08accee..feb06a3 100644
+--- a/.github/workflows/manual_build_sel_env.yml
++++ b/.github/workflows/manual_build_sel_env.yml
+@@ -50,6 +50,7 @@ on:
+           - "lilygo-t-display-s3-pro"
+           - "lilygo-t-display-ttgo"
+           - "lilygo-t-hmi"
++          - "ren-phone"
+           - "lilygo-t-lora-pager"
+           - "smoochiee-board"
+           - "Phantom_S024R"
+diff --git a/boards/_boards_json/ren-phone.json b/boards/_boards_json/ren-phone.json
+new file mode 100644
+index 0000000..56261c6
+--- /dev/null
++++ b/boards/_boards_json/ren-phone.json
+@@ -0,0 +1,50 @@
++{
++  "build": {
++    "arduino": {
++      "ldscript": "esp32s3_out.ld",
++      "memory_type": "qio_opi",
++      "partitions": "default_16MB.csv"
++    },
++    "core": "esp32",
++    "extra_flags": [
++      "-DREN_PHONE",
++      "-DBOARD_HAS_PSRAM",
++      "-DARDUINO_USB_CDC_ON_BOOT=1",
++      "-DARDUINO_USB_MODE=1",
++      "-DARDUINO_RUNNING_CORE=1",
++      "-DARDUINO_EVENT_RUNNING_CORE=1"
++    ],
++    "f_cpu": "240000000L",
++    "f_flash": "80000000L",
++    "flash_mode": "qio",
++    "hwids": [
++      [
++        "0X303A",
++        "0x1001"
++      ]
++    ],
++    "mcu": "esp32s3",
++    "variant": "pinouts"
++  },
++  "connectivity": [
++    "bluetooth",
++    "wifi"
++  ],
++  "debug": {
++    "openocd_target": "esp32s3.cfg"
++  },
++  "frameworks": [
++    "arduino",
++    "espidf"
++  ],
++  "name": "Ren Phone (ESP32-S3, 16MB flash, OPI PSRAM)",
++  "upload": {
++    "flash_size": "16MB",
++    "maximum_ram_size": 327680,
++    "maximum_size": 16777216,
++    "require_upload_port": true,
++    "speed": 921600
++  },
++  "url": "https://github.com/",
++  "vendor": "DIY"
++}
+diff --git a/boards/pinouts/pins_arduino.h b/boards/pinouts/pins_arduino.h
+index def219d..fea87ec 100644
+--- a/boards/pinouts/pins_arduino.h
++++ b/boards/pinouts/pins_arduino.h
+@@ -46,6 +46,8 @@
+ #include "../marauder-mini/pins_arduino.h"
+ #elif LILYGO_T_HMI
+ #include "../lilygo-t-hmi/pins_arduino.h"
++#elif REN_PHONE
++#include "../ren-phone/pins_arduino.h"
+ #elif ELECROW
+ #include "../elecrow/pins_arduino.h"
+ #elif ESP32C5_DEVKITC_1_TFT
+diff --git a/boards/ren-phone/interface.cpp b/boards/ren-phone/interface.cpp
+new file mode 100644
+index 0000000..1074f25
+--- /dev/null
++++ b/boards/ren-phone/interface.cpp
+@@ -0,0 +1,161 @@
++/*
++ * Ren Phone - DIY ESP32-S3 handheld
++ * Board interface for Bruce firmware
++ *
++ * Hardware:
++ *   - ESP32-S3 (16MB flash, OPI PSRAM)
++ *   - ILI9341 240x320 TFT on SPI (TFT_eSPI, pins in pins_arduino.h)
++ *   - XPT2046 resistive touch on its own pins (read by CYD28_TouchR, bit-banged)
++ *   - microSD in SDIO 1-bit mode (SD_MMC): CLK=39 CMD=38 D0=40
++ *   - INMP441 mic, WS2812 LED (GPIO48), vibration motor (GPIO18), battery ADC (GPIO8)
++ */
++
++#include "CYD28_TouchscreenR.h"
++#include "core/bus_HAL.h"
++#include "core/powerSave.h"
++#include "core/utils.h"
++#include <Arduino.h>
++#include <globals.h>
++#include <interface.h>
++
++// SD card SDIO pins (1-bit mode)
++#define REN_SD_CLK 39
++#define REN_SD_CMD 38
++#define REN_SD_D0 40
++
++// Backlight PWM (attached after the TFT is initialised)
++#define REN_BL_FREQ 5000
++#define REN_BL_BITS 8
++
++// Optional touch axis inversion, set from ren-phone.ini
++#ifndef REN_TOUCH_INVERT_X
++#define REN_TOUCH_INVERT_X 0
++#endif
++#ifndef REN_TOUCH_INVERT_Y
++#define REN_TOUCH_INVERT_Y 0
++#endif
++
++// XPT2046 is read in software SPI (same approach as the original CYD boards):
++// it keeps the touch chip independent from the hardware SPI controllers that
++// are shared between the display and the external radio modules.
++CYD28_TouchR touch(320, 240);
++
++/***************************************************************************************
++** Function name: _setup_gpio()
++** Location: main.cpp
++** Description:   initial setup for the device
++***************************************************************************************/
++void _setup_gpio() {
++    // SD card via SDIO (SD_MMC wrapper in lib/HAL)
++    SD.setPins(REN_SD_CLK, REN_SD_CMD, REN_SD_D0);
++
++    // Vibration motor: keep it off (Bruce has no driver for it)
++    pinMode(REN_VIB_PIN, OUTPUT);
++    digitalWrite(REN_VIB_PIN, LOW);
++
++    // Touch chip
++    pinMode(XPT2046_SPI_CONFIG_CS_GPIO_NUM, OUTPUT);
++    digitalWrite(XPT2046_SPI_CONFIG_CS_GPIO_NUM, HIGH);
++    if (!touch.begin()) { Serial.println("Touchscreen initialization failed!"); }
++
++    // Panel is a standard (non-inverted) ILI9341
++    bruceConfig.colorInverted = 0;
++}
++
++/***************************************************************************************
++** Function name: _post_setup_gpio()
++** Location: main.cpp
++** Description:   second stage gpio setup (after the TFT is initialised)
++***************************************************************************************/
++void _post_setup_gpio() {
++    // Brightness control must be initialised after the TFT
++    pinMode(TFT_BL, OUTPUT);
++    ledcAttach(TFT_BL, REN_BL_FREQ, REN_BL_BITS);
++    ledcWrite(TFT_BL, 255);
++}
++
++/*********************************************************************
++** Function: setBrightness
++** location: settings.cpp
++** set brightness value (0-100)
++**********************************************************************/
++void _setBrightness(uint8_t brightval) {
++    int dutyCycle;
++    if (brightval == 100) dutyCycle = 255;
++    else if (brightval == 75) dutyCycle = 130;
++    else if (brightval == 50) dutyCycle = 70;
++    else if (brightval == 25) dutyCycle = 20;
++    else if (brightval == 0) dutyCycle = 0;
++    else dutyCycle = ((brightval * 255) / 100);
++
++    ledcWrite(TFT_BL, dutyCycle);
++}
++
++/*********************************************************************
++** Function: InputHandler
++** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
++**********************************************************************/
++void InputHandler(void) {
++    static long d_tmp = 0;
++    if (millis() - d_tmp > 200 || LongPress) {
++        // nested on purpose: don't poll the touch chip more often than needed
++        if (touch.touched()) {
++            auto t = touch.getPointScaled();
++
++            // Map raw (landscape) coordinates to the current TFT rotation
++            if (bruceConfigPins.rotation == 3) {
++                t.y = (tftHeight + 20) - t.y;
++                t.x = tftWidth - t.x;
++            }
++            if (bruceConfigPins.rotation == 0) {
++                int tmp = t.x;
++                t.x = tftWidth - t.y;
++                t.y = tmp;
++            }
++            if (bruceConfigPins.rotation == 2) {
++                int tmp = t.x;
++                t.x = t.y;
++                t.y = (tftHeight + 20) - tmp;
++            }
++            // rotation == 1 (landscape, default): no transform
++
++#if REN_TOUCH_INVERT_X
++            t.x = tftWidth - t.x;
++#endif
++#if REN_TOUCH_INVERT_Y
++            t.y = (tftHeight + 20) - t.y;
++#endif
++
++            if (!wakeUpScreen()) AnyKeyPress = true;
++            else goto END;
++
++            // Touch point global variable
++            touchPoint.x = t.x;
++            touchPoint.y = t.y;
++            touchPoint.pressed = true;
++            touchHeatMap(touchPoint);
++        END:
++            d_tmp = millis();
++        }
++    }
++}
++
++/*********************************************************************
++** Function: powerOff
++** location: mykeyboard.cpp
++** Turns off the device (deep sleep, wakes on the BOOT button)
++**********************************************************************/
++void powerOff() {
++    ledcWrite(TFT_BL, 0);
++    tft.writecommand(0x10); // ILI9341 SLPIN
++    digitalWrite(REN_VIB_PIN, LOW);
++    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, LOW);
++    esp_deep_sleep_start();
++}
++
++/*********************************************************************
++** Function: checkReboot
++** location: mykeyboard.cpp
++** Btn logic to turn off the device (name is odd btw)
++**********************************************************************/
++void checkReboot() {}
+diff --git a/boards/ren-phone/pins_arduino.h b/boards/ren-phone/pins_arduino.h
+new file mode 100644
+index 0000000..83429c9
+--- /dev/null
++++ b/boards/ren-phone/pins_arduino.h
+@@ -0,0 +1,186 @@
++#ifndef Pins_Arduino_h
++#define Pins_Arduino_h
++
++#include "soc/soc_caps.h"
++#include <stdint.h>
++
++#ifndef DEVICE_NAME
++#define DEVICE_NAME "Ren Phone"
++#endif
++
++// =============================================
++// USB (native USB on GPIO19/20)
++// =============================================
++#define USB_VID 0x303a
++#define USB_PID 0x1001
++
++// =============================================
++// UART0
++// =============================================
++static const uint8_t TX = 43;
++static const uint8_t RX = 44;
++
++// =============================================
++// I2C - shared bus with the MPU6050 (0x68)
++// =============================================
++#define GROVE_SDA 15
++#define GROVE_SCL 7
++#define SYS_I2C_SDA GROVE_SDA
++#define SYS_I2C_SCL GROVE_SCL
++static const uint8_t SDA = GROVE_SDA;
++static const uint8_t SCL = GROVE_SCL;
++
++// =============================================
++// External-module SPI bus (CC1101 / NRF24 / W5500 ...)
++// Uses pins that are NOT used by the display, touch, SD, mic, IMU or PSRAM.
++// (41/42/17 were the MAX98357A speaker pins on the original Ren Phone wiring.)
++// =============================================
++#define SPI_SCK_PIN 41
++#define SPI_MOSI_PIN 42
++#define SPI_MISO_PIN 16
++#define SPI_SS_PIN 1
++
++static const uint8_t SS = SPI_SS_PIN;
++static const uint8_t MOSI = SPI_MOSI_PIN;
++static const uint8_t MISO = SPI_MISO_PIN;
++static const uint8_t SCK = SPI_SCK_PIN;
++
++// =============================================
++// SD Card - SDIO 1-bit (SD_MMC). CLK=39 CMD=38 D0=40 (set in interface.cpp)
++// =============================================
++#define SDCARD_CS -1
++#define SDCARD_SCK -1
++#define SDCARD_MISO -1
++#define SDCARD_MOSI -1
++
++// =============================================
++// Optional external radios on the module bus above
++// =============================================
++#define USE_CC1101_VIA_SPI
++#define CC1101_GDO0_PIN 17
++#define CC1101_SS_PIN SPI_SS_PIN
++#define CC1101_MOSI_PIN SPI_MOSI_PIN
++#define CC1101_SCK_PIN SPI_SCK_PIN
++#define CC1101_MISO_PIN SPI_MISO_PIN
++
++#define USE_NRF24_VIA_SPI
++#define NRF24_CE_PIN 17
++#define NRF24_SS_PIN SPI_SS_PIN
++#define NRF24_MOSI_PIN SPI_MOSI_PIN
++#define NRF24_SCK_PIN SPI_SCK_PIN
++#define NRF24_MISO_PIN SPI_MISO_PIN
++
++#define USE_W5500_VIA_SPI
++#define W5500_SS_PIN SPI_SS_PIN
++#define W5500_MOSI_PIN SPI_MOSI_PIN
++#define W5500_SCK_PIN SPI_SCK_PIN
++#define W5500_MISO_PIN SPI_MISO_PIN
++#define W5500_INT_PIN 17
++
++// =============================================
++// TFT display - ILI9341 240x320 (SPI, TFT_eSPI)
++// =============================================
++#define USER_SETUP_LOADED
++#define ILI9341_DRIVER 1
++#define TFT_INVERSION_OFF 1
++#define TFT_WIDTH 240
++#define TFT_HEIGHT 320
++#define TFT_MISO 13
++#define TFT_MOSI 11
++#define TFT_SCLK 12
++#define TFT_CS 10
++#define TFT_DC 2
++#define TFT_RST 14
++#define TFT_BL 21
++#define TFT_BACKLIGHT_ON HIGH
++#define SMOOTH_FONT 1
++#define SPI_FREQUENCY 40000000
++#define SPI_READ_FREQUENCY 16000000
++#define SPI_TOUCH_FREQUENCY 2000000
++// Touch is read on its own bus (see ren-phone.ini), not through TFT_eSPI
++#define TOUCH_CS -1
++
++#define HAS_SCREEN 1
++#define ROTATION 1 // landscape (same as Ren Phone's own landscape mode)
++#define MINBRIGHT 1
++#define BACKLIGHT 21
++
++// =============================================
++// Touch - XPT2046 (pins are in ren-phone.ini)
++// =============================================
++#define HAS_TOUCH 1
++
++// =============================================
++// Font sizes
++// =============================================
++#define FP 1
++#define FM 2
++#define FG 3
++
++// =============================================
++// RGB LED - WS2812 on GPIO48
++// =============================================
++#define HAS_RGB_LED 1
++#define RGB_LED 48
++#define LED_TYPE WS2812B
++#define LED_ORDER GRB
++#define LED_TYPE_IS_RGBW 0
++#define LED_COUNT 1
++#define LED_COLOR_STEP 5
++
++// =============================================
++// Battery - ADC on GPIO8, 1:2 divider (default multiplier is 2.0)
++// =============================================
++#define ANALOG_BAT_PIN 8
++
++// =============================================
++// Microphone - INMP441 (I2S). L/R tied to GND (left channel)
++// =============================================
++#define PIN_CLK 47  // SCK / BCLK
++#define PIN_WS 46   // WS / LRCLK
++#define PIN_DATA 45 // SD
++
++// =============================================
++// Vibration motor (Bruce has no driver for it; the pin is just kept low)
++// =============================================
++#define REN_VIB_PIN 18
++
++// =============================================
++// Boot button (GPIO0) - used only for wake-up from deep sleep
++// =============================================
++#define HAS_BTN 0
++#define BTN_ALIAS "\"Boot\""
++#define BTN_PIN 0
++#define BTN_ACT LOW
++#define DEEPSLEEP_WAKEUP_PIN 0
++#define DEEPSLEEP_PIN_ACT LOW
++
++// =============================================
++// IR / RF default pins (external modules on free GPIOs)
++// =============================================
++#define TXLED 17
++#define RXLED 16
++#define LED_ON HIGH
++#define LED_OFF LOW
++
++#define IR_TX_PINS '{{"GPIO17", 17}, {"GPIO16", 16}, {"GPIO1", 1}}'
++#define IR_RX_PINS '{{"GPIO16", 16}, {"GPIO17", 17}, {"GPIO1", 1}}'
++#define RF_TX_PINS '{{"GPIO17", 17}, {"GPIO16", 16}, {"GPIO1", 1}}'
++#define RF_RX_PINS '{{"GPIO16", 16}, {"GPIO17", 17}, {"GPIO1", 1}}'
++
++// =============================================
++// Serial (GPS) on UART0 pins
++// =============================================
++#define SERIAL_TX 43
++#define SERIAL_RX 44
++#define GPS_SERIAL_TX SERIAL_TX
++#define GPS_SERIAL_RX SERIAL_RX
++
++// =============================================
++// BadUSB (USB HID)
++// =============================================
++#define USB_as_HID 1
++#define BAD_TX GROVE_SDA
++#define BAD_RX GROVE_SCL
++
++#endif /* Pins_Arduino_h */
+diff --git a/boards/ren-phone/ren-phone.ini b/boards/ren-phone/ren-phone.ini
+new file mode 100644
+index 0000000..032cdc8
+--- /dev/null
++++ b/boards/ren-phone/ren-phone.ini
+@@ -0,0 +1,57 @@
++; PlatformIO Project Configuration File
++;
++; Ren Phone - DIY handheld ("HP DIY") based on ESP32-S3
++;
++; Hardware:
++;   - ESP32-S3, 16MB QSPI flash, 8MB OPI PSRAM
++;   - ILI9341 2.8" 240x320 TFT (SPI)
++;   - XPT2046 resistive touch on its OWN SPI bus (no IRQ pin wired)
++;   - microSD in SDIO 1-bit mode (SD_MMC)
++;   - INMP441 I2S microphone
++;   - WS2812 RGB LED, vibration motor, battery ADC (1:2 divider)
++;   - MPU6050 on I2C
++;
++; Pin map lives in boards/ren-phone/pins_arduino.h
++
++[env:ren-phone]
++board = ren-phone
++board_build.partitions = custom_16Mb.csv
++build_src_filter = ${env.build_src_filter} +<../boards/ren-phone>
++build_flags =
++	${env.build_flags}
++	-Iboards/ren-phone
++	-Os
++	-DCORE_DEBUG_LEVEL=1
++	-DDISABLE_ALL_LIBRARY_WARNINGS
++	-DDEVICE_NAME='"Ren Phone"'
++
++	; TFT on the HSPI/SPI3 controller (AUX_SPI ends up on FSPI/SPI2, used by the touch chip)
++	-DUSE_HSPI_PORT=1
++
++	; SD card via SDIO 1-bit (SD_MMC) - not SPI
++	-DUSE_SD_MMC=1
++	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/src
++	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/vfs
++	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/diskio
++	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/**
++
++	; Touch XPT2046 on a dedicated SPI bus (read by lib/CYD-touch/CYD28_TouchscreenR)
++	-DTOUCH_XPT2046_SPI
++	-DXPT2046_TOUCH_CONFIG_INT_GPIO_NUM=-1
++	-DXPT2046_SPI_BUS_SCLK_IO_NUM=6
++	-DXPT2046_SPI_BUS_MOSI_IO_NUM=5
++	-DXPT2046_SPI_BUS_MISO_IO_NUM=4
++	-DXPT2046_SPI_CONFIG_CS_GPIO_NUM=9
++
++	; INMP441 microphone (pins in pins_arduino.h)
++	-DMIC_INMP441
++
++	; Touch axis tweaks - if touch is mirrored on your unit, flip these (0/1)
++	-DREN_TOUCH_INVERT_X=0
++	-DREN_TOUCH_INVERT_Y=0
++
++lib_deps =
++	${env.lib_deps}
++
++lib_ignore =
++	SD
+diff --git a/docker/run_all_envs.sh b/docker/run_all_envs.sh
+index adf3641..bd48f88 100644
+--- a/docker/run_all_envs.sh
++++ b/docker/run_all_envs.sh
+@@ -41,6 +41,7 @@ DEFAULT_ENVS=(
+   lilygo-t-display-S3-pro
+   lilygo-t-display-ttgo
+   lilygo-t-hmi
++  ren-phone
+   lilygo-t-lora-pager
+   elecrow-24B
+   elecrow-28B
+diff --git a/platformio.ini b/platformio.ini
+index 49d7584..5e73377 100644
+--- a/platformio.ini
++++ b/platformio.ini
+@@ -47,6 +47,7 @@ default_envs =
+ 	;lilygo-t-display-S3-pro
+ 	;lilygo-t-display-ttgo
+ 	;lilygo-t-hmi
++	;ren-phone
+ 	;lilygo-t-lora-pager
+ 	;smoochiee-board
+ 	;xk404

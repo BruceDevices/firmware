@@ -2,6 +2,18 @@
 #include "core/led_control.h"
 #include "display.h"
 
+// Colors in a theme file are hex strings ("ffff"), but hand-written themes often use plain numbers.
+// strtoul(nullptr) on a non-string value used to crash (reboot) the board.
+static uint32_t themeColorValue(JsonVariant v, uint32_t fallback) {
+    if (v.is<const char *>()) {
+        const char *str = v.as<const char *>();
+        if (str != nullptr) return strtoul(str, nullptr, 16);
+    } else if (v.is<long>()) {
+        return (uint32_t)v.as<long>();
+    }
+    return fallback;
+}
+
 struct ThemeEntry {
     const char *key;
     bool *flag;
@@ -20,6 +32,8 @@ FS *BruceTheme::themeFS(void) {
 bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSettings) {
 
     if (fs == nullptr) return true;
+    // Nothing selected (boot without theme / file picker cancelled): keep the current theme untouched
+    if (filepath.isEmpty()) return false;
     if (!fs->exists(filepath)) return false;
     File file;
     file = fs->open(filepath, FILE_READ);
@@ -29,9 +43,12 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         return false;
     }
 
-    // Deserialize the JSON document
+    // Deserialize the JSON document, then release the file handle right away: the PNG pre-cache below
+    // opens more files on the SD card (only a few handles are available on SD_MMC)
     JsonDocument jsonDoc;
-    if (deserializeJson(jsonDoc, file)) {
+    bool parseFailed = (bool)deserializeJson(jsonDoc, file);
+    file.close();
+    if (parseFailed) {
         displayError("5", true);
         log_e("THEME: %s. Using default theme", "Failed reading theme file");
         removeTheme();
@@ -76,8 +93,6 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         }
     }
 
-    file.close();
-
     if (!_th["border"].isNull()) { theme.border = _th["border"].as<int>(); }
     if (!_th["label"].isNull()) { theme.label = _th["label"].as<int>(); }
     if (!_th["gifDuration"].isNull()) { theme.gifDuration = _th["gifDuration"].as<int>(); }
@@ -87,14 +102,16 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         uint16_t _secColor = bruceConfig.secColor;
         uint16_t _bgColor = bruceConfig.bgColor;
 
-        if (!_th["priColor"].isNull()) { _priColor = strtoul(_th["priColor"], nullptr, 16); }
-        if (!_th["secColor"].isNull()) { _secColor = strtoul(_th["secColor"], nullptr, 16); }
-        if (!_th["bgColor"].isNull()) { _bgColor = strtoul(_th["bgColor"], nullptr, 16); }
+        _priColor = (uint16_t)themeColorValue(_th["priColor"].as<JsonVariant>(), _priColor);
+        _secColor = (uint16_t)themeColorValue(_th["secColor"].as<JsonVariant>(), _secColor);
+        _bgColor = (uint16_t)themeColorValue(_th["bgColor"].as<JsonVariant>(), _bgColor);
         _setUiColor(_priColor, &_secColor, &_bgColor);
 
 #ifdef HAS_RGB_LED
         if (!_th["ledBright"].isNull()) { bruceConfig.ledBright = _th["ledBright"].as<int>(); }
-        if (!_th["ledColor"].isNull()) { bruceConfig.ledColor = strtoul(_th["ledColor"], nullptr, 16); }
+        if (!_th["ledColor"].isNull()) {
+            bruceConfig.ledColor = themeColorValue(_th["ledColor"].as<JsonVariant>(), bruceConfig.ledColor);
+        }
         if (!_th["ledEffect"].isNull()) { bruceConfig.ledEffect = _th["ledEffect"].as<int>(); }
         if (!_th["ledEffectSpeed"].isNull()) { bruceConfig.ledEffectSpeed = _th["ledEffectSpeed"].as<int>(); }
         if (!_th["ledEffectDirection"].isNull()) {

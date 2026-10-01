@@ -2,6 +2,52 @@
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
 #include <algorithm>
+#include <string.h>
+
+// ---------------------------------------------------------------------------
+// Task-safety helpers
+//  - sessionLock: webUISessions is touched by the AsyncTCP task (WebUI requests)
+//    while another task may be serialising it in toJson().
+//  - saveLock: two tasks must never write bruce.conf at the same time.
+// ---------------------------------------------------------------------------
+static SemaphoreHandle_t sessionLockHandle() {
+    static SemaphoreHandle_t lock = xSemaphoreCreateMutex();
+    return lock;
+}
+static SemaphoreHandle_t saveLockHandle() {
+    static SemaphoreHandle_t lock = xSemaphoreCreateMutex();
+    return lock;
+}
+struct ScopedLock {
+    SemaphoreHandle_t h;
+    explicit ScopedLock(SemaphoreHandle_t handle) : h(handle) {
+        if (h) xSemaphoreTake(h, portMAX_DELAY);
+    }
+    ~ScopedLock() {
+        if (h) xSemaphoreGive(h);
+    }
+};
+
+// WebUI handlers run inside the AsyncTCP task, whose stack is tiny
+// (CONFIG_ASYNC_TCP_STACK_SIZE). Writing bruce.conf to LittleFS + copying it to the SD card
+// (SD_MMC/FatFs) needs a lot more stack than that and crashes the board, so a save requested from
+// that task is done later by a short-lived task with its own, bigger stack.
+static volatile bool deferredSavePending = false;
+static void deferredSaveTask(void *arg) {
+    BruceConfig *cfg = static_cast<BruceConfig *>(arg);
+    vTaskDelay(pdMS_TO_TICKS(300)); // let the HTTP response go out first
+    deferredSavePending = false;    // changes made while saving re-arm a new save
+    cfg->saveFile();
+    vTaskDelete(NULL);
+}
+static void scheduleDeferredSave(BruceConfig *cfg) {
+    if (deferredSavePending) return;
+    deferredSavePending = true;
+    if (xTaskCreate(deferredSaveTask, "cfgSave", 8192, cfg, 1, NULL) != pdPASS) {
+        deferredSavePending = false;
+        log_e("Could not create the deferred config save task");
+    }
+}
 
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
@@ -38,7 +84,12 @@ JsonDocument BruceConfig::toJson() const {
     _webUI["user"] = webUI.user;
     _webUI["pwd"] = webUI.pwd;
     JsonObject _webUISessions = setting["webUISessions"].to<JsonObject>();
-    for (size_t i = 0; i < webUISessions.size(); i++) { _webUISessions[String(i + 1)] = webUISessions[i]; }
+    {
+        ScopedLock lock(sessionLockHandle());
+        for (size_t i = 0; i < webUISessions.size(); i++) {
+            _webUISessions[String(i + 1)] = webUISessions[i];
+        }
+    }
 
     JsonObject _wifiAp = setting["wifiAp"].to<JsonObject>();
     _wifiAp["ssid"] = wifiAp.ssid;
@@ -444,6 +495,13 @@ void BruceConfig::fromFile(bool checkFS) {
 }
 
 void BruceConfig::saveFile() {
+    // Called from a WebUI request (AsyncTCP task)? Save later from a task with enough stack.
+    if (strcmp(pcTaskGetName(NULL), "async_tcp") == 0) {
+        scheduleDeferredSave(this);
+        return;
+    }
+    ScopedLock saveLock(saveLockHandle()); // one writer at a time
+
     FS *fs = &LittleFS;
     JsonDocument jsonDoc = toJson();
 
@@ -881,40 +939,49 @@ void BruceConfig::removeQrCodeEntry(const String &menuName) {
 }
 
 void BruceConfig::addWebUISession(const String &token) {
-    webUISessions.push_back(token);
-    // Limit to maximum 5 sessions - remove oldest (first element) if exceeded
-    if (webUISessions.size() > 5) { webUISessions.erase(webUISessions.begin()); }
+    {
+        ScopedLock lock(sessionLockHandle());
+        webUISessions.push_back(token);
+        // Limit to maximum 5 sessions - remove oldest (first element) if exceeded
+        if (webUISessions.size() > 5) { webUISessions.erase(webUISessions.begin()); }
+    }
     saveFile();
 }
 
 void BruceConfig::removeWebUISession(const String &token) {
-    for (auto it = webUISessions.begin(); it != webUISessions.end(); ++it) {
-        if (*it == token) {
-            webUISessions.erase(it);
-            break;
+    {
+        ScopedLock lock(sessionLockHandle());
+        for (auto it = webUISessions.begin(); it != webUISessions.end(); ++it) {
+            if (*it == token) {
+                webUISessions.erase(it);
+                break;
+            }
         }
     }
     saveFile();
 }
 
 bool BruceConfig::isValidWebUISession(const String &token) {
-    auto it = std::find(webUISessions.begin(), webUISessions.end(), token);
+    {
+        ScopedLock lock(sessionLockHandle());
+        auto it = std::find(webUISessions.begin(), webUISessions.end(), token);
 
-    if (it == webUISessions.end()) {
-        return false; // Token not found
+        if (it == webUISessions.end()) {
+            return false; // Token not found
+        }
+
+        // Check if token is already at the end (most recent position)
+        if (it == webUISessions.end() - 1) {
+            return true; // Already most recent, no changes needed
+        }
+
+        // Move token to end
+        webUISessions.erase(it);
+        webUISessions.push_back(token);
+
+        // Limit to maximum 10 sessions
+        if (webUISessions.size() > 10) { webUISessions.erase(webUISessions.begin()); }
     }
-
-    // Check if token is already at the end (most recent position)
-    if (it == webUISessions.end() - 1) {
-        return true; // Already most recent, no changes needed
-    }
-
-    // Move token to end and save
-    webUISessions.erase(it);
-    webUISessions.push_back(token);
-
-    // Limit to maximum 10 sessions
-    if (webUISessions.size() > 10) { webUISessions.erase(webUISessions.begin()); }
 
     saveFile();
     return true;

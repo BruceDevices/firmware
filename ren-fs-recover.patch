@@ -1,0 +1,62 @@
+diff -ruN a/boards/ren-phone/interface.cpp b/boards/ren-phone/interface.cpp
+--- a/boards/ren-phone/interface.cpp	2026-09-20 04:36:05.087855853 +0000
++++ b/boards/ren-phone/interface.cpp	2026-09-20 04:36:05.116896713 +0000
+@@ -18,6 +18,7 @@
+ #include <Arduino.h>
+ #include <globals.h>
+ #include <math.h>
++#include <esp_partition.h>
+ #include <interface.h>
+ 
+ // SD card SDIO pins (1-bit mode)
+@@ -147,6 +148,41 @@
+     return n == 2;
+ }
+ 
++// LittleFS write failed: collect details, try format + remount, and show everything on screen.
++static void renFsRecover() {
++    const esp_partition_t *part =
++        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, NULL);
++    size_t total0 = LittleFS.totalBytes();
++    File f = LittleFS.open("/ren_fs_test.tmp", FILE_WRITE);
++    bool opened = (bool)f;
++    size_t wrote = f ? f.print("ok") : 0;
++    if (f) f.close();
++    LittleFS.remove("/ren_fs_test.tmp");
++
++    LittleFS.end();
++    bool formatted = LittleFS.format();
++    bool remounted = setupLittleFS();
++    bool okAfter = remounted && renWriteTest(LittleFS, "/ren_fs_test.tmp");
++    if (okAfter) bruceConfig.saveFile();
++
++    char l[5][48];
++    if (part) snprintf(l[0], sizeof(l[0]), "partisi: 0x%X size 0x%X", (unsigned)part->address, (unsigned)part->size);
++    else snprintf(l[0], sizeof(l[0]), "partisi LittleFS: TIDAK ADA");
++    snprintf(l[1], sizeof(l[1]), "flash chip: %u MB", (unsigned)(ESP.getFlashChipSize() / (1024 * 1024)));
++    snprintf(l[2], sizeof(l[2]), "total=%u open=%d tulis=%u", (unsigned)total0, opened, (unsigned)wrote);
++    snprintf(l[3], sizeof(l[3]), "format=%d mount=%d tulis=%d", formatted, remounted, okAfter);
++    snprintf(l[4], sizeof(l[4]), okAfter ? "SETELAH FORMAT: OK" : "SETELAH FORMAT: MASIH GAGAL");
++    for (int i = 0; i < 5; i++) Serial.printf("[FS] %s\n", l[i]);
++
++    tft.fillScreen(TFT_BLACK);
++    tft.setTextColor(TFT_RED, TFT_BLACK);
++    tft.drawString("LittleFS gagal ditulis", 4, 4, 2);
++    tft.setTextColor(TFT_WHITE, TFT_BLACK);
++    for (int i = 0; i < 5; i++) tft.drawString(l[i], 4, 34 + i * 14, 1);
++    delay(9000);
++    tft.fillScreen(TFT_BLACK);
++}
++
+ static void renSdSelfTest() {
+     // 1) LittleFS: bruce.conf is written here FIRST. If this fails, nothing reaches the SD card either.
+     bool flashOk = renWriteTest(LittleFS, "/ren_fs_test.tmp");
+@@ -157,7 +193,7 @@
+         flashOk,
+         LittleFS.exists("/bruce.conf")
+     );
+-    if (!flashOk) renShowSdError("Flash (LittleFS) gagal ditulis", "bruce.conf tidak bisa disimpan");
++    if (!flashOk) renFsRecover();
+ 
+     // 2) SD card mount + write
+     bool mounted = sdcardMounted || setupSdCard();

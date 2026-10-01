@@ -1,0 +1,73 @@
+diff -ruN a/boards/ren-phone/interface.cpp b/boards/ren-phone/interface.cpp
+--- a/boards/ren-phone/interface.cpp	2026-09-20 04:05:29.889188448 +0000
++++ b/boards/ren-phone/interface.cpp	2026-09-20 04:05:29.924151518 +0000
+@@ -124,6 +124,48 @@
+     Serial.printf("Touch cal saved: LittleFS=%d SD=%d (%s)\n", okFlash, okSd, REN_CAL_SD_FILE);
+ }
+ 
++// ---------------------------------------------------------------------------
++// SD card self-test. Bruce keeps bruce.conf (theme, colors, settings) on LittleFS and
++// copies it to the SD card only when the card is mounted. If nothing ever shows up on
++// the card, the mount or the write is failing - this reports which one.
++// ---------------------------------------------------------------------------
++static void renShowSdError(const char *l1, const char *l2) {
++    tft.fillScreen(TFT_BLACK);
++    tft.setTextColor(TFT_RED, TFT_BLACK);
++    tft.drawCentreString(l1, tft.width() / 2, tft.height() / 2 - 16, 2);
++    tft.setTextColor(TFT_WHITE, TFT_BLACK);
++    tft.drawCentreString(l2, tft.width() / 2, tft.height() / 2 + 8, 1);
++    delay(2500);
++    tft.fillScreen(TFT_BLACK);
++}
++
++static void renSdSelfTest() {
++    bool mounted = sdcardMounted || setupSdCard();
++    Serial.printf("[SD] mounted=%d (CLK=%d CMD=%d D0=%d)\n", mounted, REN_SD_CLK, REN_SD_CMD, REN_SD_D0);
++    Serial.printf(
++        "[FS] LittleFS used %u / %u bytes, bruce.conf on LittleFS=%d\n",
++        (unsigned)LittleFS.usedBytes(),
++        (unsigned)LittleFS.totalBytes(),
++        LittleFS.exists("/bruce.conf")
++    );
++    if (!mounted) {
++        renShowSdError("SD card tidak terbaca", "Cek kabel SDIO, pull-up, format FAT32");
++        return;
++    }
++    Serial.printf(
++        "[SD] type=%d size=%llu MB, bruce.conf on SD=%d\n",
++        (int)SD.cardType(),
++        (unsigned long long)(SD.cardSize() / (1024ULL * 1024ULL)),
++        SD.exists("/bruce.conf")
++    );
++    File f = SD.open("/ren_sd_test.tmp", FILE_WRITE);
++    size_t n = f ? f.print("ok") : 0;
++    if (f) f.close();
++    SD.remove("/ren_sd_test.tmp");
++    Serial.printf("[SD] write test: %u bytes\n", (unsigned)n);
++    if (n != 2) renShowSdError("SD card gagal ditulis", "Kartu ke-mount tapi tidak bisa menulis");
++}
++
+ // true while the finger stays down for ~1.2 s right at boot
+ static bool renTouchHeldAtBoot() {
+     if (!touch.touched()) return false;
+@@ -282,6 +324,8 @@
+     ledcAttach(TFT_BL, REN_BL_FREQ, REN_BL_BITS);
+     ledcWrite(TFT_BL, 255);
+ 
++    renSdSelfTest();
++
+     // Touch calibration: first boot (no saved data) or finger held on the screen while booting
+     if (renTouchHeldAtBoot() || !renLoadTouchCal()) renCalibrateTouch();
+ }
+diff -ruN a/boards/ren-phone/ren-phone.ini b/boards/ren-phone/ren-phone.ini
+--- a/boards/ren-phone/ren-phone.ini	2026-09-20 04:05:29.889288608 +0000
++++ b/boards/ren-phone/ren-phone.ini	2026-09-20 04:05:29.924178305 +0000
+@@ -30,6 +30,8 @@
+ 
+ 	; SD card via SDIO 1-bit (SD_MMC) - not SPI
+ 	-DUSE_SD_MMC=1
++	; 20 MHz instead of the 40 MHz default: much more tolerant of DIY / jumper-wire SDIO wiring
++	-DBOARD_MAX_SDMMC_FREQ=20000
+ 	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/src
+ 	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/vfs
+ 	-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32-libs/esp32s3/include/fatfs/diskio

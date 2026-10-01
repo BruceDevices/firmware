@@ -15,7 +15,8 @@ uint8_t tft_display::getRotation() { return TFT_eSPI::getRotation(); }
 
 TFT_eSPI *tft_display::native() { return static_cast<TFT_eSPI *>(this); }
 
-tft_sprite::tft_sprite(tft_display *parent) : TFT_eSprite(static_cast<TFT_eSPI *>(parent)) {}
+tft_sprite::tft_sprite(tft_display *parent)
+    : TFT_eSprite(static_cast<TFT_eSPI *>(parent)), _dmaParent(parent) {}
 
 void *tft_sprite::createSprite(int16_t w, int16_t h, uint8_t frames) {
     return TFT_eSprite::createSprite(w, h, frames);
@@ -50,6 +51,43 @@ void tft_sprite::drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color) 
 }
 
 void tft_sprite::pushSprite(int32_t x, int32_t y, uint32_t transparent) {
+#if defined(ACCRETION_TFT_DMA) && defined(ESP32_DMA)
+    // Fast path: send the whole sprite to the panel over SPI-DMA instead of the
+    // default register-banged loop (16 pixels per CPU-driven transaction).
+    // This is what actually removes the "wipe"/flicker on screen transitions:
+    // the DMA engine streams the frame to the ILI9341 as one continuous burst
+    // that FreeRTOS task switches / interrupts can no longer split into a
+    // half-drawn frame the eye can see.
+    //
+    // Only handles the common case this firmware actually uses for full-screen
+    // UI sprites: 16bpp, opaque (no transparent colour key, since the DMA path
+    // sends the raw buffer window as-is and can't skip pixels). Anything else
+    // (8bpp/4bpp palette sprites, or a transparent-colour push) falls back to
+    // the normal blocking path below, unchanged.
+    //
+    // We deliberately wait for the transfer to finish (dmaWait()) before
+    // returning, instead of leaving it running in the background. A true
+    // non-blocking double buffer would need a second full-screen copy of
+    // every persistent canvas in this firmware (Home Screen, Doom, the NES
+    // core, MJPEG...), and this board's internal RAM is already tight (see
+    // the JPEGDEC/PSRAM notes elsewhere in this codebase) - duplicating those
+    // buffers risks trading flicker for crashes. Waiting still gives the
+    // benefit: one fast uninterruptible DMA burst per frame instead of a
+    // slow, preemptible, hand-rolled SPI loop.
+    if (_dmaParent && _bpp == 16 && transparent == TFT_TRANSPARENT) {
+        TFT_eSPI *native = _dmaParent->native();
+        if (native && native->DMA_Enabled) {
+            bool oldSwapBytes = native->getSwapBytes();
+            native->setSwapBytes(false);
+            native->startWrite();
+            native->pushImageDMA(x, y, _dwidth, _dheight, _img); // buffer=nullptr: no extra RAM used
+            native->dmaWait();
+            native->endWrite();
+            native->setSwapBytes(oldSwapBytes);
+            return;
+        }
+    }
+#endif
     TFT_eSprite::pushSprite(x, y, transparent);
 }
 

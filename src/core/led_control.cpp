@@ -733,10 +733,18 @@ void ledSetup() {
     } else setLedColor(bruceConfig.ledColor);
 }
 
+// FastLED.show() (RMT5 driver) plus float math need far more than 2 KB of stack: on the Accretion Phone
+// a theme with ledEffect > 0 crashed with "Stack canary watchpoint triggered (LedEffect)".
+#ifdef ACCRETION_PHONE
+#define LED_EFFECT_TASK_STACK 6144
+#else
+#define LED_EFFECT_TASK_STACK 2048
+#endif
+
 void ledEffects(bool enable) {
     if (enable) {
         if (ledEffectTaskHandle == NULL) {
-            xTaskCreate(ledEffectTask, "LedEffect", 2048, NULL, 1, &ledEffectTaskHandle);
+            xTaskCreate(ledEffectTask, "LedEffect", LED_EFFECT_TASK_STACK, NULL, 1, &ledEffectTaskHandle);
         }
     } else {
         if (ledEffectTaskHandle != NULL) {

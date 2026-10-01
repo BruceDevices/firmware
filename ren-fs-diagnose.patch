@@ -1,0 +1,59 @@
+diff -ruN a/boards/ren-phone/interface.cpp b/boards/ren-phone/interface.cpp
+--- a/boards/ren-phone/interface.cpp	2026-09-20 04:07:21.482374452 +0000
++++ b/boards/ren-phone/interface.cpp	2026-09-20 04:07:21.496189822 +0000
+@@ -139,31 +139,44 @@
+     tft.fillScreen(TFT_BLACK);
+ }
+ 
++static bool renWriteTest(FS &fs, const char *path) {
++    File f = fs.open(path, FILE_WRITE);
++    size_t n = f ? f.print("ok") : 0;
++    if (f) f.close();
++    fs.remove(path);
++    return n == 2;
++}
++
+ static void renSdSelfTest() {
+-    bool mounted = sdcardMounted || setupSdCard();
+-    Serial.printf("[SD] mounted=%d (CLK=%d CMD=%d D0=%d)\n", mounted, REN_SD_CLK, REN_SD_CMD, REN_SD_D0);
++    // 1) LittleFS: bruce.conf is written here FIRST. If this fails, nothing reaches the SD card either.
++    bool flashOk = renWriteTest(LittleFS, "/ren_fs_test.tmp");
+     Serial.printf(
+-        "[FS] LittleFS used %u / %u bytes, bruce.conf on LittleFS=%d\n",
++        "[FS] LittleFS used %u / %u bytes, write test=%d, bruce.conf=%d\n",
+         (unsigned)LittleFS.usedBytes(),
+         (unsigned)LittleFS.totalBytes(),
++        flashOk,
+         LittleFS.exists("/bruce.conf")
+     );
++    if (!flashOk) renShowSdError("Flash (LittleFS) gagal ditulis", "bruce.conf tidak bisa disimpan");
++
++    // 2) SD card mount + write
++    bool mounted = sdcardMounted || setupSdCard();
++    Serial.printf("[SD] mounted=%d (CLK=%d CMD=%d D0=%d)\n", mounted, REN_SD_CLK, REN_SD_CMD, REN_SD_D0);
+     if (!mounted) {
+         renShowSdError("SD card tidak terbaca", "Cek kabel SDIO, pull-up, format FAT32");
+         return;
+     }
++    bool sdWriteOk = renWriteTest(SD, "/ren_sd_test.tmp");
++    bool confOnSd = SD.exists("/bruce.conf");
+     Serial.printf(
+-        "[SD] type=%d size=%llu MB, bruce.conf on SD=%d\n",
++        "[SD] type=%d size=%llu MB, write test=%d, bruce.conf=%d\n",
+         (int)SD.cardType(),
+         (unsigned long long)(SD.cardSize() / (1024ULL * 1024ULL)),
+-        SD.exists("/bruce.conf")
++        sdWriteOk,
++        confOnSd
+     );
+-    File f = SD.open("/ren_sd_test.tmp", FILE_WRITE);
+-    size_t n = f ? f.print("ok") : 0;
+-    if (f) f.close();
+-    SD.remove("/ren_sd_test.tmp");
+-    Serial.printf("[SD] write test: %u bytes\n", (unsigned)n);
+-    if (n != 2) renShowSdError("SD card gagal ditulis", "Kartu ke-mount tapi tidak bisa menulis");
++    if (!sdWriteOk) renShowSdError("SD card gagal ditulis", "Kartu ke-mount tapi tidak bisa menulis");
++    else if (!confOnSd) renShowSdError("bruce.conf belum ada di SD", "Salinan config ke SD gagal dibuat");
+ }
+ 
+ // true while the finger stays down for ~1.2 s right at boot

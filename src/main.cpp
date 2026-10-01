@@ -9,6 +9,7 @@
 #include "current_year.h"
 #include "esp32-hal-psram.h"
 #include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
 #include <functional>
@@ -452,6 +453,25 @@ void startup_sound() {
 }
 
 /*********************************************************************
+ **  Function: resetReasonName
+ **  Human readable name of why the chip (re)booted, printed at boot to
+ **  tell crashes from watchdog resets and power dips (brownout)
+ *********************************************************************/
+static const char *resetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "POWERON";
+        case ESP_RST_SW: return "SW (ESP.restart)";
+        case ESP_RST_PANIC: return "PANIC (crash / exception)";
+        case ESP_RST_INT_WDT: return "INT_WDT (interrupt watchdog)";
+        case ESP_RST_TASK_WDT: return "TASK_WDT (task watchdog)";
+        case ESP_RST_WDT: return "WDT (other watchdog)";
+        case ESP_RST_BROWNOUT: return "BROWNOUT (power dip)";
+        case ESP_RST_DEEPSLEEP: return "DEEPSLEEP wake";
+        default: return "OTHER";
+    }
+}
+
+/*********************************************************************
  **  Function: setup
  **  Where the devices are started and variables set
  *********************************************************************/
@@ -477,6 +497,9 @@ void setup() {
         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)
     );
     Serial.flush();
+
+    esp_reset_reason_t lastReset = esp_reset_reason();
+    Serial.printf("[RESET] last reset reason: %d = %s\n", (int)lastReset, resetReasonName(lastReset));
 
     RAM_LOG("setup-start");
 

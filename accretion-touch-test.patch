@@ -1,0 +1,56 @@
+diff -ruN a/boards/accretion-phone/interface.cpp b/boards/accretion-phone/interface.cpp
+--- a/boards/accretion-phone/interface.cpp	2026-09-20 05:10:03.493991750 +0000
++++ b/boards/accretion-phone/interface.cpp	2026-09-20 05:10:03.528233719 +0000
+@@ -175,6 +175,43 @@
+     }
+ }
+ 
++// TEMPORARY edge test (debug build only, do not commit): scribble over the screen and
++// report the smallest/largest mapped coordinates the touch panel can actually reach.
++static void accretionTouchTest(uint32_t durationMs) {
++    const int W = tft.width();
++    const int H = tft.height();
++    tft.fillScreen(TFT_BLACK);
++    tft.drawRect(0, 0, W, H, TFT_DARKGREY);
++    tft.drawFastHLine(0, 24, W, TFT_DARKGREY);
++    tft.drawFastHLine(0, H - 20, W, TFT_DARKGREY);
++    tft.setTextColor(TFT_WHITE, TFT_BLACK);
++    tft.drawCentreString("Tes sentuh: coret sampai mepet semua tepi", W / 2, H / 2 - 8, 1);
++    int minX = 9999, maxX = -9999, minY = 9999, maxY = -9999;
++    uint32_t end = millis() + durationMs;
++    while (millis() < end) {
++        if (!touch.touched()) {
++            delay(5);
++            continue;
++        }
++        CYD28_TS_Point p = touch.getPointScaled();
++        if (p.x < minX) minX = p.x;
++        if (p.x > maxX) maxX = p.x;
++        if (p.y < minY) minY = p.y;
++        if (p.y > maxY) maxY = p.y;
++        if (p.x >= 0 && p.x < W && p.y >= 0 && p.y < H) tft.fillCircle(p.x, p.y, 2, TFT_GREEN);
++        delay(5);
++    }
++    char buf[48];
++    tft.fillScreen(TFT_BLACK);
++    tft.setTextColor(TFT_WHITE, TFT_BLACK);
++    snprintf(buf, sizeof(buf), "X: %d .. %d  (layar 0..%d)", minX, maxX, W - 1);
++    tft.drawString(buf, 8, 90, 2);
++    snprintf(buf, sizeof(buf), "Y: %d .. %d  (layar 0..%d)", minY, maxY, H - 1);
++    tft.drawString(buf, 8, 115, 2);
++    delay(15000);
++    tft.fillScreen(TFT_BLACK);
++}
++
+ static void accretionCalibrateTouch() {
+     uint8_t oldRotation = bruceConfigPins.rotation;
+     tft.setRotation(1); // calibrate in landscape, independent of the saved rotation
+@@ -243,6 +280,8 @@
+         delay(900);
+     }
+ 
++    if (done) accretionTouchTest(20000);
++
+     // On failure/timeout the built-in defaults stay active and nothing is saved,
+     // so the calibration is offered again on the next boot.
+     tft.fillScreen(TFT_BLACK);

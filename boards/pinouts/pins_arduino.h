@@ -52,6 +52,8 @@
 #include "../marauder-mini/pins_arduino.h"
 #elif LILYGO_T_HMI
 #include "../lilygo-t-hmi/pins_arduino.h"
+#elif ACCRETION_PHONE
+#include "../accretion-phone/pins_arduino.h"
 #elif ELECROW
 #include "../elecrow/pins_arduino.h"
 #elif ESP32C5_DEVKITC_1_TFT
