@@ -267,6 +267,17 @@ void _post_setup_gpio() {
     ledcAttach(TFT_BL, ACCRETION_BL_FREQ, ACCRETION_BL_BITS);
     ledcWrite(TFT_BL, 255);
 
+#if defined(ACCRETION_TFT_DMA) && defined(ESP32_DMA)
+    // Enables the SPI-DMA engine used by tft_sprite::pushSprite() (lib/HAL/display/tftespi.cpp)
+    // for full-screen, opaque, 16bpp sprite pushes - i.e. the Home Screen, Lock Screen,
+    // Control Center, games, etc. Everything that still needs the old blocking path
+    // (8bpp/4bpp sprites, transparent-colour pushes) keeps working exactly as before.
+    // ctrl_cs=false: CS stays under the library's normal software control, same as
+    // every non-DMA transfer on this board.
+    bool dmaOk = tft.native()->initDMA(false);
+    Serial.printf("[DMA] accretion-phone TFT DMA init: %s\n", dmaOk ? "ok" : "failed (falling back to blocking pushSprite)");
+#endif
+
     // Touch calibration: first boot (no saved data) or finger held on the screen while booting
     if (accretionTouchHeldAtBoot() || !accretionLoadTouchCal()) accretionCalibrateTouch();
 }
