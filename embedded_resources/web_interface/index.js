@@ -235,6 +235,179 @@ async function appendDroppedFiles(entry) {
     }
   });
 }
+
+// ============================================================================
+// Zip extraction flow
+// ============================================================================
+
+// State for the currently-pending zip. Set by the state query in uploadFile()
+// when the backend reports isZip=true. Cleared after the user acts.
+let _pendingZip = null;
+// Callback to resume the upload queue after the zip dialog closes.
+let _resumeUpload = null;
+// Guards against a second zip action firing while the first is in flight.
+let _zipBusy = false;
+
+function _showZipDialog(state, onDone) {
+  _pendingZip = state;
+  _resumeUpload = onDone;
+
+  let dialog = $(".dialog.zip-extract");
+  // The temp file keeps the original name, so we just display the basename
+  // of the temp path.
+  let displayName = state.tempPath.split("/").pop();
+  dialog.querySelector(".zip-name").textContent = displayName;
+  dialog.querySelector(".zip-delete-after").checked = false;
+  dialog.querySelector(".zip-folder-picker").classList.add("hidden");
+  dialog.querySelector(".zip-folder-list").innerHTML = "";
+
+  Dialog.show("zip-extract");
+}
+
+async function _zipExtract(targetFolder) {
+  if (_zipBusy) return;
+  _zipBusy = true;
+
+  let dialog = $(".dialog.zip-extract");
+  // Disable all buttons in this dialog so the user can't fire a second
+  // action while we're waiting for the backend.
+  dialog.querySelectorAll("button").forEach((b) => (b.disabled = true));
+
+  let deleteAfter = dialog.querySelector(".zip-delete-after").checked
+    ? "1"
+    : "0";
+
+  Dialog.loading.show("Extracting...");
+  try {
+    let r = await requestPost("/extract", {
+      zipPath: _pendingZip.tempPath,
+      targetFolder: targetFolder,
+      fs: currentDrive,
+      deleteAfter: deleteAfter,
+    });
+    let result = JSON.parse(r);
+    Dialog.loading.hide();
+    Dialog.hide();
+    alert(`Extracted ${result.extracted} file(s) to ${result.target}`);
+  } catch (e) {
+    Dialog.loading.hide();
+    alert("Extraction failed: " + e.message);
+  } finally {
+    // Give the device a moment to finish any post-response cleanup before
+    // we fire another request (fetchSystemInfo, fetchFiles, or the next
+    // queued upload).
+    await new Promise((r) => setTimeout(r, 400));
+    dialog.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    _zipBusy = false;
+    _finishZipFlow();
+  }
+}
+
+async function _zipKeep() {
+  if (_zipBusy) return;
+  _zipBusy = true;
+
+  let dialog = $(".dialog.zip-extract");
+  dialog.querySelectorAll("button").forEach((b) => (b.disabled = true));
+
+  Dialog.loading.show("Moving zip...");
+  try {
+    let r = await requestPost("/extract", {
+      zipPath: _pendingZip.tempPath,
+      targetFolder: currentPath,
+      fs: currentDrive,
+      moveOnly: "1",
+    });
+    let result = JSON.parse(r);
+    Dialog.loading.hide();
+    Dialog.hide();
+    alert(`Zip saved to ${result.moved}`);
+  } catch (e) {
+    Dialog.loading.hide();
+    alert("Move failed: " + e.message);
+  } finally {
+    await new Promise((r) => setTimeout(r, 400));
+    dialog.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    _zipBusy = false;
+    _finishZipFlow();
+  }
+}
+
+async function _zipShowFolderPicker() {
+  let dialog = $(".dialog.zip-extract");
+  let picker = dialog.querySelector(".zip-folder-picker");
+  let list = dialog.querySelector(".zip-folder-list");
+  picker.classList.remove("hidden");
+  list.innerHTML = "Loading...";
+
+  try {
+    let r = await requestGet("/listfiles", {
+      fs: currentDrive,
+      folder: currentPath,
+    });
+    list.innerHTML = "";
+
+    // "Use current folder" as the top option
+    let useCurrent = document.createElement("button");
+    useCurrent.className = "btn-action";
+    useCurrent.textContent = `Use current folder (${currentPath})`;
+    useCurrent.onclick = () => _zipExtract(currentPath);
+    list.appendChild(useCurrent);
+
+    // List subfolders
+    r.split("\n").forEach((line) => {
+      let [type, name, size] = line.split(":");
+      if (type !== "Fo") return;
+      let sub =
+        (currentPath.endsWith("/") ? currentPath : currentPath + "/") + name;
+      let btn = document.createElement("button");
+      btn.className = "btn-action";
+      btn.textContent = "→ " + name;
+      btn.onclick = () => _zipExtract(sub);
+      list.appendChild(btn);
+    });
+
+    if (list.children.length === 1) {
+      // only the "use current folder" button — no subfolders
+      let empty = document.createElement("p");
+      empty.textContent = "(no subfolders — using current folder only)";
+      empty.style.fontStyle = "italic";
+      list.appendChild(empty);
+    }
+  } catch (e) {
+    list.innerHTML = "Failed to list folders: " + e.message;
+  }
+}
+
+function _finishZipFlow() {
+  _pendingZip = null;
+  let cb = _resumeUpload;
+  _resumeUpload = null;
+  // Refresh file listing and system info (space may have changed).
+  // By this point the caller has already waited 400ms, so no additional
+  // delay is needed here.
+  fetchSystemInfo();
+  fetchFiles(currentDrive, currentPath);
+  // Resume the upload queue
+  if (cb) cb();
+}
+
+// Wire up the zip dialog buttons
+document
+  .querySelector(".dialog.zip-extract .act-zip-extract-here")
+  .addEventListener("click", () => _zipExtract(currentPath));
+document
+  .querySelector(".dialog.zip-extract .act-zip-extract-to")
+  .addEventListener("click", () => _zipShowFolderPicker());
+document
+  .querySelector(".dialog.zip-extract .act-zip-keep")
+  .addEventListener("click", () => _zipKeep());
+document
+  .querySelector(".dialog.zip-extract .act-escape")
+  .addEventListener("click", () => {
+    _finishZipFlow();
+  });
+
 async function uploadFile() {
   if (_queueUpload.length === 0) {
     _runningUpload = false;
@@ -265,10 +438,51 @@ async function uploadFile() {
       }
     };
     req.onload = () => {
-      uploadFile();
       if (req.status >= 200 && req.status < 300) {
-        resolve(req.responseText);
+        // Don't parse the upload response — ask the backend directly
+        // what the last upload did. This is a normal GET that goes through
+        // the same code path as /systeminfo, so it can't be confused by
+        // multipart handling.
+        requestGet("/upload_state")
+          .then((stateRaw) => {
+            let state;
+            try {
+              state = JSON.parse(stateRaw);
+            } catch (_) {
+              state = { isZip: false };
+            }
+
+            if (state.isZip) {
+              // Pause the upload queue and show the dialog. It resumes
+              // when the zip flow finishes.
+              resolve(stateRaw);
+              _runningUpload = false;
+              _showZipDialog(state, () => {
+                if (_queueUpload.length > 0) {
+                  uploadFile();
+                } else {
+                  $(".dialog.upload .dialog-body").innerHTML = "";
+                  Dialog.hide();
+                  fetchSystemInfo();
+                  fetchFiles(currentDrive, currentPath);
+                }
+              });
+              return;
+            }
+
+            // Normal upload — continue queue.
+            uploadFile();
+            resolve(stateRaw);
+          })
+          .catch((err) => {
+            // If the state query fails for any reason, treat it as a
+            // normal upload so we don't wedge the queue.
+            console.error("upload_state query failed:", err);
+            uploadFile();
+            resolve("");
+          });
       } else {
+        uploadFile();
         reject();
       }
     };
