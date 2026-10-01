@@ -94,7 +94,9 @@ private:
 
 public:
 
+    using TFT_eSprite::drawCentreString;
     using TFT_eSprite::drawCircle;
+    using TFT_eSprite::drawFastHLine;
     using TFT_eSprite::drawLine;
     using TFT_eSprite::drawPixel;
     using TFT_eSprite::drawRect;
@@ -106,7 +108,9 @@ public:
     using TFT_eSprite::fillRectHGradient;
     using TFT_eSprite::fillRectVGradient;
     using TFT_eSprite::fillRoundRect;
+    using TFT_eSprite::getCursorY;
     using TFT_eSprite::height;
+    using TFT_eSprite::println;
     using TFT_eSprite::pushImage;
     using TFT_eSprite::setCursor;
     using TFT_eSprite::setTextColor;

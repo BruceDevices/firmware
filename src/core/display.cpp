@@ -776,6 +776,92 @@ Opt_Coord drawOptions(
 
     int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
     tft.drawPixel(0, 0, bruceConfig.bgColor);
+
+#if defined(ACCRETION_TFT_DMA)
+    // Compose the whole menu box off-screen and blit it to the panel in one DMA
+    // burst, instead of erasing the old highlight / drawing the new highlight /
+    // drawing text as three separate direct writes to the panel every time the
+    // cursor moves - that per-item sequence is what was visible as flicker.
+    const int32_t boxX = tftWidth * 0.10;
+    const int32_t boxY = optionsTopY;
+    const int32_t boxW = tftWidth * 0.8;
+    const int32_t boxH = (FM * 8 + 4) * menuSize + 10;
+
+    static tft_sprite canvas(&tft);
+    static int32_t canvasW = -1, canvasH = -1;
+    if (boxW != canvasW || boxH != canvasH) {
+        canvas.deleteSprite();
+        canvas.createSprite(boxW, boxH);
+        canvasW = boxW;
+        canvasH = boxH;
+    }
+
+    if (firstRender) {
+        canvas.fillRoundRect(0, 0, boxW, boxH, 5, bgcolor);
+        canvas.drawRoundRect(0, 0, boxW, boxH, 5, fgcolor);
+    }
+    canvas.setTextColor(fgcolor, bgcolor);
+    canvas.setTextSize(FM);
+    canvas.setCursor(5, 5);
+
+    int i = 0;
+    int init = 0;
+    int cont = 1;
+
+    if (index >= MAX_MENU_SIZE) init = index - MAX_MENU_SIZE + 1;
+    if (abs(index - last_index) >= menuSize) {
+        if (index > last_index) last_index = init;
+        else last_index = menuSize - 1;
+    }
+
+    cont = 1;
+    for (i = 0; i < options.size(); i++) {
+        if (i >= init) {
+            int16_t cursorY = canvas.getCursorY();
+            if (i == last_index) {
+                canvas.fillRoundRect(2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bruceConfig.bgColor);
+            }
+            if (i == index) {
+                canvas.fillRoundRect(2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bruceConfig.priColor);
+            }
+
+            if (options[i].selected) canvas.setTextColor(selcolor, bgcolor);
+            else canvas.setTextColor(fgcolor, bgcolor);
+            if (!options[i].enabled) canvas.setTextColor(TFT_DARKGREY, bgcolor);
+
+            String text = "";
+            if (i == index) {
+                text += ">";
+                // Absolute screen coordinates on purpose: the caller's
+                // displayScrollingText() draws straight onto the real panel,
+                // not into this off-screen canvas.
+                coord.x = boxX + 5 + FM * LW;
+                coord.y = boxY + canvas.getCursorY() + 4;
+                coord.size = (boxW - 10) / (LW * FM) - 1;
+                coord.fgcolor = fgcolor;
+                coord.bgcolor = bgcolor;
+            } else text += " ";
+            text += String(options[i].label) + "              ";
+            canvas.setCursor(5, canvas.getCursorY() + 4);
+
+            if (i == index) { canvas.setTextColor(bgcolor, bruceConfig.priColor); }
+            canvas.println(text.substring(0, (boxW - 10) / (LW * FM) - 1));
+
+            canvas.setTextColor(fgcolor, bgcolor);
+
+            cont++;
+        }
+        if (cont > MAX_MENU_SIZE) break;
+    }
+    last_index = index;
+
+    canvas.pushSprite(boxX, boxY); // one DMA burst for the whole box
+
+#if defined(HAS_TOUCH)
+    TouchFooter();
+#endif
+    return coord;
+#else
     if (firstRender) {
         tft.fillRoundRect(
             tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 8 + 4) * menuSize + 10, 5, bgcolor
@@ -854,6 +940,7 @@ Opt_Coord drawOptions(
     TouchFooter();
 #endif
     return coord;
+#endif
 }
 
 /***************************************************************************************
@@ -863,11 +950,28 @@ Opt_Coord drawOptions(
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     drawStatusBar();
     int menuSize = options.size();
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.drawPixel(0, 0, 0);
-    tft.fillRect(6, 30, tftWidth - 12, 8 * FP, bruceConfig.bgColor);
-    tft.drawString(title, 12, 30);
+
+#if defined(ACCRETION_TFT_DMA)
+    // This function already redraws practically the whole screen (title, three
+    // list rows, the right-edge progress strip spanning full height) every time
+    // the selection changes - compose it off-screen and blit once instead of as
+    // ~10 separate direct writes to the panel.
+    static tft_sprite canvas(&tft);
+    static bool canvasReady = false;
+    if (!canvasReady) {
+        canvas.createSprite(tftWidth, tftHeight);
+        canvasReady = true;
+    }
+#define SUBM canvas
+#else
+#define SUBM tft
+#endif
+
+    SUBM.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    SUBM.setTextSize(FP);
+    SUBM.drawPixel(0, 0, 0);
+    SUBM.fillRect(6, 30, tftWidth - 12, 8 * FP, bruceConfig.bgColor);
+    SUBM.drawString(title, 12, 30);
 
     // middle of the drawing area
     int middle = 25 /*status*/ + (tftHeight - 30 /*status + bottom margin*/) / 2;
@@ -876,24 +980,24 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int middle_up = middle - (tftHeight - 42) / 3 - FM * LH / 2 + 4;
     int middle_down = middle + (tftHeight - 42) / 3 - FM * LH / 2;
 
-    tft.setTextSize(FM);
+    SUBM.setTextSize(FM);
 #if defined(HAS_TOUCH)
-    tft.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
+    SUBM.drawCentreString("/\\", tftWidth / 2, middle_up - (FM * LH + 6), 1);
 #endif
     // Previous item
     int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
     const char *firstOption = options[firstIndex].label.c_str();
-    tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
+    SUBM.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
+    SUBM.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
+    SUBM.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
     // Selected item
     int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
-    tft.setTextSize(selectedTextSize);
-    tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
-    tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
-    tft.drawFastHLine(
+    SUBM.setTextSize(selectedTextSize);
+    SUBM.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
+    SUBM.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
+    SUBM.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+    SUBM.drawFastHLine(
         tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
         middle + selectedTextSize * LH / 2 + 1,
         strlen(options[index].label.c_str()) * selectedTextSize * LW,
@@ -902,20 +1006,27 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     // Next Item
     int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
     const char *thirdOption = options[thirdIndex].label.c_str();
-    tft.setTextSize(FM);
-    tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
-    tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
-    tft.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
+    SUBM.setTextSize(FM);
+    SUBM.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
+    SUBM.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
+    SUBM.drawCentreString(thirdOption, tftWidth / 2, middle_down, SMOOTH_FONT);
 
-    tft.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
-    tft.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
+    SUBM.fillRect(tftWidth - 5, 0, 5, tftHeight, bruceConfig.bgColor);
+    SUBM.fillRect(tftWidth - 5, index * tftHeight / menuSize, 5, tftHeight / menuSize, bruceConfig.priColor);
 
 #if defined(HAS_TOUCH)
-    tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawString("[ x ]", 7, 7, 1);
+    SUBM.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
+    SUBM.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+    SUBM.drawString("[ x ]", 7, 7, 1);
+#endif
+
+#if defined(ACCRETION_TFT_DMA)
+    canvas.pushSprite(0, 0); // one DMA burst for the whole screen
+#endif
+#if defined(HAS_TOUCH)
     TouchFooter();
 #endif
+#undef SUBM
 }
 
 void drawStatusBar() {
