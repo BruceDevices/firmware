@@ -1,5 +1,5 @@
 /*
-Last Updated: 05/07/2026
+Last Updated: 13/08/2026
 By Ninja-jr
 Removed duplicate IR codes while preserving different formats/protocols
 Added universal power-off codes for multi-device support (parsed + raw)
@@ -3806,6 +3806,496 @@ const struct IrCode code_na136Code = {
     code_na136Codes
 };
 
+const uint16_t code_na137Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na137Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na137Code = {
+    freq_to_timerval(35714), 40, 3, code_na137Times, code_na137Codes
+};
+
+const uint16_t code_na138Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na138Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na138Code = {
+    freq_to_timerval(35714), 40, 3, code_na138Times, code_na138Codes
+};
+
+const uint16_t code_na139Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na139Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na139Code = {
+    freq_to_timerval(35714), 40, 3, code_na139Times, code_na139Codes
+};
+
+const uint16_t code_na140Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na140Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na140Code = {
+    freq_to_timerval(35714), 40, 3, code_na140Times, code_na140Codes
+};
+
+const uint16_t code_na141Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na141Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na141Code = {
+    freq_to_timerval(35714), 40, 3, code_na141Times, code_na141Codes
+};
+
+const uint16_t code_na142Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na142Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na142Code = {
+    freq_to_timerval(35714), 40, 3, code_na142Times, code_na142Codes
+};
+
+const uint16_t code_na143Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na143Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na143Code = {
+    freq_to_timerval(35714), 40, 3, code_na143Times, code_na143Codes
+};
+
+const uint16_t code_na144Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na144Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na144Code = {
+    freq_to_timerval(35714), 40, 3, code_na144Times, code_na144Codes
+};
+
+const uint16_t code_na145Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na145Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na145Code = {
+    freq_to_timerval(35714), 40, 3, code_na145Times, code_na145Codes
+};
+
+const uint16_t code_na146Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na146Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na146Code = {
+    freq_to_timerval(35714), 40, 3, code_na146Times, code_na146Codes
+};
+
+const uint16_t code_na147Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na147Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na147Code = {
+    freq_to_timerval(35714), 40, 3, code_na147Times, code_na147Codes
+};
+
+const uint16_t code_na148Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na148Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na148Code = {
+    freq_to_timerval(35714), 40, 3, code_na148Times, code_na148Codes
+};
+
+const uint16_t code_na149Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na149Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na149Code = {
+    freq_to_timerval(35714), 40, 3, code_na149Times, code_na149Codes
+};
+
+const uint16_t code_na150Times[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_na150Codes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_na150Code = {
+    freq_to_timerval(35714), 24, 3, code_na150Times, code_na150Codes
+};
+
+const uint16_t code_na151Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na151Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na151Code = {
+    freq_to_timerval(35714), 40, 3, code_na151Times, code_na151Codes
+};
+
+const uint16_t code_na152Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na152Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na152Code = {
+    freq_to_timerval(35714), 40, 3, code_na152Times, code_na152Codes
+};
+
+const uint16_t code_na153Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na153Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na153Code = {
+    freq_to_timerval(35714), 40, 3, code_na153Times, code_na153Codes
+};
+
+const uint16_t code_na154Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na154Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na154Code = {
+    freq_to_timerval(35714), 40, 3, code_na154Times, code_na154Codes
+};
+
+const uint16_t code_na155Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na155Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na155Code = {
+    freq_to_timerval(35714), 40, 3, code_na155Times, code_na155Codes
+};
+
+const uint16_t code_na156Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na156Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na156Code = {
+    freq_to_timerval(35714), 40, 3, code_na156Times, code_na156Codes
+};
+
+const uint16_t code_na157Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na157Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na157Code = {
+    freq_to_timerval(35714), 40, 3, code_na157Times, code_na157Codes
+};
+
+const uint16_t code_na158Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na158Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na158Code = {
+    freq_to_timerval(35714), 40, 3, code_na158Times, code_na158Codes
+};
+
+const uint16_t code_na159Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na159Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na159Code = {
+    freq_to_timerval(35714), 40, 3, code_na159Times, code_na159Codes
+};
+
+const uint16_t code_na160Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na160Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na160Code = {
+    freq_to_timerval(35714), 40, 3, code_na160Times, code_na160Codes
+};
+
+const uint16_t code_na161Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na161Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na161Code = {
+    freq_to_timerval(35714), 40, 3, code_na161Times, code_na161Codes
+};
+
+const uint16_t code_na162Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na162Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na162Code = {
+    freq_to_timerval(35714), 40, 3, code_na162Times, code_na162Codes
+};
+
+const uint16_t code_na163Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na163Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na163Code = {
+    freq_to_timerval(35714), 40, 3, code_na163Times, code_na163Codes
+};
+
+const uint16_t code_na164Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na164Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na164Code = {
+    freq_to_timerval(35714), 40, 3, code_na164Times, code_na164Codes
+};
+
+const uint16_t code_na165Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na165Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na165Code = {
+    freq_to_timerval(35714), 40, 3, code_na165Times, code_na165Codes
+};
+
+const uint16_t code_na166Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na166Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na166Code = {
+    freq_to_timerval(35714), 40, 3, code_na166Times, code_na166Codes
+};
+
+const uint16_t code_na167Times[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_na167Codes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_na167Code = {
+    freq_to_timerval(34483), 24, 2, code_na167Times, code_na167Codes
+};
+
+const uint16_t code_na168Times[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_na168Codes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_na168Code = {
+    freq_to_timerval(34483), 24, 2, code_na168Times, code_na168Codes
+};
+
+const uint16_t code_na169Times[] = {
+    44, 815, 45, 528, 45, 815, 45, 5000,
+};
+const uint8_t code_na169Codes[] = {
+    0x29, 0x9A, 0x9B, 0xA9, 0x9A, 0x9A,
+};
+const struct IrCode code_na169Code = {
+    freq_to_timerval(34483), 24, 2, code_na169Times, code_na169Codes
+};
+
+const uint16_t code_na170Times[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_na170Codes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_na170Code = {
+    freq_to_timerval(57143), 52, 2, code_na170Times, code_na170Codes
+};
+
+const uint16_t code_na171Times[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_na171Codes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_na171Code = {
+    freq_to_timerval(57143), 52, 2, code_na171Times, code_na171Codes
+};
+
+const uint16_t code_na172Times[] = {
+    50, 100, 50, 200, 50, 800, 400, 400,
+};
+const uint8_t code_na172Codes[] = {
+    0xD5, 0x41, 0x11, 0x00, 0x14, 0x44, 0x6D, 0x54, 0x11, 0x10, 0x01, 0x44, 0x45,
+};
+const struct IrCode code_na172Code = {
+    freq_to_timerval(57143), 52, 2, code_na172Times, code_na172Codes
+};
+
+const uint16_t code_na173Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na173Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na173Code = {
+    freq_to_timerval(35714), 40, 3, code_na173Times, code_na173Codes
+};
+
+const uint16_t code_na174Times[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_na174Codes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_na174Code = {
+    freq_to_timerval(35714), 24, 3, code_na174Times, code_na174Codes
+};
+
+const uint16_t code_na175Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na175Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na175Code = {
+    freq_to_timerval(35714), 40, 3, code_na175Times, code_na175Codes
+};
+
+const uint16_t code_na176Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na176Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na176Code = {
+    freq_to_timerval(35714), 40, 3, code_na176Times, code_na176Codes
+};
+
+const uint16_t code_na177Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na177Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na177Code = {
+    freq_to_timerval(35714), 40, 3, code_na177Times, code_na177Codes
+};
+
+const uint16_t code_na178Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na178Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na178Code = {
+    freq_to_timerval(35714), 40, 3, code_na178Times, code_na178Codes
+};
+
+const uint16_t code_na179Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na179Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na179Code = {
+    freq_to_timerval(35714), 40, 3, code_na179Times, code_na179Codes
+};
+
+const uint16_t code_na180Times[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_na180Codes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_na180Code = {
+    freq_to_timerval(35714), 24, 3, code_na180Times, code_na180Codes
+};
+
+const uint16_t code_na181Times[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_na181Codes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_na181Code = {
+    freq_to_timerval(35714), 24, 3, code_na181Times, code_na181Codes
+};
+
+const uint16_t code_na182Times[] = {
+    88, 90, 88, 91, 88, 181, 88, 8976, 177, 91,
+};
+const uint8_t code_na182Codes[] = {
+    0x10, 0x92, 0x49, 0x46, 0x33, 0x09, 0x24, 0x94, 0x60,
+};
+const struct IrCode code_na182Code = {
+    freq_to_timerval(35714), 24, 3, code_na182Times, code_na182Codes
+};
+
+const uint16_t code_na183Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na183Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na183Code = {
+    freq_to_timerval(35714), 40, 3, code_na183Times, code_na183Codes
+};
+
+const uint16_t code_na184Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na184Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na184Code = {
+    freq_to_timerval(35714), 40, 3, code_na184Times, code_na184Codes
+};
+
+const uint16_t code_na185Times[] = {
+    43, 47, 43, 91, 43, 8324, 88, 47, 133, 133, 264, 90, 264, 91,
+};
+const uint8_t code_na185Codes[] = {
+    0xA4, 0x08, 0x00, 0x00, 0x00, 0x00, 0x64, 0x2C, 0x40, 0x80, 0x00, 0x00, 0x00, 0x06, 0x41,
+};
+const struct IrCode code_na185Code = {
+    freq_to_timerval(35714), 40, 3, code_na185Times, code_na185Codes
+};
+
 const uint16_t code_eu000Times[] = {
     43,
     47,
@@ -7319,181 +7809,9 @@ const struct IrCode code_eu140Code = {
     code_eu140Codes
 };
 
-const IrCode *const NApowerCodes[] = {
-    &code_na000Code, &code_na001Code, &code_na002Code, &code_na003Code, &code_na004Code, &code_na005Code,
-    &code_na006Code, &code_na007Code, &code_na008Code, &code_na009Code, &code_na010Code, &code_na011Code,
-    &code_na012Code, &code_na013Code, &code_na014Code, &code_na015Code, &code_na016Code, &code_na017Code,
-    &code_na018Code, &code_na019Code, &code_na020Code, &code_na021Code, &code_na022Code, &code_na023Code,
-    &code_na024Code, &code_na025Code, &code_na026Code, &code_na027Code, &code_na028Code, &code_na029Code,
-    &code_na030Code, &code_na031Code, &code_na032Code, &code_na033Code, &code_na034Code, &code_na035Code,
-    &code_na036Code, &code_na037Code, &code_na038Code, &code_na039Code, &code_na040Code, &code_na041Code,
-    &code_na042Code, &code_na043Code, &code_na044Code, &code_na045Code, &code_na046Code, &code_na047Code,
-    &code_na048Code, &code_na049Code, &code_na050Code, &code_na051Code, &code_na052Code, &code_na053Code,
-    &code_na054Code, &code_na055Code, &code_na056Code, &code_na057Code, &code_na058Code, &code_na059Code,
-    &code_na060Code, &code_na061Code, &code_na062Code, &code_na063Code, &code_na064Code, &code_na065Code,
-    &code_na066Code, &code_na067Code, &code_na068Code, &code_na069Code, &code_na070Code, &code_na071Code,
-    &code_na072Code, &code_na073Code, &code_na074Code, &code_na075Code, &code_na076Code, &code_na077Code,
-    &code_na078Code, &code_na079Code, &code_na080Code, &code_na081Code, &code_na082Code, &code_na083Code,
-    &code_na084Code, &code_na085Code, &code_na086Code, &code_na087Code, &code_na088Code, &code_na089Code,
-    &code_na090Code, &code_na091Code, &code_na092Code, &code_na093Code, &code_na094Code, &code_na095Code,
-    &code_na096Code, &code_na097Code, &code_na098Code, &code_na099Code, &code_na100Code, &code_na101Code,
-    &code_na102Code, &code_na103Code, &code_na104Code, &code_na105Code, &code_na106Code, &code_na107Code,
-    &code_na108Code, &code_na109Code, &code_na110Code, &code_na111Code, &code_na112Code, &code_na113Code,
-    &code_na114Code, &code_na115Code, &code_na116Code, &code_na117Code, &code_na118Code, &code_na119Code,
-    &code_na120Code, &code_na121Code, &code_na122Code, &code_na123Code, &code_na124Code, &code_na125Code,
-    &code_na126Code, &code_na127Code, &code_na128Code, &code_na129Code, &code_na130Code, &code_na131Code,
-    &code_na132Code, &code_na133Code, &code_na134Code, &code_na135Code, &code_na136Code,
-};
-
-const uint8_t num_NAcodes = sizeof(NApowerCodes) / sizeof(NApowerCodes[0]);
-
-const IrCode *const EUpowerCodes[] = {
-    &code_eu000Code,
-    &code_eu001Code,
-    &code_eu002Code,
-    &code_na000Code,
-    &code_eu004Code,
-    &code_eu005Code,
-    &code_eu006Code,
-    &code_eu007Code,
-    &code_eu008Code,
-    &code_na005Code,
-    &code_na004Code,
-    &code_eu011Code,
-    &code_eu012Code,
-    &code_eu013Code,
-    &code_na021Code,
-    &code_eu015Code,
-    &code_eu016Code,
-    &code_eu017Code,
-    &code_eu018Code,
-    &code_eu019Code,
-    &code_eu020Code,
-    &code_eu021Code,
-    &code_eu022Code,
-    &code_na022Code,
-    &code_eu024Code,
-    &code_eu025Code,
-    &code_eu026Code,
-    &code_eu140Code,
-    &code_eu027Code,
-    &code_eu028Code,
-    &code_eu029Code,
-    &code_eu030Code,
-    &code_eu031Code,
-    &code_eu032Code,
-    &code_eu033Code,
-    &code_eu034Code,
-    &code_eu036Code,
-    &code_eu037Code,
-    &code_eu038Code,
-    &code_eu039Code,
-    &code_eu040Code,
-    &code_eu041Code,
-    &code_eu042Code,
-    &code_eu043Code,
-    &code_eu044Code,
-    &code_eu045Code,
-    &code_eu046Code,
-    &code_eu047Code,
-    &code_eu048Code,
-    &code_eu049Code,
-    &code_eu050Code,
-    &code_eu051Code,
-    &code_eu052Code,
-    &code_eu053Code,
-    &code_eu054Code,
-    &code_eu055Code,
-    &code_eu056Code,
-    &code_eu058Code,
-    &code_eu059Code,
-    &code_eu060Code,
-    &code_eu061Code,
-    &code_eu062Code,
-    &code_eu063Code,
-    &code_eu064Code,
-    &code_eu065Code,
-    &code_eu066Code,
-    &code_eu067Code,
-    &code_eu068Code,
-    &code_eu069Code,
-    &code_eu070Code,
-    &code_eu071Code,
-    &code_eu072Code,
-    &code_eu073Code,
-    &code_eu074Code,
-    &code_eu075Code,
-    &code_eu076Code,
-    &code_eu077Code,
-    &code_eu078Code,
-    &code_eu079Code,
-    &code_eu080Code,
-    &code_eu081Code,
-    &code_eu082Code,
-    &code_eu083Code,
-    &code_eu084Code,
-    &code_eu085Code,
-    &code_eu086Code,
-    &code_eu087Code,
-    &code_eu088Code,
-    &code_eu089Code,
-    &code_eu090Code,
-    &code_eu091Code,
-    &code_eu092Code,
-    &code_eu093Code,
-    &code_eu094Code,
-    &code_eu095Code,
-    &code_eu096Code,
-    &code_eu097Code,
-    &code_eu098Code,
-    &code_eu099Code,
-    &code_eu100Code,
-    &code_eu101Code,
-    &code_eu102Code,
-    &code_eu103Code,
-    &code_eu104Code,
-    &code_eu105Code,
-    &code_eu106Code,
-    &code_eu107Code,
-    &code_eu108Code,
-    &code_eu109Code,
-    &code_eu110Code,
-    &code_eu111Code,
-    &code_eu112Code,
-    &code_eu113Code,
-    &code_eu114Code,
-    &code_eu115Code,
-    &code_eu116Code,
-    &code_eu117Code,
-    &code_eu118Code,
-    &code_eu119Code,
-    &code_eu120Code,
-    &code_eu121Code,
-    &code_eu122Code,
-    &code_eu123Code,
-    &code_eu124Code,
-    &code_eu125Code,
-    &code_eu126Code,
-    &code_eu127Code,
-    &code_eu128Code,
-    &code_eu129Code,
-    &code_eu130Code,
-    &code_eu131Code,
-    &code_eu132Code,
-    &code_eu133Code,
-    &code_eu134Code,
-    &code_eu135Code,
-    &code_eu136Code,
-    &code_eu137Code,
-    &code_eu138Code,
-    &code_eu139Code,
-};
-
-const uint8_t num_EUcodes = sizeof(EUpowerCodes) / sizeof(EUpowerCodes[0]);
-
-// ===== UNIVERSAL POWER CODES =====
-
-// ----- PARSED PROTOCOLS -----
+// ============================================================
+// UNIVERSAL POWER CODES - PARSED PROTOCOLS
+// ============================================================
 
 // Samsung universal power code
 const uint16_t code_universal_samsungTimes[] = {
@@ -8034,7 +8352,9 @@ const struct IrCode code_universal_rca_altCode = {
     freq_to_timerval(34483), 24, 2, code_universal_rca_altTimes, code_universal_rca_altCodes
 };
 
-// ===== RAW CODES (32-bit) =====
+// ============================================================
+// UNIVERSAL POWER CODES - RAW CODES (32-bit)
+// ============================================================
 
 // MOST TV'S - raw universal power code
 const uint32_t code_universal_most_tvsTimes[] = {
@@ -8336,7 +8656,665 @@ const struct RawIrCode code_universal_power_raw2Code = {
     freq_to_timerval(38000), 10, 3, code_universal_power_raw2Times, code_universal_power_raw2Codes
 };
 
-// Universal codes arrays for IrCode and RawIrCode
+const uint32_t code_raw_power1Times[] = {
+    9292, 4518, 635, 522, 635, 522, 635, 523, 634, 523, 662, 494, 664, 494, 663, 1625,
+    661, 519, 662, 1602, 660, 1626, 660, 1650, 636, 1650, 636, 1651, 635, 1651, 635, 522,
+    634, 1653, 633, 524, 633, 1655, 631, 526, 631, 527, 630, 1657, 630, 527, 630, 527,
+    630, 527, 630, 1658, 630, 527, 630, 1658, 630, 1658, 630, 527, 631, 1658, 629, 1658,
+    629, 1658, 629, 40773, 9295, 2239, 630, 98164, 9297, 2241, 630,
+};
+const uint8_t code_raw_power1Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power1Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power1Times, code_raw_power1Codes
+};
+
+const uint32_t code_raw_power2Times[] = {
+    9028, 4480, 593, 1667, 589, 541, 597, 532, 596, 534, 594, 562, 566, 564, 564, 539,
+    589, 567, 571, 558, 570, 1663, 594, 1666, 591, 1696, 571, 1662, 595, 1666, 591, 1669,
+    598, 1662, 595, 562, 566, 563, 565, 539, 589, 567, 571, 1661, 596, 561, 567, 563,
+    565, 564, 564, 1669, 598, 1662, 595, 1691, 566, 1668, 599, 558, 570, 1663, 594, 1692,
+    565, 575, 1669,
+};
+const uint8_t code_raw_power2Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power2Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power2Times, code_raw_power2Codes
+};
+
+const uint32_t code_raw_escaladeTimes[] = {
+    176, 67152, 1091,
+};
+const uint8_t code_raw_escaladeCodes[] = {
+    0x80, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_escaladeCode = {
+    freq_to_timerval(38000), 3, 2, code_raw_escaladeTimes, code_raw_escaladeCodes
+};
+
+const uint32_t code_raw_power3Times[] = {
+    337, 1695, 339, 664, 340, 664, 339, 665, 338, 664, 339, 693, 310, 1695, 339, 1696,
+    338, 693, 310, 1697, 337, 666, 337, 693, 310, 693, 310, 1723, 311, 692, 311, 44457,
+    309, 1723, 310, 692, 311, 692, 311, 692, 311, 693, 310, 1723, 310, 694, 334, 669,
+    334, 1700, 333, 672, 331, 1703, 330, 1727, 306, 1704, 330, 697, 306, 1727, 306, 42378,
+    309, 1724, 333, 670, 333, 670, 333, 672, 331, 673, 330, 673, 330, 1704, 329, 1704,
+    329, 674, 329, 1727, 306, 698, 305, 698, 305, 698, 305, 1728, 305, 698, 305, 44436,
+    309, 1724, 334, 670, 333, 671, 332, 672, 331, 697, 306, 1728, 306, 674, 329, 697,
+    306, 1728, 306, 698, 306, 1728, 306, 1727, 306, 1728, 305, 698, 305, 1727, 306, 42378,
+    309, 1724, 334, 669, 334, 671, 332, 672, 330, 673, 330, 697, 306, 1703, 330, 1727,
+    306, 697, 306, 1727, 306, 697, 306, 698, 305, 697, 306, 1728, 305, 697, 306, 44431,
+    309, 1724, 334, 670, 333, 670, 333, 672, 331, 696, 306, 1727, 306, 697, 306, 697,
+    306, 1727, 306, 697, 306, 1727, 306, 1727, 306, 1727, 306, 697, 306, 1728, 305, 42373,
+    309, 1724, 334, 670, 333, 670, 333, 671, 332, 697, 306, 697, 306, 1727, 305, 1727,
+    306, 697, 306, 1728, 305, 697, 306, 697, 306, 697, 306, 1727, 306, 697, 306, 44427,
+    309, 1724, 334, 669, 334, 670, 333, 672, 331, 697, 306, 1728, 306, 697, 306, 697,
+    306, 1727, 306, 697, 306, 1727, 306, 1727, 306, 1727, 306, 697, 306, 1728, 305,
+};
+const uint8_t code_raw_power3Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power3Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power3Times, code_raw_power3Codes
+};
+
+const uint32_t code_raw_power4Times[] = {
+    970, 719, 972, 718, 1822, 718, 944, 747, 920, 771, 921, 799, 893, 802, 893, 799,
+    893, 1644, 893, 799, 1767, 770, 918, 86138, 893, 798, 894, 798, 1768, 772, 915, 778,
+    913, 779, 913, 804, 888, 807, 888, 804, 888, 1627, 911, 805, 1737, 801, 888, 86143,
+    893, 798, 918, 774, 1766, 775, 913, 780, 912, 780, 912, 779, 913, 783, 912, 780,
+    912, 1625, 913, 780, 1763, 777, 912, 86141, 892, 798, 918, 774, 1766, 776, 912, 780,
+    911, 780, 912, 780, 912, 783, 912, 780, 912, 1626, 912, 780, 1762, 801, 888, 86137,
+    892, 799, 917, 774, 1766, 775, 913, 780, 912, 780, 912, 779, 913, 783, 912, 781,
+    911, 1650, 888, 805, 1738, 801, 887, 86148, 892, 799, 918, 775, 1765, 800, 888, 804,
+    888, 804, 888, 804, 888, 808, 888, 804, 888, 1651, 888, 805, 1738, 801, 888, 86133,
+    944, 772, 919, 773, 1767, 774, 914, 778, 914, 778, 914, 778, 914, 781, 915, 777,
+    915, 1624, 914, 778, 1766, 774, 914,
+};
+const uint8_t code_raw_power4Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power4Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power4Times, code_raw_power4Codes
+};
+
+const uint32_t code_raw_power5Times[] = {
+    872, 800, 873, 797, 1723, 808, 875, 798, 875, 827, 873, 772, 900, 799, 873, 799,
+    873, 1614, 873, 800, 1718, 816, 867, 86386, 844, 828, 844, 828, 1744, 786, 845, 828,
+    845, 828, 845, 828, 845, 828, 844, 828, 845, 1643, 844, 828, 1693, 838, 844,
+};
+const uint8_t code_raw_power5Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power5Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power5Times, code_raw_power5Codes
+};
+
+const uint32_t code_raw_power6Times[] = {
+    604, 2557, 605, 452, 604, 451, 605, 451, 605, 454, 602, 452, 604, 450, 606, 450,
+    606, 452, 604, 452, 604, 19746, 603, 2558, 604, 976, 1132, 974, 604, 452, 604, 452,
+    604, 451, 605, 451, 605, 451, 606, 451, 605, 116246, 602, 2559, 603, 453, 603, 454,
+    602, 453, 603, 453, 604, 452, 604, 452, 604, 453, 603, 453, 603, 453, 603,
+};
+const uint8_t code_raw_power6Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power6Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power6Times, code_raw_power6Codes
+};
+
+const uint32_t code_raw_power7Times[] = {
+    926, 751, 1760, 756, 922, 756, 921, 782, 897, 782, 897, 783, 897, 784, 897, 784,
+    897, 1624, 897, 784, 1736, 787, 895, 85521, 921, 780, 1734, 784, 896, 783, 894, 785,
+    895, 784, 895, 784, 895, 785, 895, 784, 896, 1625, 895, 785, 1735, 787, 896, 85546,
+    894, 783, 1732, 763, 917, 783, 896, 783, 896, 784, 895, 784, 895, 785, 894, 785,
+    897, 1624, 897, 784, 1734, 786, 897,
+};
+const uint8_t code_raw_power7Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power7Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power7Times, code_raw_power7Codes
+};
+
+const uint32_t code_raw_power8Times[] = {
+    9021, 4377, 655, 452, 654, 452, 654, 1567, 654, 453, 653, 453, 653, 453, 652, 454,
+    651, 455, 651, 1568, 654, 1569, 653, 455, 651, 1570, 652, 1570, 652, 1570, 652, 1571,
+    651, 1572, 649, 480, 626, 481, 624, 482, 623, 1599, 623, 483, 623, 484, 622, 484,
+    622, 484, 622, 1601, 621, 1601, 621, 1601, 621, 484, 622, 1601, 621, 1601, 621, 1601,
+    621, 1601, 621, 39912, 8910, 2137, 622, 95435, 8933, 2137, 622, 95434, 8934, 2137, 622,
+    95434, 8934, 2137, 622, 95434, 8934, 2137, 622, 95434, 8933, 2137, 622, 95434, 8933,
+    2138, 621, 95436, 8932, 2138, 621, 95435, 8933, 2138, 621, 95435, 8933, 2137, 622,
+};
+const uint8_t code_raw_power8Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power8Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power8Times, code_raw_power8Codes
+};
+
+const uint32_t code_raw_power9Times[] = {
+    976, 723, 1776, 796, 925, 804, 897, 804, 897, 803, 897, 803, 897, 803, 897, 803,
+    922, 1610, 919, 783, 1767, 807, 914, 86103, 921, 778, 1769, 805, 916, 786, 914, 788,
+    913, 787, 914, 787, 914, 788, 913, 811, 890, 1617, 914, 787, 1764, 832, 889, 86082,
+    920, 778, 1768, 804, 916, 786, 914, 786, 914, 786, 914, 786, 914, 786, 915, 786,
+    915, 1616, 915, 786, 1763, 809, 913,
+};
+const uint8_t code_raw_power9Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power9Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power9Times, code_raw_power9Codes
+};
+
+const uint32_t code_raw_power10Times[] = {
+    8510, 4237, 528, 1592, 528, 1592, 528, 526, 529, 526, 529, 526, 529, 526, 529, 526,
+    529, 527, 528, 1591, 529, 1591, 529, 1592, 528, 527, 528, 1590, 530, 526, 529, 526,
+    529, 525, 528, 22533, 529, 1590, 529, 1592, 528, 526, 529, 526, 529, 526, 529, 526,
+    529, 526, 529, 526, 529, 1592, 528, 1591, 555, 1564, 556, 500, 555, 1565, 554, 500,
+    529, 526, 529, 524, 529,
+};
+const uint8_t code_raw_power10Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power10Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power10Times, code_raw_power10Codes
+};
+
+const uint32_t code_raw_power11Times[] = {
+    8073, 3997, 524, 502, 495, 505, 492, 1508, 498, 503, 494, 1505, 501, 1500, 495, 1504,
+    491, 1510, 496, 3988, 522, 502, 495, 1505, 501, 501, 496, 504, 493, 1507, 499, 502,
+    495, 1505, 501, 501, 496, 18806, 8072, 3997, 524, 502, 495, 505, 492, 1507, 499, 502,
+    495, 1505, 490, 1509, 497, 1504, 491, 1510, 496, 3988, 522, 502, 495, 1505, 501, 500,
+    497, 503, 494, 1506, 500, 501, 496, 1504, 491, 510, 498, 18806, 8072, 3998, 523, 503,
+    494, 506, 491, 1509, 497, 504, 493, 1506, 499, 1501, 494, 1506, 500, 1502, 493, 3989,
+    522, 504, 493, 1507, 499, 502, 495, 505, 492, 1508, 498, 503, 494, 1506, 499, 502,
+    495, 18807, 8072, 3998, 523, 503, 494, 506, 491, 1509, 497, 504, 493, 1506, 500, 1501,
+    494, 1506, 500, 1502, 493, 3989, 521, 503, 494, 1506, 500, 502, 495, 505, 492, 1508,
+    498, 503, 494, 1506, 500, 502, 495, 18807, 8072, 3998, 523, 502, 495, 505, 492, 1508,
+    498, 503, 494, 1505, 501, 1500, 495, 1504, 491, 1510, 496, 3988, 523, 502, 495, 1505,
+    501, 501, 496, 503, 494, 1506, 500, 501, 496, 1504, 491, 510, 498,
+};
+const uint8_t code_raw_power11Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power11Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power11Times, code_raw_power11Codes
+};
+
+const uint32_t code_raw_power12Times[] = {
+    182, 7827, 172, 2332, 177, 2328, 181, 2323, 176, 2330, 179, 1309, 175, 1331, 174, 2331,
+    178, 1328, 177, 2328, 181, 1307, 177, 2327, 182, 1325, 180, 1326, 179, 1309, 176, 1331,
+    174, 1332, 173, 2333, 176, 2310, 178, 1328, 177, 2328, 181, 1325, 180, 2306, 182, 1325,
+    180, 2325, 174, 8340, 183, 7825, 175, 2330, 179, 2326, 173, 2333, 176, 2310, 178, 1328,
+    177, 1329, 176, 2329, 180, 1308, 176, 2329, 180, 1326, 179, 2326, 173, 1334, 182, 1306,
+    179, 1328, 177, 1329, 176, 1312, 183, 2322, 177, 2329, 180, 1326, 179, 2325, 174, 1315,
+    180, 2326, 173, 1333, 183, 2323, 176, 8339, 183, 7824, 175, 2330, 179, 2307, 181, 2324,
+    175, 2331, 178, 1328, 177, 1330, 175, 2311, 177, 1329, 176, 2329, 180, 1326, 179, 2327,
+    182, 1305, 179, 1328, 177, 1328, 177, 1311, 173, 1334, 182, 2323, 176, 2330, 179, 1326,
+    571, 1916, 180, 1327, 178, 2325, 587, 920, 575, 1930, 579,
+};
+const uint8_t code_raw_power12Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power12Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power12Times, code_raw_power12Codes
+};
+
+const uint32_t code_raw_power13Times[] = {
+    9047, 4385, 682, 474, 682, 1578, 708, 476, 679, 1581, 706, 477, 679, 1582, 705, 1582,
+    705, 1582, 678, 1583, 679, 1607, 679, 1582, 678, 478, 679, 478, 678, 477, 679, 1582,
+    705, 1582, 679, 1583, 679, 1608, 704, 1582, 705, 478, 678, 1582, 705, 478, 678, 478,
+    678, 478, 679, 477, 679, 478, 679, 478, 678, 1582, 705, 478, 678, 1583, 704, 1582,
+    705, 1582, 679, 39574, 9073, 4387, 679, 478, 678, 1583, 679, 503, 677, 1584, 705, 478,
+    678, 1582, 705, 1582, 705, 1582, 705, 1582, 705, 1582, 705, 1582, 678, 479, 677, 479,
+    678, 479, 677, 1583, 679, 1608, 704, 1582, 705, 1582, 705, 1582, 705, 478, 678, 1583,
+    704, 478, 678, 478, 678, 1582, 680, 478, 703, 453, 704, 453, 703, 1557, 703, 480,
+    676, 1584, 704, 1583, 704, 478, 678,
+};
+const uint8_t code_raw_power13Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power13Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power13Times, code_raw_power13Codes
+};
+
+const uint32_t code_raw_power14Times[] = {
+    4499, 4472, 566, 1662, 565, 1664, 563, 1665, 562, 565, 538, 564, 539, 562, 541, 560,
+    543, 558, 545, 1683, 544, 1658, 569, 1686, 541, 559, 544, 557, 536, 565, 538, 563,
+    540, 561, 542, 559, 544, 1684, 543, 558, 545, 556, 537, 564, 539, 562, 541, 560,
+    543, 558, 545, 1684, 543, 558, 545, 1683, 544, 1684, 543, 1660, 567, 1688, 539, 1689,
+    538, 1664, 563, 565, 538, 563, 540, 561, 542, 559, 544, 42973, 4495, 4472, 566, 1662,
+    565, 1663, 564, 1664, 563, 564, 539, 562, 541, 560, 543, 558, 545, 556, 537, 1691,
+    536, 1691, 536, 1666, 572, 555, 538, 564, 539, 561, 542, 559, 544, 557, 536, 565,
+    538, 1689, 538, 563, 540, 560, 543, 558, 545, 555, 538, 563, 540, 561, 542, 1686,
+    541, 559, 544, 1684, 543, 1684, 543, 1658, 569, 1685, 542, 1686, 541, 1660, 567, 559,
+    544, 557, 536, 565, 538, 563, 540, 42959, 4499, 4466, 562, 1666, 572, 1656, 571, 1656,
+    571, 556, 537, 564, 539, 562, 541, 559, 544, 556, 537, 1691, 536, 1690, 537, 1664,
+    563, 564, 539, 562, 541, 560, 543, 557, 536, 565, 538, 563, 540, 1688, 539, 561,
+    542, 559, 544, 556, 537, 564, 539, 562, 541, 560, 543, 1684, 543, 558, 545, 1682,
+    545, 1683, 544, 1657, 570, 1684, 543, 1659, 568, 1659, 568, 559, 544, 557, 536, 565,
+    538, 563, 540, 42955, 4503, 4463, 565, 1663, 564, 1663, 564, 1664, 563, 563, 540, 561,
+    542, 558, 545, 556, 537, 564, 539, 1688, 539, 1688, 539, 1662, 565, 562, 541, 559,
+    544, 557, 536, 565, 538, 563, 540, 560, 543, 1685, 542, 559, 544, 556, 537, 564,
+    539, 562, 541, 559, 544, 557, 536, 1692, 535, 565, 538, 1690, 537, 1690, 537, 1664,
+    563, 1691, 536, 1666, 572, 1656, 571, 556, 537, 564, 539, 562, 541, 559, 544,
+};
+const uint8_t code_raw_power14Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power14Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power14Times, code_raw_power14Codes
+};
+
+const uint32_t code_raw_power15Times[] = {
+    4567, 4475, 732, 1555, 703, 1608, 705, 1608, 705, 478, 676, 460, 669, 507, 651, 506,
+    649, 508, 621, 1640, 672, 1616, 673, 1639, 674, 508, 648, 508, 648, 508, 647, 485,
+    644, 511, 647, 508, 648, 1639, 674, 508, 649, 508, 647, 485, 645, 511, 647, 508,
+    648, 509, 647, 1639, 674, 509, 647, 1613, 673, 1641, 673, 1640, 673, 1640, 672, 1617,
+    671, 1640, 673, 48544, 4566, 4505, 648, 1639, 674, 1639, 674, 1639, 647, 510, 648, 508,
+    648, 509, 648, 508, 648, 508, 648, 1639, 647, 1642, 673, 1639, 674, 508, 648, 509,
+    648, 508, 647, 485, 645, 511, 647, 509, 647, 1640, 673, 509, 647, 509, 646, 486,
+    643, 511, 647, 509, 647, 509, 647, 1640, 673, 509, 647, 1615, 672, 1640, 673, 1640,
+    673,
+};
+const uint8_t code_raw_power15Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power15Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power15Times, code_raw_power15Codes
+};
+
+const uint32_t code_raw_power16Times[] = {
+    264, 1848, 264, 792, 264, 792, 264, 792, 264, 792, 264, 792, 264, 1848, 264, 1848,
+    264, 792, 264, 1848, 264, 792, 264, 792, 264, 792, 264, 1848, 264, 792, 264, 43560,
+    264, 1848, 264, 792, 264, 792, 264, 792, 264, 792, 264, 1848, 264, 792, 264, 792,
+    264, 1848, 264, 792, 264, 1848, 264, 1848, 264, 1848, 264, 792, 264, 1848, 264, 43560,
+};
+const uint8_t code_raw_power16Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power16Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power16Times, code_raw_power16Codes
+};
+
+const uint32_t code_raw_power17Times[] = {
+    3381, 1656, 439, 401, 438, 1239, 439, 401, 438, 1240, 439, 401, 438, 1239, 440, 401,
+    438, 1239, 440, 400, 439, 1238, 440, 401, 438, 1239, 440, 1240, 438, 426, 438, 1240,
+    439, 400, 439, 1240, 439, 1240, 438, 1240, 438, 1240, 438, 401, 438, 401, 438, 402,
+    437, 1242, 436, 402, 437, 1242, 437, 402, 437, 403, 436, 1242, 437, 402, 437, 403,
+    436, 403, 436, 403, 436, 1242, 437, 1242, 437, 403, 436, 1242, 437, 403, 436, 403,
+    436, 403, 436, 1242, 437, 403, 436, 403, 436, 403, 436, 1243, 436, 403, 436, 1242,
+    437, 1242, 437,
+};
+const uint8_t code_raw_power17Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power17Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power17Times, code_raw_power17Codes
+};
+
+const uint32_t code_raw_pvr_powerTimes[] = {
+    3387, 1650, 441, 398, 441, 1238, 439, 400, 440, 1238, 441, 372, 468, 1237, 442, 371,
+    470, 1236, 441, 399, 440, 1238, 441, 397, 441, 1238, 440, 1238, 441, 398, 440, 1238,
+    440, 400, 440, 1239, 440, 1238, 441, 1239, 440, 1238, 441, 373, 467, 377, 461, 373,
+    468, 1237, 442, 398, 441, 1238, 440, 376, 464, 399, 439, 1241, 439, 399, 439, 400,
+    440, 399, 440, 376, 464, 399, 439, 400, 439, 400, 440, 400, 438, 400, 440, 400,
+    439, 375, 465, 1238, 441, 1239, 440, 399, 439, 1239, 440, 399, 440, 400, 439, 372,
+    469, 372, 467,
+};
+const uint8_t code_raw_pvr_powerCodes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_pvr_powerCode = {
+    freq_to_timerval(38000), 10, 3, code_raw_pvr_powerTimes, code_raw_pvr_powerCodes
+};
+
+const uint32_t code_raw_power18Times[] = {
+    278, 1811, 277, 788, 246, 794, 250, 764, 280, 786, 248, 792, 252, 1813, 275, 1815,
+    273, 791, 253, 1812, 276, 789, 255, 785, 249, 791, 253, 1812, 276, 789, 255, 45322,
+    280, 1809, 279, 786, 248, 766, 278, 788, 246, 794, 250, 1815, 273, 792, 252, 788,
+    246, 1819, 280, 785, 249, 1817, 271, 1819, 280, 1810, 278, 787, 247, 1818, 281, 43217,
+    274, 1818, 270, 794, 250, 764, 280, 786, 248, 792, 252, 788, 256, 1809, 279, 1811,
+    277, 788, 246, 1819, 280, 785, 249, 766, 278, 762, 272, 1819, 280, 785, 248,
+};
+const uint8_t code_raw_power18Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power18Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power18Times, code_raw_power18Codes
+};
+
+const uint32_t code_raw_power19Times[] = {
+    352, 1747, 353, 694, 354, 694, 353, 694, 354, 694, 354, 693, 354, 1747, 354, 1745,
+    355, 693, 355, 1746, 354, 693, 355, 691, 357, 691, 356, 1745, 355, 689, 356, 46388,
+    358, 1740, 359, 689, 358, 688, 360, 689, 358, 689, 359, 1741, 358, 688, 359, 689,
+    359, 1741, 358, 691, 356, 1743, 356, 1743, 356, 1742, 357, 690, 357, 1741, 356, 44286,
+    261, 1839, 260, 786, 262, 786, 262, 785, 263, 785, 263, 786, 262, 1838, 262, 1838,
+    262, 786, 262, 1839, 261, 786, 262, 784, 264, 787, 261, 1837, 263, 783, 262, 46491,
+    261, 1839, 261, 786, 262, 786, 262, 786, 261, 786, 262, 1839, 261, 786, 262, 786,
+    262, 1839, 261, 786, 262, 1838, 262, 1838, 262, 1838, 262, 786, 262, 1835, 262,
+};
+const uint8_t code_raw_power19Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power19Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power19Times, code_raw_power19Codes
+};
+
+const uint32_t code_raw_power20Times[] = {
+    195, 1833, 300, 766, 280, 760, 275, 790, 276, 737, 309, 731, 304, 1801, 301, 1804,
+    309, 731, 304, 1801, 270, 795, 282, 758, 277, 762, 273, 1832, 270, 769, 246, 45851,
+    326, 1780, 302, 739, 307, 785, 282, 732, 303, 736, 310, 1795, 307, 732, 303, 763,
+    303, 1775, 307, 733, 334, 1798, 273, 1832, 270, 1810, 251, 814, 273, 1780, 281, 43762,
+    302, 1804, 309, 758, 277, 737, 330, 762, 284, 730, 305, 734, 301, 1803, 310, 1796,
+    306, 733, 302, 1829, 273, 767, 279, 734, 301, 791, 275, 1804, 278, 762, 253, 45870,
+    307, 1798, 304, 763, 272, 767, 279, 787, 279, 760, 275, 1829, 284, 730, 305, 734,
+    301, 1804, 309, 757, 278, 1827, 275, 1804, 278, 1828, 274, 765, 270, 1835, 278, 43740,
+    303, 1776, 306, 787, 279, 760, 275, 765, 281, 759, 307, 758, 277, 1775, 307, 1799,
+    303, 736, 299, 1832, 281, 759, 276, 763, 304, 736, 299, 1832, 281, 733, 302, 45820,
+    306, 1800, 302, 764, 282, 758, 277, 788, 278, 762, 284, 1821, 281, 732, 303, 736,
+    310, 1796, 307, 733, 302, 1829, 273, 1806, 276, 1830, 272, 767, 268, 1837, 245, 43772,
+    302, 1778, 304, 789, 277, 762, 284, 756, 279, 786, 249, 765, 301, 1777, 336, 1770,
+    301, 764, 282, 1824, 278, 761, 274, 765, 301, 738, 308, 1824, 278, 761, 274,
+};
+const uint8_t code_raw_power20Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power20Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power20Times, code_raw_power20Codes
+};
+
+const uint32_t code_raw_power21Times[] = {
+    277, 1806, 274, 775, 281, 776, 279, 770, 275, 774, 281, 768, 277, 1814, 277, 1806,
+    274, 775, 280, 1803, 277, 780, 276, 773, 282, 766, 279, 1831, 249, 781, 274, 45962,
+    281, 1803, 277, 771, 274, 783, 273, 802, 253, 770, 275, 1834, 257, 801, 255, 768,
+    277, 1807, 273, 775, 280, 1811, 280, 1804, 276, 1806, 274, 774, 282, 1811, 280, 43887,
+    275, 1809, 282, 767, 278, 779, 276, 799, 256, 766, 279, 771, 274, 1843, 248, 1810,
+    281, 767, 278, 1806, 274, 782, 274, 776, 279, 796, 249, 1807, 273, 784, 282, 45962,
+    279, 1804, 276, 772, 273, 784, 282, 768, 277, 798, 247, 1836, 255, 802, 253, 796,
+    249, 1808, 283, 766, 279, 1813, 278, 1805, 275, 1808, 272, 776, 279, 1813, 278, 43890,
+    282, 1801, 279, 769, 276, 781, 274, 775, 280, 769, 276, 773, 283, 1834, 257, 1801,
+    279, 769, 276, 1808, 272, 784, 282, 767, 278, 772, 273, 1810, 281, 776, 279,
+};
+const uint8_t code_raw_power21Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power21Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power21Times, code_raw_power21Codes
+};
+
+const uint32_t code_raw_power22Times[] = {
+    3488, 3488, 872, 2616, 872, 872, 872, 872, 872, 2616, 872, 872, 872, 2616, 872, 872,
+    872, 872, 872, 872, 872, 872, 872, 872, 872, 2616, 872, 872, 872, 2616, 872, 2616,
+    872, 872, 872, 2616, 872, 872, 872, 2616, 872, 2616, 872, 2616, 872, 2616, 872, 2616,
+    872, 872, 872, 34008,
+};
+const uint8_t code_raw_power22Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power22Code = {
+    freq_to_timerval(36700), 10, 3, code_raw_power22Times, code_raw_power22Codes
+};
+
+const uint32_t code_raw_power23Times[] = {
+    328, 605, 321, 283, 643, 290, 313, 589, 316, 287, 639, 596, 642, 589, 316, 285,
+    318, 285, 641, 591, 637, 294, 309, 587, 328,
+};
+const uint8_t code_raw_power23Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power23Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power23Times, code_raw_power23Codes
+};
+
+const uint32_t code_raw_power24Times[] = {
+    9219, 4484, 662, 469, 661, 469, 661, 1627, 660, 471, 658, 474, 656, 499, 631, 499,
+    631, 499, 631, 1657, 630, 1657, 631, 500, 630, 1657, 631, 1657, 631, 1657, 630, 1657,
+    631, 1657, 631, 500, 630, 500, 630, 500, 630, 1657, 630, 500, 631, 500, 630, 500,
+    631, 500, 630, 1657, 630, 1658, 630, 1657, 631, 500, 630, 1657, 631, 1658, 630, 1658,
+    630, 1658, 630, 40107, 9106, 2202, 631,
+};
+const uint8_t code_raw_power24Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power24Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power24Times, code_raw_power24Codes
+};
+
+const uint32_t code_raw_power25Times[] = {
+    9016, 4408, 603, 512, 602, 512, 629, 1599, 686, 428, 630, 483, 630, 484, 629, 485,
+    628, 492, 627, 1604, 625, 1605, 624, 491, 623, 1630, 599, 1631, 598, 1631, 598, 1631,
+    598, 1636, 599, 515, 599, 515, 599, 515, 599, 1631, 599, 515, 599, 515, 599, 515,
+    599, 521, 599, 1631, 599, 1631, 599, 1631, 598, 515, 599, 1631, 598, 1631, 598, 1631,
+    598, 1632, 598, 39999, 9016, 2166, 626, 95735, 9012, 2168, 625, 95735, 9013, 2167, 626,
+};
+const uint8_t code_raw_power25Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power25Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power25Times, code_raw_power25Codes
+};
+
+const uint32_t code_raw_power26Times[] = {
+    611, 386, 612, 3984, 612, 4984, 612, 387, 611, 3985, 612, 387, 611, 3986, 611, 4985,
+    611, 387, 611, 3986, 611, 4985, 611, 387, 611, 3986, 610, 4987, 609, 4985, 611, 389,
+    609,
+};
+const uint8_t code_raw_power26Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power26Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power26Times, code_raw_power26Codes
+};
+
+const uint32_t code_raw_power27Times[] = {
+    561, 442, 562, 4055, 591, 5032, 592, 413, 591, 4026, 593, 411, 593, 4026, 593, 5030,
+    618, 387, 617, 4001, 592, 5032, 591, 440, 564, 4028, 591, 5033, 590, 5034, 589, 440,
+    563,
+};
+const uint8_t code_raw_power27Codes[] = {
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const struct RawIrCode code_raw_power27Code = {
+    freq_to_timerval(38000), 10, 3, code_raw_power27Times, code_raw_power27Codes
+};
+
+const IrCode *const NApowerCodes[] = {
+    &code_na000Code, &code_na001Code, &code_na002Code, &code_na003Code, &code_na004Code, &code_na005Code,
+    &code_na006Code, &code_na007Code, &code_na008Code, &code_na009Code, &code_na010Code, &code_na011Code,
+    &code_na012Code, &code_na013Code, &code_na014Code, &code_na015Code, &code_na016Code, &code_na017Code,
+    &code_na018Code, &code_na019Code, &code_na020Code, &code_na021Code, &code_na022Code, &code_na023Code,
+    &code_na024Code, &code_na025Code, &code_na026Code, &code_na027Code, &code_na028Code, &code_na029Code,
+    &code_na030Code, &code_na031Code, &code_na032Code, &code_na033Code, &code_na034Code, &code_na035Code,
+    &code_na036Code, &code_na037Code, &code_na038Code, &code_na039Code, &code_na040Code, &code_na041Code,
+    &code_na042Code, &code_na043Code, &code_na044Code, &code_na045Code, &code_na046Code, &code_na047Code,
+    &code_na048Code, &code_na049Code, &code_na050Code, &code_na051Code, &code_na052Code, &code_na053Code,
+    &code_na054Code, &code_na055Code, &code_na056Code, &code_na057Code, &code_na058Code, &code_na059Code,
+    &code_na060Code, &code_na061Code, &code_na062Code, &code_na063Code, &code_na064Code, &code_na065Code,
+    &code_na066Code, &code_na067Code, &code_na068Code, &code_na069Code, &code_na070Code, &code_na071Code,
+    &code_na072Code, &code_na073Code, &code_na074Code, &code_na075Code, &code_na076Code, &code_na077Code,
+    &code_na078Code, &code_na079Code, &code_na080Code, &code_na081Code, &code_na082Code, &code_na083Code,
+    &code_na084Code, &code_na085Code, &code_na086Code, &code_na087Code, &code_na088Code, &code_na089Code,
+    &code_na090Code, &code_na091Code, &code_na092Code, &code_na093Code, &code_na094Code, &code_na095Code,
+    &code_na096Code, &code_na097Code, &code_na098Code, &code_na099Code, &code_na100Code, &code_na101Code,
+    &code_na102Code, &code_na103Code, &code_na104Code, &code_na105Code, &code_na106Code, &code_na107Code,
+    &code_na108Code, &code_na109Code, &code_na110Code, &code_na111Code, &code_na112Code, &code_na113Code,
+    &code_na114Code, &code_na115Code, &code_na116Code, &code_na117Code, &code_na118Code, &code_na119Code,
+    &code_na120Code, &code_na121Code, &code_na122Code, &code_na123Code, &code_na124Code, &code_na125Code,
+    &code_na126Code, &code_na127Code, &code_na128Code, &code_na129Code, &code_na130Code, &code_na131Code,
+    &code_na132Code, &code_na133Code, &code_na134Code, &code_na135Code, &code_na136Code,
+    &code_na137Code, &code_na138Code, &code_na139Code, &code_na140Code, &code_na141Code,
+    &code_na142Code, &code_na143Code, &code_na144Code, &code_na145Code, &code_na146Code,
+    &code_na147Code, &code_na148Code, &code_na149Code, &code_na150Code, &code_na151Code,
+    &code_na152Code, &code_na153Code, &code_na154Code, &code_na155Code, &code_na156Code,
+    &code_na157Code, &code_na158Code, &code_na159Code, &code_na160Code, &code_na161Code,
+    &code_na162Code, &code_na163Code, &code_na164Code, &code_na165Code, &code_na166Code,
+    &code_na167Code, &code_na168Code, &code_na169Code, &code_na170Code, &code_na171Code,
+    &code_na172Code, &code_na173Code, &code_na174Code, &code_na175Code, &code_na176Code,
+    &code_na177Code, &code_na178Code, &code_na179Code, &code_na180Code, &code_na181Code,
+    &code_na182Code, &code_na183Code, &code_na184Code, &code_na185Code,
+};
+
+const uint8_t num_NAcodes = sizeof(NApowerCodes) / sizeof(NApowerCodes[0]);
+
+const IrCode *const EUpowerCodes[] = {
+    &code_eu000Code,
+    &code_eu001Code,
+    &code_eu002Code,
+    &code_na000Code,
+    &code_eu004Code,
+    &code_eu005Code,
+    &code_eu006Code,
+    &code_eu007Code,
+    &code_eu008Code,
+    &code_na005Code,
+    &code_na004Code,
+    &code_eu011Code,
+    &code_eu012Code,
+    &code_eu013Code,
+    &code_na021Code,
+    &code_eu015Code,
+    &code_eu016Code,
+    &code_eu017Code,
+    &code_eu018Code,
+    &code_eu019Code,
+    &code_eu020Code,
+    &code_eu021Code,
+    &code_eu022Code,
+    &code_na022Code,
+    &code_eu024Code,
+    &code_eu025Code,
+    &code_eu026Code,
+    &code_eu140Code,
+    &code_eu027Code,
+    &code_eu028Code,
+    &code_eu029Code,
+    &code_eu030Code,
+    &code_eu031Code,
+    &code_eu032Code,
+    &code_eu033Code,
+    &code_eu034Code,
+    &code_eu036Code,
+    &code_eu037Code,
+    &code_eu038Code,
+    &code_eu039Code,
+    &code_eu040Code,
+    &code_eu041Code,
+    &code_eu042Code,
+    &code_eu043Code,
+    &code_eu044Code,
+    &code_eu045Code,
+    &code_eu046Code,
+    &code_eu047Code,
+    &code_eu048Code,
+    &code_eu049Code,
+    &code_eu050Code,
+    &code_eu051Code,
+    &code_eu052Code,
+    &code_eu053Code,
+    &code_eu054Code,
+    &code_eu055Code,
+    &code_eu056Code,
+    &code_eu058Code,
+    &code_eu059Code,
+    &code_eu060Code,
+    &code_eu061Code,
+    &code_eu062Code,
+    &code_eu063Code,
+    &code_eu064Code,
+    &code_eu065Code,
+    &code_eu066Code,
+    &code_eu067Code,
+    &code_eu068Code,
+    &code_eu069Code,
+    &code_eu070Code,
+    &code_eu071Code,
+    &code_eu072Code,
+    &code_eu073Code,
+    &code_eu074Code,
+    &code_eu075Code,
+    &code_eu076Code,
+    &code_eu077Code,
+    &code_eu078Code,
+    &code_eu079Code,
+    &code_eu080Code,
+    &code_eu081Code,
+    &code_eu082Code,
+    &code_eu083Code,
+    &code_eu084Code,
+    &code_eu085Code,
+    &code_eu086Code,
+    &code_eu087Code,
+    &code_eu088Code,
+    &code_eu089Code,
+    &code_eu090Code,
+    &code_eu091Code,
+    &code_eu092Code,
+    &code_eu093Code,
+    &code_eu094Code,
+    &code_eu095Code,
+    &code_eu096Code,
+    &code_eu097Code,
+    &code_eu098Code,
+    &code_eu099Code,
+    &code_eu100Code,
+    &code_eu101Code,
+    &code_eu102Code,
+    &code_eu103Code,
+    &code_eu104Code,
+    &code_eu105Code,
+    &code_eu106Code,
+    &code_eu107Code,
+    &code_eu108Code,
+    &code_eu109Code,
+    &code_eu110Code,
+    &code_eu111Code,
+    &code_eu112Code,
+    &code_eu113Code,
+    &code_eu114Code,
+    &code_eu115Code,
+    &code_eu116Code,
+    &code_eu117Code,
+    &code_eu118Code,
+    &code_eu119Code,
+    &code_eu120Code,
+    &code_eu121Code,
+    &code_eu122Code,
+    &code_eu123Code,
+    &code_eu124Code,
+    &code_eu125Code,
+    &code_eu126Code,
+    &code_eu127Code,
+    &code_eu128Code,
+    &code_eu129Code,
+    &code_eu130Code,
+    &code_eu131Code,
+    &code_eu132Code,
+    &code_eu133Code,
+    &code_eu134Code,
+    &code_eu135Code,
+    &code_eu136Code,
+    &code_eu137Code,
+    &code_eu138Code,
+    &code_eu139Code,
+    &code_na137Code, &code_na138Code, &code_na139Code, &code_na140Code,
+    &code_na141Code, &code_na142Code, &code_na143Code, &code_na144Code,
+    &code_na145Code, &code_na146Code, &code_na147Code, &code_na148Code,
+    &code_na149Code, &code_na150Code, &code_na151Code, &code_na152Code,
+    &code_na153Code, &code_na154Code, &code_na155Code, &code_na156Code,
+    &code_na157Code, &code_na158Code, &code_na159Code, &code_na160Code,
+    &code_na161Code, &code_na162Code, &code_na163Code, &code_na164Code,
+    &code_na165Code, &code_na166Code, &code_na167Code, &code_na170Code,
+    &code_na171Code, &code_na172Code, &code_na173Code, &code_na174Code,
+    &code_na175Code, &code_na176Code, &code_na177Code, &code_na178Code,
+    &code_na179Code, &code_na180Code, &code_na181Code, &code_na182Code,
+    &code_na183Code, &code_na184Code, &code_na185Code,
+};
+
+const uint8_t num_EUcodes = sizeof(EUpowerCodes) / sizeof(EUpowerCodes[0]);
+
 const IrCode *const UniversalParsedCodes[] = {
     &code_universal_samsungCode,
     &code_universal_grundigCode,
@@ -8404,6 +9382,35 @@ const RawIrCode *const UniversalRawCodes[] = {
     &code_universal_power_rawCode,
     &code_universal_off_rawCode,
     &code_universal_power_raw2Code,
+    &code_raw_power1Code,
+    &code_raw_power2Code,
+    &code_raw_escaladeCode,
+    &code_raw_power3Code,
+    &code_raw_power4Code,
+    &code_raw_power5Code,
+    &code_raw_power6Code,
+    &code_raw_power7Code,
+    &code_raw_power8Code,
+    &code_raw_power9Code,
+    &code_raw_power10Code,
+    &code_raw_power11Code,
+    &code_raw_power12Code,
+    &code_raw_power13Code,
+    &code_raw_power14Code,
+    &code_raw_power15Code,
+    &code_raw_power16Code,
+    &code_raw_power17Code,
+    &code_raw_pvr_powerCode,
+    &code_raw_power18Code,
+    &code_raw_power19Code,
+    &code_raw_power20Code,
+    &code_raw_power21Code,
+    &code_raw_power22Code,
+    &code_raw_power23Code,
+    &code_raw_power24Code,
+    &code_raw_power25Code,
+    &code_raw_power26Code,
+    &code_raw_power27Code,
 };
 const uint8_t num_UniversalRawCodes = sizeof(UniversalRawCodes) / sizeof(UniversalRawCodes[0]);
 
