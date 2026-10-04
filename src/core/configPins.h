@@ -8,6 +8,12 @@
 #ifndef CC1101_GDO2_PIN
 #define CC1101_GDO2_PIN -1
 #endif
+#ifndef RF_TX_DEFAULT_PIN
+#define RF_TX_DEFAULT_PIN GROVE_SDA
+#endif
+#ifndef RF_RX_DEFAULT_PIN
+#define RF_RX_DEFAULT_PIN GROVE_SCL
+#endif
 
 enum RFIDModules {
     M5_RFID2_MODULE = 0,
@@ -225,8 +231,8 @@ public:
     int irRx = RXLED;
 
     // RF
-    int rfTx = GROVE_SDA;
-    int rfRx = GROVE_SCL;
+    int rfTx = RF_TX_DEFAULT_PIN;
+    int rfRx = RF_RX_DEFAULT_PIN;
     int rfModule = M5_RF_MODULE;
     float rfFreq = 433.92;
     int rfFxdFreq = 1;

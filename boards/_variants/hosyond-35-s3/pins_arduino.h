@@ -16,32 +16,24 @@ static const uint8_t SCL = 39;
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
-// SPI defaults. The board's SPI2_HOST is wired to the QSPI display;
-// peripheral SPI (RFID, CC1101, NRF24, etc.) uses these same GPIO
-// numbers unless overridden at runtime with begin(sck, miso, mosi, ss).
-#define SPI_SS_PIN   10
-#define SPI_MOSI_PIN 11
-#define SPI_MISO_PIN 13
-#define SPI_SCK_PIN  12
+// No SPI bus is exposed on this board: SPI2_HOST drives the QSPI display, SD uses SDMMC,
+// and the only free GPIOs are IO45/IO46. Leave the generic SPI pins and every radio/SD-SPI
+// alias unassigned (-1) so Bruce's radio menus can never reconfigure the display pins.
+// Bruce's precompiler_flags.h supplies -1 for the CC1101/NRF24/W5500/SDCARD macros.
+#define SPI_SS_PIN   -1
+#define SPI_MOSI_PIN -1
+#define SPI_MISO_PIN -1
+#define SPI_SCK_PIN  -1
 
 static const uint8_t SS   = SPI_SS_PIN;
 static const uint8_t MOSI = SPI_MOSI_PIN;
 static const uint8_t MISO = SPI_MISO_PIN;
 static const uint8_t SCK  = SPI_SCK_PIN;
 
-// Peripheral aliases expected by Bruce modules
-#define SDCARD_SCK   SPI_SCK_PIN
-#define SDCARD_MISO  SPI_MISO_PIN
-#define SDCARD_MOSI  SPI_MOSI_PIN
-#define CC1101_MOSI_PIN SPI_MOSI_PIN
-#define CC1101_SCK_PIN  SPI_SCK_PIN
-#define CC1101_MISO_PIN SPI_MISO_PIN
-#define NRF24_MOSI_PIN  SPI_MOSI_PIN
-#define NRF24_SCK_PIN   SPI_SCK_PIN
-#define NRF24_MISO_PIN  SPI_MISO_PIN
-#define W5500_MOSI_PIN  SPI_MOSI_PIN
-#define W5500_SCK_PIN   SPI_SCK_PIN
-#define W5500_MISO_PIN  SPI_MISO_PIN
+// RF module defaults: the two spare GPIOs (shared with IR). Bruce's own default would be
+// the I2C pair (GROVE_SDA/SCL = 38/39), which carry touch and the audio codec.
+#define RF_TX_DEFAULT_PIN 45
+#define RF_RX_DEFAULT_PIN 46
 
 // Font sizes (used by Bruce display code).
 // Deliberately static const (NOT #define) so that FastLED's internal
