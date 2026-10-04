@@ -6,7 +6,8 @@ Build env: `hosyond-35-s3`. First hardware bring-up: 2026-10-03.
 ## Status
 - Display: working (Bruce menu renders, landscape, correct colors without the invert menu).
 - Touch: working (verified 2026-10-04). Report slots: byte0 bit7=valid, bits[5:0]=x_h; coordinates are portrait-native panel pixels and the existing rotation mapping in `interface.cpp` is correct.
-- Not yet checked: SD (4-bit MMC failed to mount at boot), RGB LED, audio, battery reading, 80 MHz bus clock (currently 40 MHz).
+- SD: mounts in 4-bit SDMMC mode with a card inserted (verified 2026-10-04; the `0x107` boot error only means an empty slot). File browse/write not yet exercised.
+- Not yet checked: RGB LED, audio, battery reading, 80 MHz bus clock (currently 40 MHz).
 - Touch debugging tip: a tiny Arduino sketch that scans I2C (touch is 0x55 on SDA38/SCL39) and prints reports from register 0x0014 finds protocol bugs much faster than debugging inside Bruce.
 
 ## Display notes (the hard-won part)
