@@ -99,8 +99,23 @@ void tft_display::begin(uint32_t speed) {
         cfg.pin_d5 = TFT_D5;
         cfg.pin_d6 = TFT_D6;
         cfg.pin_d7 = TFT_D7;
+#elif defined(LOVYAN_QSPI_BUS)
+        // QSPI via Bus_SPI: use pin_io0-io3 for the four data lines.
+        // CS is in the panel config; the bus has no CS pin.
+        cfg.spi_host = TFT_SPI_HOST;
+        cfg.freq_write = TFT_WRITE_FREQ;
+        cfg.freq_read = TFT_READ_FREQ;
+        cfg.spi_mode = TFT_SPI_MODE;
+        cfg.use_lock = TFT_USE_LOCK;
+        cfg.spi_3wire = true;
+        cfg.dma_channel = SPI_DMA_CH_AUTO;
+        cfg.pin_sclk = TFT_SCLK;
+        cfg.pin_io0 = TFT_QSPI_D0;
+        cfg.pin_io1 = TFT_QSPI_D1;
+        cfg.pin_io2 = TFT_QSPI_D2;
+        cfg.pin_io3 = TFT_QSPI_D3;
 #else
-#error "Define a bus: LOVYAN_SPI_BUS, LOVYAN_I2C_BUS, LOVYAN_8PARALLEL_BUS."
+#error "Define a bus: LOVYAN_SPI_BUS, LOVYAN_I2C_BUS, LOVYAN_8PARALLEL_BUS, LOVYAN_QSPI_BUS."
 #endif
 
         _bus_instance.config(cfg);
@@ -125,11 +140,16 @@ void tft_display::begin(uint32_t speed) {
         cfg.offset_x = TFT_OFFSET_X;
         cfg.offset_y = TFT_OFFSET_Y;
         cfg.offset_rotation = 0;
-        cfg.readable = true;
+#if defined(LOVYAN_QSPI_BUS)
+        cfg.readable   = false;
+        cfg.bus_shared = false;
+#else
+        cfg.readable   = true;
+        cfg.bus_shared = true;
+#endif
         cfg.invert = TFT_INVERTION;
         cfg.rgb_order = TFT_RGB_ORDER;
         cfg.dlen_16bit = false;
-        cfg.bus_shared = true;
         _panel_instance.config(cfg);
         setPanel(&_panel_instance);
     }
