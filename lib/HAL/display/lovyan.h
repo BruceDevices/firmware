@@ -35,14 +35,20 @@
 #error "You must define LOVYAN_BUS: \n\
     - Bus_SPI\n \
     - Bus_Parallel8\n \
-    - Bus_I2C "
+    - Bus_I2C\n \
+    - Bus_QSPI "
 #endif
 
-#if !defined(LOVYAN_SPI_BUS) && !defined(LOVYAN_I2C_BUS) && !defined(LOVYAN_8PARALLEL_BUS)
-#error "You must define the bus macro: LOVYAN_SPI_BUS or LOVYAN_I2C_BUS or LOVYAN_8PARALLEL_BUS\n"
+#if !defined(LOVYAN_SPI_BUS) && !defined(LOVYAN_I2C_BUS) && !defined(LOVYAN_8PARALLEL_BUS) && \
+    !defined(LOVYAN_QSPI_BUS)
+#error "You must define the bus macro: LOVYAN_SPI_BUS, LOVYAN_I2C_BUS, LOVYAN_8PARALLEL_BUS, or LOVYAN_QSPI_BUS\n"
 #endif
 
 #include <LovyanGFX.hpp>
+
+#ifdef LOVYAN_CUSTOM_PANEL_HEADER
+#include LOVYAN_CUSTOM_PANEL_HEADER
+#endif
 #include <SPI.h>
 #include <algorithm>
 #include <cmath>
