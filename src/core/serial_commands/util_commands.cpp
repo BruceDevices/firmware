@@ -351,7 +351,9 @@ uint32_t displayCallback(cmd *c) {
         }
         serialDevice->println("\n[End of Dump]");
     } else if (opt == "info") {
-        serialDevice->println(TFT_WIDTH + String("x") + TFT_HEIGHT + String("x") + ROTATION);
+        serialDevice->println(
+            TFT_WIDTH + String("x") + TFT_HEIGHT + String("x") + bruceConfigPins.rotation
+        );
     } else {
         serialDevice->println(
             "Display command accept:\n"

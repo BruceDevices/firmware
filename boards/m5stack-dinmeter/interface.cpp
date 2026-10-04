@@ -4,9 +4,20 @@
 #include <interface.h>
 
 // Rotary encoder
-#include <rotary_decoder.h>
-RotaryDecoder *encoder = nullptr;
-void pollEncoder(void) { encoder->poll(); }
+#include "hal/device.h"
+#include "hal/inputs/encoder.h"
+
+#define ENCODER_INA 41
+#define ENCODER_INB 40
+#define ENCODER_KEY 42
+
+static DeviceEncoder encoderCfg() {
+    DeviceEncoder cfg;
+    cfg.pin_a = ENCODER_INA;
+    cfg.pin_b = ENCODER_INB;
+    cfg.pin_sel = ENCODER_KEY;
+    return cfg;
+}
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -14,14 +25,43 @@ void pollEncoder(void) { encoder->poll(); }
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.buzzer = 3;
+    bruceConfigPins.i2c_bus = {(gpio_num_t)1, (gpio_num_t)2};   // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)11, (gpio_num_t)12}; // sda, scl
+    bruceConfigPins.rfTx = 1;
+    bruceConfigPins.rfRx = 2;
+    bruceConfigPins.irTx = 1;
+    bruceConfigPins.irRx = 2;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)15, (gpio_num_t)13};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)15, (gpio_num_t)13};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)2, (gpio_num_t)1};   // rx, tx (CH9329, via GROVE fallback)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, (gpio_num_t)13};
+    // No dedicated PN532 pins on this board -> PN532_bus reuses outer_bus (shared SPI slot)
+    bruceConfigPins.PN532_bus = {(gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, (gpio_num_t)13};
+    // CC1101/NRF24/SDCARD/LoRa/W5500 share the same SPI bus (sck=15, miso=2, mosi=1)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, GPIO_NUM_NC, (gpio_num_t)13, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, (gpio_num_t)13, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, (gpio_num_t)13
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)15, (gpio_num_t)2, (gpio_num_t)1, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
+
     M5.begin();
     setSysI2CBus(M5.In_I2C.getPort() == I2C_NUM_1 ? &Wire1 : &Wire);
     bruceConfig.colorInverted = 0;
-    pinMode(ENCODER_KEY, INPUT);
-    pinMode(ENCODER_INA, INPUT_PULLUP);
-    pinMode(ENCODER_INB, INPUT_PULLUP);
-    encoder = new RotaryDecoder();
-    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
+    hal_encoder_init(encoderCfg());
 }
 /*********************************************************************
 ** Function: setBrightness
@@ -45,50 +85,9 @@ int getBattery() {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = millis(); // debauce for buttons
-    static unsigned long lastEncoderMoveMs = 0;
-    static int posDifference = 0;
-    static int lastPos = 0;
-    bool sel = !LOW;
+    hal_encoder_poll(encoderCfg());
 
-    int newPos = encoder->getPosition();
-    if (newPos != lastPos) {
-        posDifference += (newPos - lastPos);
-        // Independent running total for consumers that want to apply the
-        // full pending backlog in one pass instead of one step at a time
-        // (see drainRotarySteps() in globals.h). Never cleared by the
-        // stale-drop below -- it's drained exactly, not time-limited.
-        RotaryNetSteps += (newPos - lastPos);
-        lastPos = newPos;
-        lastEncoderMoveMs = millis();
-    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
-        // Drop any stale queued steps once the encoder has stopped moving.
-        posDifference = 0;
-    }
-
-    if (millis() - tm < 200 && !LongPress) return;
-
-    sel = digitalRead(ENCODER_KEY);
-
-    if (posDifference != 0 || sel == LOW) {
-        if (!wakeUpScreen()) AnyKeyPress = true;
-        else return;
-    }
-    if (posDifference > 0) {
-        PrevPress = true;
-        posDifference--;
-    }
-    if (posDifference < 0) {
-        NextPress = true;
-        posDifference++;
-    }
-
-    if (sel == LOW) {
-        posDifference = 0;
-        SelPress = true;
-        tm = millis();
-    }
-
+    // Prev + Select together -> Esc
     if (PrevPress && SelPress) {
         EscPress = true;
         SelPress = false;

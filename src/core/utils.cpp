@@ -35,34 +35,10 @@ void addOptionToMainMenu() {
 ** Description:   Returns the battery value from 1-100
 ***************************************************************************************/
 int getBattery() {
-#ifdef USE_BQ27220_VIA_I2C
-    // Use BQ27220 fuel gauge for accurate battery reading
-    float pct = bq.getChargePcnt();
-    // Guard against library/device errors returning out-of-range values
-    if (pct <= 0.0f) return 1;
-    if (pct > 100.0f) return 100;
-    return (int)pct;
-#endif
-#ifdef ANALOG_BAT_PIN
-#ifndef ANALOG_BAT_MULTIPLIER
-#define ANALOG_BAT_MULTIPLIER 2.0f
-#endif
-    static bool adcInitialized = false;
-    if (!adcInitialized) {
-        pinMode(ANALOG_BAT_PIN, INPUT);
-        adcInitialized = true;
-    }
-    uint32_t adcReading = analogReadMilliVolts(ANALOG_BAT_PIN);
-    float actualVoltage = (float)adcReading * ANALOG_BAT_MULTIPLIER;
-    const float MIN_VOLTAGE = 3300.0f;
-    const float MAX_VOLTAGE = 4150.0f;
-    float percent = ((actualVoltage - MIN_VOLTAGE) / (MAX_VOLTAGE - (MIN_VOLTAGE + 50.0f))) * 100.0f;
-
-    if (percent < 0) percent = 1;
-    if (percent > 100) percent = 100;
-    return (int)percent;
-#endif
-    return 0;
+    // Fuel gauge IC (GAUGE_*) or analog divider (ANALOG_BAT_PIN), see hal/power/gauge.*
+    int percent = hal_gauge_get_percent();
+    if (percent < 0) return 0;
+    return (percent == 0) ? 1 : percent;
 }
 
 void updateClockTimezone() {
@@ -190,9 +166,9 @@ void showDeviceInfo() {
     area.addLine("SD Card free: " + formatBytes(SD.totalBytes() - SD.usedBytes()));
     area.addLine("");
 
-#ifdef HAS_SCREEN
+#ifndef USE_DUMMY_TFT
     area.addLine("[SCREEN]");
-    area.addLine("Rotation: " + String(ROTATION));
+    area.addLine("Rotation: " + String(bruceConfigPins.rotation));
     area.addLine("Width: " + String(tftWidth) + "px");
     area.addLine("Height: " + String(tftHeight) + "px");
     area.addLine("Brightness: " + String(bruceConfig.bright) + "%");
@@ -206,38 +182,54 @@ void showDeviceInfo() {
     area.addLine("SYS_I2C_SCL: " + String(bruceConfigPins.sys_i2c.scl));
     area.addLine("SERIAL TX: " + String(bruceConfigPins.uart_bus.tx));
     area.addLine("SERIAL RX: " + String(bruceConfigPins.uart_bus.rx));
-    area.addLine("SPI_SCK_PIN: " + String(SPI_SCK_PIN));
-    area.addLine("SPI_MOSI_PIN: " + String(SPI_MOSI_PIN));
-    area.addLine("SPI_MISO_PIN: " + String(SPI_MISO_PIN));
-    area.addLine("SPI_SS_PIN: " + String(SPI_SS_PIN));
-    area.addLine("IR TX: " + String(TXLED));
-    area.addLine("IR RX: " + String(RXLED));
+    area.addLine("IR TX: " + String(bruceConfigPins.irTx));
+    area.addLine("IR RX: " + String(bruceConfigPins.irRx));
+    area.addLine("");
+
+    auto addSpiBusLine = [&](const char *label, const BruceConfigPins::SPIPins &bus) {
+        area.addLine(
+            String(label) + ": " + String(bus.miso) + ", " + String(bus.mosi) + ", " + String(bus.sck) +
+            ", " + String(bus.cs) + ", " + String(bus.io0) + ", " + String(bus.io2)
+        );
+    };
+    area.addLine("SPI buses: MI, MO, SCK, CS, IO0, IO2");
+    addSpiBusLine("Default", bruceConfigPins.outer_bus);
+    addSpiBusLine("CC1101", bruceConfigPins.CC1101_bus);
+    addSpiBusLine("nRF24", bruceConfigPins.NRF24_bus);
+    addSpiBusLine("PN532", bruceConfigPins.PN532_bus);
+    addSpiBusLine("SDCard", bruceConfigPins.SDCARD_bus);
+#if !defined(LITE_VERSION)
+    addSpiBusLine("ST25R", bruceConfigPins.ST25R_bus);
+    addSpiBusLine("W5500", bruceConfigPins.W5500_bus);
+    addSpiBusLine("LoRa", bruceConfigPins.LoRa_bus);
+#endif
     area.addLine("");
 
     area.addLine("[BAT]");
     area.addLine("Charge: " + String(getBattery()) + "%");
-#ifdef USE_BQ27220_VIA_I2C
-    area.addLine("BQ27220 ADDR: " + String(BQ27220_I2C_ADDRESS));
-    area.addLine("Curr Capacity: " + String(bq.getRemainCap()) + "mAh");
-    area.addLine("Full Capacity: " + String(bq.getFullChargeCap()) + "mAh");
-    area.addLine("Design Capacity: " + String(bq.getDesignCap()) + "mAh");
-    area.addLine("Charging: " + String(bq.getIsCharging()));
-    area.addLine(
-        "Charging Voltage: " + String(((double)bq.getVolt(VOLT_MODE::VOLT_CHARGING) / 1000.0)) + "V"
-    );
-    area.addLine("Charging Current: " + String(bq.getCurr(CURR_MODE::CURR_CHARGING)) + "mA");
-    area.addLine(
-        "Time to Empty: " + String((bq.getTimeToEmpty() / 1440)) + " days " +
-        String(((bq.getTimeToEmpty() % 1440) / 60)) + " hrs " + String(((bq.getTimeToEmpty() % 1440) % 60)) +
-        " mins"
-    );
-    area.addLine("Avg Power Use: " + String(bq.getAvgPower()) + "mW");
-    area.addLine("Voltage: " + String(((double)bq.getVolt(VOLT_MODE::VOLT) / 1000.0)) + "V");
-    area.addLine("Raw Voltage: " + String(bq.getVolt(VOLT_MODE::VOLT_RWA)) + "mV");
-    area.addLine("Curr Current: " + String(bq.getCurr(CURR_INSTANT)) + "mA");
-    area.addLine("Avg Current: " + String(bq.getCurr(CURR_MODE::CURR_AVERAGE)) + "mA");
-    area.addLine("Raw Current: " + String(bq.getCurr(CURR_MODE::CURR_RAW)) + "mA");
+    DeviceGaugeInfo gi;
+    if (hal_gauge_get_info(gi)) {
+#ifdef BQ27220_I2C_ADDRESS
+        area.addLine("BQ27220 ADDR: " + String(BQ27220_I2C_ADDRESS));
 #endif
+        area.addLine("Curr Capacity: " + String(gi.remain_cap_mah) + "mAh");
+        area.addLine("Full Capacity: " + String(gi.full_cap_mah) + "mAh");
+        area.addLine("Design Capacity: " + String(gi.design_cap_mah) + "mAh");
+        area.addLine("Charging: " + String(gi.charging));
+        area.addLine("Charging Voltage: " + String(((double)gi.charging_mv / 1000.0)) + "V");
+        area.addLine("Charging Current: " + String(gi.charging_ma) + "mA");
+        area.addLine(
+            "Time to Empty: " + String((gi.time_to_empty_min / 1440)) + " days " +
+            String(((gi.time_to_empty_min % 1440) / 60)) + " hrs " +
+            String(((gi.time_to_empty_min % 1440) % 60)) + " mins"
+        );
+        area.addLine("Avg Power Use: " + String(gi.avg_power_mw) + "mW");
+        area.addLine("Voltage: " + String(((double)gi.volt_mv / 1000.0)) + "V");
+        area.addLine("Raw Voltage: " + String(gi.volt_raw_mv) + "mV");
+        area.addLine("Curr Current: " + String(gi.curr_instant_ma) + "mA");
+        area.addLine("Avg Current: " + String(gi.curr_average_ma) + "mA");
+        area.addLine("Raw Current: " + String(gi.curr_raw_ma) + "mA");
+    }
 
     area.show();
 }
@@ -247,7 +239,7 @@ void showDeviceInfo() {
 ** Function: touchHeatMap
 ** Touchscreen Mapping, include this function after reading the touchPoint
 **********************************************************************/
-void touchHeatMap(struct TouchPoint t) {
+void touchHeatMap(struct BruceTouchPoint t) {
     int third_x = tftWidth / 3;
     int third_y = tftHeight / 3;
 

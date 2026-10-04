@@ -5,9 +5,7 @@
 #include <ArduinoJson.h>
 #include <precompiler_flags.h>
 #include <set>
-#ifndef CC1101_GDO2_PIN
-#define CC1101_GDO2_PIN -1
-#endif
+#include <vector>
 
 enum RFIDModules {
     M5_RFID2_MODULE = 0,
@@ -24,13 +22,20 @@ enum RFModules {
     CC1101_SPI_MODULE = 1,
 };
 
+// How the microphone is wired. Chosen at runtime (was the MIC_SPM1423 / MIC_INMP441 macros plus
+// the presence of a PIN_BCLK -D); the board picks its default in _setup_gpio(), the user can override it from
+// pinsMenu() without rebuilding.
+enum MicTypes {
+    MIC_TYPE_PDM = 0,         // SPM1423 in PDM mode: clk + data only
+    MIC_TYPE_I2S_MSB = 1,     // SPM1423 wired as MSB/left-justified I2S: clk(BCLK) + ws + data
+    MIC_TYPE_I2S_PHILIPS = 2, // INMP441 & co, standard (Philips) I2S: clk(BCLK) + ws + data
+};
+
 class BruceConfigPins {
 public:
     struct UARTPins {
         gpio_num_t rx = GPIO_NUM_NC;
         gpio_num_t tx = GPIO_NUM_NC;
-
-        UARTPins() : rx(GPIO_NUM_NC), tx(GPIO_NUM_NC) {}
 
         UARTPins(gpio_num_t rx = GPIO_NUM_NC, gpio_num_t tx = GPIO_NUM_NC) : rx(rx), tx(tx) {}
 
@@ -54,8 +59,6 @@ public:
     struct I2CPins {
         gpio_num_t sda = GPIO_NUM_NC;
         gpio_num_t scl = GPIO_NUM_NC;
-
-        I2CPins() : sda(GPIO_NUM_NC), scl(GPIO_NUM_NC) {}
 
         I2CPins(gpio_num_t sda = GPIO_NUM_NC, gpio_num_t scl = GPIO_NUM_NC) : sda(sda), scl(scl) {}
 
@@ -119,99 +122,116 @@ public:
         }
     };
 
+    // I2S speaker wiring (HAS_SPEAKER). Was the BCLK/WCLK/DOUT/MCLK -D macros; now set per board
+    // in _setup_gpio() and overridable at runtime from pinsMenu().
+    struct SpeakerPins {
+        gpio_num_t bclk = GPIO_NUM_NC;
+        gpio_num_t ws = GPIO_NUM_NC; // LRCLK / word select
+        gpio_num_t dout = GPIO_NUM_NC;
+        gpio_num_t mclk = GPIO_NUM_NC; // NC when the codec derives MCLK from BCLK (e.g. Cardputer)
+
+        SpeakerPins(
+            gpio_num_t bclk = GPIO_NUM_NC, gpio_num_t ws = GPIO_NUM_NC, gpio_num_t dout = GPIO_NUM_NC,
+            gpio_num_t mclk = GPIO_NUM_NC
+        )
+            : bclk(bclk), ws(ws), dout(dout), mclk(mclk) {}
+
+        void fromJson(JsonObject obj) {
+            bclk = (gpio_num_t)(obj["bclk"] | (int)GPIO_NUM_NC);
+            ws = (gpio_num_t)(obj["ws"] | (int)GPIO_NUM_NC);
+            dout = (gpio_num_t)(obj["dout"] | (int)GPIO_NUM_NC);
+            mclk = (gpio_num_t)(obj["mclk"] | (int)GPIO_NUM_NC);
+        }
+
+        void toJson(JsonObject obj) const {
+            obj["bclk"] = bclk;
+            obj["ws"] = ws;
+            obj["dout"] = dout;
+            obj["mclk"] = mclk;
+        }
+
+        bool isValid() const { return bclk != GPIO_NUM_NC && ws != GPIO_NUM_NC && dout != GPIO_NUM_NC; }
+    };
+
+    // Microphone wiring (HAS_MICROPHONE). Was PIN_CLK/PIN_DATA/PIN_BCLK/PIN_WS + the
+    // MIC_SPM1423/MIC_INMP441 -D macros; now set per board in _setup_gpio().
+    struct MicPins {
+        gpio_num_t clk = GPIO_NUM_NC;  // PDM clock, or BCLK in either I2S mode
+        gpio_num_t ws = GPIO_NUM_NC;   // word select / LRCLK; unused (NC) in PDM mode
+        gpio_num_t data = GPIO_NUM_NC; // DIN
+        int type = MIC_TYPE_PDM;
+
+        MicPins(
+            gpio_num_t clk = GPIO_NUM_NC, gpio_num_t data = GPIO_NUM_NC, gpio_num_t ws = GPIO_NUM_NC,
+            int type = MIC_TYPE_PDM
+        )
+            : clk(clk), ws(ws), data(data), type(type) {}
+
+        void fromJson(JsonObject obj) {
+            clk = (gpio_num_t)(obj["clk"] | (int)GPIO_NUM_NC);
+            ws = (gpio_num_t)(obj["ws"] | (int)GPIO_NUM_NC);
+            data = (gpio_num_t)(obj["data"] | (int)GPIO_NUM_NC);
+            type = obj["type"] | (int)MIC_TYPE_PDM;
+        }
+
+        void toJson(JsonObject obj) const {
+            obj["clk"] = clk;
+            obj["ws"] = ws;
+            obj["data"] = data;
+            obj["type"] = type;
+        }
+
+        bool isValid() const {
+            if (clk == GPIO_NUM_NC || data == GPIO_NUM_NC) return false;
+            if (type != MIC_TYPE_PDM && ws == GPIO_NUM_NC) return false;
+            return true;
+        }
+    };
+
+    // An alternate wiring a board can offer for CC1101_bus/NRF24_bus (e.g. a legacy Grove module
+    // vs. sharing the SD card's SPI bus, or an M5Stack Cap module). Populated per-board in
+    // _setup_gpio(); the generic menus in settings.cpp/NRF24.cpp just list whatever is here, so a
+    // new board declares its own alt wiring without editing shared code.
+    struct SPIPinPreset {
+        const char *label;
+        SPIPins pins;
+        // Optional wiring-diagram URL shown as a QR code if the module isn't found with this preset.
+        const char *wiringQrUrl = nullptr;
+    };
+
     const char *filepath = "/brucePins.conf";
 
     // SPI Buses
 
-#ifdef CC1101_SCK_PIN
-    SPIPins CC1101_bus = {
-        (gpio_num_t)CC1101_SCK_PIN,
-        (gpio_num_t)CC1101_MISO_PIN,
-        (gpio_num_t)CC1101_MOSI_PIN,
-        (gpio_num_t)CC1101_SS_PIN,
-        (gpio_num_t)CC1101_GDO0_PIN,
-        (gpio_num_t)CC1101_GDO2_PIN
-    };
-#else
+    // No fallback macro — every board sets these explicitly in _setup_gpio().
     SPIPins CC1101_bus;
-#endif
-
-#ifdef NRF24_SCK_PIN
-    SPIPins NRF24_bus = {
-        (gpio_num_t)NRF24_SCK_PIN,
-        (gpio_num_t)NRF24_MISO_PIN,
-        (gpio_num_t)NRF24_MOSI_PIN,
-        (gpio_num_t)NRF24_SS_PIN,
-        (gpio_num_t)NRF24_CE_PIN
-    };
-#else
     SPIPins NRF24_bus;
-#endif
-
-#ifdef PN532_SCK_PIN
-    SPIPins PN532_bus = {
-        (gpio_num_t)PN532_SCK_PIN,
-        (gpio_num_t)PN532_MISO_PIN,
-        (gpio_num_t)PN532_MOSI_PIN,
-        (gpio_num_t)PN532_SS_PIN,
-        (gpio_num_t)PN532_CE_PIN
-    };
-#else
+    // Alternate wirings for CC1101_bus/NRF24_bus; empty unless the board pushes presets into it.
+    std::vector<SPIPinPreset> CC1101_presets;
+    std::vector<SPIPinPreset> NRF24_presets;
     SPIPins PN532_bus;
-#endif
-
-#ifdef ST25R_SCLK
-    SPIPins ST25R_bus = {
-        (gpio_num_t)ST25R_SCLK,
-        (gpio_num_t)ST25R_MISO,
-        (gpio_num_t)ST25R_MOSI,
-        (gpio_num_t)ST25R_CS,
-        (gpio_num_t)ST25R_IRQ,
-        GPIO_NUM_NC
-    };
-#else
     SPIPins ST25R_bus;
-#endif
-
-#ifdef SDCARD_SCK
     SPIPins SDCARD_bus = {
         (gpio_num_t)SDCARD_SCK, (gpio_num_t)SDCARD_MISO, (gpio_num_t)SDCARD_MOSI, (gpio_num_t)SDCARD_CS
     };
-#else
-    SPIPins SDCARD_bus;
-#endif
 
 #if !defined(LITE_VERSION)
-#if defined(W5500_SCK_PIN)
-    SPIPins W5500_bus = {
-        (gpio_num_t)W5500_SCK_PIN,
-        (gpio_num_t)W5500_MISO_PIN,
-        (gpio_num_t)W5500_MOSI_PIN,
-        (gpio_num_t)W5500_SS_PIN,
-        (gpio_num_t)W5500_INT_PIN,
-        (gpio_num_t)W5500_RST_PIN,
-    };
-#else
     SPIPins W5500_bus;
-#endif
-
-#ifdef LORA_SCK
-    SPIPins LoRa_bus = {
-        (gpio_num_t)LORA_SCK,
-        (gpio_num_t)LORA_MISO,
-        (gpio_num_t)LORA_MOSI,
-        (gpio_num_t)LORA_CS,
-        (gpio_num_t)LORA_RST,
-        (gpio_num_t)LORA_DIO0
-    };
-#else
     SPIPins LoRa_bus;
 #endif
-#endif
-    I2CPins sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
+    // Board's default/generic SPI bus (used directly by drivers that don't have their own
+    // dedicated bus, e.g. the RC522-SPI RFID2 driver and some M5Stack Cap presets). Set per-board
+    // in _setup_gpio(); no fallback macro (was SPI_SCK_PIN/SPI_MISO_PIN/SPI_MOSI_PIN/SPI_SS_PIN,
+    // removed from boards/**/*.ini).
+    SPIPins outer_bus;
+    // sys_i2c has no fallback macro (SYS_I2C_SDA/SCL are only ever board-local -D's now, e.g.
+    // CYD-2432S028's GT911 variant) — every board sets it explicitly in _setup_gpio().
+    I2CPins sys_i2c;
     I2CPins i2c_bus = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
-    UARTPins uart_bus = {(gpio_num_t)SERIAL_RX, (gpio_num_t)SERIAL_TX};
-    UARTPins gps_bus = {(gpio_num_t)GPS_SERIAL_RX, (gpio_num_t)GPS_SERIAL_TX};
+    UARTPins uart_bus;
+    UARTPins gps_bus;
+    // BadUSB CH9329 UART (used on devices without native USB-OTG)
+    UARTPins badusb_bus;
 
     // Screen Rotation
     int rotation = ROTATION > 1 ? 3 : 1;
@@ -220,9 +240,9 @@ public:
     String bleName = String("Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX));
 
     // IR
-    int irTx = TXLED;
+    int irTx = -1;
     uint8_t irTxRepeats = 0;
-    int irRx = RXLED;
+    int irRx = -1;
 
     // RF
     int rfTx = GROVE_SDA;
@@ -240,6 +260,13 @@ public:
 
     // GPS
     int gpsBaudrate = 9600;
+
+    // Audio. No fallback macros -- every board sets these in _setup_gpio().
+    // The buzzer is always compiled in and stays silent while `buzzer` is not a usable pin; a
+    // board with HAS_SPEAKER uses the I2S speaker instead.
+    SpeakerPins speaker_bus;
+    MicPins mic_bus;
+    int buzzer = -1;
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -305,4 +332,12 @@ public:
     // GPS
     void setGpsBaudrate(int value);
     void validateGpsBaudrateValue();
+
+    // Audio
+    void setSpeakerPins(SpeakerPins value);
+    void setMicPins(MicPins value);
+    void setBuzzerPin(int value);
+    void validateSpeakerPins(SpeakerPins &value);
+    void validateMicPins(MicPins &value);
+    void validateBuzzerPin();
 };

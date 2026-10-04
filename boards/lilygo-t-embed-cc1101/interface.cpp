@@ -5,28 +5,47 @@
 #include <interface.h>
 
 // Rotary encoder
-#include <rotary_decoder.h>
-extern RotaryDecoder *encoder;
-RotaryDecoder *encoder = nullptr;
-void pollEncoder(void) { encoder->poll(); }
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/encoder.h"
+
+// Encoder pins differ between the two envs built from this directory; GAUGE_BQ27220 is
+// the real discriminator (T_EMBED_1101/T_EMBED are never defined by any -D, see _setup_gpio).
+#ifdef GAUGE_BQ27220 // lilygo-t-embed-cc1101 env
+#define ENCODER_INA 4
+#define ENCODER_INB 5
+#else // lilygo-t-embed env
+#define ENCODER_INA 2
+#define ENCODER_INB 1
+#endif
+#define ENCODER_KEY 0
+
+#define SEL_BTN ENCODER_KEY
+
+#define BK_BTN 6
+#define BTN_ACT LOW
+static DeviceEncoder encoderCfg() {
+    DeviceEncoder cfg;
+    cfg.pin_a = ENCODER_INA;
+    cfg.pin_b = ENCODER_INB;
+    cfg.pin_sel = SEL_BTN;
+#ifdef T_EMBED_1101
+    cfg.pin_esc = BK_BTN;
+#endif
+    return cfg;
+}
 
 // Battery libs
 #if defined(T_EMBED_1101)
 // Power handler for battery detection
 #include <Wire.h>
-// Charger chip
-#define XPOWERS_CHIP_BQ25896
-#include <XPowersLib.h>
 #include <esp32-hal-dac.h>
-XPowersPPM PPM;
 #elif defined(T_EMBED)
 
 #endif
 
-#ifdef USE_BQ27220_VIA_I2C
+#ifdef GAUGE_BQ27220
 #define BATTERY_DESIGN_CAPACITY 1300
-#include <bq27220.h>
-BQ27220 bq;
 #endif
 
 #include "core/i2c_finder.h"
@@ -38,6 +57,76 @@ BQ27220 bq;
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+#ifdef GAUGE_BQ27220
+    // lilygo-t-embed-cc1101 env (real discriminator: T_EMBED_1101/T_EMBED are never actually
+    // defined by any -D flag in this codebase -- pre-existing dead macros, not touched here --
+    // so GAUGE_BQ27220, which IS exclusive to this env's .ini, is used instead)
+    bruceConfigPins.i2c_bus = {(gpio_num_t)8, (gpio_num_t)18};    // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)8, (gpio_num_t)18};    // sda, scl
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};  // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)18, (gpio_num_t)8}; // rx, tx (CH9329; BAD_RX/BAD_TX
+                                                                  // fell back to GROVE_SCL/GROVE_SDA)
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 1;
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, GPIO_NUM_NC};
+    // No dedicated PN532 SPI bus on this env (NFC is PN532_I2C_MODULE) -- RC522-SPI shares the
+    // generic SPI bus like on boards without a dedicated NFC slot.
+    bruceConfigPins.PN532_bus = {(gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, GPIO_NUM_NC};
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)12, (gpio_num_t)3, (gpio_num_t)38
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)44, (gpio_num_t)43
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)13
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)44, (gpio_num_t)43, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst (no W5500_RST_PIN on this env -> falls back to -1)
+#endif
+    bruceConfigPins.speaker_bus = {
+        (gpio_num_t)46, (gpio_num_t)40, (gpio_num_t)7, (gpio_num_t)39
+    }; // bclk,ws,dout,mclk
+    bruceConfigPins.mic_bus = {(gpio_num_t)39, (gpio_num_t)42, GPIO_NUM_NC, MIC_TYPE_PDM}; // clk,data
+#else
+    // lilygo-t-embed env (non-CC1101)
+    bruceConfigPins.i2c_bus = {(gpio_num_t)44, (gpio_num_t)43};    // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {GPIO_NUM_NC, GPIO_NUM_NC};          // not defined on this variant
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)43, (gpio_num_t)44}; // rx, tx (BAD_RX/BAD_TX fell
+                                                                   // back to GROVE_SCL/GROVE_SDA)
+    bruceConfigPins.irTx = 44;
+    bruceConfigPins.irRx = 43;
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)16};
+    // No dedicated PN532 SPI bus defined on this env -- RC522-SPI shares the generic SPI bus.
+    bruceConfigPins.PN532_bus = {(gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)16};
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)43, (gpio_num_t)44, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2 (no dedicated gdo2 pin on this env)
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)43, (gpio_num_t)44
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)39
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)40, (gpio_num_t)38, (gpio_num_t)41, (gpio_num_t)43, (gpio_num_t)44, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst (no W5500_RST_PIN on this env -> falls back to -1)
+#endif
+    bruceConfigPins.speaker_bus = {
+        (gpio_num_t)7, (gpio_num_t)5, (gpio_num_t)6, (gpio_num_t)39
+    }; // bclk,ws,dout,mclk
+    bruceConfigPins.mic_bus = {(gpio_num_t)21, (gpio_num_t)14, GPIO_NUM_NC, MIC_TYPE_PDM}; // clk,data
+#endif
+    bruceConfigPins.rotation = 3;
+
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
     pinMode(SEL_BTN, INPUT);
@@ -48,40 +137,38 @@ void _setup_gpio() {
     pinMode(CC1101_SW0_PIN, OUTPUT);
 
     // Chip Select CC1101, SD and TFT to HIGH State to fix SD initialization
-    pinMode(CC1101_SS_PIN, OUTPUT);
-    digitalWrite(CC1101_SS_PIN, HIGH);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
-    pinMode(NRF24_SS_PIN, OUTPUT); // NRF24 on Plus
-    digitalWrite(NRF24_SS_PIN, HIGH);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT); // NRF24 on Plus
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
 
-    pinMode(NRF24_CE_PIN, OUTPUT); // put nRF24 in standby
-    digitalWrite(NRF24_CE_PIN, LOW);
+    pinMode(bruceConfigPins.NRF24_bus.io0, OUTPUT); // put nRF24 in standby (io0 slot holds CE)
+    digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
 
     // Power chip pin
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH); // Power on CC1101 and LED
-    bool pmu_ret = false;
-    setSysI2CBus(&Wire); // PPM/bq27220 live on the default Wire object (GROVE == sys_i2c on this variant)
-    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
-    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
-    if (pmu_ret) {
-        // https://github.com/Xinyuan-LilyGO/T-Embed-CC1101/blob/3e6df69af51befdbd5c96761aca28b9a784413eb/examples/factory_test/factory_test.ino#L399-L425
-
-        PPM.resetDefault();
-        PPM.setChargeTargetVoltage(4208);
-        PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-    }
-    if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
+    setSysI2CBus(&Wire); // PMIC and gauge live on the default Wire object (GROVE == sys_i2c on this variant)
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
+    DevicePmic pmicCfg;
+    pmicCfg.pin_sda = bruceConfigPins.sys_i2c.sda;
+    pmicCfg.pin_scl = bruceConfigPins.sys_i2c.scl;
+    pmicCfg.address = 0x6B; // BQ25896
+    hal_pmic_init(pmicCfg);
+    DeviceGauge gaugeCfg;
+    gaugeCfg.design_capacity_mah = BATTERY_DESIGN_CAPACITY;
+    hal_gauge_init(gaugeCfg);
     // Start with default IR, RF and RFID Configs, replace old
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
     bruceConfigPins.irRx = 1;
     bruceConfigPins.irTx = 2;
 #else
-    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
     Wire.beginTransmission(0x40);
     if (Wire.endTransmission() == 0) {
         Serial.println("ES7210 Online, No CC1101 version");
@@ -100,120 +187,34 @@ void _setup_gpio() {
 
 #endif
 
-#ifdef T_EMBED_1101
-    pinMode(BK_BTN, INPUT);
-#endif
-    pinMode(ENCODER_KEY, INPUT);
-    pinMode(ENCODER_INA, INPUT_PULLUP);
-    pinMode(ENCODER_INB, INPUT_PULLUP);
-    encoder = new RotaryDecoder();
-    encoder->begin(ENCODER_INA, ENCODER_INB, 2);
+    hal_encoder_init(encoderCfg());
+
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 }
 
-/***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-#if defined(USE_BQ27220_VIA_I2C)
-int getBattery() {
-    int percent = 0;
-    percent = bq.getChargePcnt();
-    return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
-}
-#endif
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-    } else if (brightval > 99) {
-        analogWrite(TFT_BL, 254);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
-void InputHandler(void) {
-    static unsigned long tm = millis();  // debounce for buttons
-    static unsigned long tm2 = millis(); // delay between Select and encoder (avoid missclick)
-    static unsigned long lastEncoderMoveMs = 0;
-    static int posDifference = 0;
-    static int lastPos = 0;
-    bool sel = !BTN_ACT;
-    bool esc = !BTN_ACT;
-
-    int newPos = encoder->getPosition();
-    if (newPos != lastPos) {
-        posDifference += (newPos - lastPos);
-        // Independent running total for consumers that want to apply the
-        // full pending backlog in one pass instead of one step at a time
-        // (see drainRotarySteps() in globals.h). Never cleared by the
-        // stale-drop below -- it's drained exactly, not time-limited.
-        RotaryNetSteps += (newPos - lastPos);
-        lastPos = newPos;
-        lastEncoderMoveMs = millis();
-    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
-        // Drop any stale queued steps once the encoder has stopped moving.
-        posDifference = 0;
-    }
-
-    if (millis() - tm > 200 || LongPress) {
-        sel = digitalRead(SEL_BTN);
-#ifdef T_EMBED_1101
-        esc = digitalRead(BK_BTN);
-#endif
-    }
-    if (posDifference != 0 || sel == BTN_ACT || esc == BTN_ACT) {
-        if (!wakeUpScreen()) AnyKeyPress = true;
-        else return;
-    }
-    if (posDifference > 0) {
-        PrevPress = true;
-        posDifference--;
-#ifdef HAS_ENCODER_LED
-        EncoderLedChange = -1;
-#endif
-        tm2 = millis();
-    }
-    if (posDifference < 0) {
-        NextPress = true;
-        posDifference++;
-#ifdef HAS_ENCODER_LED
-        EncoderLedChange = 1;
-#endif
-        tm2 = millis();
-    }
-
-    if (sel == BTN_ACT && millis() - tm2 > 200) {
-        posDifference = 0;
-        SelPress = true;
-        tm = millis();
-    }
-    if (esc == BTN_ACT) {
-        AnyKeyPress = true;
-        EscPress = true;
-        // Serial.println("EscPressed");
-        tm = millis();
-    }
-}
+void InputHandler(void) { hal_encoder_poll(encoderCfg()); }
 
 void powerOff() {
 #ifdef T_EMBED_1101
-    PPM.shutdown();
+    hal_pmic_shutdown();
 #endif
 }
 
 void powerDownNFC() {
     Adafruit_PN532 nfc = Adafruit_PN532(17, 45);
     bool i2c_check = check_i2c_address(PN532_I2C_ADDRESS);
-    nfc.setInterface(SYS_I2C_SDA, SYS_I2C_SCL);
+    nfc.setInterface(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
     nfc.begin();
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (i2c_check || versiondata) {
@@ -376,9 +377,9 @@ void checkReboot() {
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging
 ***************************************************************************************/
-#ifdef USE_BQ27220_VIA_I2C
+#ifdef GAUGE_BQ27220
 bool isCharging() {
-    return bq.getIsCharging(); // Return the charging status from BQ27220
+    return hal_gauge_is_charging(); // Return the charging status from BQ27220
 }
 #else
 bool isCharging() { return false; }

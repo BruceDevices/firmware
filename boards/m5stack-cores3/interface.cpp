@@ -8,9 +8,9 @@
 
 static void setupCoreS3SharedSpiPins() {
     pinMode(TFT_CS, OUTPUT);
-    pinMode(SDCARD_CS, OUTPUT);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
-    digitalWrite(SDCARD_CS, HIGH);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
 
     // CoreS3 shares the display D/C pin with SPI MISO. M5.begin() and the first
     // TFT_eSPI draw happen before storage is mounted, so release GPIO35 back to
@@ -31,6 +31,32 @@ static void setupCoreS3SharedSpiPins() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)2, (gpio_num_t)1};   // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)12, (gpio_num_t)11}; // sda, scl
+    bruceConfigPins.rfTx = 2;
+    bruceConfigPins.rfRx = 1;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.badusb_bus = {(gpio_num_t)1, (gpio_num_t)2}; // rx, tx (CH9329)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)26};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)26};
+    // CC1101/NRF24/W5500 share the SD Card's SPI bus (sck, miso, mosi)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)0, (gpio_num_t)10, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)6, (gpio_num_t)7
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)4
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)7
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+
     M5.begin();
     M5.Power.setUsbOutput(false);
     M5.Power.setExtOutput(true);

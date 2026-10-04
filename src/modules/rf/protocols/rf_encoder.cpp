@@ -153,6 +153,21 @@ bool rf_encode_protocol(
 }
 
 bool rf_tx_protocol(uint64_t data, unsigned int bits, int te, const RfProtocolDef *def, int repeat) {
+    // Extended protocols with an encode callback are dispatched differently.
+    if (def->encode) {
+        RfCodes codes;
+        codes.key = data;
+        codes.Bit = bits;
+        codes.protocol = def->name;
+        std::vector<int> durs;
+        if (!def->encode(codes, durs)) return false;
+        std::vector<int> repeated;
+        repeated.reserve(durs.size() * repeat);
+        for (int r = 0; r < repeat; r++)
+            repeated.insert(repeated.end(), durs.begin(), durs.end());
+        return rf_tx_durations(repeated);
+    }
+
     std::vector<int> durs;
     if (!rf_encode_protocol(data, bits, te, def, repeat, durs)) return false;
 

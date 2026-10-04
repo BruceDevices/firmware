@@ -28,7 +28,7 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
-#if !defined(LITE_VERSION) && (defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR))
+#if !defined(LITE_VERSION)
             {"Audio Config",  [this]() { audioMenu(); }    },
 #endif
             {"System Config", [this]() { systemMenu(); }   },
@@ -69,6 +69,9 @@ void ConfigMenu::displayUIMenu() {
             {"Menu Layout", [this]() { setMainMenuStyleMenu(); }            },
             {"UI Color",    [this]() { setUIColor(); }                      },
             {"UI Theme",    [this]() { setTheme(); }                        },
+#if defined(HAS_RESISTIVE_TOUCH)
+            {"Calibrate Touch", []() { calibrateTouch(); }                  },
+#endif
             {"Back",        []() {}                                         },
         };
 
@@ -128,18 +131,15 @@ void ConfigMenu::audioMenu() {
     while (true) {
         std::vector<Option> localOptions = {
 #if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR)
-
             {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
-                                                             [this]() {
+                                                                [this]() {
                  // Toggle sound setting
                  bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
                  bruceConfig.saveFile();
-             }                                                                                                                                            },
-#if defined(HAS_NS4168_SPKR)
+             }                                                                            },
+#if defined(HAS_SPEAKER)
             {"Sound Volume",                                                [this]() { setSoundVolume(); }},
-#endif  // BUZZ_PIN || HAS_NS4168_SPKR
-#endif  //  HAS_NS4168_SPKR
+#endif  //  HAS_SPEAKER
 #endif  //  LITE_VERSION
             {"Back",                                                        []() {}                       },
         };
@@ -297,21 +297,30 @@ void ConfigMenu::devMenu() {
 void ConfigMenu::pinsMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-            {"I2C Finder",     [this]() { find_i2c_addresses(); }                      },
-            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
-            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
+            {"I2C Finder",     [this]() { find_i2c_addresses(); }                       },
+            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); } },
+            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); }  },
 #if !defined(LITE_VERSION)
-            {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-            {"ST25R3916 Pins", [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
-            {"W5500 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
+            {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }   },
+            {"ST25R3916 Pins", [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); }  },
+            {"W5500 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); }  },
 #endif
-            {"SDCard Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
-            {"I2C Pins",       [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
-            {"UART Pins",      [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
-            {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
+            {"SDCard Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); } },
+            {"I2C Pins",       [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }    },
+            {"UART Pins",      [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); }  },
+            {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }   },
+            {"BadUSB Pins",    [this]() { setUARTPinsMenu(bruceConfigPins.badusb_bus); }},
+#if defined(HAS_SPEAKER)
+            {"Speaker Pins",   []() { setSpeakerPinsMenu(bruceConfigPins.speaker_bus); }},
+#else
+            {"Buzzer Pin",     []() { setBuzzerPinMenu(); }                             },
+#endif
+#if defined(HAS_MICROPHONE)
+            {"Mic Pins",       []() { setMicPinsMenu(bruceConfigPins.mic_bus); }        },
+#endif
             //{"Serial use USB",  [this]() { switchToUSBSerial(); }                       },
             //{"Serial use UART", [this]() { switchToUARTSerial(); }                      },
-            {"Back",           []() {}                                                 },
+            {"Back",           []() {}                                                  },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Pins Setup");

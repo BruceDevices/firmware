@@ -249,9 +249,8 @@ int8_t displayMessage(
     const char *message, const char *leftButton, const char *centerButton, const char *rightButton,
     uint16_t color
 ) {
-#ifdef HAS_SCREEN
+
     uint8_t oldTextDatum = tft.getTextDatum();
-#endif
 
     tft.setTextColor(color);
     tft.setTextSize(FM);
@@ -338,9 +337,7 @@ int8_t displayMessage(
         delay(10);
     }
 
-#ifdef HAS_SCREEN
     tft.setTextDatum(oldTextDatum);
-#endif
 
     return selected;
 }
@@ -348,7 +345,7 @@ int8_t displayMessage(
 void displayError(const String &txt, bool waitKeyPress) {
     displayRedStripe(txt);
     Serial.println("ERR: " + txt);
-#ifndef HAS_SCREEN
+#ifdef USE_DUMMY_TFT
     return;
 #endif
     delay(200);
@@ -358,7 +355,7 @@ void displayError(const String &txt, bool waitKeyPress) {
 void displayWarning(const String &txt, bool waitKeyPress) {
     displayRedStripe(txt, TFT_BLACK, TFT_YELLOW);
     Serial.println("WARN: " + txt);
-#ifndef HAS_SCREEN
+#ifdef USE_DUMMY_TFT
     return;
 #endif
     delay(200);
@@ -368,10 +365,9 @@ void displayWarning(const String &txt, bool waitKeyPress) {
 void displayInfo(const String &txt, bool waitKeyPress) {
     displayRedStripe(txt, TFT_WHITE, TFT_BLUE);
     Serial.println("INFO: " + txt);
-#ifndef HAS_SCREEN
+#ifdef USE_DUMMY_TFT
     return;
 #endif
-
     delay(200);
     while (waitKeyPress && !check(AnyKeyPress)) vTaskDelay(10 / portTICK_PERIOD_MS);
 }
@@ -379,7 +375,7 @@ void displayInfo(const String &txt, bool waitKeyPress) {
 void displaySuccess(const String &txt, bool waitKeyPress) {
     displayRedStripe(txt, TFT_WHITE, TFT_DARKGREEN);
     Serial.println("SUCCESS: " + txt);
-#ifndef HAS_SCREEN
+#ifdef USE_DUMMY_TFT
     return;
 #endif
     delay(200);
@@ -389,7 +385,7 @@ void displaySuccess(const String &txt, bool waitKeyPress) {
 void displayTextLine(const String &txt, bool waitKeyPress) {
     displayRedStripe(txt, getComplementaryColor2(bruceConfig.priColor), bruceConfig.priColor);
     Serial.println("MESSAGE: " + txt);
-#ifndef HAS_SCREEN
+#ifdef USE_DUMMY_TFT
     return;
 #endif
     delay(200);

@@ -42,7 +42,7 @@ private:
     bool _use_i2c;
     TwoWire *_i2cWire = nullptr;
     MFRC522Driver *_driver = nullptr;
-    MFRC522DriverPinSimple ss_pin = MFRC522DriverPinSimple(SPI_SS_PIN);
+    MFRC522DriverPinSimple ss_pin; // initialized from bruceConfigPins.PN532_bus.cs, see RFID2.cpp
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Converters

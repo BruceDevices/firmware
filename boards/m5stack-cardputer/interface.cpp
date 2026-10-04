@@ -1,9 +1,15 @@
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
 #include <Wire.h>
 #include <interface.h>
+
+#define CAP_CC1101_GDO0_PIN 15
+#define TCA8418_I2C_ADDR 0x34
+#define TCA8418_SCL_PIN 9
+#define TCA8418_SDA_PIN 8
 
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
@@ -82,11 +88,59 @@ inline void mapRawKeyToPhysical(uint8_t keyvalue, uint8_t &row, uint8_t &col) {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    // MCLK stays NC: the ES8311 on the ADV derives it from BCLK, and GPIO43 is LRCLK only --
+    // routing MCLK to the same GPIO would overwrite LRCLK in the GPIO matrix.
+    bruceConfigPins.speaker_bus = {(gpio_num_t)41, (gpio_num_t)43, (gpio_num_t)42, GPIO_NUM_NC};
+    // Cardputer classic wiring: PDM mic. The ADV switches to I2S in _post_setup_gpio().
+    bruceConfigPins.mic_bus = {(gpio_num_t)43, (gpio_num_t)46, GPIO_NUM_NC, MIC_TYPE_PDM};
+    bruceConfigPins.i2c_bus = {(gpio_num_t)2, (gpio_num_t)1};   // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)-1, (gpio_num_t)-1}; // -1 unless ADV variant detected
+    bruceConfigPins.rfTx = 2;
+    bruceConfigPins.rfRx = 1;
+    bruceConfigPins.irTx = 44;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.badusb_bus = {(gpio_num_t)1, (gpio_num_t)2}; // rx, tx (CH9329)
+    // Board's default/generic SPI bus, shared with SDCARD (used by drivers without their own bus,
+    // e.g. the RC522-SPI RFID2 driver)
+    bruceConfigPins.outer_bus = {(gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1};
+    // Connections use a microSD sniffer module sharing SPI with SDCARD (CS=GROVE_SCL)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1, (gpio_num_t)2, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1, (gpio_num_t)2
+    }; // sck,miso,mosi,cs(ss),ce
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1, (gpio_num_t)2, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)5, (gpio_num_t)3, (gpio_num_t)4
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)12
+    }; // sck,miso,mosi,cs
+    // RFID2 (RC522-SPI driver) shares the default SPI port; same cs as CC1101/NRF24
+    bruceConfigPins.PN532_bus = {(gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1};
+    // Alt wiring: M5Stack Cap CC1101, shares the default SPI port with the SD card and the cap's
+    // own ST25R3916. https://docs.m5stack.com/en/cap/Cap_CC1101
+#ifdef CAP_CC1101_SS_PIN
+    bruceConfigPins.CC1101_presets = {
+        {"M5 Cap",
+         {bruceConfigPins.outer_bus.sck, bruceConfigPins.outer_bus.miso, bruceConfigPins.outer_bus.mosi,
+          (gpio_num_t)CAP_CC1101_SS_PIN, (gpio_num_t)CAP_CC1101_GDO0_PIN, GPIO_NUM_NC}}
+    };
+#endif
+
     //    Keyboard.begin();
     pinMode(0, INPUT);
     pinMode(5, OUTPUT);
     // Set GPIO5 HIGH for SD card compatibility (thx for the tip @bmorcelli & 7h30th3r0n3)
     digitalWrite(5, HIGH);
+
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 }
 volatile bool kb_interrupt = false;
 void IRAM_ATTR gpio_isr_handler(void *arg) {
@@ -129,6 +183,10 @@ void _post_setup_gpio() {
     bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
     bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
 
+    // Cardputer ADV reads the mic through the ES8311 codec over MSB/left-justified I2S instead
+    // of the classic Cardputer's PDM wiring; GPIO43 is the shared LRCLK.
+    bruceConfigPins.mic_bus = {(gpio_num_t)41, (gpio_num_t)46, (gpio_num_t)43, MIC_TYPE_I2S_MSB};
+
     bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
     bruceConfigPins.gpsBaudrate = 115200;
@@ -164,14 +222,7 @@ void _post_setup_gpio() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -513,8 +564,6 @@ void _setup_codec_speaker(bool enable) {
 **********************************************************************/
 void _setup_codec_mic(bool enable) {
     if (!UseTCA8418) return;
-    // Set microfone pin for ADV
-    mic_bclk_pin = (gpio_num_t)41;
 
     static constexpr const uint8_t enabled_bulk_data[] = {
         2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON

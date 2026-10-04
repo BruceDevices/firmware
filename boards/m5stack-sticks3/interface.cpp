@@ -1,67 +1,65 @@
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/buttons.h"
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
 #include <interface.h>
 
-#define TFT_BRIGHT_CHANNEL 0
-#define TFT_BRIGHT_Bits 8
-#define TFT_BRIGHT_FREQ 5000
+#define SEL_BTN 11
 
-constexpr uint32_t kDwDoublePressWindowMs = 250;
-constexpr uint32_t kDwLongPressMs = 600;
-constexpr uint32_t kDwDebounceMs = 8;
+#define BTN_ACT LOW
+#define DW_BTN 12
 
-static volatile uint32_t dw_last_isr_ms = 0;
-static volatile uint32_t dw_press_ms = 0;
-static volatile uint32_t dw_first_release_ms = 0;
-static volatile bool dw_is_down = false;
-static volatile bool dw_waiting = false;
-static volatile bool dw_double_ready = false;
-static volatile bool dw_long_seen = false;
-
-void IRAM_ATTR isr_dw_btn() {
-    uint32_t now = millis();
-    if (now - dw_last_isr_ms < kDwDebounceMs) return;
-    dw_last_isr_ms = now;
-    bool pressed = (digitalRead(DW_BTN) == BTN_ACT);
-    if (pressed) {
-        dw_is_down = true;
-        dw_press_ms = now;
-        return;
-    }
-
-    dw_is_down = false;
-    if (dw_long_seen) {
-        dw_long_seen = false;
-        dw_waiting = false;
-        return;
-    }
-
-    if ((now - dw_press_ms) < kDwLongPressMs) {
-        if (dw_waiting && (now - dw_first_release_ms) <= kDwDoublePressWindowMs) {
-            dw_double_ready = true;
-            dw_waiting = false;
-        } else {
-            dw_waiting = true;
-            dw_first_release_ms = now;
-        }
-    } else {
-        dw_waiting = false;
-    }
-}
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    // bclk,ws,dout,mclk
+    bruceConfigPins.speaker_bus = {(gpio_num_t)17, (gpio_num_t)15, (gpio_num_t)14, (gpio_num_t)18};
+    // clk,data,ws,type
+    bruceConfigPins.mic_bus = {(gpio_num_t)17, (gpio_num_t)16, (gpio_num_t)15, MIC_TYPE_I2S_MSB};
+    bruceConfigPins.i2c_bus = {(gpio_num_t)9, (gpio_num_t)10};  // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)47, (gpio_num_t)48}; // sda, scl
+    bruceConfigPins.rfTx = 9;
+    bruceConfigPins.rfRx = 10;
+    bruceConfigPins.irTx = 46;
+    bruceConfigPins.irRx = 42;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};  // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)10, (gpio_num_t)9};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)10, (gpio_num_t)9}; // rx, tx (Grove SCL/SDA fallback)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, (gpio_num_t)43};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, (gpio_num_t)43};
+    // CC1101/NRF24/SDCARD/W5500/LoRa share the main SPI bus (sck=5, miso=4, mosi=6)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)3, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, (gpio_num_t)8, (gpio_num_t)1
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, (gpio_num_t)7
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)5, (gpio_num_t)4, (gpio_num_t)6, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
+
     M5.begin();
     Wire1.begin(47, 48);
     setSysI2CBus(&Wire1);
 
-    pinMode(SEL_BTN, INPUT);
-    pinMode(DW_BTN, INPUT);
+    // SEL_BTN -> Next (click) / Sel (double click or hold)
+    // DW_BTN  -> Prev (click) / Esc (double click or hold)
+    hal_buttons_init_2(DeviceButtons{SEL_BTN, DW_BTN}, 600);
 
     M5.Power.setExtOutput(false); // It buzzes it ext power is turned on
 
@@ -88,8 +86,6 @@ void _setup_gpio() {
     pinMode(46, OUTPUT);
     digitalWrite(46, LOW); // Infrared LED Off
 
-    attachInterrupt(DW_BTN, isr_dw_btn, CHANGE);
-    pinMode(TFT_BL, OUTPUT);
     bruceConfig.colorInverted = 0;
 }
 /***************************************************************************************
@@ -99,8 +95,8 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
     // PWM backlight setup
-    ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BL, 250);
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 }
 
 /*********************************************************************
@@ -108,25 +104,7 @@ void _post_setup_gpio() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    int dutyCycle;
-    if (brightval == 100) dutyCycle = 250;
-    else if (brightval == 75) dutyCycle = 130;
-    else if (brightval == 50) dutyCycle = 70;
-    else if (brightval == 25) dutyCycle = 20;
-    else if (brightval == 0) dutyCycle = 5;
-    else dutyCycle = ((brightval * 250) / 100);
-
-    // Serial.printf("dutyCycle for bright 0-255: %d\n", dutyCycle);
-
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    if (!ledcWrite(TFT_BL, dutyCycle)) {
-        // Serial.println("Failed to set brightness");
-        ledcDetach(TFT_BL);
-        ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-        ledcWrite(TFT_BL, dutyCycle);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -142,54 +120,7 @@ int getBattery() {
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
-void InputHandler(void) {
-    static unsigned long tm = 0;
-    static bool dwLongFired = false;
-    unsigned long now = millis();
-    if (now - tm < 200 && !LongPress) return;
-
-    bool selPressed = (digitalRead(SEL_BTN) == BTN_ACT);
-    bool dwPressed = dw_is_down;
-    bool dwWaiting = dw_waiting;
-    bool dwDoubleReady = dw_double_ready;
-    unsigned long dwPressStart = dw_press_ms;
-    unsigned long dwFirstRelease = dw_first_release_ms;
-
-    bool dwNextReady = dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs;
-
-    if (!(selPressed || dwPressed || dwDoubleReady || dwNextReady)) return;
-
-    if (!wakeUpScreen()) AnyKeyPress = true;
-    else return;
-
-    if (selPressed) {
-        SelPress = true;
-        tm = now;
-    }
-    if (dwPressed) {
-        if (!dwLongFired && (now - dwPressStart) > kDwLongPressMs) {
-            EscPress = true;
-            dwLongFired = true;
-            dw_waiting = false;
-            dw_double_ready = false;
-            dw_long_seen = true;
-            tm = now;
-        }
-    } else if (dwLongFired) {
-        dwLongFired = false;
-    }
-
-    if (dwDoubleReady) {
-        PrevPress = true;
-        dw_double_ready = false;
-        dw_waiting = false;
-        tm = now;
-    } else if (dwNextReady) {
-        NextPress = true;
-        dw_waiting = false;
-        tm = now;
-    }
-}
+void InputHandler(void) { hal_buttons_poll_2(); }
 
 /*********************************************************************
 ** Function: powerOff
@@ -272,9 +203,6 @@ void _setup_codec_speaker(bool enable) {
 ** Handles audio CODEC to enable/disable microphone
 **********************************************************************/
 void _setup_codec_mic(bool enable) {
-    // Set microfone pin for ADV
-    mic_bclk_pin = (gpio_num_t)17;
-
     static constexpr const uint8_t enabled_bulk_data[] = {
         2, 0x00, 0x80, // 0x00 RESET/  CSM POWER ON
         2, 0x01, 0xBA, // 0x01 CLOCK_MANAGER/ MCLK=BCLK

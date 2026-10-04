@@ -1,17 +1,38 @@
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/touch.h"
 #include <Wire.h>
 #include <XPowersLib.h>
 #include <interface.h>
 
 XPowersAXP2101 axp192;
-#include <TouchDrvFT6X36.hpp>
-TouchDrvFT6X36 touch;
 
 // Haptic
-#include "SensorDRV2605.hpp"
-SensorDRV2605 drv;
+#include "HapticDrivers.hpp"
+HapticDriver_DRV2605 drv;
+
+// FT6X36 over Wire1 (39, 40). Derived algebraically from the pre-HAL per-rotation remap
+// InputHandler used to do -- see src/hal/README.md for the swap/mirror table method.
+static DeviceTouch touchCfg() {
+    DeviceTouch cfg;
+    cfg.pin_sda = 39;
+    cfg.pin_scl = 40;
+    cfg.pin_irq = 16;
+    cfg.i2c_bus = &Wire1;
+    // rotation:        0      1      2      3
+    const bool swapXY[4] = {true, false, true, false};
+    const bool mirrorX[4] = {true, true, false, false};
+    const bool mirrorY[4] = {true, false, false, true};
+    for (int i = 0; i < 4; i++) {
+        cfg.SwapXY[i] = swapXY[i];
+        cfg.MirrorX[i] = mirrorX[i];
+        cfg.MirrorY[i] = mirrorY[i];
+    }
+    return cfg;
+}
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -19,7 +40,30 @@ SensorDRV2605 drv;
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
-    pinMode(16, INPUT); // Touch IRQ
+    // bclk,ws,dout,mclk
+    bruceConfigPins.speaker_bus = {(gpio_num_t)48, (gpio_num_t)15, (gpio_num_t)46, (gpio_num_t)44};
+    bruceConfigPins.mic_bus = {(gpio_num_t)44, (gpio_num_t)47, GPIO_NUM_NC, MIC_TYPE_PDM}; // clk,data,ws,type
+    bruceConfigPins.i2c_bus = {(gpio_num_t)10, (gpio_num_t)11};  // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)10, (gpio_num_t)11};  // sda, scl
+    bruceConfigPins.rfTx = 10;
+    bruceConfigPins.rfRx = 11;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 11;
+    bruceConfigPins.rotation = 2;
+    bruceConfigPins.uart_bus = {(gpio_num_t)41, (gpio_num_t)42};    // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)41, (gpio_num_t)42};     // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)11, (gpio_num_t)10};  // rx, tx (CH9329)
+    // Disabled/not present on this board (module not populated) - kept explicit for documentation
+    bruceConfigPins.CC1101_bus = {GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC};
+    bruceConfigPins.NRF24_bus = {GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC};
+    bruceConfigPins.SDCARD_bus = {GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC};
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC};
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)3, (gpio_num_t)4, (gpio_num_t)1, (gpio_num_t)5, (gpio_num_t)8, (gpio_num_t)9
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
+
     // NOTE: this board permanently reserves BOTH hardware I2C controllers for system peripherals
     // (sensors/PMU/RTC on Wire, touch on Wire1) — bus_HAL only tracks one "sys" bus, so
     // bruceConfigPins.i2c_bus only has a real hardware bus free if its pins match one of these two.
@@ -90,10 +134,6 @@ void _setup_gpio() {
     axp192.setButtonBatteryChargeVoltage(3300);
     axp192.enableButtonBatteryCharge();
 
-    touch.begin(Wire1, FT6X36_SLAVE_ADDRESS, 39, 40);
-    touch.setSwapXY(true);
-    touch.interruptPolling();
-
     // Disable RF and NRF Menus for default
     bruceConfig.disabledMenus.push_back("RF");
     bruceConfig.disabledMenus.push_back("NRF24");
@@ -104,8 +144,8 @@ void _setup_gpio() {
     } else {
         Serial.println("Init DRV2605 Sensor success!");
         drv.selectLibrary(1);
-        drv.setMode(SensorDRV2605::MODE_INTTRIG);
-        drv.useERM();
+        drv.setMode(HapticMode::INTERNAL_TRIGGER);
+        drv.setActuatorType(HapticActuatorType::ERM);
 
         // Startup buzz
         drv.setWaveform(0, 70);
@@ -121,10 +161,9 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH);
-    ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BL, 255);
+    if (!hal_touch_init(touchCfg(), 0)) { Serial.println("Touch IC not Started"); }
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 }
 
 /***************************************************************************************
@@ -142,63 +181,19 @@ int getBattery() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    int dutyCycle;
-    if (brightval == 100) dutyCycle = 255;
-    else if (brightval == 75) dutyCycle = 130;
-    else if (brightval == 50) dutyCycle = 70;
-    else if (brightval == 25) dutyCycle = 20;
-    else if (brightval == 0) dutyCycle = 0;
-    else dutyCycle = ((brightval * 255) / 100);
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
-    // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BL, dutyCycle);
-}
-
-bool getTouched() { return digitalRead(16) == LOW; }
-struct TP {
-    int16_t x[1], y[1];
-};
 /*********************************************************************
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    TP t;
     static unsigned long tm = 0;
     if (millis() - tm > 200 || LongPress) {
-        // I know R3CK.. I Should NOT nest if statements..
-        // but it is needed to not keep SPI bus used without need, it save resources
-        if (getTouched()) {
-            touch.getPoint(t.x, t.y, 1);
-            // Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d",t.x, t.y);
-            if (bruceConfigPins.rotation == 3) {
-                t.y[0] = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y[0];
-                t.x[0] = t.x[0];
-            }
-            if (bruceConfigPins.rotation == 0) {
-                int tmp = t.x[0];
-                t.x[0] = tftWidth - t.y[0];
-                t.y[0] = tftHeight - tmp;
-            }
-            if (bruceConfigPins.rotation == 2) {
-                int tmp = t.x[0];
-                t.x[0] = t.y[0];
-                t.y[0] = tmp;
-            }
-            if (bruceConfigPins.rotation == 1) { t.x[0] = tftWidth - t.x[0]; }
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d\n",t.x[0], t.y[0]);
-
-            if (!wakeUpScreen()) AnyKeyPress = true;
-            else return;
-
-            // Touch point global variable
-            touchPoint.x = t.x[0];
-            touchPoint.y = t.y[0];
-            touchPoint.pressed = true;
-            touchHeatMap(touchPoint);
-
+        BruceTouchPoint t;
+        if (hal_touch_read(touchCfg(), t)) {
             tm = millis();
+            if (!hal_touch_apply(t)) return;
             drv.setWaveform(0, 75);
             drv.setWaveform(1, 0); // end waveform
             drv.run();

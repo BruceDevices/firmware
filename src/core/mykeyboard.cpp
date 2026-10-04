@@ -240,19 +240,29 @@ struct box_t {
 
 // Retrieves the current keyStroke from InputHandler, resets it after use.
 // This function is used in loopTask to get the latest key press.
+static SemaphoreHandle_t inputLock_ = nullptr;
+static StaticSemaphore_t inputLockStorage;
+
+void inputLockInit() {
+    if (inputLock_ == nullptr) inputLock_ = xSemaphoreCreateRecursiveMutexStatic(&inputLockStorage);
+}
+
+void inputLock() {
+    if (inputLock_ != nullptr) xSemaphoreTakeRecursive(inputLock_, portMAX_DELAY);
+}
+
+void inputUnlock() {
+    if (inputLock_ != nullptr) xSemaphoreGiveRecursive(inputLock_);
+}
+
 keyStroke _getKeyPress() {
-#ifndef USE_TFT_eSPI_TOUCH
-    vTaskSuspend(xHandle);
+    // Waiting on the mutex instead of suspending the input task: the writer finishes its
+    // update and releases, so neither side is ever frozen mid-allocation.
+    inputLock();
     keyStroke key = KeyStroke;
     KeyStroke.Clear();
-    delay(10);
-    vTaskResume(xHandle);
+    inputUnlock();
     return key;
-#else
-    keyStroke key = KeyStroke;
-    KeyStroke.Clear();
-    return key;
-#endif
 } // Returns a keyStroke that the keyboards won't recognize by default
 
 /*********************************************************************
@@ -832,9 +842,6 @@ String generalKeyboard(
             // waits at least 250ms before accepting another input, to prevent rapid involuntary repeats
 
 #if defined(HAS_TOUCH) // CYD, Core2, CoreS3
-#if defined(USE_TFT_eSPI_TOUCH)
-            check(AnyKeyPress);
-#endif
             if (touchPoint.pressed) {
                 // If using touchscreen and buttons_strings, reset the navigation states to avoid inconsistent
                 // behavior, and reset the navigation coords to the OK button.

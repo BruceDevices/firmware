@@ -1,5 +1,19 @@
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/buttons.h"
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
+
+#define SEL_BTN 0
+
+#define BTN_ACT LOW
+#define DW_BTN 38
+#define L_BTN 10
+#define R_BTN 11
+#define UP_BTN 39
+
+static DeviceButtons buttonsCfg() { return DeviceButtons{L_BTN, R_BTN, UP_BTN, DW_BTN, SEL_BTN}; }
+
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -8,71 +22,79 @@
 ***************************************************************************************/
 
 // Power handler for battery detection
-#ifdef XPOWERS_CHIP_BQ25896
+#if 1
 #include <Wire.h>
-#include <XPowersLib.h>
-XPowersPPM PPM;
 #endif
 
 void _setup_gpio() {
+    bruceConfigPins.buzzer = 40;
+    bruceConfigPins.sys_i2c = {(gpio_num_t)47, (gpio_num_t)48}; // sda, scl
+    bruceConfigPins.i2c_bus = {(gpio_num_t)47, (gpio_num_t)48}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 47;
+    bruceConfigPins.rfRx = 48;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)44, (gpio_num_t)43}; // rx, tx (shares SERIAL bus)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)5};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)5};
+    // CC1101/NRF24/SDCARD share the main SPI bus (sck=17, miso=8, mosi=18)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)46, (gpio_num_t)9, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)12, (gpio_num_t)13
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)3
+    }; // sck,miso,mosi,cs
 
-    pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
-    pinMode(SEL_BTN, INPUT);
-    pinMode(DW_BTN, INPUT);
-    pinMode(R_BTN, INPUT);
-    pinMode(L_BTN, INPUT);
+    hal_buttons_init(buttonsCfg(), 5);
 
-    pinMode(CC1101_SS_PIN, OUTPUT);
-    pinMode(NRF24_SS_PIN, OUTPUT);
-    digitalWrite(CC1101_SS_PIN, HIGH);
-    digitalWrite(NRF24_SS_PIN, HIGH);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
+
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 
     // Starts SPI instance for CC1101 and NRF24 with CS pins blocking communication at start
 
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
-    bruceConfigPins.irRx = RXLED;
     setSysI2CBus(&Wire); // PMU lives on the default Wire object
-    bool pmu_ret = false;
-    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
-    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
-    if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
-        PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(832);
-        // PPM.getChargerConstantCurr();
-        // Serial.printf("getChargerConstantCurr: %d mA\n", PPM.getChargerConstantCurr());
-        PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
-    }
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
+    DevicePmic pmicCfg;
+    pmicCfg.pin_sda = bruceConfigPins.sys_i2c.sda;
+    pmicCfg.pin_scl = bruceConfigPins.sys_i2c.scl;
+    pmicCfg.address = 0x6B; // BQ25896
+    hal_pmic_init(pmicCfg);
 }
 bool isCharging() {
     // PPM.disableBatterPowerPath();
-    return PPM.isCharging();
+    return hal_pmic_is_charging();
 }
 
 int getBattery() {
-    int voltage = PPM.getBattVoltage();
+    int voltage = hal_pmic_get_batt_voltage_mv();
     int percent = (voltage - 3300) * 100 / (float)(4150 - 3350);
 
     if (percent < 0) return 1;
     if (percent > 100) percent = 100;
 
-    if (PPM.isCharging() && percent >= 97) {
-        PPM.disableBatLoad();
+    if (hal_pmic_is_charging() && percent >= 97) {
+        hal_pmic_disable_bat_load();
         percent = 95; // estimate still charging
     }
 
-    if (PPM.isChargeDone()) { percent = 100; }
+    if (hal_pmic_is_charge_done()) { percent = 100; }
 
     return percent;
 }
@@ -82,50 +104,13 @@ int getBattery() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
-void InputHandler(void) {
-    static unsigned long tm = 0;
-    if (millis() - tm < 200 && !LongPress) return;
-    bool _u = digitalRead(UP_BTN);
-    bool _d = digitalRead(DW_BTN);
-    bool _l = digitalRead(L_BTN);
-    bool _r = digitalRead(R_BTN);
-    bool _s = digitalRead(SEL_BTN);
-
-    if (!_s || !_u || !_d || !_r || !_l) {
-        tm = millis();
-        if (!wakeUpScreen()) AnyKeyPress = true;
-        else return;
-    }
-    if (!_l) { PrevPress = true; }
-    if (!_r) { NextPress = true; }
-    if (!_u) {
-        UpPress = true;
-        PrevPagePress = true;
-    }
-    if (!_d) {
-        DownPress = true;
-        NextPagePress = true;
-    }
-    if (!_s) { SelPress = true; }
-    if (!_l && !_r) {
-        EscPress = true;
-        NextPress = false;
-        PrevPress = false;
-    }
-}
+void InputHandler(void) { hal_buttons_poll_5(buttonsCfg()); }
 
 /*********************************************************************
 ** Function: powerOff

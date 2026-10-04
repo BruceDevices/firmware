@@ -58,6 +58,30 @@ void SpectrumPlot::buildGeometry() {
     _wfTop = _specBot + 3;
 }
 
+// Classic SDR waterfall colourmap (à la GQRX / SDR# / SDRPlay): the noise floor
+// blends with the panel, then the signal climbs through blue, cyan, green,
+// yellow and red to a white-hot peak. Grounded in the common SDR gradients.
+static void sp_build_sdr_palette() {
+    static const uint8_t stopPos[] = {0, 30, 60, 105, 150, 195, 225, 255};
+    static const uint8_t stopR[] = {0, 0, 0, 0, 40, 235, 235, 255};
+    static const uint8_t stopG[] = {0, 0, 40, 180, 205, 235, 70, 255};
+    static const uint8_t stopB[] = {0, 90, 175, 200, 60, 0, 0, 255};
+    const int NS = sizeof(stopPos) / sizeof(stopPos[0]);
+
+    sp_heat[0] = bruceConfig.bgColor; // "no signal" blends with the panel
+    for (int i = 1; i < SP_HEAT_N; i++) {
+        int t = i * 255 / (SP_HEAT_N - 1);
+        int s = 0;
+        while (s < NS - 2 && t > stopPos[s + 1]) s++;
+        int span = stopPos[s + 1] - stopPos[s];
+        int f = span ? (t - stopPos[s]) * 255 / span : 0;
+        int r = stopR[s] + (stopR[s + 1] - stopR[s]) * f / 255;
+        int g = stopG[s] + (stopG[s + 1] - stopG[s]) * f / 255;
+        int b = stopB[s] + (stopB[s + 1] - stopB[s]) * f / 255;
+        sp_heat[i] = tft.color565(r, g, b);
+    }
+}
+
 void SpectrumPlot::buildPalette() {
     uint16_t pri = bruceConfig.priColor;
     _bg = bruceConfig.bgColor;
@@ -67,10 +91,12 @@ void SpectrumPlot::buildPalette() {
     _peak = blendColors(pri, TFT_WHITE, 150);
     _grid = blendColors(_bg, pri, 55);
     _label = blendColors(_bg, pri, 170);
-    buildHeatPalette(sp_heat, SP_HEAT_N);
+    if (_sdr) sp_build_sdr_palette();
+    else buildHeatPalette(sp_heat, SP_HEAT_N);
 }
 
-bool SpectrumPlot::begin(const String &title) {
+bool SpectrumPlot::begin(const String &title, bool sdrWaterfall) {
+    _sdr = sdrWaterfall;
     buildGeometry();
     buildPalette();
 

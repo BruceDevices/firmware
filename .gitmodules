@@ -1,0 +1,15 @@
+[submodule "lib/DisplayDrivers"]
+	path = lib/DisplayDrivers
+	url = https://github.com/bmorcelli/DisplayDrivers
+[submodule "lib/SensorLib"]
+	path = lib/SensorLib
+	url = https://github.com/lewisxhe/SensorLib
+[submodule "lib/XPowersLib"]
+	path = lib/XPowersLib
+	url = https://github.com/lewisxhe/XPowersLib
+[submodule "lib/ESP32_Button"]
+	path = lib/ESP32_Button
+	url = https://github.com/bmorcelli/ESP32_Button
+[submodule "lib/RotaryEncoder"]
+	path = lib/RotaryEncoder
+	url = https://github.com/mathertel/RotaryEncoder

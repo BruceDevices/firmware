@@ -24,11 +24,10 @@ JSValue native_tone(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) 
     if (argc > 1) { JS_ToUint32(ctx, &duration, argv[1]); }
     if (argc > 2) { nonBlocking = JS_ToInt32(ctx, &nonBlocking, argv[2]); }
 
-#if defined(BUZZ_PIN)
-    tone(BUZZ_PIN, freq, duration);
-
-#elif defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
     if (!nonBlocking) { serialCli.parse("tone " + String(freq) + " " + String(duration)); }
+#else
+    if (bruceConfigPins.buzzer > 0) tone((uint8_t)bruceConfigPins.buzzer, freq, duration);
 #endif
 
     return JS_UNDEFINED;

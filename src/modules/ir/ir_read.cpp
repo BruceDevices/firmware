@@ -80,7 +80,7 @@ void IrRead::setup() {
     irrecv.enableIRIn();
 
 #ifdef USE_BOOST
-    PPM.enableOTG();
+    hal_pmic_enable_otg();
 #endif
     const std::vector<std::pair<String, int>> pins = IR_RX_PINS;
     int count = 0;
@@ -148,7 +148,7 @@ void IrRead::loop() {
             button_pos = 0;
             quickloop = false;
 #ifdef USE_BOOST
-            PPM.disableOTG();
+            hal_pmic_disable_otg();
 #endif
             break;
         }

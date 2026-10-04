@@ -52,13 +52,11 @@ void SerialCli::setup() {
 #ifndef LITE_VERSION
     createInterpreterCommands(&_cli);
 #endif
-#ifdef HAS_SCREEN
+#ifndef USE_DUMMY_TFT
     createScreenCommands(&_cli);
 #endif
 #ifdef HAS_RGB_LED
     createLedCommands(&_cli);
 #endif
-#if defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN)
     createSoundCommands(&_cli);
-#endif
 }

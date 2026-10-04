@@ -5,7 +5,7 @@
 #include <M5Unified.h>
 #endif
 
-#if defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
 #include "AudioFileSourceFunction.h"
 #include "AudioGeneratorAAC.h"
 #include "AudioGeneratorFLAC.h"
@@ -129,13 +129,12 @@ static AudioOutputI2S *createConfiguredAudioOutput() {
         return nullptr;
     }
 
-#if defined(ARDUINO_M5STACK_CARDPUTER)
-    // Cardputer ADV's ES8311 derives MCLK from BCLK. GPIO43 is LRCLK only;
-    // routing MCLK to the same GPIO overwrites LRCLK in the GPIO matrix.
-    audioout->SetPinout(BCLK, WCLK, DOUT);
-#else
-    audioout->SetPinout(BCLK, WCLK, DOUT, MCLK);
-#endif
+    const BruceConfigPins::SpeakerPins &spkr = bruceConfigPins.speaker_bus;
+    // A board leaves mclk at GPIO_NUM_NC when its codec derives MCLK from BCLK (e.g. Cardputer
+    // ADV's ES8311, whose GPIO43 is LRCLK only -- routing MCLK to the same GPIO would overwrite
+    // LRCLK in the GPIO matrix).
+    if (spkr.mclk == GPIO_NUM_NC) audioout->SetPinout(spkr.bclk, spkr.ws, spkr.dout);
+    else audioout->SetPinout(spkr.bclk, spkr.ws, spkr.dout, spkr.mclk);
     audioout->SetGain(bruceConfig.soundVolume / AUDIO_VOLUME_MAX);
 
     return audioout;
@@ -666,9 +665,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
-        if (frequency == 0 && duration > 0) {
-            delay(duration);
-        }
+        if (frequency == 0 && duration > 0) { delay(duration); }
         _setup_codec_speaker(false);
         return;
     }
@@ -736,7 +733,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
 
 #endif
 
-#if defined(HAS_NS4168_SPKR) && defined(ARDUINO_M5STACK_CARDPUTER)
+#if defined(HAS_SPEAKER) && defined(ARDUINO_M5STACK_CARDPUTER)
 static i2s_chan_handle_t cardputerToneTx = nullptr;
 
 static bool beginCardputerToneOutput() {
@@ -757,13 +754,13 @@ static bool beginCardputerToneOutput() {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
-            .mclk = I2S_GPIO_UNUSED,
-            .bclk = (gpio_num_t)BCLK,
-            .ws = (gpio_num_t)WCLK,
-            .dout = (gpio_num_t)DOUT,
-            .din = I2S_GPIO_UNUSED,
-            .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
-        },
+                     .mclk = I2S_GPIO_UNUSED,
+                     .bclk = bruceConfigPins.speaker_bus.bclk,
+                     .ws = bruceConfigPins.speaker_bus.ws,
+                     .dout = bruceConfigPins.speaker_bus.dout,
+                     .din = I2S_GPIO_UNUSED,
+                     .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
+                     },
     };
     stdCfg.slot_cfg.bit_shift = true;
     if (i2s_channel_init_std_mode(cardputerToneTx, &stdCfg) != ESP_OK ||
@@ -818,9 +815,7 @@ static void cardputerTone(unsigned int frequency, unsigned long duration) {
 void _tone(unsigned int frequency, unsigned long duration) {
     if (!bruceConfig.soundEnabled) return;
 
-#if defined(BUZZ_PIN)
-    tone(BUZZ_PIN, frequency, duration);
-#elif defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
 #if defined(ARDUINO_M5STACK_CARDPUTER)
     cardputerTone(frequency, duration);
 #elif __has_include(<M5Unified.h>)
@@ -835,5 +830,8 @@ void _tone(unsigned int frequency, unsigned long duration) {
 #else
     playTone(frequency, duration, 0);
 #endif
+#else
+    // No I2S speaker: fall back to the buzzer, which stays silent until a pin is configured.
+    if (bruceConfigPins.buzzer > 0) tone((uint8_t)bruceConfigPins.buzzer, frequency, duration);
 #endif
 }

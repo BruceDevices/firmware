@@ -1,6 +1,7 @@
 #include "core/bus_HAL.h"
 #include <Arduino.h>
 #include <M5Unified.h>
+#include <globals.h>
 
 namespace {
 constexpr uint8_t kNessoExpanderAddress = 0x44;
@@ -117,7 +118,7 @@ NessoGroveM5Wire &nessoGroveWire() {
 bool enableNessoGrovePower() { return nessoEnableGrovePower(); }
 
 TwoWire *acquireBoardI2CBus(int8_t sda, int8_t scl) {
-    if (sda != GROVE_SDA || scl != GROVE_SCL) return nullptr;
+    if (sda != bruceConfigPins.i2c_bus.sda || scl != bruceConfigPins.i2c_bus.scl) return nullptr;
     enableNessoGrovePower();
 
     lockSysI2CBus();
@@ -125,7 +126,7 @@ TwoWire *acquireBoardI2CBus(int8_t sda, int8_t scl) {
 
     NessoGroveM5Wire &wire = nessoGroveWire();
     if (!wire.begin(sda, scl, kDefaultI2CFrequency)) {
-        M5.In_I2C.begin(I2C_NUM_0, SYS_I2C_SDA, SYS_I2C_SCL);
+        M5.In_I2C.begin(I2C_NUM_0, bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
         unlockSysI2CBus();
         return nullptr;
     }
@@ -136,7 +137,7 @@ bool releaseBoardI2CBus(TwoWire *wire) {
     if (wire != &nessoGroveWire()) return false;
 
     nessoGroveWire().end();
-    M5.In_I2C.begin(I2C_NUM_0, SYS_I2C_SDA, SYS_I2C_SCL);
+    M5.In_I2C.begin(I2C_NUM_0, bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
     unlockSysI2CBus();
     return true;
 }

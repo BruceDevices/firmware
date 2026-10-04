@@ -16,6 +16,10 @@
 #include "utils.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <globals.h>
+#include <nvs.h>
+#if defined(HAS_RESISTIVE_TOUCH)
+#include <CYD28_TouchscreenR.h>
+#endif
 
 int currentScreenBrightness = -1;
 
@@ -107,56 +111,120 @@ int gsetRotation(bool set) {
 
 /*********************************************************************
 **  Function: setBrightnessMenu
-**  Handles Menu to set brightness
+**  Handles Menu to set brightness (live-preview slider; drag on touch
+**  boards, Next/Prev to step by 5%, Sel to apply, Esc to cancel)
 **********************************************************************/
 void setBrightnessMenu() {
-    int idx = 0;
-    if (bruceConfig.bright == 100) idx = 0;
-    else if (bruceConfig.bright == 75) idx = 1;
-    else if (bruceConfig.bright == 50) idx = 2;
-    else if (bruceConfig.bright == 25) idx = 3;
-    else if (bruceConfig.bright == 1) idx = 4;
+    returnToMenu = false;
 
-    options = {
-        {"100%",
-         [=]() { setBrightness((uint8_t)100); },
-         bruceConfig.bright == 100,
-         [](void *pointer, bool shouldRender) {
-             setBrightness((uint8_t)100, false);
-             return false;
-         }},
-        {"75 %",
-         [=]() { setBrightness((uint8_t)75); },
-         bruceConfig.bright == 75,
-         [](void *pointer, bool shouldRender) {
-             setBrightness((uint8_t)75, false);
-             return false;
-         }},
-        {"50 %",
-         [=]() { setBrightness((uint8_t)50); },
-         bruceConfig.bright == 50,
-         [](void *pointer, bool shouldRender) {
-             setBrightness((uint8_t)50, false);
-             return false;
-         }},
-        {"25 %",
-         [=]() { setBrightness((uint8_t)25); },
-         bruceConfig.bright == 25,
-         [](void *pointer, bool shouldRender) {
-             setBrightness((uint8_t)25, false);
-             return false;
-         }},
-        {" 1 %",
-         [=]() { setBrightness((uint8_t)1); },
-         bruceConfig.bright == 1,
-         [](void *pointer, bool shouldRender) {
-             setBrightness((uint8_t)1, false);
-             return false;
-         }}
-    };
-    addOptionToMainMenu(); // this one bugs the brightness selection
-    loopOptions(options, MENU_TYPE_REGULAR, "", idx);
-    setBrightness(bruceConfig.bright, false);
+    int original = bruceConfig.bright;
+    int val = (bruceConfig.bright / 5) * 5;
+    if (val > 100) val = 100;
+    if (val < 0) val = 0;
+
+    const int lineHeight = FM * LH;
+    const int hintHeight = FP * LH;
+    const int sliderH = 12;
+    const int radius = sliderH / 2;
+    const int spacing = 8;
+    const int paddingTop = 8;
+    const int paddingBottom = 8;
+    const int paddingSide = 12;
+
+    int contentWidth = static_cast<int>(tftWidth * 0.8f);
+    int contentHeight = paddingTop + lineHeight + spacing + sliderH + spacing + hintHeight + paddingBottom;
+    int boxX = (tftWidth - contentWidth) / 2;
+    int boxY = (tftHeight - contentHeight) / 2;
+
+    int trackX = boxX + paddingSide;
+    int trackW = contentWidth - 2 * paddingSide;
+    int trackY = boxY + paddingTop + lineHeight + spacing;
+
+    bool redraw = true;
+    bool first_draw = true;
+    while (1) {
+        if (redraw) {
+            if (first_draw) {
+                tft.fillRoundRect(boxX, boxY, contentWidth, contentHeight, 5, bruceConfig.bgColor);
+                tft.drawRoundRect(boxX, boxY, contentWidth, contentHeight, 5, bruceConfig.priColor);
+                first_draw = false;
+            }
+            tft.setTextSize(FM);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawCentreString(
+                " Bright: " + String(val) + "% ", boxX + contentWidth / 2, boxY + paddingTop, 1
+            );
+
+            int indicatorX = trackX + (trackW * val) / 100;
+            tft.fillRect(trackX, trackY - 3, trackW, 3, bruceConfig.bgColor);
+            tft.fillRect(trackX, trackY + sliderH, trackW, 3, bruceConfig.bgColor);
+            tft.fillRect(trackX - radius - 2, trackY - 4, radius * 2, sliderH + 8, bruceConfig.bgColor);
+            tft.fillRect(
+                trackX + trackW - radius + 2, trackY - 4, radius * 2, sliderH + 8, bruceConfig.bgColor
+            );
+            tft.drawRoundRect(trackX, trackY, trackW, sliderH, radius, bruceConfig.secColor);
+            int fillW = indicatorX - trackX;
+
+            tft.fillRoundRect(trackX, trackY, fillW, sliderH, radius, bruceConfig.secColor);
+            tft.fillRoundRect(
+                trackX + fillW, trackY + 1, trackW - fillW, sliderH - 2, radius, bruceConfig.bgColor
+            );
+
+            tft.fillCircle(indicatorX, trackY + sliderH / 2, radius + 2, bruceConfig.priColor);
+
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.drawCentreString("Sel to apply", boxX + contentWidth / 2, trackY + sliderH + spacing, 1);
+
+            setBrightness(val, false);
+            redraw = false;
+        }
+
+#if defined(HAS_TOUCH)
+        if (touchPoint.pressed) {
+            const int touchX = touchPoint.x;
+            const int touchY = touchPoint.y;
+            touchPoint.Clear();
+
+            const int touchPadding = 10;
+            if (touchX >= boxX && touchX <= boxX + contentWidth && touchY >= trackY - touchPadding &&
+                touchY <= trackY + sliderH + touchPadding) {
+                int clampedX = touchX;
+                if (clampedX < trackX) clampedX = trackX;
+                if (clampedX > trackX + trackW) clampedX = trackX + trackW;
+                int newVal = ((clampedX - trackX) * 100 + trackW / 2) / trackW;
+                newVal = (newVal / 5) * 5;
+                if (newVal > 100) newVal = 100;
+                if (newVal < 0) newVal = 0;
+                if (newVal != val) {
+                    val = newVal;
+                    redraw = true;
+                }
+            }
+        }
+#endif
+
+        if (check(NextPress)) {
+            val += 5;
+            if (val > 100) val = 100;
+            redraw = true;
+        }
+        if (check(PrevPress)) {
+            val -= 5;
+            if (val < 0) val = 0;
+            redraw = true;
+        }
+        if (check(SelPress)) {
+            setBrightness(val);
+            break;
+        }
+        if (check(EscPress) || returnToMenu) {
+            setBrightness(original, false);
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    tft.fillScreen(bruceConfig.bgColor);
 }
 
 /*********************************************************************
@@ -644,112 +712,46 @@ void setEvilGatewayIp() {
 void setRFModuleMenu() {
     int result = 0;
     int idx = 0;
-    uint8_t pins_setup = 0;
+    int presetIdx = -1; // -1 = plain "CC1101" (board's default CC1101_bus wiring, set in _setup_gpio())
     if (bruceConfigPins.rfModule == M5_RF_MODULE) idx = 0;
     else if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
         idx = 1;
-#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-        if (bruceConfigPins.CC1101_bus.mosi == GPIO_NUM_26) idx = 2;
-#endif
-#ifdef CAP_CC1101_SS_PIN
-        if (bruceConfigPins.CC1101_bus.cs == (gpio_num_t)CAP_CC1101_SS_PIN) idx = 2;
-#endif
+        for (size_t i = 0; i < bruceConfigPins.CC1101_presets.size(); i++) {
+            const BruceConfigPins::SPIPins &p = bruceConfigPins.CC1101_presets[i].pins;
+            if (bruceConfigPins.CC1101_bus.sck == p.sck && bruceConfigPins.CC1101_bus.mosi == p.mosi &&
+                bruceConfigPins.CC1101_bus.cs == p.cs) {
+                idx = 2 + (int)i;
+                break;
+            }
+        }
     }
 
     options = {
-        {"M5 RF433T/R",         [&]() { result = M5_RF_MODULE; }   },
-#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-        {"CC1101 (legacy)",     [&pins_setup]() { pins_setup = 1; }},
-        {"CC1101 (Shared SPI)", [&pins_setup]() { pins_setup = 2; }},
-#else
-        {"CC1101", [&]() { result = CC1101_SPI_MODULE; }},
-#endif
-#ifdef CAP_CC1101_SS_PIN
-        {"CC1101 M5 Cap", [&pins_setup]() { pins_setup = 3; }},
-#endif
-        /* WIP:
-         * #ifdef USE_CC1101_VIA_PCA9554
-         * {"CC1101+PCA9554",  [&]() { result = 2; }},
-         * #endif
-         */
+        {"M5 RF433T/R", [&]() { result = M5_RF_MODULE; }     },
+        {"CC1101",      [&]() { result = CC1101_SPI_MODULE; }},
     };
+    for (size_t i = 0; i < bruceConfigPins.CC1101_presets.size(); i++) {
+        options.push_back({bruceConfigPins.CC1101_presets[i].label, [&, i]() {
+                               result = CC1101_SPI_MODULE;
+                               presetIdx = (int)i;
+                           }});
+    }
     loopOptions(options, idx);
-    if (result == CC1101_SPI_MODULE || pins_setup > 0) {
-        // This setting is meant to StickCPlus and StickCPlus2 to setup the ports from RF Menu
-        if (pins_setup == 1) {
-            result = CC1101_SPI_MODULE;
-            bruceConfigPins.setCC1101Pins(
-                {(gpio_num_t)CC1101_SCK_PIN,
-                 (gpio_num_t)CC1101_MISO_PIN,
-                 (gpio_num_t)CC1101_MOSI_PIN,
-                 (gpio_num_t)CC1101_SS_PIN,
-                 (gpio_num_t)CC1101_GDO0_PIN,
-                 GPIO_NUM_NC}
-            );
-            bruceConfigPins.setNrf24Pins(
-                {(gpio_num_t)CC1101_SCK_PIN,
-                 (gpio_num_t)CC1101_MISO_PIN,
-                 (gpio_num_t)CC1101_MOSI_PIN,
-                 (gpio_num_t)CC1101_SS_PIN,
-                 (gpio_num_t)CC1101_GDO0_PIN,
-                 GPIO_NUM_NC}
-            );
-        } else if (pins_setup == 2) {
-#if CONFIG_SOC_GPIO_OUT_RANGE_MAX > 30
-            result = CC1101_SPI_MODULE;
-            bruceConfigPins.setCC1101Pins(
-                {(gpio_num_t)SDCARD_SCK,
-                 (gpio_num_t)SDCARD_MISO,
-                 (gpio_num_t)SDCARD_MOSI,
-                 GPIO_NUM_33,
-                 GPIO_NUM_32,
-                 GPIO_NUM_NC}
-            );
-            bruceConfigPins.setNrf24Pins(
-                {(gpio_num_t)SDCARD_SCK,
-                 (gpio_num_t)SDCARD_MISO,
-                 (gpio_num_t)SDCARD_MOSI,
-                 GPIO_NUM_33,
-                 GPIO_NUM_32,
-                 GPIO_NUM_NC}
-            );
-#endif
+    if (result == CC1101_SPI_MODULE) {
+        if (presetIdx >= 0) {
+            const BruceConfigPins::SPIPinPreset &preset = bruceConfigPins.CC1101_presets[presetIdx];
+            bruceConfigPins.setCC1101Pins(preset.pins);
+            bruceConfigPins.setNrf24Pins(preset.pins);
         }
-#ifdef CAP_CC1101_SS_PIN
-        else if (pins_setup == 3) {
-            // M5Stack Cap CC1101: shares the default SPI port with the SD card and the cap's
-            // own ST25R3916. https://docs.m5stack.com/en/cap/Cap_CC1101
-            result = CC1101_SPI_MODULE;
-            bruceConfigPins.setCC1101Pins(
-                {(gpio_num_t)SPI_SCK_PIN,
-                 (gpio_num_t)SPI_MISO_PIN,
-                 (gpio_num_t)SPI_MOSI_PIN,
-                 (gpio_num_t)CAP_CC1101_SS_PIN,
-                 (gpio_num_t)CAP_CC1101_GDO0_PIN,
-                 GPIO_NUM_NC}
-            );
-        }
-#endif
-        // initRfModule() dispatches on rfModule, so the pin presets have to already say CC1101 or
-        // it takes the single-pin path and reports success without ever probing the chip - which
-        // is the whole point of the "not found" + wiring QR below. Left alone for the plain
-        // "CC1101" entry, which is still selectable blind so the pins can be set afterwards.
-        // Not saved yet: the error path below falls back to M5_RF_MODULE and saves that instead.
-        if (pins_setup > 0) bruceConfigPins.rfModule = CC1101_SPI_MODULE;
         if (initRfModule()) {
             bruceConfigPins.setRfModule(CC1101_SPI_MODULE);
             deinitRfModule();
-            if (pins_setup == 1) AUX_SPI.end();
             return;
         }
         // else display an error
         displayError("CC1101 not found", true);
-        if (pins_setup == 1)
-            qrcode_display("https://github.com/pr3y/Bruce/blob/main/media/connections/cc1101_stick.jpg");
-        if (pins_setup == 2)
-            qrcode_display(
-                "https://github.com/pr3y/Bruce/blob/main/media/connections/cc1101_stick_SDCard.jpg"
-            );
+        if (presetIdx >= 0 && bruceConfigPins.CC1101_presets[presetIdx].wiringQrUrl)
+            qrcode_display(bruceConfigPins.CC1101_presets[presetIdx].wiringQrUrl);
         while (!check(AnyKeyPress)) vTaskDelay(50 / portTICK_PERIOD_MS);
     }
     // fallback to "M5 RF433T/R" on errors
@@ -785,14 +787,14 @@ void setRFIDModuleMenu() {
     options = {
         {"M5 RFID2",
          [=]() { bruceConfigPins.setRfidModule(M5_RFID2_MODULE); },
-         bruceConfigPins.rfidModule == M5_RFID2_MODULE     },
+         bruceConfigPins.rfidModule == M5_RFID2_MODULE                            },
 #ifdef M5STICK
         {"PN532 I2C G33",
          [=]() { bruceConfigPins.setRfidModule(PN532_I2C_MODULE); },
-         bruceConfigPins.rfidModule == PN532_I2C_MODULE    },
+         bruceConfigPins.rfidModule == PN532_I2C_MODULE                           },
         {"PN532 I2C G36",
          [=]() { bruceConfigPins.setRfidModule(PN532_I2C_SPI_MODULE); },
-         bruceConfigPins.rfidModule == PN532_I2C_SPI_MODULE},
+         bruceConfigPins.rfidModule == PN532_I2C_SPI_MODULE                       },
 #else
         {"PN532 on I2C",
          [=]() { bruceConfigPins.setRfidModule(PN532_I2C_MODULE); },
@@ -800,33 +802,32 @@ void setRFIDModuleMenu() {
 #endif
         {"PN532 on SPI",
          [=]() { bruceConfigPins.setRfidModule(PN532_SPI_MODULE); },
-         bruceConfigPins.rfidModule == PN532_SPI_MODULE    },
+         bruceConfigPins.rfidModule == PN532_SPI_MODULE                           },
         {"RC522 on SPI",
          [=]() { bruceConfigPins.setRfidModule(RC522_SPI_MODULE); },
-         bruceConfigPins.rfidModule == RC522_SPI_MODULE    },
+         bruceConfigPins.rfidModule == RC522_SPI_MODULE                           },
 #if !defined(LITE_VERSION)
         {"ST25R3916 SPI",
          [=]() { bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
-         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE},
+         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE                       },
         {"ST25R3916 I2C",
          [=]() { bruceConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
-         bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+         bruceConfigPins.rfidModule == ST25R3916_I2C_MODULE                       },
 #ifdef CAP_NFC_SS_PIN
         // M5Stack Cap CC1101: its NFC half is an ST25R3916 on the default SPI port.
         // https://docs.m5stack.com/en/cap/Cap_CC1101
         {"CC1101 M5 Cap",
          [=]() {
              bruceConfigPins.setSR25RPins(
-                 {(gpio_num_t)SPI_SCK_PIN,
-                  (gpio_num_t)SPI_MISO_PIN,
-                  (gpio_num_t)SPI_MOSI_PIN,
+                 {(gpio_num_t)CAP_NFC_SCK_PIN,
+                  (gpio_num_t)CAP_NFC_MISO_PIN,
+                  (gpio_num_t)CAP_NFC_MOSI_PIN,
                   (gpio_num_t)CAP_NFC_SS_PIN,
                   (gpio_num_t)CAP_NFC_IRQ_PIN,
                   GPIO_NUM_NC}
              );
              bruceConfigPins.setRfidModule(ST25R3916_SPI_MODULE);
-         },
-         bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE &&
+         },                                                              bruceConfigPins.rfidModule == ST25R3916_SPI_MODULE &&
              bruceConfigPins.ST25R_bus.cs == (gpio_num_t)CAP_NFC_SS_PIN},
 #endif
 #endif
@@ -1123,7 +1124,6 @@ void runClockLoop(bool showMenuHint) {
 int gsetIrTxPin(bool set) {
     int result = bruceConfigPins.irTx;
 
-    if (result > 50) bruceConfigPins.setIrTxPin(TXLED);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1136,7 +1136,8 @@ int gsetIrTxPin(bool set) {
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
             if (i != TFT_CS && i != TFT_RST && i != TFT_SCLK && i != TFT_MOSI && i != TFT_BL &&
-                i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
+                i != TOUCH_CS && i != bruceConfigPins.SDCARD_bus.cs && i != bruceConfigPins.SDCARD_bus.mosi &&
+                i != bruceConfigPins.SDCARD_bus.miso)
 #endif
                 options.push_back(
                     {pin.first,
@@ -1184,7 +1185,7 @@ void setIrTxRepeats() {
 int gsetIrRxPin(bool set) {
     int result = bruceConfigPins.irRx;
 
-    if (result > 45) bruceConfigPins.setIrRxPin(GROVE_SCL);
+    if (result < 0) bruceConfigPins.setIrRxPin(GROVE_SCL);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1197,7 +1198,8 @@ int gsetIrRxPin(bool set) {
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
             if (i != TFT_CS && i != TFT_RST && i != TFT_SCLK && i != TFT_MOSI && i != TFT_BL &&
-                i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
+                i != TOUCH_CS && i != bruceConfigPins.SDCARD_bus.cs && i != bruceConfigPins.SDCARD_bus.mosi &&
+                i != bruceConfigPins.SDCARD_bus.miso)
 #endif
                 options.push_back(
                     {pin.first,
@@ -1220,7 +1222,7 @@ int gsetIrRxPin(bool set) {
 int gsetRfTxPin(bool set) {
     int result = bruceConfigPins.rfTx;
 
-    if (result > 45) bruceConfigPins.setRfTxPin(GROVE_SDA);
+    if (result < 0) bruceConfigPins.setRfTxPin(bruceConfigPins.i2c_bus.sda);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1233,7 +1235,8 @@ int gsetRfTxPin(bool set) {
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
             if (i != TFT_CS && i != TFT_RST && i != TFT_SCLK && i != TFT_MOSI && i != TFT_BL &&
-                i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
+                i != TOUCH_CS && i != bruceConfigPins.SDCARD_bus.cs && i != bruceConfigPins.SDCARD_bus.mosi &&
+                i != bruceConfigPins.SDCARD_bus.miso)
 #endif
                 options.push_back(
                     {pin.first,
@@ -1257,7 +1260,7 @@ int gsetRfTxPin(bool set) {
 int gsetRfRxPin(bool set) {
     int result = bruceConfigPins.rfRx;
 
-    if (result > 36) bruceConfigPins.setRfRxPin(GROVE_SCL);
+    if (result < 0) bruceConfigPins.setRfRxPin(GROVE_SCL);
     if (set) {
         options.clear();
         std::vector<std::pair<const char *, int>> pins;
@@ -1270,7 +1273,8 @@ int gsetRfRxPin(bool set) {
 #ifdef ALLOW_ALL_GPIO_FOR_IR_RF
             int i = pin.second;
             if (i != TFT_CS && i != TFT_RST && i != TFT_SCLK && i != TFT_MOSI && i != TFT_BL &&
-                i != TOUCH_CS && i != SDCARD_CS && i != SDCARD_MOSI && i != SDCARD_MISO)
+                i != TOUCH_CS && i != bruceConfigPins.SDCARD_bus.cs && i != bruceConfigPins.SDCARD_bus.mosi &&
+                i != bruceConfigPins.SDCARD_bus.miso)
 #endif
                 options.push_back(
                     {pin.first,
@@ -1640,10 +1644,15 @@ RELOAD:
 **  Main Menu to manually set SPI Pins
 **********************************************************************/
 void setI2CPinsMenu(BruceConfigPins::I2CPins &value) {
-#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2 && SYS_I2C_SDA >= 0 && SYS_I2C_SCL >= 0
-    displayError("I2C Pins cannot be changed on this board", true);
-    return;
-#else
+#if defined(SOC_HP_I2C_NUM) && SOC_HP_I2C_NUM < 2
+    // On SoCs with a single HP I2C peripheral, Grove I2C shares hardware with the system I2C bus
+    // (touch/RTC/PMIC), so its pins can't be changed independently when the board has a real,
+    // distinct system I2C bus.
+    if (bruceConfigPins.sys_i2c.sda >= 0 && bruceConfigPins.sys_i2c.scl >= 0) {
+        displayError("I2C Pins cannot be changed on this board", true);
+        return;
+    }
+#endif
     uint8_t opt = 0;
     bool changed = false;
     BruceConfigPins::I2CPins points = value;
@@ -1680,7 +1689,134 @@ RELOAD:
         changed = true;
         goto RELOAD;
     }
-#endif
+}
+
+/*********************************************************************
+**  Function: setSpeakerPinsMenu
+**  Menu to manually set the I2S speaker pins (was the BCLK/WCLK/DOUT/MCLK -D macros)
+**********************************************************************/
+void setSpeakerPinsMenu(BruceConfigPins::SpeakerPins &value) {
+    uint8_t opt = 0;
+    bool changed = false;
+    BruceConfigPins::SpeakerPins points = value;
+
+RELOAD:
+    options = {
+        {String("BCLK=" + String(points.bclk)).c_str(), [&]() { opt = 1; }},
+        {String("WCLK=" + String(points.ws)).c_str(), [&]() { opt = 2; }},
+        {String("DOUT=" + String(points.dout)).c_str(), [&]() { opt = 3; }},
+        {String("MCLK=" + String(points.mclk)).c_str(), [&]() { opt = 4; }},
+        {"Save Config", [&]() { opt = 7; }, changed},
+        {"Main Menu", [&]() { opt = 0; }},
+    };
+
+    loopOptions(options);
+    if (opt == 0) return;
+    else if (opt == 7) {
+        if (changed) {
+            value = points;
+            bruceConfigPins.setSpeakerPins(value);
+        }
+    } else {
+        options = {};
+        gpio_num_t sel = GPIO_NUM_NC;
+        int index = 0;
+        if (opt == 1) index = points.bclk + 1;
+        else if (opt == 2) index = points.ws + 1;
+        else if (opt == 3) index = points.dout + 1;
+        else if (opt == 4) index = points.mclk + 1;
+        for (int8_t i = -1; i <= GPIO_NUM_MAX; i++) {
+            String tmp = String(i);
+            options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
+        }
+        loopOptions(options, index);
+        options.clear();
+        if (opt == 1) points.bclk = sel;
+        else if (opt == 2) points.ws = sel;
+        else if (opt == 3) points.dout = sel;
+        else if (opt == 4) points.mclk = sel;
+        changed = true;
+        goto RELOAD;
+    }
+}
+
+/*********************************************************************
+**  Function: setMicPinsMenu
+**  Menu to manually set the microphone wiring (was PIN_CLK/PIN_DATA/PIN_BCLK/PIN_WS)
+**********************************************************************/
+void setMicPinsMenu(BruceConfigPins::MicPins &value) {
+    uint8_t opt = 0;
+    bool changed = false;
+    BruceConfigPins::MicPins points = value;
+
+RELOAD:
+    {
+        const char *typeName = points.type == MIC_TYPE_I2S_PHILIPS ? "I2S Philips"
+                               : points.type == MIC_TYPE_I2S_MSB   ? "I2S MSB"
+                                                                   : "PDM";
+        options = {
+            {String("Type=" + String(typeName)).c_str(), [&]() { opt = 1; }},
+            {String("CLK/BCLK=" + String(points.clk)).c_str(), [&]() { opt = 2; }},
+            {String("WS  =" + String(points.ws)).c_str(), [&]() { opt = 3; }},
+            {String("DATA=" + String(points.data)).c_str(), [&]() { opt = 4; }},
+            {"Save Config", [&]() { opt = 7; }, changed},
+            {"Main Menu", [&]() { opt = 0; }},
+        };
+    }
+
+    loopOptions(options);
+    if (opt == 0) return;
+    else if (opt == 7) {
+        if (changed) {
+            value = points;
+            bruceConfigPins.setMicPins(value);
+        }
+    } else if (opt == 1) {
+        options = {
+            {"PDM",         [&]() { points.type = MIC_TYPE_PDM; }        },
+            {"I2S MSB",     [&]() { points.type = MIC_TYPE_I2S_MSB; }    },
+            {"I2S Philips", [&]() { points.type = MIC_TYPE_I2S_PHILIPS; }},
+        };
+        loopOptions(options, points.type);
+        options.clear();
+        changed = true;
+        goto RELOAD;
+    } else {
+        options = {};
+        gpio_num_t sel = GPIO_NUM_NC;
+        int index = 0;
+        if (opt == 2) index = points.clk + 1;
+        else if (opt == 3) index = points.ws + 1;
+        else if (opt == 4) index = points.data + 1;
+        for (int8_t i = -1; i <= GPIO_NUM_MAX; i++) {
+            String tmp = String(i);
+            options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
+        }
+        loopOptions(options, index);
+        options.clear();
+        if (opt == 2) points.clk = sel;
+        else if (opt == 3) points.ws = sel;
+        else if (opt == 4) points.data = sel;
+        changed = true;
+        goto RELOAD;
+    }
+}
+
+/*********************************************************************
+**  Function: setBuzzerPinMenu
+**  Menu to manually set the buzzer pin (was the BUZZ_PIN -D macro).
+**  -1 disables the buzzer.
+**********************************************************************/
+void setBuzzerPinMenu() {
+    options = {};
+    int sel = bruceConfigPins.buzzer;
+    for (int8_t i = -1; i <= GPIO_NUM_MAX; i++) {
+        String tmp = String(i);
+        options.push_back({tmp.c_str(), [i, &sel]() { sel = i; }});
+    }
+    loopOptions(options, bruceConfigPins.buzzer + 1);
+    options.clear();
+    bruceConfigPins.setBuzzerPin(sel);
 }
 
 /*********************************************************************
@@ -1814,5 +1950,243 @@ void installAppStoreJS() {
 
     displaySuccess("App Store installed", true);
     displaySuccess("Goto JS Interpreter -> Tools -> App Store", true);
+}
+#endif
+
+#if defined(HAS_RESISTIVE_TOUCH)
+extern CYD28_TouchR touch; // defined by hal/inputs/touch.cpp
+
+static constexpr const char *TOUCH_CAL_NAMESPACE = "touch_cal";
+
+static bool validTouchCalibration(uint16_t x0, uint16_t x1, uint16_t y0, uint16_t y1) {
+    return x0 > 0 && x1 > 0 && y0 > 0 && y1 > 0 && x0 != x1 && y0 != y1;
+}
+
+static esp_err_t readTouchCalibrationItems(
+    nvs_handle_t handle, uint16_t &x0, uint16_t &x1, uint16_t &y0, uint16_t &y1, uint8_t &rot
+) {
+    esp_err_t err = nvs_get_u16(handle, "x0", &x0);
+    err |= nvs_get_u16(handle, "x1", &x1);
+    err |= nvs_get_u16(handle, "y0", &y0);
+    err |= nvs_get_u16(handle, "y1", &y1);
+    err |= nvs_get_u8(handle, "r", &rot);
+    if (err == ESP_OK) return err;
+
+    // Older builds used single-letter keys.
+    err = nvs_get_u16(handle, "x", &x0);
+    err |= nvs_get_u16(handle, "X", &x1);
+    err |= nvs_get_u16(handle, "y", &y0);
+    err |= nvs_get_u16(handle, "Y", &y1);
+    err |= nvs_get_u8(handle, "r", &rot);
+    return err;
+}
+
+static bool getTouchCalibration(uint16_t &x0, uint16_t &x1, uint16_t &y0, uint16_t &y1, uint8_t &rot) {
+    x0 = x1 = y0 = y1 = 0;
+    rot = 0;
+
+    nvs_handle_t handle;
+    if (nvs_open(TOUCH_CAL_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        log_i("getTouchCalibration: no %s namespace found", TOUCH_CAL_NAMESPACE);
+        return false;
+    }
+    esp_err_t err = readTouchCalibrationItems(handle, x0, x1, y0, y1, rot);
+    nvs_close(handle);
+    rot &= 0x07;
+    return err == ESP_OK && validTouchCalibration(x0, x1, y0, y1);
+}
+
+// Loads the calibration from the NVS namespace "touch_cal" and applies it to the touch driver.
+// Returns false when there is no valid calibration stored.
+bool loadTouchCalibration() {
+    uint16_t x0, x1, y0, y1;
+    uint8_t rot;
+
+    if (!getTouchCalibration(x0, x1, y0, y1, rot)) {
+        Serial.println("loadTouchCalibration: Failed to load valid calibration data");
+        return false;
+    }
+
+    uint16_t parameters[5] = {x0, x1, y0, y1, rot};
+    touch.setTouch(parameters);
+    Serial.printf(
+        "loadTouchCalibration: Loaded calibration - x0:%u x1:%u y0:%u y1:%u rot:%u\n", x0, x1, y0, y1, rot
+    );
+    return true;
+}
+
+bool saveTouchCalibration(uint16_t x0, uint16_t x1, uint16_t y0, uint16_t y1, uint8_t rot) {
+    if (!validTouchCalibration(x0, x1, y0, y1)) {
+        Serial.printf(
+            "saveTouchCalibration: Invalid calibration - x0:%u x1:%u y0:%u y1:%u rot:%u\n",
+            x0,
+            x1,
+            y0,
+            y1,
+            rot
+        );
+        return false;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(TOUCH_CAL_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        Serial.printf("saveTouchCalibration: Failed to open %s namespace\n", TOUCH_CAL_NAMESPACE);
+        return false;
+    }
+
+    rot &= 0x07;
+    err = nvs_set_u16(handle, "x0", x0);
+    err |= nvs_set_u16(handle, "x1", x1);
+    err |= nvs_set_u16(handle, "y0", y0);
+    err |= nvs_set_u16(handle, "y1", y1);
+    err |= nvs_set_u8(handle, "r", rot);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    nvs_close(handle);
+
+    if (err == ESP_OK) {
+        Serial.printf(
+            "saveTouchCalibration: Saved calibration - x0:%u x1:%u y0:%u y1:%u rot:%u\n", x0, x1, y0, y1, rot
+        );
+        return true;
+    }
+    Serial.printf("saveTouchCalibration: Failed to save calibration data: %s\n", esp_err_to_name(err));
+    return false;
+}
+
+// Asks the user to touch the 4 corners, computes the calibration, applies it and stores it in NVS.
+void calibrateTouch() {
+    // The input task reads the same touch driver: keep it out while the raw readings are taken.
+    inputLock();
+    tft.setRotation(0);
+    tft.fillScreen(bruceConfig.bgColor);
+    wakeUpScreen();
+    const uint16_t _w = tft.width();
+    const uint16_t _h = tft.height();
+
+    struct RawTouchPoint {
+        uint16_t x;
+        uint16_t y;
+    };
+
+    auto drawCenteredLine = [&](const char *text, int16_t y) { tft.drawCentreString(text, _w / 2, y, 1); };
+
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+    tft.setTextSize(FP);
+    const int16_t lineHeight = LH;
+    int16_t y = (_h - lineHeight * 4) / 2;
+    drawCenteredLine("Bruce Touch Calibration", y);
+    y += lineHeight;
+    drawCenteredLine("---------------------------", y);
+    y += lineHeight;
+    drawCenteredLine("Touch the screen corners", y);
+    y += lineHeight;
+    drawCenteredLine("indicated by the arrows", y);
+    delay(500);
+
+    auto drawArrow = [&](uint8_t corner) {
+        tft.fillRect(0, 0, 30, 30, bruceConfig.bgColor);
+        tft.fillRect(0, _h - 30, 30, 30, bruceConfig.bgColor);
+        tft.fillRect(_w - 30, 0, 30, 30, bruceConfig.bgColor);
+        tft.fillRect(_w - 30, _h - 30, 30, 30, bruceConfig.bgColor);
+        const int16_t edge = 0;
+        const int16_t len = 28;
+        const int16_t head = 8;
+        const bool right = corner == 1 || corner == 2;
+        const bool bottom = corner >= 2;
+        const int16_t x0 = right ? _w - edge : edge;
+        const int16_t y0 = bottom ? _h - edge : edge;
+        const int16_t sx = right ? -1 : 1;
+        const int16_t sy = bottom ? -1 : 1;
+
+        tft.drawLine(x0 + sx * len, y0 + sy * len, x0, y0, bruceConfig.priColor);
+        tft.drawLine(x0, y0, x0 + sx * head, y0, bruceConfig.priColor);
+        tft.drawLine(x0, y0, x0, y0 + sy * head, bruceConfig.priColor);
+        tft.drawLine(x0 + 1, y0 + sy, x0 + sx * (head + 1), y0 + sy, bruceConfig.priColor);
+        tft.drawLine(x0 + sx, y0 + 1, x0 + sx, y0 + sy * (head + 1), bruceConfig.priColor);
+    };
+
+    auto logRaw = [&](const char *phase) {
+        static unsigned long lastLog = 0;
+        if (millis() - lastLog < 1000) return;
+        lastLog = millis();
+        auto r = touch.getPointRaw();
+        Serial.printf(
+            "calibrateTouch[%s]: raw x=%d y=%d z=%d isrWake=%d\n", phase, r.x, r.y, r.z, touch.isrWake
+        );
+    };
+    auto readRawPoint = [&]() {
+        while (touch.touched()) {
+            logRaw("release");
+            delay(10);
+        }
+        while (!touch.touched()) {
+            logRaw("wait");
+            delay(10);
+        }
+
+        uint32_t sx = 0;
+        uint32_t sy = 0;
+        const uint8_t samples = 6;
+        for (uint8_t i = 0; i < samples; ++i) {
+            auto p = touch.getPointRaw();
+            sx += p.x;
+            sy += p.y;
+            delay(18);
+        }
+
+        while (touch.touched()) { delay(10); }
+        return RawTouchPoint{uint16_t(sx / samples), uint16_t(sy / samples)};
+    };
+
+    RawTouchPoint p[4];
+    for (uint8_t i = 0; i < 4; ++i) {
+        drawArrow(i);
+        p[i] = readRawPoint();
+    }
+
+    const int32_t leftRawX = (int32_t(p[0].x) + p[3].x) / 2;
+    const int32_t rightRawX = (int32_t(p[1].x) + p[2].x) / 2;
+    const int32_t leftRawY = (int32_t(p[0].y) + p[3].y) / 2;
+    const int32_t rightRawY = (int32_t(p[1].y) + p[2].y) / 2;
+
+    const uint8_t swapXY = abs(rightRawX - leftRawX) < abs(rightRawY - leftRawY);
+    const uint8_t invertX = swapXY ? p[0].y > p[1].y : p[0].x > p[1].x;
+    const uint8_t invertY = swapXY ? p[0].x > p[3].x : p[0].y > p[3].y;
+    // Same bit layout the Launcher stores (swapXY and invertX are inverted for compatibility with
+    // the CYD28_TouchscreenR orientation handling), so both firmwares can share the NVS values.
+    const uint8_t rot = !swapXY | (invertY << 1) | (!invertX << 2);
+    uint16_t xMin = !swapXY ? p[0].y : p[0].x;
+    uint16_t xMax = xMin;
+    uint16_t yMin = !swapXY ? p[0].x : p[0].y;
+    uint16_t yMax = yMin;
+    for (uint8_t i = 1; i < 4; ++i) {
+        const uint16_t rx = !swapXY ? p[i].y : p[i].x;
+        const uint16_t ry = !swapXY ? p[i].x : p[i].y;
+        if (rx < xMin) xMin = rx;
+        if (rx > xMax) xMax = rx;
+        if (ry < yMin) yMin = ry;
+        if (ry > yMax) yMax = ry;
+    }
+
+    uint16_t parameters[5] = {xMin, xMax, yMin, yMax, rot};
+    touch.setTouch(parameters);
+    saveTouchCalibration(xMin, xMax, yMin, yMax, rot);
+
+    Serial.printf(
+        "calibrateTouch: x0:%u x1:%u y0:%u y1:%u rot:%u swap:%u invX:%u invY:%u\n",
+        xMin,
+        xMax,
+        yMin,
+        yMax,
+        rot,
+        swapXY,
+        invertX,
+        invertY
+    );
+    tft.setRotation(bruceConfigPins.rotation);
+    tft.fillScreen(bruceConfig.bgColor);
+    wakeUpScreen();
+    inputUnlock();
 }
 #endif

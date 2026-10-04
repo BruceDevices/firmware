@@ -1,9 +1,30 @@
+#include "CYD28_TouchscreenR.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/touch.h"
 #include <Arduino.h>
 #include <interface.h>
 
-#define XPT2046_CS TOUCH_CS
+#define XPT2046_CS CYD28_TouchR_CS
+extern CYD28_TouchR touch; // defined by hal/inputs/touch.cpp
+
+// The XPT2046 reports landscape (rotation 1) coordinates; the calibration (NVS "touch_cal")
+// takes care of how it is physically mounted
+static DeviceTouch touchCfg() {
+    DeviceTouch cfg;
+    // rotation:        0      1      2      3
+    const bool swapXY[4] = {true, false, true, false};
+    const bool mirrorX[4] = {true, false, false, true};
+    const bool mirrorY[4] = {false, false, true, true};
+    for (int i = 0; i < 4; i++) {
+        cfg.SwapXY[i] = swapXY[i];
+        cfg.MirrorX[i] = mirrorX[i];
+        cfg.MirrorY[i] = mirrorY[i];
+    }
+    return cfg;
+}
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -12,13 +33,37 @@
 ***************************************************************************************/
 SPIClass touchSPI;
 void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)21, (gpio_num_t)22}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 21;
+    bruceConfigPins.rfRx = 22;
+    bruceConfigPins.irTx = 22;
+    bruceConfigPins.irRx = 22;
+    bruceConfigPins.uart_bus = {(gpio_num_t)1, (gpio_num_t)3};     // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)1, (gpio_num_t)3};      // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)22, (gpio_num_t)21}; // rx, tx (Grove SCL/SDA)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)35};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)35};
+    // CC1101/NRF24/SDCARD/W5500 share the main SPI bus (sck=18, miso=19, mosi=23)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)21, (gpio_num_t)22, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)21, (gpio_num_t)22
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)5
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)21, (gpio_num_t)22, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+
     pinMode(XPT2046_CS, OUTPUT);
     digitalWrite(XPT2046_CS, HIGH);
-    bruceConfigPins.rotation = 0;  // portrait mode for Phantom
+    bruceConfigPins.rotation = 0;  // intentional: overrides -DROTATION regardless of value (portrait)
     bruceConfig.colorInverted = 0; // color invert for Phantom
-    tft.setRotation(bruceConfigPins.rotation);
-    uint16_t calData[5] = {275, 3500, 280, 3590, 3}; // 0011 = 3
-    tft.setTouch(calData);
 }
 
 /***************************************************************************************
@@ -27,16 +72,12 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
-    // uint16_t calData[5];
-    // bruceConfigPins.rotation = 0;
-    // tft.setRotation(0);
-    // tft.calibrateTouch(calData, TFT_WHITE, TFT_BLACK, 10);
-    // Serial.printf("%d\n%d\n%d\n%d\n%d\n", calData[0], calData[1], calData[2], calData[3], calData[4]);
-    // tft.setTouch(calData);
+    if (!hal_touch_init(touchCfg(), 0, true))
+        Serial.println("Touch IC not Started"); // shares the display SPI bus
+    else Serial.println("Touch IC Started");
     // Brightness control must be initialized after tft in this case @Pirata
-    pinMode(TFT_BL, OUTPUT);
-    ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
-    ledcWrite(TFT_BL, 255);
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 }
 
 /*********************************************************************
@@ -44,18 +85,7 @@ void _post_setup_gpio() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    int dutyCycle;
-    if (brightval == 100) dutyCycle = 255;
-    else if (brightval == 75) dutyCycle = 130;
-    else if (brightval == 50) dutyCycle = 70;
-    else if (brightval == 25) dutyCycle = 20;
-    else if (brightval == 0) dutyCycle = 0;
-    else dutyCycle = ((brightval * 255) / 100);
-
-    // log_i("dutyCycle for bright 0-255: %d", dutyCycle);
-    ledcWrite(TFT_BL, dutyCycle);
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -63,57 +93,12 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = 0;
+    checkPowerSaveTime();
     if (millis() - tm > 200 || LongPress) {
-        // I know R3CK.. I Should NOT nest if statements..
-        // but it is needed to not keep SPI bus used without need, it save resources
-        TouchPoint t;
-        // TouchPoint t2;
-        checkPowerSaveTime();
-        digitalWrite(TFT_CS, HIGH);
-        digitalWrite(TOUCH_CS, LOW);
-        bool _IH_touched = tft.getTouch(&t.x, &t.y);
-        // tft.getTouchRaw(&t2.x, &t2.y);
-        digitalWrite(TOUCH_CS, HIGH);
-        if (_IH_touched) {
-            NextPress = false;
-            PrevPress = false;
-            UpPress = false;
-            DownPress = false;
-            SelPress = false;
-            EscPress = false;
-            AnyKeyPress = false;
-            NextPagePress = false;
-            PrevPagePress = false;
-            touchPoint.pressed = false;
-            _IH_touched = false;
-
-            // Serial.printf("\nRAWRaw: Touch Pressed on x=%d, y=%d", t2.x, t2.y);
-            // Serial.printf("\nRAW:    Touch Pressed on x=%d, y=%d", t.x, t.y);
-            if (bruceConfigPins.rotation == 0) {
-                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
-                t.x = tftWidth - t.x;
-            }
-            if (bruceConfigPins.rotation == 3) {
-                uint16_t tmp = t.x;
-                t.x = map((tftHeight + TOUCH_FOOTER_HEIGHT) - t.y, 0, 240, 0, 320);
-                t.y = map(tmp, 0, 320, 0, 240);
-            }
-            if (bruceConfigPins.rotation == 1) {
-                uint16_t tmp = t.x;
-                t.x = map(t.y, 0, 240, 0, 320);
-                t.y = map(tftWidth - tmp, 0, 320, 0, 240);
-            }
-            // Serial.printf("\nROT: Touch Pressed on x=%d, y=%d, rot: %d\n", t.x, t.y,
-            // bruceConfigPins.rotation);
+        BruceTouchPoint t;
+        if (hal_touch_read(touchCfg(), t)) {
             tm = millis();
-            if (!wakeUpScreen()) AnyKeyPress = true;
-            else return;
-
-            // Touch point global variable
-            touchPoint.x = t.x;
-            touchPoint.y = t.y;
-            touchPoint.pressed = true;
-            touchHeatMap(touchPoint);
+            hal_touch_apply(t);
         }
     }
 }

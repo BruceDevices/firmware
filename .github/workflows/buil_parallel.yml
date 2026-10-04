@@ -47,9 +47,12 @@ jobs:
           - { env: "m5stack-dinmeter",                family: "ESP32-S3",}
           - { env: "m5stack-tab5",                    family: "ESP32-P4",}
           - { env: "esp32-s3-devkitc-1",              family: "ESP32-S3",}
+          - { env: "Freenove-FNK0104AB",              family: "ESP32-S3",}
           - { env: "esp32-s3-devkitc-1-psram",        family: "ESP32-S3",}
           - { env: "esp32-c5",                        family: "ESP32-C5",}
           - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
+          - { env: "esp32-c5-tft-ST7789-170x320",     family: "ESP32-C5",}
+          - { env: "esp32-c5-tft-ST7789-240x320",     family: "ESP32-C5",}
           - { env: "nm-cyd-c5",                       family: "ESP32-C5",}
           - { env: "CYD-2432S028",                    family: "ESP32",}
           - { env: "CYD-2USB",                        family: "ESP32",}
@@ -76,12 +79,14 @@ jobs:
           - { env: "lilygo-t-display-s3-touch-mmc",   family: "ESP32-S3",}
           - { env: "lilygo-t-display-S3-pro",         family: "ESP32-S3",}
           - { env: "lilygo-t-display-ttgo",           family: "ESP32",}
+          - { env: "lilygo-t4",                       family: "ESP32",}
           - { env: "lilygo-t-hmi",                    family: "ESP32-S3",}
           - { env: "lilygo-t-lora-pager",             family: "ESP32-S3",}
           - { env: "elecrow-24B",                     family: "ESP32",}
           - { env: "elecrow-28B",                     family: "ESP32",}
           - { env: "elecrow-advance-35-s3",           family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
+          - { env: "S3_supermini_madara",             family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
@@ -97,10 +102,12 @@ jobs:
           - { env: "Awok-Touch",                      family: "ESP32",}
           - { env: "WaveSentry-R1",                   family: "ESP32",}
           - { env: "LAUNCHER_WaveSentry-R1",          family: "ESP32",}
+          - { env: "lilka",                           family: "ESP32-S3",}
 
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          submodules: recursive
       - id: build
         name: setup Python
         uses: actions/setup-python@v5

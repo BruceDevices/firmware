@@ -1,14 +1,12 @@
 #include "core/i2c_finder.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
 #include <globals.h>
 #include <interface.h>
-
-#ifdef XPOWERS_CHIP_BQ25896
 #include <Wire.h>
-#include <XPowersLib.h>
-XPowersPPM PPM;
-#endif
+
+#define EXPANDER_INT_PIN 28
 
 // Interrupt flag from expander
 volatile bool expanderInterrupt = false;
@@ -21,6 +19,29 @@ void IRAM_ATTR expanderISR() { expanderInterrupt = true; }
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)4, (gpio_num_t)5}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 4;
+    bruceConfigPins.rfRx = 5;
+    bruceConfigPins.irTx = 26;
+    bruceConfigPins.irRx = 25;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.uart_bus = {(gpio_num_t)12, (gpio_num_t)11};  // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)11, (gpio_num_t)12};   // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)12, (gpio_num_t)11}; // rx, tx (CH9329)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8};
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8, (gpio_num_t)9, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)1, (gpio_num_t)0
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)10
+    }; // sck,miso,mosi,cs
+    bruceConfigPins.ST25R_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8, (gpio_num_t)9, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,irq,-
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
@@ -28,13 +49,13 @@ void _setup_gpio() {
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
 
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH);
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
 
-    Wire.begin(GROVE_SDA, GROVE_SCL);
+    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
 
     // Configure buttons on expander as inputs
     ioExpander.button(IO_EXP_UP);
@@ -52,32 +73,18 @@ void _setup_gpio() {
     attachInterrupt(digitalPinToInterrupt(EXPANDER_INT_PIN), expanderISR, FALLING);
 
     // === PMU (BQ25896) Setup ===
-    bool pmu_ret = PPM.init(); // Modern XPowersLib prefers this
-    if (pmu_ret) {
-        PPM.setSysPowerDownVoltage(3300);
-        PPM.setInputCurrentLimit(3250);
-        Serial.printf("getInputCurrentLimit: %d mA\n", PPM.getInputCurrentLimit());
-        PPM.disableCurrentLimitPin();
-        PPM.setChargeTargetVoltage(4208);
-        PPM.setPrechargeCurr(64);
-        PPM.setChargerConstantCurr(320);
-        PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-        PPM.disableOTG();
-        PPM.enableCharge();
-    } else {
-        Serial.println("BQ25896 init failed!");
-    }
+    DevicePmic pmicCfg; // no pins: the driver's default I2C init
+    pmicCfg.charge_current_ma = 320;
+    hal_pmic_init(pmicCfg);
 
-    pinMode(NRF24_SS_PIN, OUTPUT);
-    pinMode(CC1101_SS_PIN, OUTPUT);
-    pinMode(SDCARD_CS, OUTPUT);
-    // pinMode(W5500_SS_PIN, OUTPUT);
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     pinMode(TFT_CS, OUTPUT);
 
-    digitalWrite(NRF24_SS_PIN, HIGH);
-    digitalWrite(CC1101_SS_PIN, HIGH);
-    digitalWrite(SDCARD_CS, HIGH);
-    // digitalWrite(W5500_SS_PIN, HIGH);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
     digitalWrite(TFT_CS, HIGH);
 }
 
@@ -93,7 +100,7 @@ void _post_setup_gpio() {
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
 int getBattery() {
-    uint16_t voltage = PPM.getBattVoltage();
+    uint16_t voltage = hal_pmic_get_batt_voltage_mv();
 
     if (voltage < 3300) return 0;
     if (voltage >= 4200) return 100;
@@ -107,19 +114,12 @@ int getBattery() {
 /***************************************************************************************
 ** Function name: isCharging()
 ***************************************************************************************/
-bool isCharging() { return PPM.isCharging(); }
+bool isCharging() { return hal_pmic_is_charging(); }
 
 /*********************************************************************
 ** Function: setBrightness
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, 0);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100.0));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -180,7 +180,7 @@ void InputHandler() {
 /*********************************************************************
 ** Function: powerOff
 **********************************************************************/
-void powerOff() { PPM.shutdown(); }
+void powerOff() { hal_pmic_shutdown(); }
 
 /*********************************************************************
 ** Function: checkReboot

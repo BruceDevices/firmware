@@ -16,10 +16,17 @@
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/touch.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <globals.h>
 #include <interface.h>
+
+#define ES3C28P 1
+#define ES8311_ADDR 0x18
+#define ES8311_CODEC 1
 
 // =============================================
 // SD Card SDIO pins (defined locally for USE_SD_MMC)
@@ -47,39 +54,26 @@
 #define ES3C28P_BTN_ACT LOW
 
 // =============================================
-// Touch Screen (FT6336G via I2C)
+// Touch Screen (FT6336G via I2C, hal_touch_init/hal_touch_read -- src/hal/inputs/touch.cpp)
 // =============================================
-// The FT6336G uses the same register protocol as CST816S/FT6236
-// Register 0x02: number of touch points
-// Register 0x03-0x06: touch point 1 X/Y coordinates
-#define FT6336_REG_NUM_TOUCHES 0x02
-#define FT6336_REG_TOUCH_DATA 0x03
-
-static bool touchInitialized = false;
-
-static uint8_t ft6336_read_reg(uint8_t reg) {
-    Wire.beginTransmission(ES3C28P_TOUCH_ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom(ES3C28P_TOUCH_ADDR, 1);
-    if (Wire.available()) return Wire.read();
-    return 0;
-}
-
-static bool ft6336_read_touch(int16_t &x, int16_t &y) {
-    uint8_t touches = ft6336_read_reg(FT6336_REG_NUM_TOUCHES);
-    if (touches == 0 || touches > 2) return false;
-
-    uint8_t data[4];
-    Wire.beginTransmission(ES3C28P_TOUCH_ADDR);
-    Wire.write(FT6336_REG_TOUCH_DATA);
-    Wire.endTransmission(false);
-    Wire.requestFrom(ES3C28P_TOUCH_ADDR, 4);
-    for (int i = 0; i < 4; i++) { data[i] = Wire.read(); }
-
-    x = ((data[0] & 0x0F) << 8) | data[1];
-    y = ((data[2] & 0x0F) << 8) | data[3];
-    return true;
+// Raw touch reads portrait-native (rotation 0 needs no transform in the old code): derived
+// algebraically from InputHandler's old per-rotation remap block -- see src/hal/README.md.
+static DeviceTouch touchCfg() {
+    DeviceTouch cfg;
+    cfg.pin_sda = ES3C28P_TOUCH_SDA;
+    cfg.pin_scl = ES3C28P_TOUCH_SCL;
+    cfg.pin_rst = ES3C28P_TOUCH_RST;
+    cfg.pin_irq = ES3C28P_TOUCH_INT;
+    // rotation:        0      1      2      3
+    const bool swapXY[4] = {false, true, false, true};
+    const bool mirrorX[4] = {false, false, true, true};
+    const bool mirrorY[4] = {false, true, true, false};
+    for (int i = 0; i < 4; i++) {
+        cfg.SwapXY[i] = swapXY[i];
+        cfg.MirrorX[i] = mirrorX[i];
+        cfg.MirrorY[i] = mirrorY[i];
+    }
+    return cfg;
 }
 
 /***************************************************************************************
@@ -87,26 +81,49 @@ static bool ft6336_read_touch(int16_t &x, int16_t &y) {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    // bclk,ws,dout,mclk
+    bruceConfigPins.speaker_bus = {(gpio_num_t)5, (gpio_num_t)7, (gpio_num_t)8, (gpio_num_t)4};
+    // ES8311 ADC: clocked off the speaker BCLK, and its LRCLK doubles as the mic WS
+    // clk,data,ws,type
+    bruceConfigPins.mic_bus = {(gpio_num_t)5, (gpio_num_t)6, (gpio_num_t)7, MIC_TYPE_I2S_MSB};
+    bruceConfigPins.sys_i2c = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl
+    bruceConfigPins.i2c_bus = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 16;
+    bruceConfigPins.rfRx = 15;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 3;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)15, (gpio_num_t)16}; // rx, tx (CH9329)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)21};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)21};
+    // CC1101/NRF24/W5500 share the same expansion-pin SPI bus (sck=14, miso=2, mosi=3)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)21, (gpio_num_t)2, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)21, (gpio_num_t)3
+    }; // sck,miso,mosi,cs(ss),ce
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)3, GPIO_NUM_NC, GPIO_NUM_NC, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+
 #ifdef USE_SD_MMC
     // ---- SD Card (SDIO mode, 1-bit) ----
     SD.setPins(PIN_SD_CLK, PIN_SD_CMD, PIN_SD_D0);
 #endif
 
-    // ---- Touch Screen Init (FT6336G) ----
-    // Reset touch controller
-    pinMode(ES3C28P_TOUCH_RST, OUTPUT);
-    digitalWrite(ES3C28P_TOUCH_RST, LOW);
-    delay(10);
-    digitalWrite(ES3C28P_TOUCH_RST, HIGH);
-    delay(300);
-
-    // Touch interrupt pin
-    pinMode(ES3C28P_TOUCH_INT, INPUT);
-
     // Initialize I2C bus (shared with audio codec ES8311)
     setSysI2CBus(&Wire);
-    Wire.begin(ES3C28P_TOUCH_SDA, ES3C28P_TOUCH_SCL);
-    touchInitialized = true;
+
+    // ---- Touch Screen Init (FT6336G) ----
+    if (!hal_touch_init(touchCfg(), ES3C28P_TOUCH_ADDR)) {
+        Serial.println("Touch IC not Started");
+    }
 
     // ---- Amplifier: disable by default (active LOW, so HIGH = disabled) ----
     pinMode(ES3C28P_AMP_EN, OUTPUT);
@@ -115,8 +132,6 @@ void _setup_gpio() {
     // ---- Start with default module configs ----
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
-    bruceConfigPins.irRx = RXLED;
-    bruceConfigPins.irTx = TXLED;
 
     Serial.begin(115200);
 }
@@ -127,53 +142,15 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
     // Backlight control via PWM (must be after TFT init)
-    pinMode(TFT_BL, OUTPUT);
-    analogWrite(TFT_BL, 255); // Full brightness initially
-}
-
-/***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 0-100
-**                Uses GPIO9 (ADC1_CH8) with x2 voltage divider
-**                Battery range: 2500mV (0%) to 4200mV (100%)
-***************************************************************************************/
-int getBattery() {
-    static bool adcInitialized = false;
-    if (!adcInitialized) {
-        pinMode(ANALOG_BAT_PIN, INPUT);
-        analogSetAttenuation(ADC_11db); // Full range for 0-3.3V input
-        adcInitialized = true;
-    }
-
-    // Read ADC and convert to actual battery voltage (with x2 divider)
-    uint32_t adcReading = analogReadMilliVolts(ANALOG_BAT_PIN);
-    float actualVoltage = (float)adcReading * 2.0f; // x2 voltage divider
-
-    // Battery voltage range per ES3C28P specs:
-    // Min: 2500mV (cutoff/empty), Max: 4200mV (fully charged)
-    const float MIN_VOLTAGE = 2500.0f;
-    const float MAX_VOLTAGE = 4200.0f;
-
-    int percent = (int)(((actualVoltage - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 100.0f);
-
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-
-    return percent;
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
 }
 
 /*********************************************************************
 ** Function: setBrightness
 ** set brightness value (0-100)
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, 0);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -185,39 +162,10 @@ void InputHandler(void) {
 
     if (millis() - tm > 200 || LongPress) {
         // ---- Touch Screen Input ----
-        if (touchInitialized) {
-            int16_t raw_x, raw_y;
-            if (ft6336_read_touch(raw_x, raw_y)) {
-                tm = millis();
-
-                // Apply rotation transformation
-                int16_t t_x = raw_x;
-                int16_t t_y = raw_y;
-
-                if (bruceConfigPins.rotation == 1) {
-                    // Landscape: swap and mirror
-                    t_x = raw_y;
-                    t_y = (TFT_WIDTH - 1) - raw_x;
-                } else if (bruceConfigPins.rotation == 2) {
-                    // Portrait inverted
-                    t_x = (TFT_WIDTH - 1) - raw_x;
-                    t_y = (TFT_HEIGHT - 1) - raw_y;
-                } else if (bruceConfigPins.rotation == 3) {
-                    // Landscape inverted
-                    t_x = (TFT_HEIGHT - 1) - raw_y;
-                    t_y = raw_x;
-                }
-                // rotation == 0: portrait default, no transform needed
-
-                if (!wakeUpScreen()) AnyKeyPress = true;
-                else return;
-
-                // Set global touch point
-                touchPoint.x = t_x;
-                touchPoint.y = t_y;
-                touchPoint.pressed = true;
-                touchHeatMap(touchPoint);
-            }
+        BruceTouchPoint t;
+        if (hal_touch_read(touchCfg(), t)) {
+            tm = millis();
+            if (!hal_touch_apply(t)) return;
         }
 
         // ---- BOOT Button Input ----
@@ -238,7 +186,7 @@ void InputHandler(void) {
 **********************************************************************/
 void powerOff() {
     // Turn off backlight
-    analogWrite(TFT_BL, 0);
+    hal_bright_set(TFT_BL, 0);
     // Turn off amplifier
     digitalWrite(ES3C28P_AMP_EN, HIGH);
     // Send display to sleep
@@ -393,10 +341,6 @@ void _setup_codec_speaker(bool enable) {
 ** Handles audio CODEC to enable/disable microphone
 **********************************************************************/
 void _setup_codec_mic(bool enable) {
-    // Set microphone I2S pin for Bruce's mic module
-    extern gpio_num_t mic_bclk_pin;
-    mic_bclk_pin = (gpio_num_t)BCLK;
-
     if (enable) {
         // Reset codec (exact sequence from LCD Wiki)
         es8311_write_reg(ES8311_REG00_RESET, 0x1F);

@@ -6,7 +6,17 @@
 ** Location: main.cpp
 ** Description:   initial setup for the device
 ***************************************************************************************/
-void _setup_gpio() { bruceConfig.startupApp = "WebUI"; }
+void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)0, (gpio_num_t)1}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 0;
+    bruceConfigPins.rfRx = 1;
+    bruceConfigPins.irTx = 27;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.badusb_bus = {(gpio_num_t)4, (gpio_num_t)5}; // rx, tx (CH9329)
+
+    bruceConfig.startupApp = "WebUI";
+}
 
 /***************************************************************************************
 ** Function name: getBattery()

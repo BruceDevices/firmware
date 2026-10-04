@@ -138,9 +138,7 @@ void tft_logger::getTftInfo() {
     writeUint16(buffer, pos, width());
     writeUint16(buffer, pos, height());
     uint8_t rot = 0;
-#if defined(HAS_SCREEN)
     rot = getRotation();
-#endif
     buffer[pos++] = rot;
     buffer[1] = pos;
     tftLog l;
@@ -156,9 +154,7 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     writeUint16(buffer, pos, width());
     writeUint16(buffer, pos, height());
     uint8_t rot = 0;
-#if defined(HAS_SCREEN)
     rot = getRotation();
-#endif
     buffer[pos++] = rot;
     buffer[1] = pos;
 
@@ -445,7 +441,9 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
     if (!log) return;
-    if (removeLogEntriesInsideRect(x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize())) {
+    if (removeLogEntriesInsideRect(
+            x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize()
+        )) {
         // debug purpose
         // Serial.printf("Something was removed while processing: %s\n", s.c_str());
     }
@@ -506,7 +504,9 @@ void tft_logger::log_print(String s) {
     if (!log) return;
 
     removeLogEntriesInsideRect(
-        getCursorX() - 1, getCursorY() - 1, s.length() * LW * currentTextSize() + 2,
+        getCursorX() - 1,
+        getCursorY() - 1,
+        s.length() * LW * currentTextSize() + 2,
         s.length() * LH * currentTextSize() + 2
     );
 

@@ -6,7 +6,9 @@
 #include "modules/ir/custom_ir.h"
 #include "modules/ir/ir_jammer.h"
 #include "modules/ir/ir_read.h"
-
+#if defined(ARDUINO_M5STICK_S3)
+#include <M5Unified.h>
+#endif
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
     bool prevPower = M5.Power.getExtOutput();

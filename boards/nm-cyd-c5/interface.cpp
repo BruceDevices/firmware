@@ -1,6 +1,33 @@
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/touch.h"
+#include "CYD28_TouchscreenR.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/inputs/buttons.h"
 #include <interface.h>
+
+#ifdef HAS_3_BUTTONS
+static DeviceButtons buttonsCfg() { return DeviceButtons{UP_BTN, DW_BTN, SEL_BTN}; }
+#endif
+
+#ifdef HAS_TOUCH
+extern CYD28_TouchR touch; // defined by hal/inputs/touch.cpp
+static DeviceTouch touchCfg() {
+    DeviceTouch cfg;
+    // The XPT2046 reports landscape (rotation 1) coordinates
+    // rotation:        0      1      2      3
+    const bool swapXY[4] = {true, false, true, false};
+    const bool mirrorX[4] = {true, false, false, true};
+    const bool mirrorY[4] = {false, false, true, true};
+    for (int i = 0; i < 4; i++) {
+        cfg.SwapXY[i] = swapXY[i];
+        cfg.MirrorX[i] = mirrorX[i];
+        cfg.MirrorY[i] = mirrorY[i];
+    }
+    return cfg;
+}
+#endif
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -8,6 +35,33 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)9, (gpio_num_t)8}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 8;
+    bruceConfigPins.rfRx = 9;
+    bruceConfigPins.irTx = 8;
+    bruceConfigPins.irRx = 9;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)12, (gpio_num_t)11}; // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)4, (gpio_num_t)5};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)4, (gpio_num_t)5}; // rx, tx
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)9};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)9};
+    // CC1101/NRF24/SDCARD/W5500 share the main SPI bus (sck=6, miso=2, mosi=7)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)9, (gpio_num_t)8, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)9, (gpio_num_t)8
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)10
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)9, (gpio_num_t)8, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+#endif
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
@@ -15,28 +69,28 @@ void _setup_gpio() {
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
 
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH);
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
 
 #ifdef HAS_3_BUTTONS
-    pinMode(UP_BTN, INPUT_PULLUP); // Sets the power btn as an INPUT
-    pinMode(SEL_BTN, INPUT_PULLUP);
-    pinMode(DW_BTN, INPUT_PULLUP);
+    hal_buttons_init(buttonsCfg(), 3);
 #endif
-    pinMode(NRF24_SS_PIN, OUTPUT);
-    pinMode(CC1101_SS_PIN, OUTPUT);
-    pinMode(SDCARD_CS, OUTPUT);
-    pinMode(W5500_SS_PIN, OUTPUT);
+    pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     pinMode(TFT_CS, OUTPUT);
 
-    digitalWrite(NRF24_SS_PIN, HIGH);
-    digitalWrite(CC1101_SS_PIN, HIGH);
-    digitalWrite(SDCARD_CS, HIGH);
-    digitalWrite(W5500_SS_PIN, HIGH);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
     digitalWrite(TFT_CS, HIGH);
+#if !defined(LITE_VERSION)
+    pinMode(bruceConfigPins.W5500_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.W5500_bus.cs, HIGH);
+#endif
 }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
@@ -45,12 +99,10 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() {
 #ifdef HAS_TOUCH
-    pinMode(TOUCH_CS, OUTPUT);
-    uint16_t calData[5] = {225, 3413, 403, 3334, 1};
-    tft.setTouch(calData);
+    hal_touch_init(touchCfg(), 0, true); // shares the display SPI bus
 #endif
-    bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
-    bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;
+    bruceConfigPins.gps_bus.rx = (gpio_num_t)4;
+    bruceConfigPins.gps_bus.tx = (gpio_num_t)5;
     bruceConfigPins.gpsBaudrate = 9600;
     bruceConfigPins.rfTx = 8;
     bruceConfigPins.rfRx = 9;
@@ -70,8 +122,8 @@ void _post_setup_gpio() {
     // Force set I2C bus pins for nm-cyd-c5.
     // brucePins.conf may have stale/wrong i2c_bus values, so override them
     // to ensure PN532 and other I2C devices use the correct GPIO9(SDA)/GPIO8(SCL).
-    bruceConfigPins.i2c_bus.sda = (gpio_num_t)GROVE_SDA;
-    bruceConfigPins.i2c_bus.scl = (gpio_num_t)GROVE_SCL;
+    bruceConfigPins.i2c_bus.sda = (gpio_num_t)9;
+    bruceConfigPins.i2c_bus.scl = (gpio_num_t)8;
 }
 
 /***************************************************************************************
@@ -92,14 +144,7 @@ bool isCharging() { return false; }
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -109,65 +154,17 @@ void InputHandler(void) {
     static unsigned long tm = 0;
     if (millis() - tm < 200 && !LongPress) return;
 #ifdef HAS_TOUCH
-    TouchPoint t;
     checkPowerSaveTime();
-    bool _IH_touched = tft.getTouch(&t.x, &t.y);
-    if (_IH_touched) {
-        NextPress = false;
-        PrevPress = false;
-        UpPress = false;
-        DownPress = false;
-        SelPress = false;
-        EscPress = false;
-        AnyKeyPress = false;
-        NextPagePress = false;
-        PrevPagePress = false;
-        touchPoint.pressed = false;
-        _IH_touched = false;
-        Serial.printf("\nRAW: Touch Pressed on x=%d, y=%d", t.x, t.y);
-        if (bruceConfigPins.rotation == 3) {
-            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
-            t.x = tftWidth - t.x;
+    {
+        BruceTouchPoint t;
+        if (hal_touch_read(touchCfg(), t)) {
+            tm = millis();
+            if (!hal_touch_apply(t)) return;
         }
-        if (bruceConfigPins.rotation == 0) {
-            uint16_t tmp = t.x;
-            t.x = map((tftHeight + TOUCH_FOOTER_HEIGHT) - t.y, 0, 320, 0, 240);
-            t.y = map(tmp, 0, 240, 0, 320);
-        }
-        if (bruceConfigPins.rotation == 2) {
-            uint16_t tmp = t.x;
-            t.x = map(t.y, 0, 320, 0, 240);
-            t.y = map(tftWidth - tmp, 0, 240, 0, 320);
-        }
-
-        Serial.printf("\nROT: Touch Pressed on x=%d, y=%d, rot=%d\n", t.x, t.y, bruceConfigPins.rotation);
-
-        if (!wakeUpScreen()) AnyKeyPress = true;
-        else return;
-
-        // Touch point global variable
-        touchPoint.x = t.x;
-        touchPoint.y = t.y;
-        touchPoint.pressed = true;
-        touchHeatMap(touchPoint);
-        tm = millis();
     }
-
 #endif
 #ifdef HAS_3_BUTTONS
-    bool upPressed = (digitalRead(UP_BTN) == LOW);
-    bool selPressed = (digitalRead(SEL_BTN) == LOW);
-    bool dwPressed = (digitalRead(DW_BTN) == LOW);
-
-    bool anyPressed = upPressed || selPressed || dwPressed;
-    if (anyPressed) tm = millis();
-    if (anyPressed && wakeUpScreen()) return;
-
-    AnyKeyPress = anyPressed;
-    PrevPress = upPressed;
-    EscPress = upPressed && dwPressed;
-    NextPress = dwPressed;
-    SelPress = selPressed;
+    hal_buttons_poll_3(buttonsCfg());
 #endif
 }
 

@@ -1,8 +1,18 @@
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/buttons.h"
+#include "hal/inputs/touch.h"
 #include <globals.h>
 #include <interface.h>
+
+#define SEL_BTN 16
+
+#define BTN_ACT LOW
+#define DW_BTN 14
+#define UP_BTN 0
 
 #ifdef USE_SD_MMC
 #define PIN_SD_CMD 13
@@ -10,27 +20,27 @@
 #define PIN_SD_D0 12
 #endif
 #ifdef HAS_TOUCH
-#define TOUCH_MODULES_CST_SELF
-#include <TouchLib.h>
-#include <Wire.h>
-TouchLib touch(Wire, 18, 17, CTS820_SLAVE_ADDRESS, 21);
+// CST820 (CST8xx family) over the default Wire object. Raw touch always reads through the old
+// fixed touch.setRotation(1) pre-transform (a plain x/y swap): derived algebraically from
+// composing it with InputHandler's old per-rotation remap block -- see src/hal/README.md.
+static DeviceTouch touchCfg() {
+    DeviceTouch cfg;
+    cfg.pin_sda = 18;
+    cfg.pin_scl = 17;
+    cfg.pin_rst = 21;
+    cfg.cst8xx_model = 1; // CST816/CST820/CST716
+    // rotation:        0      1      2      3
+    const bool swapXY[4] = {false, true, false, true};
+    const bool mirrorX[4] = {true, false, false, true};
+    const bool mirrorY[4] = {false, true, true, false};
+    for (int i = 0; i < 4; i++) {
+        cfg.SwapXY[i] = swapXY[i];
+        cfg.MirrorX[i] = mirrorX[i];
+        cfg.MirrorY[i] = mirrorY[i];
+    }
+    return cfg;
+}
 #endif
-
-#include <Button.h>
-volatile bool nxtPress = false;
-volatile bool prvPress = false;
-volatile bool ecPress = false;
-volatile bool slPress = false;
-static void onButtonSingleClickCb1(void *button_handle, void *usr_data) { nxtPress = true; }
-static void onButtonDoubleClickCb1(void *button_handle, void *usr_data) { slPress = true; }
-static void onButtonHoldCb1(void *button_handle, void *usr_data) { slPress = true; }
-
-static void onButtonSingleClickCb2(void *button_handle, void *usr_data) { prvPress = true; }
-static void onButtonDoubleClickCb2(void *button_handle, void *usr_data) { ecPress = true; }
-static void onButtonHoldCb2(void *button_handle, void *usr_data) { ecPress = true; }
-
-Button *btn1;
-Button *btn2;
 
 #if defined(T_DISPLAY_S3)
 
@@ -41,6 +51,89 @@ Button *btn2;
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.mic_bus = {(gpio_num_t)39, (gpio_num_t)42, GPIO_NUM_NC, MIC_TYPE_PDM}; // clk,data,ws,type
+    // GROVE_SDA/SCL, TXLED/RXLED, SERIAL_TX/RX and the shared SPI buses used to vary per
+    // env via -D overrides (see lilygo-t-display-s3.ini history) depending on the
+    // HAS_TOUCH / USE_SD_MMC pin-mux combination for this board; mirror those 4
+    // combinations here now that the macros are gone.
+#if defined(HAS_TOUCH) && defined(USE_SD_MMC)
+    bruceConfigPins.i2c_bus = {(gpio_num_t)18, (gpio_num_t)17}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 18;
+    bruceConfigPins.rfRx = 17;
+    bruceConfigPins.irTx = 10;
+    bruceConfigPins.irRx = 44;
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)16};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)16};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)17, (gpio_num_t)18}; // rx, tx
+#elif defined(HAS_TOUCH)
+    bruceConfigPins.i2c_bus = {(gpio_num_t)18, (gpio_num_t)17}; // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)18, (gpio_num_t)17}; // sda, scl
+    bruceConfigPins.rfTx = 18;
+    bruceConfigPins.rfRx = 17;
+    bruceConfigPins.irTx = 3;
+    bruceConfigPins.irRx = 21;
+    bruceConfigPins.uart_bus = {(gpio_num_t)43, (gpio_num_t)44};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)17, (gpio_num_t)18};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)17, (gpio_num_t)18}; // rx, tx
+#elif defined(USE_SD_MMC)
+    bruceConfigPins.i2c_bus = {(gpio_num_t)16, (gpio_num_t)21}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 16;
+    bruceConfigPins.rfRx = 21;
+    bruceConfigPins.irTx = 10;
+    bruceConfigPins.irRx = 44;
+    bruceConfigPins.uart_bus = {(gpio_num_t)16, (gpio_num_t)21};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)21, (gpio_num_t)16};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)21, (gpio_num_t)16}; // rx, tx
+#else
+    bruceConfigPins.i2c_bus = {(gpio_num_t)44, (gpio_num_t)43}; // sda, scl (Grove)
+    bruceConfigPins.rfTx = 44;
+    bruceConfigPins.rfRx = 43;
+    bruceConfigPins.irTx = 17;
+    bruceConfigPins.irRx = 18;
+    bruceConfigPins.uart_bus = {(gpio_num_t)43, (gpio_num_t)44};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)43, (gpio_num_t)44};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)43, (gpio_num_t)44}; // rx, tx
+#endif
+    bruceConfigPins.rotation = 3;
+
+#if defined(USE_SD_MMC)
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)-1, (gpio_num_t)-1, (gpio_num_t)-1, (gpio_num_t)-1};
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)43, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)1, (gpio_num_t)44, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+#if defined(HAS_TOUCH)
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)43, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)16, (gpio_num_t)44
+    }; // sck,miso,mosi,cs(ss),ce
+#else
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)43, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)18, (gpio_num_t)17
+    }; // sck,miso,mosi,cs(ss),ce
+#endif
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)43, (gpio_num_t)2, (gpio_num_t)3, (gpio_num_t)-1, (gpio_num_t)-1, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+#else
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)1
+    }; // sck,miso,mosi,cs
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)2, (gpio_num_t)21, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)10, (gpio_num_t)3
+    }; // sck,miso,mosi,cs(ss),ce
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)-1, (gpio_num_t)-1, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+#endif
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)10};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)11, (gpio_num_t)10};
 
 #ifdef USE_SD_MMC
     SD.setPins(PIN_SD_CLK, PIN_SD_CMD, PIN_SD_D0);
@@ -50,61 +143,26 @@ void _setup_gpio() {
     gpio_hold_dis((gpio_num_t)21); // PIN_TOUCH_RES
     pinMode(15, OUTPUT);
     digitalWrite(15, HIGH); // PIN_POWER_ON
-    pinMode(21, OUTPUT);    // PIN_TOUCH_RES
-    digitalWrite(21, LOW);  // PIN_TOUCH_RES
-    delay(500);
-    digitalWrite(21, HIGH); // PIN_TOUCH_RES
     setSysI2CBus(&Wire);    // Touch lives on the default Wire object
-    Wire.begin(18, 17);     // SDA, SCL
-    if (!touch.init()) { Serial.println("Touch IC not found"); }
-
-    touch.setRotation(1);
+    if (!hal_touch_init(touchCfg(), 0x15 /* CTS820_SLAVE_ADDRESS */)) {
+        Serial.println("Touch IC not found");
+    }
 #endif
     // setup buttons
-    button_config_t bt1 = {
-        .type = BUTTON_TYPE_GPIO,
-        .long_press_time = 600,
-        .short_press_time = 120,
-        .gpio_button_config = {
-                               .gpio_num = DW_BTN,
-                               .active_level = 0,
-                               },
-    };
-    button_config_t bt2 = {
-        .type = BUTTON_TYPE_GPIO,
-        .long_press_time = 600,
-        .short_press_time = 120,
-        .gpio_button_config = {
-                               .gpio_num = UP_BTN,
-                               .active_level = 0,
-                               },
-    };
     pinMode(SEL_BTN, INPUT_PULLUP);
-
-    btn1 = new Button(bt1);
-
-    // btn->attachPressDownEventCb(&onButtonPressDownCb, NULL);
-    btn1->attachSingleClickEventCb(&onButtonSingleClickCb1, NULL);
-    btn1->attachDoubleClickEventCb(&onButtonDoubleClickCb1, NULL);
-    btn1->attachLongPressStartEventCb(&onButtonHoldCb1, NULL);
-
-    btn2 = new Button(bt2);
-
-    // btn->attachPressDownEventCb(&onButtonPressDownCb, NULL);
-    btn2->attachSingleClickEventCb(&onButtonSingleClickCb2, NULL);
-    btn2->attachDoubleClickEventCb(&onButtonDoubleClickCb2, NULL);
-    btn2->attachLongPressStartEventCb(&onButtonHoldCb2, NULL);
+    // DW_BTN -> Next (click) / Sel (double click or hold)
+    // UP_BTN -> Prev (click) / Esc (double click or hold)
+    hal_buttons_init_2(DeviceButtons{DW_BTN, UP_BTN}, 600);
 
     // setup POWER pin required by the vendor
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
 
+    hal_bright_attach(TFT_BL);
+
     // Start with default IR, RF and RFID Configs, replace old
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
-
-    bruceConfigPins.irRx = RXLED;
-    bruceConfigPins.irTx = TXLED;
 
     Serial.begin(115200);
 }
@@ -113,14 +171,7 @@ void _setup_gpio() {
 **  Function: setBrightness
 **  set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
@@ -128,68 +179,17 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 
 void InputHandler(void) {
-    static long tm = 0;
-    static bool btn_pressed = false;
-    bool selPressed = false;
-    if (nxtPress || prvPress || ecPress || slPress || selPressed) btn_pressed = true;
+    hal_buttons_poll_2();
 
-    if (millis() - tm > 200 || LongPress) {
+    static unsigned long tm = 0;
+    if (millis() - tm <= 200 && !LongPress) return;
 #ifdef HAS_TOUCH
-        if (touch.read()) {
-            auto t = touch.getPoint(0);
-            tm = millis();
-            if (bruceConfigPins.rotation == 1) {
-                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
-                // t.x = tftWidth-t.x;
-            }
-            if (bruceConfigPins.rotation == 3) {
-                // t.y = (tftHeight+20)-t.y;
-                t.x = tftWidth - t.x;
-            }
-            // Need to test the other orientations
-
-            if (bruceConfigPins.rotation == 0) {
-                int tmp = t.x;
-                t.x = tftWidth - t.y;
-                t.y = tmp;
-            }
-            if (bruceConfigPins.rotation == 2) {
-                int tmp = t.x;
-                t.x = t.y;
-                t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
-            }
-
-            // Serial.printf("\nPressed x=%d , y=%d, rot: %d",t.x, t.y, bruceConfigPins.rotation);
-
-            if (!wakeUpScreen()) AnyKeyPress = true;
-            else return;
-
-            // Touch point global variable
-            touchPoint.x = t.x;
-            touchPoint.y = t.y;
-            touchPoint.pressed = true;
-            touchHeatMap(touchPoint);
-        }
-#endif
-        if (digitalRead(SEL_BTN) == BTN_ACT) {
-            selPressed = true;
-            btn_pressed = true;
-        }
-        if (btn_pressed) {
-            btn_pressed = false;
-            if (!wakeUpScreen()) AnyKeyPress = true;
-            else return;
-            SelPress = slPress + selPressed;
-            EscPress = ecPress;
-            NextPress = nxtPress;
-            PrevPress = prvPress;
-
-            nxtPress = false;
-            prvPress = false;
-            ecPress = false;
-            slPress = false;
-        }
+    BruceTouchPoint t;
+    if (hal_touch_read(touchCfg(), t)) {
+        tm = millis();
+        if (!hal_touch_apply(t)) return;
     }
+#endif
 }
 
 void powerOff() {

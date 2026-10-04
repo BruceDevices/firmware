@@ -17,7 +17,7 @@ void OthersMenu::optionsMenu() {
         {"QRCodes",      qrcode_menu                  },
         {"Megalodon",    shark_setup                  },
 
-#if defined(MIC_SPM1423) || defined(MIC_INMP441)
+#if defined(HAS_MICROPHONE)
         {"Microphone",   [this]() { micMenu(); }      }, //@deveclipse
 #endif
 
@@ -57,7 +57,7 @@ void OthersMenu::badUsbHidMenu() {
 
 void OthersMenu::micMenu() {
     options = {
-#if defined(MIC_SPM1423) || defined(MIC_INMP441)
+#if defined(HAS_MICROPHONE)
         {"Spectrum", mic_test                   },
         {"Record",   mic_record_app             },
 #endif

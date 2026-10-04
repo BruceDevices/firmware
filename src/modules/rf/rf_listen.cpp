@@ -23,14 +23,14 @@ void IRAM_ATTR onPulse() {
 }
 
 // Beep through the EXACT same path as the working DTMF Tones.js script:
-// audio.tone -> (HAS_NS4168_SPKR) serialCli.parse("tone f d") -> toneCallback -> playTone.
+// audio.tone -> (HAS_SPEAKER) serialCli.parse("tone f d") -> toneCallback -> playTone.
 // The key detail learned from that script: the I2S speaker needs a long tone (~500ms) to be
 // audible - short beeps get swallowed by the DMA buffer before it drains.
 static void rf_listen_beep(unsigned int hz, unsigned long ms) {
-#if defined(BUZZ_PIN)
-    tone(BUZZ_PIN, hz, ms); // non-blocking buzzer
-#else
+#if defined(HAS_SPEAKER)
     serialCli.parse("tone " + String(hz) + " " + String(ms));
+#else
+    if (bruceConfigPins.buzzer > 0) tone((uint8_t)bruceConfigPins.buzzer, hz, ms); // non-blocking buzzer
 #endif
 }
 

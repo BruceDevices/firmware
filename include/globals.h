@@ -38,33 +38,14 @@ extern RTC_DateTypeDef _date;
 #endif
 
 // Declaração dos objetos TFT
-#if defined(HAS_SCREEN)
-#include <display/tft.h>
+#include <DisplayDrivers.h>
 #include <tftLogger.h>
 extern tft_logger tft;
 extern tft_sprite sprite;
 extern tft_sprite draw;
-#else
-#include <tftLogger.h>
-extern tft_logger tft;
-extern SerialDisplayClass &sprite;
-extern SerialDisplayClass &draw;
-#endif
 
-#ifdef USE_BQ27220_VIA_I2C
-#include <bq27220.h>
-extern BQ27220 bq;
-#endif
-
-#ifdef USE_BQ25896
-#include <XPowersLib.h>
-extern XPowersPPM PPM;
-#endif
-
-#ifdef USE_BOOST /// to avoid t embed toggle otg on some codes
-#include <XPowersLib.h>
-extern XPowersPPM PPM;
-#endif
+#include "hal/power/gauge.h"
+#include "hal/power/pmic.h"
 
 extern int8_t interpreter_state; // -1 - stopped, 0 - background, 1 - waiting for foreground, 2 - foreground
 
@@ -166,7 +147,7 @@ struct keyStroke { // DO NOT CHANGE IT!!!!!
     }
 };
 
-struct TouchPoint {
+struct BruceTouchPoint {
     bool pressed = false;
     uint16_t x;
     uint16_t y;
@@ -179,7 +160,7 @@ struct TouchPoint {
     }
 };
 
-extern TouchPoint touchPoint;
+extern BruceTouchPoint touchPoint;
 // true (default): touchHeatMap() maps taps anywhere on screen into zone-based Prev/Sel/Next/Esc/Up/Down,
 // same as physical buttons. A screen that wants to hit-test raw taps itself (e.g. tap-to-select in
 // loopOptions) sets this false while it runs; the TouchFooter band keeps working either way.
@@ -253,17 +234,20 @@ static inline int32_t drainRotarySteps() {
 #endif
 
 extern TaskHandle_t xHandle;
-extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
 
-#ifndef USE_TFT_eSPI_TOUCH
+// Recursive mutex shared by the InputHandler task (writer) and its consumers (check(),
+// _getKeyPress()). The consumers wait on it instead of suspending the input task, so neither
+// side is ever frozen mid-update (or mid SPI transfer when the touchscreen shares the display bus).
+void inputLockInit();
+void inputLock();
+void inputUnlock();
+
+extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
     if (!btn) return false;
 #ifdef HAS_ENCODER
     // NextPress/PrevPress here are rotary-encoder-derived, not raw mechanical
     // button reads -- the encoder's own quadrature decode already rejects
-    // bounce, so the extra software debounce delay below is redundant for
-    // these two flags and only adds latency to every scroll step. Skip it
-    // for them; every other flag (SelPress, EscPress, etc.) keeps the
-    // original suspend+delay+resume debounce untouched.
+    // bounce, so they need no extra handling.
     if (&btn == &NextPress || &btn == &PrevPress) {
         if (resetButtonStatus) {
             btn = false;
@@ -273,25 +257,14 @@ extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
         return true;
     }
 #endif
-    vTaskSuspend(xHandle);
+    inputLock();
     if (resetButtonStatus) {
         btn = false;
         AnyKeyPress = false;
         SerialCmdPress = false;
     }
-    delay(10);
-    vTaskResume(xHandle);
+    inputUnlock();
     return true;
-#else
-
-    InputHandler();
-    if (!btn) return false;
-    btn = false;
-    AnyKeyPress = false;
-    SerialCmdPress = false;
-    return true;
-
-#endif
 }
 
 extern gpio_num_t mic_bclk_pin; // used to configure Cardputer ADV Microphone

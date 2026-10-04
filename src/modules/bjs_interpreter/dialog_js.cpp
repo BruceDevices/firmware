@@ -383,9 +383,8 @@ JSValue native_dialogCreateTextViewer(JSContext *ctx, JSValue *this_val, int arg
 }
 
 JSValue native_drawStatusBar(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-#if defined(HAS_SCREEN)
     drawStatusBar();
-#endif
+
     return JS_UNDEFINED;
 }
 

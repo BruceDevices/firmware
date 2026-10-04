@@ -151,15 +151,15 @@ typedef struct {
 
 // Single active portal instance
 struct BackgroundPortal {
-    EvilPortal *instance;             // Portal instance
-    String portalId;                  // Unique ID for file naming
-    String ssid;                      // SSID being spoofed
-    uint8_t channel;                   // Channel this portal runs on
-    unsigned long lastHeartbeat;      // Last time we checked this portal
-    unsigned long launchTime;         // When portal was launched
-    bool hasCreds;                    // Whether credentials captured
-    String capturedPassword;          // Captured password if any
-    uint32_t clientFingerprint;       // Fingerprint of connected victim
+    EvilPortal *instance;        // Portal instance
+    String portalId;             // Unique ID for file naming
+    String ssid;                 // SSID being spoofed
+    uint8_t channel;             // Channel this portal runs on
+    unsigned long lastHeartbeat; // Last time we checked this portal
+    unsigned long launchTime;    // When portal was launched
+    bool hasCreds;               // Whether credentials captured
+    String capturedPassword;     // Captured password if any
+    uint32_t clientFingerprint;  // Fingerprint of connected victim
 };
 
 // Karma configuration
@@ -180,13 +180,13 @@ typedef struct {
     uint8_t priorityThreshold;
     uint8_t cloneThreshold;
     bool enableBeaconing;
-    uint16_t highTierDuration;
+    uint32_t highTierDuration;
     uint16_t mediumTierDuration;
     uint16_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
     uint16_t baseDuration;
-    uint16_t extendedDuration;
+    uint32_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure

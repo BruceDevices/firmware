@@ -2,27 +2,61 @@
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <Wire.h>
-#include <bq27220.h>
 #include <globals.h>
 #include <interface.h>
 
 // Rotary encoder
-#include <rotary_decoder.h>
-extern RotaryDecoder *encoder;
-RotaryDecoder *encoder = nullptr;
-void pollEncoder(void) { encoder->poll(); }
+#include "hal/bright/bright.h"
+#include "hal/device.h"
+#include "hal/inputs/encoder.h"
 
-// Charger chip
-#define XPOWERS_CHIP_BQ25896
-#include <XPowersLib.h>
+#define ENCODER_INA 40
+#define ENCODER_INB 41
+#define ENCODER_KEY 7
+
+#define SEL_BTN ENCODER_KEY
+
+#define AUDIO_I2S_MCLK 10
+#define AUDIO_I2S_SCK 11
+#define AUDIO_I2S_SDIN 17
+#define AUDIO_I2S_SDOUT 45
+#define AUDIO_I2S_WS 18
+#define BK_BTN 0
+#define BTN_ACT LOW
+#define CAPS_LOCK 0x00
+#define EXPANDS_AMP_EN 1
+#define EXPANDS_DRV_EN 0
+#define EXPANDS_GPIO_EN 11
+#define EXPANDS_GPS_RST 7
+#define EXPANDS_KB_EN 10
+#define EXPANDS_KB_PWR 8
+#define EXPANDS_KB_RST 2
+#define EXPANDS_LORA_EN 3
+#define EXPANDS_SD_DET 12
+#define EXPANDS_SD_EN 14
+#define KB_I2C_ADDRESS 0x34
+#define KEYBOARD_BL 46
+#define KEY_SHIFT 0x1c
+
+static const uint8_t backlightPins[] = {TFT_BL, KEYBOARD_BL};
+
+static DeviceEncoder encoderCfg() {
+    DeviceEncoder cfg;
+    // A/B swapped on purpose: this board's wiring reports rotation opposite to
+    // the other encoder boards for the Next/Prev mapping hal_encoder_poll()
+    // assumes (hal_encoder_poll() has no invert flag).
+    cfg.pin_a = ENCODER_INB;
+    cfg.pin_b = ENCODER_INA;
+    cfg.pin_sel = SEL_BTN;
+    cfg.pin_esc = BK_BTN;
+    return cfg;
+}
+
 #include <esp32-hal-dac.h>
-XPowersPPM PPM;
 
 // Battery libs
-#ifdef USE_BQ27220_VIA_I2C
+#ifdef GAUGE_BQ27220
 #define BATTERY_DESIGN_CAPACITY 1500
-#include <bq27220.h>
-BQ27220 bq;
 #endif
 
 #include "core/i2c_finder.h"
@@ -33,8 +67,8 @@ BQ27220 bq;
 Adafruit_TCA8418 *keyboard;
 
 // Haptic
-#include "SensorDRV2605.hpp"
-SensorDRV2605 drv;
+#include "HapticDrivers.hpp"
+HapticDriver_DRV2605 drv;
 void hapticTest(uint8_t effect);
 uint8_t effect = 1;
 
@@ -152,45 +186,84 @@ void initPeripherals() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    // bclk,ws,dout,mclk
+    bruceConfigPins.speaker_bus = {(gpio_num_t)11, (gpio_num_t)18, (gpio_num_t)45, (gpio_num_t)10};
+    // clk,data,ws,type
+    bruceConfigPins.mic_bus = {(gpio_num_t)18, (gpio_num_t)17, (gpio_num_t)11, MIC_TYPE_I2S_MSB};
+    bruceConfigPins.i2c_bus = {(gpio_num_t)3, (gpio_num_t)2}; // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)3, (gpio_num_t)2}; // sda, scl
+    bruceConfigPins.rfTx = 3;
+    bruceConfigPins.rfRx = 2;
+    bruceConfigPins.irTx = -1;
+    bruceConfigPins.irRx = -1;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43}; // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)4, (gpio_num_t)12};   // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)2, (gpio_num_t)3}; // rx, tx (inherited from Grove I2C)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)21};
+    // No dedicated PN532 on this board (NFC is ST25R3916) - RC522-SPI shares the SD card SPI slot
+    bruceConfigPins.PN532_bus = {(gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)21};
+    // CC1101/NRF24 live over the GPIO expansion header, sharing sck/miso/mosi with the main bus
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)44, (gpio_num_t)43, (gpio_num_t)9
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)44, (gpio_num_t)43
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)21
+    }; // sck,miso,mosi,cs
+    bruceConfigPins.ST25R_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)39, (gpio_num_t)5, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,irq,-
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)44, (gpio_num_t)43, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)36, (gpio_num_t)47, (gpio_num_t)14
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
 
     pinMode(SEL_BTN, INPUT);
     pinMode(BK_BTN, INPUT);
-    pinMode(ST25R_IRQ, INPUT);
+    pinMode(bruceConfigPins.ST25R_bus.io0, INPUT);
 
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
 
-    pinMode(SDCARD_CS, OUTPUT);
-    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
 
     pinMode(NFC_CS, OUTPUT);
     digitalWrite(NFC_CS, HIGH);
 
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
+#if !defined(LITE_VERSION)
+    pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
-    pinMode(LORA_RST, OUTPUT);
-    digitalWrite(LORA_RST, HIGH);
+    pinMode(bruceConfigPins.LoRa_bus.io0, OUTPUT);
+    digitalWrite(bruceConfigPins.LoRa_bus.io0, HIGH);
+#endif
     setSysI2CBus(&Wire); // PMU/keyboard/RTC/codec all live on the default Wire object
 #if defined(HAS_RTC)
     _rtc.setWire(getSysI2CBus());
 #endif
-    Wire.begin(SYS_I2C_SDA, SYS_I2C_SCL);
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
 
     // Power management
-    bool pmu_ret = false;
-    pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);
-    if (pmu_ret) {
-        // https://github.com/Xinyuan-LilyGO/LilyGoLib/blob/a64fc6ca94757baa5401ad71b39fb7f92cd1a7e9/src/LilyGo_LoRa_Pager.cpp#L442-L452
-        PPM.resetDefault();
-
-        PPM.setChargeTargetVoltage(4288);
-        PPM.setChargerConstantCurr(704);
-        PPM.enableMeasure(PowersBQ25896::CONTINUOUS);
-    }
+    DevicePmic pmicCfg;
+    pmicCfg.pin_sda = bruceConfigPins.sys_i2c.sda;
+    pmicCfg.pin_scl = bruceConfigPins.sys_i2c.scl;
+    pmicCfg.address = 0x6B; // BQ25896
+    pmicCfg.charge_target_mv = 4288;
+    pmicCfg.charge_current_ma = 704;
+    hal_pmic_init(pmicCfg);
 
     // Battery gauge
-    if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
+    DeviceGauge gaugeCfg;
+    gaugeCfg.design_capacity_mah = BATTERY_DESIGN_CAPACITY;
+    hal_gauge_init(gaugeCfg);
     initPeripherals();
 
     // Initialise keyboard
@@ -211,20 +284,16 @@ void _setup_gpio() {
     bruceConfigPins.gpsBaudrate = 38400;
 
     // Encoder
-    pinMode(ENCODER_KEY, INPUT);
-    pinMode(ENCODER_INA, INPUT_PULLUP);
-    pinMode(ENCODER_INB, INPUT_PULLUP);
-    encoder = new RotaryDecoder();
-    encoder->begin(ENCODER_INB, ENCODER_INA, 4);
+    hal_encoder_init(encoderCfg(), EncoderLatchMode::FOUR3);
 
     // Haptic driver
-    if (!drv.begin(Wire, SDA, SCL)) {
+    if (!drv.begin(Wire, bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl)) {
         Serial.println("Failed to find DRV2605.");
     } else {
         Serial.println("Init DRV2605 Sensor success!");
         drv.selectLibrary(1);
-        drv.setMode(SensorDRV2605::MODE_INTTRIG);
-        drv.useERM();
+        drv.setMode(HapticMode::INTERNAL_TRIGGER);
+        drv.setActuatorType(HapticActuatorType::ERM);
 
         // Startup buzz
         drv.setWaveform(0, 70);
@@ -251,7 +320,11 @@ void _setup_gpio() {
     board.begin(cfg);
 }
 
-void _post_setup_gpio() { initPeripherals(); }
+void _post_setup_gpio() {
+    initPeripherals();
+    hal_bright_attach(backlightPins, 2);
+    hal_bright_set(backlightPins, 2, 100);
+}
 
 /***************************************************************************************
 ** Function name: getBattery()
@@ -261,7 +334,7 @@ int getBattery() {
     static float smoothed = -1;
     constexpr float alpha = 0.2f;
 
-    int pct = bq.getChargePcnt();
+    int pct = hal_gauge_get_percent();
 
     if (pct >= 0 && pct <= 100) {
         if (smoothed < 0) {
@@ -278,51 +351,15 @@ int getBattery() {
 **  Function: setBrightness
 **  set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) {
-    if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
-        analogWrite(KEYBOARD_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
-        analogWrite(KEYBOARD_BL, bl);
-    }
-}
+void _setBrightness(uint8_t brightval) { hal_bright_set(backlightPins, 2, brightval); }
 
 /*********************************************************************
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = millis();
-    static unsigned long lastEncoderMoveMs = 0;
-    static int posDifference = 0;
-    static int lastPos = 0;
-    bool sel = !BTN_ACT;
-    bool esc = !BTN_ACT;
-
     uint8_t keyValue = 0;
     uint8_t keyVal = '\0';
-
-    if (millis() - tm < 500) return;
-
-    int newPos = encoder->getPosition();
-    if (newPos != lastPos) {
-        posDifference += (newPos - lastPos);
-        // Independent running total for consumers that want to apply the
-        // full pending backlog in one pass instead of one step at a time
-        // (see drainRotarySteps() in globals.h). Never cleared by the
-        // stale-drop below -- it's drained exactly, not time-limited.
-        RotaryNetSteps += (newPos - lastPos);
-        lastPos = newPos;
-        lastEncoderMoveMs = millis();
-    } else if (posDifference != 0 && millis() - lastEncoderMoveMs > 30) {
-        // Drop any stale queued steps once the encoder has stopped moving.
-        posDifference = 0;
-    }
-
-    sel = digitalRead(SEL_BTN);
-    esc = digitalRead(BK_BTN);
 
     if (keyboard->available() > 0) {
         keyStroke pendingKey;
@@ -372,40 +409,33 @@ void InputHandler(void) {
         }
     } else KeyStroke.Clear();
 
-    if (posDifference != 0 || sel == BTN_ACT || esc == BTN_ACT || KeyStroke.enter) {
+    if (KeyStroke.enter) {
         if (!wakeUpScreen()) {
             AnyKeyPress = true;
-
-            // Haptic feedback
-            drv.setWaveform(0, 1);
+            drv.setWaveform(0, 1); // Haptic feedback
             drv.setWaveform(1, 0);
             drv.run();
-
-            if (posDifference > 0) {
-                PrevPress = true;
-                posDifference--;
-            }
-            if (posDifference < 0) {
-                NextPress = true;
-                posDifference++;
-            }
-            if (sel == BTN_ACT) SelPress = true;
-            if (esc == BTN_ACT) EscPress = true;
-        } else goto END;
+        }
     }
 
-END:
-    if (sel == BTN_ACT || esc == BTN_ACT) tm = millis();
+    // Encoder rotation, Select (encoder key) and Esc (back key)
+    bool hadPress = NextPress || PrevPress || SelPress || EscPress;
+    hal_encoder_poll(encoderCfg());
+    if (!hadPress && (NextPress || PrevPress || SelPress || EscPress)) {
+        drv.setWaveform(0, 1); // Haptic feedback
+        drv.setWaveform(1, 0);
+        drv.run();
+    }
 }
 
-void powerOff() { PPM.shutdown(); }
+void powerOff() { hal_pmic_shutdown(); }
 
 /***************************************************************************************
 ** Function name: isCharging()
 ** Description:   Determines if the device is charging
 ***************************************************************************************/
-#ifdef USE_BQ27220_VIA_I2C
-bool isCharging() { return bq.getIsCharging(); }
+#ifdef GAUGE_BQ27220
+bool isCharging() { return hal_gauge_is_charging(); }
 #else
 bool isCharging() { return false; }
 #endif

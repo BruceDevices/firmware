@@ -8,7 +8,7 @@
 #include "modules/ir/TV-B-Gone.h"
 #include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
-#if defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
 #include "modules/others/audio_player.h"
 #endif
 #include "modules/others/qrcode_menu.h"
@@ -59,21 +59,13 @@ bool setupSdCard(uint8_t maxFiles) {
     // avoid unnecessary remounting
     if (sdcardMounted) return true;
     bool result = true;
-    bool task = false; // devices that doesn't use InputHandler task
-#ifdef USE_TFT_eSPI_TOUCH
-    task = true;
-#endif
 #ifdef USE_SD_MMC
     if (!SD.begin("/sdcard", true, false, BOARD_MAX_SDMMC_FREQ, maxFiles)) {
         sdcardMounted = false;
         result = false;
     }
 #else
-    // Not using InputHandler (SdCard on default &SPI bus)
-    if (task) {
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, SPI, 4000000UL, "/sd", maxFiles)) result = false;
-        // Serial.println("Task not activated");
-    } else {
+    {
         // acquireSPIBus() never begin()s the display's bus (it's already running), so a non-null,
         // non-sdcardSPI result means these pins are physically the display's own bus. Reusing the
         // pointer it returns (instead of calling tft.getSPIinstance() here) also keeps this file
@@ -843,7 +835,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                      // TODO: show in the text viewer
                                                  }});
             }
-#if defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
             if (isAudioFile(filepath))
                 options.insert(options.begin(), {"Play Audio", [&]() {
                                                      delay(200);
