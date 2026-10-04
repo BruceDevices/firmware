@@ -604,7 +604,6 @@ const DeviceType android_models[] = {
 const int android_models_count = sizeof(android_models) / sizeof(android_models[0]);
 
 const char *const BLE_SPAM_WINDOWS_PRESETS[] = {
-    "Generic Swift Pair",
     "Never Gonna Give You Up",
     "Bill Nye's iPhone",
     "Skibidi Toilet",
