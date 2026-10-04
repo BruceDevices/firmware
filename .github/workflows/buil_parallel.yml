@@ -81,6 +81,7 @@ jobs:
           - { env: "elecrow-advance-35-s3",           family: "ESP32-S3",}
           - { env: "smoochiee-board",                 family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
+          - { env: "fatalcore",                       family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
           - { env: "Marauder-Mini",                   family: "ESP32",}
