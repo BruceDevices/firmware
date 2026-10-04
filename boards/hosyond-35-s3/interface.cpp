@@ -58,11 +58,22 @@ static uint8_t tp_get_point(int16_t *x, int16_t *y) {
 
 #endif // HAS_CAPACITIVE_TOUCH && TOUCH_ST77922_I2C
 
+#ifdef ES8311_CODEC
+// Amplifier shutdown is active LOW and defaults to disabled (pin high).
+static void amp_off_at_boot() {
+    pinMode(AMP_EN_PIN, OUTPUT);
+    digitalWrite(AMP_EN_PIN, HIGH);
+}
+#endif
+
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ***************************************************************************************/
 void _setup_gpio() {
     bruceConfig.colorInverted = 0;
+#ifdef ES8311_CODEC
+    amp_off_at_boot();
+#endif
 
 #if defined(USE_SD_MMC)
     // Configure 4-bit SDMMC pins before first SD.begin() call
@@ -137,14 +148,29 @@ void _post_setup_gpio() {
 ***************************************************************************************/
 int getBattery() {
 #if defined(ANALOG_BAT_PIN) && ANALOG_BAT_PIN >= 0
-    // 2× voltage divider; ADC full-scale = 3.3 V → 4.2 V max battery
-    int raw = analogRead(ANALOG_BAT_PIN);
-    int mv = (raw * 3300 * 2) / 4095;
-    // Linear approximation 3400 mV = 0 %, 4200 mV = 100 %
-    int pct = (mv - 3400) * 100 / 800;
-    if (pct < 0) pct = 0;
-    if (pct > 100) pct = 100;
-    return pct;
+    // Calibrated millivolts at the pin; BAT+ is halved by a 100k/100k divider.
+    analogSetPinAttenuation(ANALOG_BAT_PIN, ADC_11db);
+    analogReadMilliVolts(ANALOG_BAT_PIN); // discard: high-impedance source
+    uint32_t sum = 0;
+    for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(ANALOG_BAT_PIN);
+    int mv = (int)(sum / 16) * 2;
+
+    // Typical single-cell Li-ion resting voltage -> percent
+    static const int16_t curve[][2] = {
+        {3270, 0},  {3610, 5},  {3690, 10}, {3710, 15}, {3730, 20}, {3750, 25}, {3770, 30},
+        {3790, 35}, {3800, 40}, {3820, 45}, {3840, 50}, {3850, 55}, {3870, 60}, {3910, 65},
+        {3950, 70}, {3980, 75}, {4020, 80}, {4080, 85}, {4110, 90}, {4150, 95}, {4200, 100},
+    };
+    const int n = sizeof(curve) / sizeof(curve[0]);
+    if (mv <= curve[0][0]) return 0;
+    if (mv >= curve[n - 1][0]) return 100;
+    for (int i = 1; i < n; i++) {
+        if (mv <= curve[i][0]) {
+            int v0 = curve[i - 1][0], v1 = curve[i][0], p0 = curve[i - 1][1], p1 = curve[i][1];
+            return p0 + (mv - v0) * (p1 - p0) / (v1 - v0);
+        }
+    }
+    return 100;
 #else
     return 100;
 #endif
@@ -240,6 +266,60 @@ void InputHandler(void) {
     EscPress   = false;
 #endif
 }
+
+
+#ifdef ES8311_CODEC
+static int es8311_fail = 0;
+static void es8311_write(uint8_t reg, uint8_t val) {
+    Wire1.beginTransmission(ES8311_ADDR);
+    Wire1.write(reg);
+    Wire1.write(val);
+    if (Wire1.endTransmission() != 0) es8311_fail++;
+}
+static int es8311_read(uint8_t reg) {
+    Wire1.beginTransmission(ES8311_ADDR);
+    Wire1.write(reg);
+    if (Wire1.endTransmission(false) != 0) return -1;
+    if (Wire1.requestFrom((uint8_t)ES8311_ADDR, (uint8_t)1) != 1) return -1;
+    return Wire1.read();
+}
+
+// Speaker path: codec in I2S slave mode, 16-bit, MCLK supplied on the MCLK pin (256 x fs).
+// Register values follow the vendor ES8311 driver / ES3C28P board port.
+void _setup_codec_speaker(bool enable) {
+    digitalWrite(AMP_EN_PIN, enable ? LOW : HIGH);
+    es8311_fail = 0;
+    if (!enable) {
+        es8311_write(0x0D, 0xFC); // power down analog
+        es8311_write(0x00, 0x00);
+        return;
+    }
+    es8311_write(0x00, 0x1F); // reset
+    delay(20);
+    es8311_write(0x00, 0x00);
+    es8311_write(0x00, 0x80); // power on, slave mode
+    es8311_write(0x01, 0x3F); // clocks on, MCLK from pin
+    es8311_write(0x02, 0x00); // pre_div 1, pre_mult 1x
+    es8311_write(0x03, 0x10); // ADC OSR
+    es8311_write(0x04, 0x10); // DAC OSR
+    es8311_write(0x05, 0x00); // ADC/DAC clock dividers
+    es8311_write(0x06, 0x03); // BCLK divider
+    es8311_write(0x07, 0x00); // LRCK divider high
+    es8311_write(0x08, 0xFF); // LRCK divider low (256)
+    es8311_write(0x09, 0x0C); // SDP in: I2S 16-bit
+    es8311_write(0x0A, 0x0C); // SDP out: I2S 16-bit
+    es8311_write(0x0D, 0x01); // power up analog
+    es8311_write(0x0E, 0x02); // enable PGA / ADC modulator
+    es8311_write(0x12, 0x00); // power up DAC
+    es8311_write(0x13, 0x10); // enable output driver
+    es8311_write(0x1C, 0x6A); // ADC EQ bypass, DC offset cancel
+    es8311_write(0x37, 0x08); // DAC EQ bypass
+    es8311_write(0x32, 0xD8); // DAC volume ~85%
+    Serial.printf("[ES8311] speaker on: id=%02X%02X ver=%02X reg0D=%02X reg32=%02X i2c_fail=%d\n",
+                  es8311_read(0xFD), es8311_read(0xFE), es8311_read(0xFF), es8311_read(0x0D), es8311_read(0x32),
+                  es8311_fail);
+}
+#endif // ES8311_CODEC
 
 /*********************************************************************
 ** Function: powerOff

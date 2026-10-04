@@ -7,7 +7,13 @@ Build env: `hosyond-35-s3`. First hardware bring-up: 2026-10-03.
 - Display: working (Bruce menu renders, landscape, correct colors without the invert menu).
 - Touch: working (verified 2026-10-04). Report slots: byte0 bit7=valid, bits[5:0]=x_h; coordinates are portrait-native panel pixels and the existing rotation mapping in `interface.cpp` is correct.
 - SD: mounts in 4-bit SDMMC mode with a card inserted (verified 2026-10-04; the `0x107` boot error only means an empty slot). File browse/write not yet exercised.
-- Not yet checked: RGB LED, audio, battery reading, 80 MHz bus clock (currently 40 MHz).
+- RGB LED: working (WS2812B, 3-channel GRB, GPIO40); Bruce's LED menu appears via `HAS_RGB_LED` + `LED_TYPE/ORDER/COUNT` in the variant header.
+- Audio: working (verified 2026-10-04: `tone` and `say` serial commands audible on a connected speaker). Bruce gates sound on `HAS_NS4168_SPKR` with `BCLK/WCLK/DOUT/MCLK`; the board supplies `_setup_codec_speaker()` which drives the amp enable (GPIO1, active LOW, defaults off) and programs the ES8311 (I2C 0x18, shared bus) in I2S slave mode. Chip ID 0x8311 is printed to serial on use. Microphone path (ES8311 ADC) not implemented.
+- Battery: calibrated ADC (`analogReadMilliVolts`, 16-sample average, x2 for the 100k/100k divider) mapped through a Li-ion curve. Verified plausible on USB (93-97%); behaviour on battery-only power not yet confirmed.
+- Display clock is 40 MHz (vendor uses 80 MHz); 40 MHz judged good enough.
+- Not yet done: microphone, IR pin assignment (spare GPIOs are IO45/IO46 only), repointing Bruce's default SPI-radio pins away from the display bus.
+- Free pins: only IO45/IO46, the shared I2C pair (SDA38/SCL39) and the UART header (43/44) are exposed. SPI radios (CC1101/NRF24/W5500, ~5 pins) do not fit; I2C and UART modules and IR do.
+- Serial shell: `help` over USB serial lists Bruce's commands (`tone`, `say`, `gpio`, `settings`, `led`, ...), handy for exercising hardware without touching the UI.
 - Touch debugging tip: a tiny Arduino sketch that scans I2C (touch is 0x55 on SDA38/SCL39) and prints reports from register 0x0014 finds protocol bugs much faster than debugging inside Bruce.
 
 ## Display notes (the hard-won part)

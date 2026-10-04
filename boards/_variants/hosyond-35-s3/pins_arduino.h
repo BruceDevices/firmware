@@ -51,6 +51,13 @@ static const uint8_t FM = 2;
 static const uint8_t FG = 3;
 
 // USB HID capable
+// On-board WS2812B (3-channel, GRB) on RGB_LED
+#define LED_TYPE WS2812B
+#define LED_ORDER GRB
+#define LED_TYPE_IS_RGBW 0
+#define LED_COUNT 1
+#define LED_COLOR_STEP 15
+
 #define USB_as_HID 1
 
 #endif /* Pins_Arduino_h */
