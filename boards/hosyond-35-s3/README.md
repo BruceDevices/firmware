@@ -3,6 +3,11 @@
 ESP32-S3-N16R8, 320x480 ST77922 over quad SPI, ST77922 I2C touch @ 0x55.
 Build env: `hosyond-35-s3`. First hardware bring-up: 2026-10-03.
 
+## Hardware
+LCDWiki "3.5inch ESP32-S3 Display", models ES3C35P (with speaker) and ES3C35P-NS (no speaker):
+- Docs, schematic, datasheets and vendor Arduino demos: https://www.lcdwiki.com/3.5inch_ESP32-S3_Display
+- Example listing: https://www.amazon.com/dp/B0H28X8SQ4
+
 ## Status
 - Display: working (Bruce menu renders, landscape, correct colors without the invert menu).
 - Touch: working (verified 2026-10-04). Report slots: byte0 bit7=valid, bits[5:0]=x_h; coordinates are portrait-native panel pixels and the existing rotation mapping in `interface.cpp` is correct.
