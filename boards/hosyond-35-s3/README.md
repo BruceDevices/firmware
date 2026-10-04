@@ -5,8 +5,9 @@ Build env: `hosyond-35-s3`. First hardware bring-up: 2026-10-03.
 
 ## Status
 - Display: working (Bruce menu renders, landscape, correct colors without the invert menu).
-- Touch: register protocol follows the vendor driver, not yet verified on hardware.
+- Touch: working (verified 2026-10-04). Report slots: byte0 bit7=valid, bits[5:0]=x_h; coordinates are portrait-native panel pixels and the existing rotation mapping in `interface.cpp` is correct.
 - Not yet checked: SD (4-bit MMC failed to mount at boot), RGB LED, audio, battery reading, 80 MHz bus clock (currently 40 MHz).
+- Touch debugging tip: a tiny Arduino sketch that scans I2C (touch is 0x55 on SDA38/SCL39) and prints reports from register 0x0014 finds protocol bugs much faster than debugging inside Bruce.
 
 ## Display notes (the hard-won part)
 - The panel needs the draw window **x start and width aligned to 4 pixels**. Arbitrary windows (text glyphs,
@@ -27,6 +28,7 @@ Build env: `hosyond-35-s3`. First hardware bring-up: 2026-10-03.
 - Flash with esptool directly (`pio run -t upload` crashes on cp1252 consoles):
   `python -m esptool --chip esp32s3 --port COMx --baud 921600 write-flash 0x0 Bruce-hosyond-35-s3.bin`
 - Bruce persists rotation and color inversion in flash; `erase-flash` when testing display defaults.
+- Run builds with PlatformIO's `Scripts` dir on PATH (`export PATH=/c/Users/<you>/.platformio/penv/Scripts:$PATH`); otherwise `patch.py`'s nested `pio pkg exec` fails.
 - `patch.py` swaps in a patched `libnet80211.a` guarded by `.patched`. If another PlatformIO project refreshes the
   libs package, Bruce can fail to link with `cannot find -lnet80211`; re-run the patch (objcopy
   `--weaken-symbol=ieee80211_raw_frame_sanity_check libnet80211.a.old libnet80211.a`, then create `.patched`).

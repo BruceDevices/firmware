@@ -18,9 +18,9 @@
 #if defined(HAS_CAPACITIVE_TOUCH) && defined(TOUCH_ST77922_I2C)
 
 // ST77922 touch register map (from vendor esp_lcd_st77922.c)
-#define ST77922_TOUCH_INFO_REG   0x0010  // adv_info: bit3=with_coord
-#define ST77922_MAX_TOUCHES_REG  0x0009  // number of active touch points
-#define ST77922_COORD0_REG       0x0014  // first touch-point data (7 bytes each)
+#define ST77922_TOUCH_INFO_REG   0x0010  // adv_info: bit3 = with_coord
+#define ST77922_COORD0_REG       0x0014  // 5 report slots, 7 bytes each
+#define ST77922_REPORT_SLOTS     5
 
 static bool touch_ready = false;
 
@@ -36,32 +36,24 @@ static bool tp_read(uint16_t reg, uint8_t *buf, uint8_t count) {
     return true;
 }
 
-// Returns 1 if a valid touch is detected and sets x/y; returns 0 otherwise.
-// Coordinate format per touch_report_t in vendor driver (7 bytes/point):
-//   byte0 bits[7:2] = x_h (6 bits), bit1 = reserved, bit0 = valid
-//   byte1            = x_l (8 bits)  → x = (x_h << 8) | x_l  (14-bit, display units)
-//   byte2            = y_h (8 bits)
-//   byte3            = y_l (8 bits)  → y = (y_h << 8) | y_l  (16-bit, display units)
-//   byte4 = area, byte5 = intensity, byte6 = reserved
+// Returns 1 and sets x/y (portrait-native panel pixels) for the first valid touch slot.
+// Slot layout (C bitfields, LSB first): byte0 bits[5:0]=x_h, bit7=valid; byte1=x_l; byte2=y_h; byte3=y_l; byte4=area.
 static uint8_t tp_get_point(int16_t *x, int16_t *y) {
     uint8_t adv_info = 0;
     if (!tp_read(ST77922_TOUCH_INFO_REG, &adv_info, 1)) return 0;
-    if (!(adv_info & 0x08)) return 0;  // bit3: with_coord
+    if (!(adv_info & 0x08)) return 0;
 
-    uint8_t num_points = 0;
-    if (!tp_read(ST77922_MAX_TOUCHES_REG, &num_points, 1)) return 0;
-    if (num_points == 0 || num_points > 10) return 0;
+    uint8_t data[7 * ST77922_REPORT_SLOTS];
+    if (!tp_read(ST77922_COORD0_REG, data, sizeof(data))) return 0;
 
-    uint8_t data[7];
-    if (!tp_read(ST77922_COORD0_REG, data, 7)) return 0;
-
-    bool valid = (data[0] & 0x01);
-    if (!valid) return 0;
-
-    // Coordinates are reported in display pixel units by the touch firmware
-    *x = (int16_t)(((uint16_t)(data[0] >> 2) << 8) | data[1]);
-    *y = (int16_t)(((uint16_t)data[2] << 8) | data[3]);
-    return 1;
+    for (int i = 0; i < ST77922_REPORT_SLOTS; i++) {
+        const uint8_t *r = &data[i * 7];
+        if (!(r[0] & 0x80)) continue;
+        *x = (int16_t)(((uint16_t)(r[0] & 0x3F) << 8) | r[1]);
+        *y = (int16_t)(((uint16_t)r[2] << 8) | r[3]);
+        return 1;
+    }
+    return 0;
 }
 
 #endif // HAS_CAPACITIVE_TOUCH && TOUCH_ST77922_I2C
@@ -81,9 +73,9 @@ void _setup_gpio() {
     // Power-on reset for the ST77922 touch controller
     pinMode(TOUCH_RST, OUTPUT);
     digitalWrite(TOUCH_RST, LOW);
-    delay(10);
+    delay(100);
     digitalWrite(TOUCH_RST, HIGH);
-    delay(50);
+    delay(100);
 
     pinMode(TOUCH_INT, INPUT_PULLUP);
 
