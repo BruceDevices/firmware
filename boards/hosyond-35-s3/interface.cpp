@@ -153,7 +153,11 @@ int getBattery() {
     analogReadMilliVolts(ANALOG_BAT_PIN); // discard: high-impedance source
     uint32_t sum = 0;
     for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(ANALOG_BAT_PIN);
-    int mv = (int)(sum / 16) * 2;
+    int raw_mv = (int)(sum / 16) * 2;
+    // Smooth load-induced sag (LED, Wi-Fi bursts) so the indicator doesn't jitter.
+    static float filt_mv = 0;
+    filt_mv = (filt_mv == 0) ? raw_mv : filt_mv + (raw_mv - filt_mv) * 0.2f;
+    int mv = (int)filt_mv;
 
     // Typical single-cell Li-ion resting voltage -> percent
     static const int16_t curve[][2] = {
@@ -162,7 +166,7 @@ int getBattery() {
         {3950, 70}, {3980, 75}, {4020, 80}, {4080, 85}, {4110, 90}, {4150, 95}, {4200, 100},
     };
     const int n = sizeof(curve) / sizeof(curve[0]);
-    if (mv <= curve[0][0]) return 0;
+    if (mv <= curve[0][0]) return mv > 2000 ? 1 : 0;
     if (mv >= curve[n - 1][0]) return 100;
     for (int i = 1; i < n; i++) {
         if (mv <= curve[i][0]) {
