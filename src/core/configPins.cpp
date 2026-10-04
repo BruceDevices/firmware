@@ -410,7 +410,7 @@ void BruceConfigPins::setLoRaPins(SPIPins value) {
     saveFile();
 }
 void BruceConfigPins::setW5500Pins(SPIPins value) {
-    LoRa_bus = value;
+    W5500_bus = value;
     validateSpiPins(W5500_bus);
     saveFile();
 }
