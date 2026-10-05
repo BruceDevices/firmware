@@ -26,17 +26,21 @@ if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
     )
 
     if mcu=="esp32c5" or mcu=="esp32c6" :
-        env.Execute(
-            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
+        patch_result = env.Execute(
+            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check \"%s\" \"%s\""
             % (original_file, patched_file)
         )
     elif mcu=="esp32p4":
         """Do nothing"""
+        patch_result = 0
     else:
-        env.Execute(
-            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
+        patch_result = env.Execute(
+            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check \"%s\" \"%s\""
             % (mcu, mcu, original_file, patched_file)
         )
+
+    if patch_result != 0 or (mcu != "esp32p4" and not isfile(patched_file)):
+        raise RuntimeError("Failed to patch libnet80211.a; original archive was preserved")
 
     if isfile("%s.old" % (original_file)):
         remove("%s.old" % (original_file))

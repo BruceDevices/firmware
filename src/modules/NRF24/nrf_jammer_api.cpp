@@ -128,7 +128,9 @@ void stopBLEJammer() {
     if (CHECK_NRF_SPI(mode)) {
         NRFradio.stopConstCarrier();
         NRFradio.powerDown(); // FIX: explicit power-down for clean shutdown
+        nrf_stop();
     }
+    nrf24Initialized = false;
     bleJammingActive = false;
     isHopping = false;
     currentChannelIndex = 0;

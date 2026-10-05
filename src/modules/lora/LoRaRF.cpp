@@ -111,6 +111,7 @@ bool startLoraRadio(float bandMHz) {
         return false;
     }
 
+    prepareRadioSPI(RadioSPISelection::LoRa);
     loraSpi = selectLoraSPIBus();
     clearLoraRadio();
     const int busyPin = (loraRadioVariant == LoRaRadioVariant::SX1262) ? getLoraBusyPin() : GPIO_NUM_NC;
@@ -293,6 +294,16 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
+#ifdef CARDPUTER_ADV_3IN1
+    loraRadioVariant = LoRaRadioVariant::SX1262;
+    if (doc["LoRa_Radio"] != "SX1262") {
+        doc["LoRa_Radio"] = "SX1262";
+        File cfg = LittleFS.open("/lora_settings.json", "w");
+        serializeJson(doc, cfg);
+        cfg.close();
+    }
+    return;
+#endif
     String stored = doc["LoRa_Radio"] | "SX1276";
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
@@ -389,7 +400,12 @@ void lorachat() {
         File file = LittleFS.open("/lora_settings.json", "w");
         doc["LoRa_Frequency"] = "434500000.00";
         doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] =
+#ifdef CARDPUTER_ADV_3IN1
+            "SX1262";
+#else
+            "SX1276";
+#endif
         serializeJson(doc, file);
         file.close();
     }

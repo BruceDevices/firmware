@@ -86,3 +86,9 @@ bool trylockSysI2CBus();
 // bus only when the requested pins differ from whoever last used it). Returns nullptr if sck,
 // miso or mosi is unset, or if the pins matched the display's bus but the board is headless.
 SPIClass *acquireSPIBus(gpio_num_t sck, gpio_num_t miso, gpio_num_t mosi);
+
+enum class RadioSPISelection { CC1101, NRF24, LoRa };
+// Deselects the other radio chip selects before a radio is initialized.
+// On Cardputer ADV 3IN1 GPIO9 is the keyboard SCL while NRF24 is inactive;
+// software cannot hold that CS high without stopping the keyboard I2C bus.
+void prepareRadioSPI(RadioSPISelection selected);

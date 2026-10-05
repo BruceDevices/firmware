@@ -4,12 +4,101 @@
 #include <Keyboard.h>
 #include <Wire.h>
 #include <interface.h>
+#ifdef CARDPUTER_ADV_3IN1
+#include "adv_3in1.h"
+#include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#endif
 
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
 // TCA8418 keyboard controller for ADV variant
 Adafruit_TCA8418 tca;
 bool UseTCA8418 = false; // Set to true to use TCA8418 (Cardputer ADV)
+#ifdef CARDPUTER_ADV_3IN1
+static std::atomic_bool nrfOwnsKeyboardPins{false};
+static std::atomic_bool keyboardRecoveryPending{false};
+extern Adafruit_TCA8418 tca;
+extern volatile bool kb_interrupt;
+void gpio_isr_handler(void *arg);
+static SemaphoreHandle_t keyboardPinMutex() {
+    static SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+    return mutex;
+}
+
+void cardputerAdvLockInput() { xSemaphoreTake(keyboardPinMutex(), portMAX_DELAY); }
+void cardputerAdvUnlockInput() { xSemaphoreGive(keyboardPinMutex()); }
+bool cardputerAdvNrfActive() { return nrfOwnsKeyboardPins; }
+bool cardputerAdvKeyboardRecoveryPending() { return keyboardRecoveryPending; }
+
+bool cardputerAdvEnterNrf() {
+    cardputerAdvLockInput();
+    if (nrfOwnsKeyboardPins) {
+        bool usable = !keyboardRecoveryPending;
+        cardputerAdvUnlockInput();
+        return usable;
+    }
+    if (!UseTCA8418) {
+        cardputerAdvUnlockInput();
+        Serial.println("ADV 3IN1: TCA8418 keyboard unavailable; refusing NRF pin takeover");
+        return false;
+    }
+    detachInterrupt(digitalPinToInterrupt(TCA8418_INT_PIN));
+    if (!Wire1.end()) {
+        Wire1.begin(TCA8418_SDA_PIN, TCA8418_SCL_PIN);
+        attachInterruptArg(digitalPinToInterrupt(TCA8418_INT_PIN), gpio_isr_handler, nullptr, CHANGE);
+        cardputerAdvUnlockInput();
+        Serial.println("ADV 3IN1: could not release keyboard I2C");
+        return false;
+    }
+    // Set the inactive logic levels before enabling the output drivers.
+    digitalWrite(8, LOW);
+    digitalWrite(9, HIGH);
+    pinMode(8, OUTPUT);
+    pinMode(9, OUTPUT);
+    nrfOwnsKeyboardPins = true;
+    keyboardRecoveryPending = false;
+    cardputerAdvUnlockInput();
+    return true;
+}
+
+bool cardputerAdvLeaveNrf() {
+    cardputerAdvLockInput();
+    if (!nrfOwnsKeyboardPins) {
+        cardputerAdvUnlockInput();
+        return true;
+    }
+    digitalWrite(8, LOW);
+    digitalWrite(9, HIGH);
+    pinMode(8, INPUT);
+    pinMode(9, INPUT);
+    bool ready = false;
+    for (int attempt = 0; attempt < 3 && !ready; ++attempt) {
+        if (Wire1.begin(TCA8418_SDA_PIN, TCA8418_SCL_PIN)) {
+            ready = tca.begin(TCA8418_I2C_ADDR, &Wire1) && tca.matrix(7, 8);
+        }
+        if (!ready) {
+            Wire1.end();
+            delay(10);
+        }
+    }
+    if (ready) {
+        tca.flush();
+        pinMode(TCA8418_INT_PIN, INPUT);
+        attachInterruptArg(digitalPinToInterrupt(TCA8418_INT_PIN), gpio_isr_handler, nullptr, CHANGE);
+        tca.enableInterrupts();
+        kb_interrupt = true;
+        nrfOwnsKeyboardPins = false;
+        keyboardRecoveryPending = false;
+    } else {
+        Serial.println("ADV 3IN1: keyboard I2C recovery failed");
+        keyboardRecoveryPending = true;
+    }
+    cardputerAdvUnlockInput();
+    return ready;
+}
+#endif
 
 // Keyboard state variables
 bool fn_key_pressed = false;
@@ -84,9 +173,16 @@ inline void mapRawKeyToPhysical(uint8_t keyvalue, uint8_t &row, uint8_t &col) {
 void _setup_gpio() {
     //    Keyboard.begin();
     pinMode(0, INPUT);
+#ifdef CARDPUTER_ADV_3IN1
+    digitalWrite(5, HIGH);
+    pinMode(5, OUTPUT);
+    digitalWrite(15, HIGH);
+    pinMode(15, OUTPUT);
+#else
     pinMode(5, OUTPUT);
     // Set GPIO5 HIGH for SD card compatibility (thx for the tip @bmorcelli & 7h30th3r0n3)
     digitalWrite(5, HIGH);
+#endif
 }
 volatile bool kb_interrupt = false;
 void IRAM_ATTR gpio_isr_handler(void *arg) {
@@ -129,10 +225,13 @@ void _post_setup_gpio() {
     bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
     bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
 
+#ifndef CARDPUTER_ADV_3IN1
     bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
+#endif
     bruceConfigPins.gpsBaudrate = 115200;
 
+#ifndef CARDPUTER_ADV_3IN1
     bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
     bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
@@ -151,6 +250,15 @@ void _post_setup_gpio() {
     digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
+#else
+    // The dedicated build profile overrides pin files loaded from flash/SD.
+    bruceConfigPins.applyBoardProfile();
+    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
+    pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
+    digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
+    // GPIO8/9 remain owned by Wire1 until a NRF function starts.
+#endif
 
     tca.matrix(7, 8);
     tca.flush();
@@ -205,9 +313,23 @@ void InputHandler(void) {
         tm = millis();
         if (!wakeUpScreen()) yield();
         else return;
+#ifdef CARDPUTER_ADV_3IN1
+        if (cardputerAdvNrfActive()) EscPress = true;
+        else SelPress = true;
+#else
         SelPress = true;
+#endif
         AnyKeyPress = true;
     }
+
+#ifdef CARDPUTER_ADV_3IN1
+    // The TCA8418 is disconnected here. Do not fall through to the legacy
+    // Cardputer keyboard driver, which uses unrelated GPIOs.
+    if (cardputerAdvNrfActive()) {
+        KeyStroke.Clear();
+        return;
+    }
+#endif
 
     if (UseTCA8418) {
         bool keyEventHandled = false;
@@ -503,7 +625,17 @@ void _setup_codec_speaker(bool enable) {
     };
     static constexpr const uint8_t disabled_bulk_data[] = {0};
 
+#ifdef CARDPUTER_ADV_3IN1
+    cardputerAdvLockInput();
+    if (cardputerAdvNrfActive()) {
+        cardputerAdvUnlockInput();
+        return;
+    }
+#endif
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+#ifdef CARDPUTER_ADV_3IN1
+    cardputerAdvUnlockInput();
+#endif
 }
 
 /*********************************************************************
@@ -540,5 +672,15 @@ void _setup_codec_mic(bool enable) {
         0
     };
 
+#ifdef CARDPUTER_ADV_3IN1
+    cardputerAdvLockInput();
+    if (cardputerAdvNrfActive()) {
+        cardputerAdvUnlockInput();
+        return;
+    }
+#endif
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+#ifdef CARDPUTER_ADV_3IN1
+    cardputerAdvUnlockInput();
+#endif
 }

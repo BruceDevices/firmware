@@ -27,6 +27,7 @@ extern HardwareSerial NRFSerial; // Uses UART2 for External NRF's
 NRF24_MODE nrf_setMode();
 
 bool nrf_start(NRF24_MODE mode);
+void nrf_stop();
 
 void nrf_info();
 #endif
