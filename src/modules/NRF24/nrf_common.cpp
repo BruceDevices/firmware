@@ -1,10 +1,28 @@
 #include "nrf_common.h"
 #include "../../core/bus_HAL.h"
 #include "../../core/mykeyboard.h"
+#ifdef CARDPUTER_ADV_3IN1
+#include "adv_3in1.h"
+#endif
 
 RF24 NRFradio(bruceConfigPins.NRF24_bus.io0, bruceConfigPins.NRF24_bus.cs);
 HardwareSerial NRFSerial = HardwareSerial(2); // Uses UART2 for External NRF's
 SPIClass *NRFSPI;
+static bool nrfInitialized = false;
+
+void nrf_stop() {
+#ifdef CARDPUTER_ADV_3IN1
+    if (!cardputerAdvNrfActive()) return;
+    if (nrfInitialized) {
+        NRFradio.stopListening();
+        NRFradio.powerDown();
+    }
+    digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+    digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
+    nrfInitialized = false;
+    cardputerAdvLeaveNrf();
+#endif
+}
 
 void nrf_info() {
     tft.fillScreen(bruceConfig.bgColor);
@@ -43,6 +61,11 @@ bool nrf_start(NRF24_MODE mode) {
 
     if (!CHECK_NRF_SPI(mode)) return result;
 
+#ifdef CARDPUTER_ADV_3IN1
+    if (!cardputerAdvEnterNrf()) return false;
+#endif
+    prepareRadioSPI(RadioSPISelection::NRF24);
+
     // Always re-assert CE LOW and CS HIGH before begin() — these pins
     // may have been left in an indeterminate state by the previous session,
     // especially after stopConstCarrier() which can leave CE HIGH internally.
@@ -55,8 +78,13 @@ bool nrf_start(NRF24_MODE mode) {
     NRFSPI =
         acquireSPIBus(bruceConfigPins.NRF24_bus.sck, bruceConfigPins.NRF24_bus.miso, bruceConfigPins.NRF24_bus.mosi);
     if (!NRFSPI) {
+#ifdef CARDPUTER_ADV_3IN1
+        nrf_stop();
+        return false;
+#else
         Serial.println("No hardware SPI bus available for NRF24, falling back to default SPI");
         NRFSPI = &SPI;
+#endif
     }
     delay(10);
 
@@ -66,7 +94,9 @@ bool nrf_start(NRF24_MODE mode) {
             rf24_gpio_pin_t(bruceConfigPins.NRF24_bus.cs)
         )) {
         result = true;
+        nrfInitialized = true;
     } else {
+        nrf_stop();
         return false;
     }
     return result;

@@ -234,9 +234,37 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         count++;
         log_e("Fail");
     }
+#ifdef CARDPUTER_ADV_3IN1
+    if (applyBoardProfile()) count++;
+#endif
     validateConfig();
     if (count > 0) saveFile();
 }
+
+#ifdef CARDPUTER_ADV_3IN1
+bool BruceConfigPins::applyBoardProfile() {
+    const SPIPins cc = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_13};
+    const SPIPins nrf = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_9, GPIO_NUM_8};
+    const SPIPins lora = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_5, GPIO_NUM_3, GPIO_NUM_4};
+    auto differs = [](const SPIPins &a, const SPIPins &b) {
+        return a.sck != b.sck || a.miso != b.miso || a.mosi != b.mosi ||
+               a.cs != b.cs || a.io0 != b.io0 || a.io2 != b.io2;
+    };
+    bool changed = differs(CC1101_bus, cc) || differs(NRF24_bus, nrf) || differs(LoRa_bus, lora);
+    CC1101_bus = cc;
+    NRF24_bus = nrf;
+    LoRa_bus = lora;
+    // The stock ADV post-setup uses GPIO15/13 for GPS. They are radio CS/GDO0
+    // on this module, so move a persisted stock GPS assignment to Grove.
+    if (gps_bus.rx == GPIO_NUM_15 || gps_bus.rx == GPIO_NUM_13 ||
+        gps_bus.tx == GPIO_NUM_15 || gps_bus.tx == GPIO_NUM_13) {
+        gps_bus.rx = (gpio_num_t)GROVE_SCL;
+        gps_bus.tx = (gpio_num_t)GROVE_SDA;
+        changed = true;
+    }
+    return changed;
+}
+#endif
 
 void BruceConfigPins::toJson(JsonObject obj) const {
     JsonObject root = obj[getMacAddress()].to<JsonObject>();
@@ -405,6 +433,9 @@ void BruceConfigPins::validateConfig() {
 #if !defined(LITE_VERSION)
 void BruceConfigPins::setLoRaPins(SPIPins value) {
     LoRa_bus = value;
+#ifdef CARDPUTER_ADV_3IN1
+    applyBoardProfile();
+#endif
     validateSpiPins(LoRa_bus);
     saveFile();
 }
@@ -421,12 +452,18 @@ void BruceConfigPins::setSR25RPins(SPIPins value) {
 #endif
 void BruceConfigPins::setCC1101Pins(SPIPins value) {
     CC1101_bus = value;
+#ifdef CARDPUTER_ADV_3IN1
+    applyBoardProfile();
+#endif
     validateSpiPins(CC1101_bus);
     saveFile();
 }
 
 void BruceConfigPins::setNrf24Pins(SPIPins value) {
     NRF24_bus = value;
+#ifdef CARDPUTER_ADV_3IN1
+    applyBoardProfile();
+#endif
     validateSpiPins(NRF24_bus);
     saveFile();
 }
@@ -444,6 +481,9 @@ void BruceConfigPins::setSDCardPins(SPIPins value) {
 }
 
 void BruceConfigPins::setSpiPins(SPIPins value) {
+#ifdef CARDPUTER_ADV_3IN1
+    applyBoardProfile();
+#endif
     validateSpiPins(value);
     saveFile();
 }

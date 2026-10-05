@@ -1,6 +1,9 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
 #include "core/utils.h"
+#ifdef CARDPUTER_ADV_3IN1
+#include "modules/NRF24/nrf_common.h"
+#endif
 
 static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
 
@@ -92,6 +95,10 @@ void interpreterHandler(void *pvParameters) {
     JSValue val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
 
     run_timers(ctx);
+#ifdef CARDPUTER_ADV_3IN1
+    // Scripts can call nrf24.begin() without an explicit end API.
+    nrf_stop();
+#endif
 
     LongPress = false;
     if (JS_IsException(val)) { js_fatal_error_handler(ctx); }

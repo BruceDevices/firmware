@@ -9,11 +9,11 @@
 void NRF24Menu::optionsMenu() {
     options.clear();
     options.push_back({"Information", nrf_info});
-    options.push_back({"Spectrum", nrf_spectrum});
+    options.push_back({"Spectrum", []() { nrf_spectrum(); nrf_stop(); }});
     #if !defined(LITE_VERSION)
-    options.push_back({"MouseJack", nrf_mousejack});
+    options.push_back({"MouseJack", []() { nrf_mousejack(); nrf_stop(); }});
     #endif
-    options.push_back({"NRF Jammer", nrf_jammer});
+    options.push_back({"NRF Jammer", []() { nrf_jammer(); nrf_stop(); }});
 
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
     options.push_back({"Config pins", [this]() { configMenu(); }});

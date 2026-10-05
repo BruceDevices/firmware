@@ -239,6 +239,7 @@ bool initRfModule(String mode, float frequency) {
     if (!frequency) frequency = bruceConfigPins.rfFreq;
 
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+        prepareRadioSPI(RadioSPISelection::CC1101);
         SPIClass *ccSpi = acquireSPIBus(
             bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
         );

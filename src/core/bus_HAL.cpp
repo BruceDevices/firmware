@@ -2,6 +2,11 @@
 #include "core/configPins.h"
 #include "globals.h"
 #include "soc/soc_caps.h"
+#ifdef CARDPUTER_ADV_3IN1
+#include "adv_3in1.h"
+// The NRF driver owns the keyboard pin transition; stop it before another radio.
+void nrf_stop();
+#endif
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -298,6 +303,23 @@ bool checkAndRecoverSysI2CBus() {
 }
 
 // ---------------- SPI bus arbitration ----------------
+
+void prepareRadioSPI(RadioSPISelection selected) {
+#ifdef CARDPUTER_ADV_3IN1
+    if (selected != RadioSPISelection::NRF24 && cardputerAdvNrfActive()) nrf_stop();
+    auto deselect = [](gpio_num_t pin) {
+        if (pin == GPIO_NUM_NC) return;
+        digitalWrite(pin, HIGH);
+        pinMode(pin, OUTPUT);
+    };
+    if (selected != RadioSPISelection::CC1101) deselect(bruceConfigPins.CC1101_bus.cs);
+    if (selected != RadioSPISelection::LoRa) deselect(bruceConfigPins.LoRa_bus.cs);
+    // GPIO9 belongs to Wire1 in keyboard mode. Its directly connected NRF CS
+    // cannot be driven HIGH here; electrical exclusivity needs hardware isolation.
+#else
+    (void)selected;
+#endif
+}
 
 // Pins currently configured on the shared auxiliary bus (AUX_SPI), so repeated acquisitions
 // with the same pins skip a redundant end()/begin() cycle that could disturb whoever else is

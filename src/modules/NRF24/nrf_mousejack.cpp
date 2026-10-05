@@ -709,6 +709,7 @@ static bool mj_scan() {
 
     NRFradio.stopListening();
     NRFradio.powerDown();
+    nrf_stop();
     return (mj_targetCount > 0);
 }
 
@@ -787,6 +788,7 @@ static void mj_attackString(int targetIndex) {
     mj_typeString(target, text.c_str());
 
     NRFradio.powerDown();
+    nrf_stop();
     displaySuccess("Injection complete", true);
 }
 
@@ -885,6 +887,7 @@ static void mj_attackDucky(int targetIndex) {
 
     file.close();
     NRFradio.powerDown();
+    nrf_stop();
     displaySuccess("Script complete", true);
 }
 

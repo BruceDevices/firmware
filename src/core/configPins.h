@@ -123,7 +123,9 @@ public:
 
     // SPI Buses
 
-#ifdef CC1101_SCK_PIN
+#ifdef CARDPUTER_ADV_3IN1
+    SPIPins CC1101_bus = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_13};
+#elif defined(CC1101_SCK_PIN)
     SPIPins CC1101_bus = {
         (gpio_num_t)CC1101_SCK_PIN,
         (gpio_num_t)CC1101_MISO_PIN,
@@ -136,7 +138,9 @@ public:
     SPIPins CC1101_bus;
 #endif
 
-#ifdef NRF24_SCK_PIN
+#ifdef CARDPUTER_ADV_3IN1
+    SPIPins NRF24_bus = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_9, GPIO_NUM_8};
+#elif defined(NRF24_SCK_PIN)
     SPIPins NRF24_bus = {
         (gpio_num_t)NRF24_SCK_PIN,
         (gpio_num_t)NRF24_MISO_PIN,
@@ -195,7 +199,9 @@ public:
     SPIPins W5500_bus;
 #endif
 
-#ifdef LORA_SCK
+#ifdef CARDPUTER_ADV_3IN1
+    SPIPins LoRa_bus = {GPIO_NUM_40, GPIO_NUM_39, GPIO_NUM_14, GPIO_NUM_5, GPIO_NUM_3, GPIO_NUM_4};
+#elif defined(LORA_SCK)
     SPIPins LoRa_bus = {
         (gpio_num_t)LORA_SCK,
         (gpio_num_t)LORA_MISO,
@@ -255,6 +261,10 @@ public:
     void loadFile(JsonDocument &jsonDoc, bool checkFS = true);
     void factoryReset();
     void validateConfig();
+#ifdef CARDPUTER_ADV_3IN1
+    // Fixed board wiring wins over pin files from another Cardputer firmware.
+    bool applyBoardProfile();
+#endif
     void fromJson(JsonObject obj);
     void toJson(JsonObject obj) const;
 

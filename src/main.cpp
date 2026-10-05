@@ -11,6 +11,9 @@
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
+#ifdef CARDPUTER_ADV_3IN1
+#include "adv_3in1.h"
+#endif
 #include <functional>
 #include <string>
 #include <vector>
@@ -83,6 +86,9 @@ static void taskEncoderPoll(void *parameter) {
 TaskHandle_t xHandle;
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
+#ifdef CARDPUTER_ADV_3IN1
+    unsigned long lastKeyboardRetry = 0;
+#endif
     while (true) {
         checkPowerSaveTime();
         // Sometimes this task run 2 or more times before looptask,
@@ -102,9 +108,21 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
+#ifdef CARDPUTER_ADV_3IN1
+            if (cardputerAdvKeyboardRecoveryPending() && millis() - lastKeyboardRetry >= 500) {
+                lastKeyboardRetry = millis();
+                cardputerAdvLeaveNrf();
+            }
+            cardputerAdvLockInput();
+            if (!cardputerAdvNrfActive()) checkAndRecoverSysI2CBus();
+#else
             checkAndRecoverSysI2CBus();
+#endif
 #ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
+#endif
+#ifdef CARDPUTER_ADV_3IN1
+            cardputerAdvUnlockInput();
 #endif
             timer = millis();
         }
