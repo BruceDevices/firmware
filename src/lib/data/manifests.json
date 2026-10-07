@@ -5,6 +5,7 @@
 	],
 	"M5Stack": [
 		{ "id": "arduino-nesso-n1", "name": "Arduino Nesso N1", "family": "ESP32-C6" },
+		{ "id": "m5stack-atoms3", "name": "AtomS3", "family": "ESP32-S3" },
 		{ "id": "m5stack-cardputer", "name": "Cardputer (and Adv)", "family": "ESP32-S3" },
 		{ "id": "m5stack-core16mb", "name": "Core16mb", "family": "ESP32" },
 		{ "id": "m5stack-core2", "name": "Core2", "family": "ESP32" },
