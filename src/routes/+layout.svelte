@@ -104,7 +104,7 @@
 			<a href="mailto:contact@bruce.computer" class="inline-block">
 				<img src={asset('/img/email.svg')} alt="Email" class="h-10 w-10 transition-transform duration-200 ease-in-out hover:scale-110" />
 			</a>
-			<a href="https://matrix.to/#/#general:matrix.bruce.computer" target="_blank" rel="noopener noreferrer" class="inline-block">
+			<a href="https://matrix.to/#/#space:matrix.bruce.computer" target="_blank" rel="noopener noreferrer" class="inline-block">
 				<img src={asset('/img/matrix.svg')} alt="Matrix" class="h-10 w-10 transition-transform duration-200 ease-in-out hover:scale-110" />
 			</a>
 		</div>
