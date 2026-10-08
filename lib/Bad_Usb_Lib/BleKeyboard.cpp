@@ -185,9 +185,9 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
         advertising->addServiceUUID(BLEUUID((uint16_t)(ESP.getEfuseMac() & 0xFFFF)));
     } else {
 
-        advertising->addServiceUUID(hid->getHidService()->getUUID());
         NimBLEAdvertisementData advertisementData = NimBLEAdvertisementData();
         advertisementData.setFlags(BLE_HS_ADV_F_DISC_GEN);
+        advertisementData.addServiceUUID(hid->getHidService()->getUUID());
         advertisementData.setName(deviceName.c_str());
         advertisementData.setAppearance(appearance);
         advertising->setAdvertisementData(advertisementData);
