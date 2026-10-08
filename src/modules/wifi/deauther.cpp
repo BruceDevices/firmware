@@ -847,10 +847,11 @@ void deauthAllFromScan() {
                                runDeauthAll(targetMAC, ch);
                            }});
     }
-    options.push_back({"Back", []() { returnToMenu = true; }});
+    bool goBack = false;
+    options.push_back({"Back", [&]() { goBack = true; }});
 
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { deauthAllMenu(); }
 }
 
 void deauthAllByChannel() {
@@ -873,22 +874,24 @@ void deauthAllByChannel() {
                                runDeauthAll(broadcast_mac, ch);
                            }});
     }
-    options.push_back({"Back", []() { returnToMenu = true; }});
+    bool goBack = false;
+    options.push_back({"Back", [&]() { goBack = true; }});
 
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { deauthAllMenu(); }
 }
 
 void deauthAllMenu() {
     drawMainBorderWithTitle("Deauth All");
 
+    bool goBack = false;
     options = {
         {"Select from Scan", [=]() { deauthAllFromScan(); } },
         {"Select Channel",   [=]() { deauthAllByChannel(); }},
-        {"Back",             [=]() { returnToMenu = true; } },
+        {"Back",             [&]() { goBack = true; }},
     };
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { enhancedDeauthMenu(); }
 }
 
 void runDeauthTargetList(const std::vector<Host> &targets, uint8_t *targetMAC, int channel) {
@@ -1036,10 +1039,11 @@ void showAPSelectionForClientDeauth() {
                                scanClientsOnAP(targetMAC, ch);
                            }});
     }
-    options.push_back({"Back", []() { returnToMenu = true; }});
+    bool goBack = false;
+    options.push_back({"Back", [&]() { goBack = true; }});
 
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { deauthTargetListMenu(); }
 }
 
 void clientSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
@@ -1150,10 +1154,10 @@ void scanClientsOnAP(uint8_t *targetMAC, int channel) {
 }
 
 void showClientSelectionForDeauth(const std::vector<Host> &clients, uint8_t *targetMAC, int channel) {
-    options.clear();
-
     uint8_t apBssid[6];
     memcpy(apBssid, targetMAC, 6);
+
+    options.clear();
 
     if (!clients.empty()) {
         for (auto &client : clients) {
@@ -1177,10 +1181,11 @@ void showClientSelectionForDeauth(const std::vector<Host> &clients, uint8_t *tar
 
     options.push_back({"Rescan", [=]() { scanClientsOnAP(targetMAC, channel); }});
 
-    options.push_back({"Back", []() { returnToMenu = true; }});
+    bool goBack = false;
+    options.push_back({"Back", [&]() { goBack = true; }});
 
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { showAPSelectionForClientDeauth(); }
 }
 
 void deauthTargetListMenu() { showAPSelectionForClientDeauth(); }
@@ -1228,10 +1233,11 @@ void showTargetSelection() {
                                stationDeauth(target);
                            }});
     }
-    options.push_back({"Back", []() { returnToMenu = true; }});
+    bool goBack = false;
+    options.push_back({"Back", [&]() { goBack = true; }});
 
-    addOptionToMainMenu();
     loopOptions(options);
+    if (goBack) { enhancedDeauthMenu(); }
 }
 
 std::vector<Host> buildTargetListFromScan() {
