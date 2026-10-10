@@ -2,6 +2,8 @@
 #include "core/led_control.h"
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
+#include "protocols/rf_presets.h"
+#include "protocols/rf_raw_capture.h"
 #include "protocols/rf_config.h"   // RF_DBG
 #include "protocols/rf_registry.h" // rf_flipper_protocol_name
 #include "rf_send.h"
@@ -1084,7 +1086,7 @@ String rf_scan(float start_freq, float stop_freq, int max_loops) {
     return out;
 }
 
-String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) {
+String rfReceiveSignal(float frequency, int maxSeconds, bool raw, bool headless, const String &rxPreset) {
     RfCodes received;
 
     if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
@@ -1098,15 +1100,38 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
         tft.println("Waiting for a " + String(frequency) + " MHz " + "signal.");
     }
 
-    // init native RMT receive
+    // Reject unsupported requests before touching the radio; never claim an FSK
+    // capture when an external OOK receiver or unknown preset was selected.
+    const RfPreset *preset = rxPreset.isEmpty() ? nullptr : rf_find_preset(rxPreset);
+    if (!rxPreset.isEmpty() && (!raw || !preset || bruceConfigPins.rfModule != CC1101_SPI_MODULE))
+        return "";
     if (!initRfModule("rx", frequency)) return "";
+    String registers;
+    if (preset) {
+        ELECHOUSE_cc1101.setSidle();
+        ELECHOUSE_cc1101.setModulation(preset->modulation);
+        ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
+        ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
+        ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
+        ELECHOUSE_cc1101.setPktFormat(3);
+        ELECHOUSE_cc1101.SetRx();
+        for (uint8_t address = 0; address <= 0x2e; ++address) {
+            char hex[4];
+            snprintf(hex, sizeof(hex), "%02X", ELECHOUSE_cc1101.SpiReadReg(address));
+            if (address) registers += " ";
+            registers += hex;
+        }
+    }
     RfRxSession rx;
-    if (!rx.begin()) {
+    if (!rx.begin(true)) {
         deinitRfModule();
         return "";
     }
 
-    while (!check(EscPress)) {
+    String rawCapture;
+    const uint32_t started = millis();
+    // Headless JS owns the Back event; checking it here must not consume it.
+    while (!(headless ? EscPress : check(EscPress))) {
         std::vector<int> durations;
         if (rx.poll(durations)) {
             // In decode mode try KeeLoq, then the registry; raw mode skips decoding.
@@ -1119,7 +1144,15 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             uint64_t crc = 0;
             std::vector<int> indexed;
             int rawBits = 0, rawTe = 0;
-            int transitions = rf_build_raw(durations, _data, hasCrc, crc, indexed, rawBits, rawTe);
+            int transitions = durations.size();
+            if (raw) {
+                rawCapture = rf_capture::rawLines(durations).c_str();
+                _data = rawCapture;
+                _data.replace("RAW_Data:", "");
+                if (!durations.empty()) rawTe = abs(durations.front());
+            } else {
+                transitions = rf_build_raw(durations, _data, hasCrc, crc, indexed, rawBits, rawTe);
+            }
 
             if (decoded) {
                 received.frequency = long(frequency * 1000000);
@@ -1133,7 +1166,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 // Raw mode requested: keep undecoded captures as RAW.
                 received.frequency = long(frequency * 1000000);
                 received.protocol = "RAW";
-                received.preset = "Ook270Async";
+                received.preset = preset ? preset->name : "Ook270Async";
                 received.te = rawTe;
                 received.data = _data;
                 received.filepath = "unsaved";
@@ -1170,28 +1203,20 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                     "Preset: " + String(received.preset == "" ? String("Ook270Async") : received.preset) +
                     "\n";
                 subfile_out += "Protocol: RAW\n";
-                subfile_out += "RAW_Data: " + received.data;
+                if (preset) {
+                    subfile_out += "Bruce_RX_Preset: " + String(preset->name) + "\n";
+                    subfile_out += "Bruce_RX_Registers: " + registers + "\n";
+                }
+                subfile_out += "Bruce_Buffer_Full: " + String(rx.bufferFull() ? 1 : 0) + "\n";
+                subfile_out += raw ? rawCapture : "RAW_Data: " + received.data;
             }
             rx.end();
             deinitRfModule();
             return subfile_out;
         }
-        if (max_loops > 0) {
-            // headless mode, quit if nothing received after max_loops
-            vTaskDelay(1000 / portTICK_PERIOD_MS); // wait first, THEN check
-            max_loops -= 1;
-            if (max_loops == 0) {
-                // Use sentinel -1: loop runs one more iteration to catch signals
-                // that arrived during vTaskDelay before giving up
-                max_loops = -1;
-            }
-        } else if (max_loops == -1) {
-            // Final check already done in this iteration - truly timed out
-            Serial.println("timeout");
-            rx.end();
-            deinitRfModule();
-            return "";
-        }
+        if (maxSeconds > 0 && millis() - started >= uint32_t(maxSeconds) * 1000U) break;
+        // Keep rearming promptly instead of leaving a one-second receive gap.
+        vTaskDelay(1);
     }
 
     rx.end();

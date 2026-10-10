@@ -123,6 +123,9 @@ void display_signal_data(RfCodes received, bool headless = false);
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
-String rfReceiveSignal(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
+String rfReceiveSignal(
+    float frequency = 0, int maxSeconds = -1, bool raw = false, bool headless = false,
+    const String &rxPreset = ""
+);
 
 #endif
