@@ -130,9 +130,11 @@ void RfRxSession::arm() {
     if (err != ESP_OK) RF_DBG("rmt_receive failed: %d", (int)err);
 }
 
-bool RfRxSession::begin() {
+bool RfRxSession::begin(bool radioReady) {
+    end();
+    _bufferFull = false;
     if (bruceConfigPins.rfModule == M5_RF_MODULE) {
-        if (!initRfModule("rx", bruceConfigPins.rfFreq)) return false;
+        if (!radioReady && !initRfModule("rx", bruceConfigPins.rfFreq)) return false;
 
         portENTER_CRITICAL(&rf_m5_mux);
         rf_m5_pin = bruceConfigPins.rfRx;
@@ -153,7 +155,7 @@ bool RfRxSession::begin() {
         _buf = (rmt_symbol_word_t *)malloc(_bufSymbols * sizeof(rmt_symbol_word_t));
         if (_buf == nullptr) return false;
     }
-    _ch = setup_rf_rx();
+    _ch = setup_rf_rx(radioReady);
     if (_ch == nullptr) return false;
     _queue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
     if (_queue == nullptr) {
@@ -200,6 +202,7 @@ bool RfRxSession::poll(std::vector<int> &durations) {
         portEXIT_CRITICAL(&rf_m5_mux);
 
         if (ready == 0) return false;
+        _bufferFull = ready == int(sizeof(rf_m5_buf) / sizeof(rf_m5_buf[0]));
         rf_filter_m5_rx_glitches(durations);
 #if RF_DEBUG
         RF_DBG("M5 GPIO capture: %u durations", (unsigned)durations.size());
@@ -213,6 +216,7 @@ bool RfRxSession::poll(std::vector<int> &durations) {
     if (_ch == nullptr) return false;
     rmt_rx_done_event_data_t rx;
     if (xQueueReceive(_queue, &rx, 0) == pdPASS) {
+        _bufferFull = rx.num_symbols == _bufSymbols;
         rf_symbols_to_durations(rx.received_symbols, rx.num_symbols, durations);
         rf_filter_m5_rx_glitches(durations);
         arm(); // re-arm for the next signal
