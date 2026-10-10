@@ -194,6 +194,25 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 </details>
 
 <details>
+  <summary><h2>Wire Tools</h2></summary>
+
+- [x] UART Terminal
+  - [x] Baudrate presets + custom (300..5000000)
+  - [x] Custom RX/TX pins (Config > UART Pins)
+  - [x] Live send/receive terminal
+- [x] I2C Bus
+  - [x] Device scan (0x08-0x77)
+  - [x] Register read/write
+  - [x] 256-byte register dump
+- [x] SPI Bus
+  - [x] JEDEC flash detect
+  - [x] CS-framed HEX console (arbitrary transfers)
+- [x] JTAG Scanner
+  - [x] IDCODE read (TAP reset + DR shift, bit-banged TCK/TMS/TDI/TDO)
+- [x] Serial control: `wire uart|i2c|spi|jtag ...` commands over the serial CLI
+</details>
+
+<details>
   <summary><h2>Clock</h2></summary>
 
 - [x] RTC Support
@@ -272,6 +291,7 @@ Other media can be [found here](./media/).
 - [@rennancockles](https://github.com/rennancockles) for a lot of RFID code, refactoring and others features.
 - [@7h30th3r0n3](https://github.com/7h30th3r0n3) refactoring and a lot of help with WiFi attacks.
 - [@Tawank](https://github.com/Tawank) refactoring interpreter among many other things
+- [@geo-tp](https://github.com/geo-tp) contributing with lots of PRs and Wire Tools code
 - @pablonymous RF functions to read RAW Data
 - [Smoochiee](https://github.com/smoochiee) for Bruce PCB design.
 - TH3_KR4K3N for Stick cplus extender PCB design.

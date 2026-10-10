@@ -27,6 +27,9 @@ MainMenu::MainMenu() {
 #endif
         &clockMenu,
         &othersMenu,
+#if !defined(LITE_VERSION)
+        &wireToolsMenu,
+#endif
         &configMenu,
     };
 
