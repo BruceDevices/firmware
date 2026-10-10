@@ -39,7 +39,8 @@ class RfRxSession {
 public:
     // Create + enable the RMT RX channel (via setup_rf_rx) and arm a receive.
     // Returns false if the RF module / channel could not be initialised.
-    bool begin();
+    // An already configured radio must not be reset to the default OOK preset.
+    bool begin(bool radioReady = false);
     // Non-blocking: when a signal has been captured, fills `durations` with the
     // signed pulse lengths (HIGH > 0, LOW < 0, µs), re-arms the receiver and
     // returns true. Returns false when nothing is ready yet.
@@ -47,6 +48,7 @@ public:
     // Disable + delete the channel and free the queue/buffer.
     void end();
     bool active() const { return _ch != nullptr || _m5Isr; }
+    bool bufferFull() const { return _bufferFull; }
     ~RfRxSession() { end(); }
 
 private:
@@ -57,6 +59,7 @@ private:
     // stack, where rfReceiveSignal runs, avoids stack overflow / corruption.
     rmt_symbol_word_t *_buf = nullptr;
     static const size_t _bufSymbols = 256;
+    bool _bufferFull = false;
     void arm();
 };
 
