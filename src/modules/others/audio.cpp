@@ -27,6 +27,11 @@ static const uint32_t AUDIO_TASK_STACK_SIZE = 16384; // 16KB - increased for com
 static const UBaseType_t AUDIO_TASK_PRIORITY = 1;
 static const BaseType_t AUDIO_TASK_CORE = 1; // Core 1
 
+// playTone() output: 8 kHz tone, DMA of 3 x 80 frames = 30 ms (see playTone())
+static const uint32_t TONE_SAMPLE_RATE = 8000;
+static const int TONE_DMA_BUFFERS = 3;
+static const int TONE_DMA_FRAMES = 80;
+
 // ===== ASYNC PLAYBACK STATE =====
 struct AudioPlayerState {
     // Playback objects
@@ -671,14 +676,22 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     }
 
     float hz = frequency;
+    float toneSec = duration / 1000.0f;
 
     AudioOutputI2S *out = createConfiguredAudioOutput();
     if (!out) {
         _setup_codec_speaker(false);
         return;
     }
+    // begin() fills the whole DMA with silence and the generator tears the output down as
+    // soon as its last sample is queued, so whatever is still in the DMA is never played.
+    // With the default 5 x 576 frames that is 360 ms at the 8 kHz used here: shorter tones
+    // were silent and longer ones lost their last 360 ms. Keep the DMA small and append
+    // one DMA worth of silence, which is what gets cut instead.
+    out->SetBuffers(TONE_DMA_BUFFERS, TONE_DMA_FRAMES * 4);
+    const float tailSec = (float)(TONE_DMA_BUFFERS * TONE_DMA_FRAMES) / TONE_SAMPLE_RATE;
 
-    AudioFileSourceFunction *file = new AudioFileSourceFunction(duration / 1000.0);
+    AudioFileSourceFunction *file = new AudioFileSourceFunction(toneSec + tailSec, 1, TONE_SAMPLE_RATE);
     if (!file) {
         delete out;
         _setup_codec_speaker(false);
@@ -688,13 +701,15 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     float volumeScale = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
 
     if (waveType == 0) {
-        file->addAudioGenerators([volumeScale, hz](const float time) {
+        file->addAudioGenerators([volumeScale, hz, toneSec](const float time) {
+            if (time >= toneSec) return 0.0f;
             float v = (sin(hz * time) >= 0) ? 1.0f : -1.0f;
             v *= volumeScale;
             return v;
         });
     } else if (waveType == 1) {
-        file->addAudioGenerators([volumeScale, hz](const float time) {
+        file->addAudioGenerators([volumeScale, hz, toneSec](const float time) {
+            if (time >= toneSec) return 0.0f;
             float v = sin(TWO_PI * hz * time);
             v *= fmod(time, 1.f);
             v *= volumeScale;
