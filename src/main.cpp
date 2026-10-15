@@ -479,6 +479,10 @@ void setup() {
     setup_gpio();
 
     tft.init();
+#if defined(T_EMBED_1101)
+    // Mount shared-bus SD before the first screen draw on this board.
+    setupSdCard();
+#endif
     tft.setRotation(bruceConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
