@@ -689,7 +689,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
 
     if (waveType == 0) {
         file->addAudioGenerators([volumeScale, hz](const float time) {
-            float v = (sin(hz * time) >= 0) ? 1.0f : -1.0f;
+            float v = (sin(TWO_PI * hz * time) >= 0) ? 1.0f : -1.0f;
             v *= volumeScale;
             return v;
         });
