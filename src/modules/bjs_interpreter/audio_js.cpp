@@ -1,6 +1,8 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "audio_js.h"
 
+#include "modules/others/audio.h"
+
 JSValue native_playAudioFile(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (argc < 1) { return JS_NewBool(false); }
 
@@ -18,14 +20,15 @@ JSValue native_tone(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) 
 
     uint32_t freq = 500;
     uint32_t duration = 1000;
-    int nonBlocking = false;
+    bool nonBlocking = false;
 
     if (argc > 0) { JS_ToUint32(ctx, &freq, argv[0]); }
     if (argc > 1) { JS_ToUint32(ctx, &duration, argv[1]); }
-    if (argc > 2) { nonBlocking = JS_ToInt32(ctx, &nonBlocking, argv[2]); }
+    if (argc > 2) { nonBlocking = JS_ToBool(ctx, argv[2]); }
 
 #if defined(HAS_SPEAKER)
-    if (!nonBlocking) { serialCli.parse("tone " + String(freq) + " " + String(duration)); }
+    if (nonBlocking) _tone(freq, duration, PLAYBACK_ASYNC);
+    else serialCli.parse("tone " + String(freq) + " " + String(duration));
 #else
     if (bruceConfigPins.buzzer > 0) tone((uint8_t)bruceConfigPins.buzzer, freq, duration);
 #endif

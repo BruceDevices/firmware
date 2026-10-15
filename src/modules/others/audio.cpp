@@ -659,13 +659,16 @@ bool isAudioFile(const String &filepath) {
            filepath.endsWith(".aac") || filepath.endsWith(".flac");
 }
 
-void playTone(unsigned int frequency, unsigned long duration, short waveType) {
+void playTone(unsigned int frequency, unsigned long duration, short waveType, PlaybackMode mode) {
     if (!bruceConfig.soundEnabled) return;
+
+    // Stop any current playback
+    if (isAudioPlaying()) { stopAudioPlayback(); }
 
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
-        if (frequency == 0 && duration > 0) { delay(duration); }
+        if (frequency == 0 && duration > 0 && mode == PLAYBACK_BLOCKING) { delay(duration); }
         _setup_codec_speaker(false);
         return;
     }
@@ -716,6 +719,14 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
         delete file;
         delete out;
         _setup_codec_speaker(false);
+        return;
+    }
+
+    // === ASYNC MODE ===
+    // The playback task does not watch the keys, so a key press during the tone
+    // stays for the caller instead of being consumed to cut the tone short.
+    if (mode == PLAYBACK_ASYNC) {
+        startAsyncPlayback(wav, file, out, "tone");
         return;
     }
 
@@ -812,23 +823,24 @@ static void cardputerTone(unsigned int frequency, unsigned long duration) {
 }
 #endif
 
-void _tone(unsigned int frequency, unsigned long duration) {
+void _tone(unsigned int frequency, unsigned long duration, PlaybackMode mode) {
     if (!bruceConfig.soundEnabled) return;
 
 #if defined(HAS_SPEAKER)
 #if defined(ARDUINO_M5STACK_CARDPUTER)
+    // No async path here: cardputerTone() writes the samples itself
     cardputerTone(frequency, duration);
 #elif __has_include(<M5Unified.h>)
     if (frequency == 0) {
-        if (duration > 0) delay(duration);
+        if (duration > 0 && mode == PLAYBACK_BLOCKING) delay(duration);
     } else {
         uint8_t m5vol = (bruceConfig.soundVolume * 255) / AUDIO_VOLUME_MAX;
         M5.Speaker.setVolume(m5vol);
         M5.Speaker.tone(frequency, duration);
-        if (duration > 0) delay(duration);
+        if (duration > 0 && mode == PLAYBACK_BLOCKING) delay(duration);
     }
 #else
-    playTone(frequency, duration, 0);
+    playTone(frequency, duration, 0, mode);
 #endif
 #else
     // No I2S speaker: fall back to the buzzer, which stays silent until a pin is configured.
