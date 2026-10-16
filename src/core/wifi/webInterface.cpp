@@ -238,20 +238,20 @@ void handleUpload(
                 // Serial.println("Failed to open file for writing: " + uploadFolder + "/" + filename);
                 goto RETRY;
             }
+            if (request->hasArg("password") && request->_tempFile) {
+                // Write the encrypted-file header once; the hex payload is streamed per chunk.
+                String header = encryptFileHeader();
+                request->_tempFile.write((const uint8_t *)header.c_str(), header.length());
+            }
         }
 
         if (len) {
             if (request->hasArg("password")) {
-                // encryption requested
-                static int chunck_no = 0;
-                if (chunck_no != 0) {
-                    // TODO: handle multiple chunks
-                    request->send(404, "text/html", "file is too big");
-                    return;
-                } else chunck_no += 1;
+                // Encrypt this chunk incrementally. The XOR keystream is position-based, so
+                // `index` (the chunk's offset in the plaintext) keeps it continuous across
+                // chunks without buffering the whole file in RAM.
                 String enc_password = request->arg("password");
-                String plaintext = String((char *)data).substring(0, len);
-                String cyphertxt = encryptString(plaintext, enc_password);
+                String cyphertxt = encryptChunkToHex(data, len, enc_password, index);
                 if (cyphertxt == "") { return; }
                 if (request->_tempFile)
                     request->_tempFile.write((const uint8_t *)cyphertxt.c_str(), cyphertxt.length());
@@ -260,6 +260,8 @@ void handleUpload(
             }
         }
         if (final) {
+            // Terminate the encrypted Data line before closing, matching encryptString().
+            if (request->hasArg("password") && request->_tempFile) request->_tempFile.write((const uint8_t *)"\n", 1);
             // close the file handle as the upload is now done
             if (request->_tempFile) request->_tempFile.close();
         }
