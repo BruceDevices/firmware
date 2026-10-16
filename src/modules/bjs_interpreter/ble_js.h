@@ -8,6 +8,11 @@ extern "C" {
 JSValue native_bleScan(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_bleAdvertise(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 JSValue native_bleStopAdvertise(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_bleConnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_bleIsConnected(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_bleRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_bleWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue native_bleDisconnect(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 }
 
 #endif
