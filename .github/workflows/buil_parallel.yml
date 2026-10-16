@@ -90,6 +90,7 @@ jobs:
           - { env: "S3_supermini_madara",             family: "ESP32-S3",}
           - { env: "seeedstudio-xiao-esp32s3",        family: "ESP32-S3",}
           - { env: "reaper",                          family: "ESP32-S3",}
+          - { env: "fatalcore",                          family: "ESP32-S3",}
           - { env: "Phantom_S024R",                   family: "ESP32",}
           - { env: "LAUNCHER_Phantom_S024R",          family: "ESP32",}
           - { env: "Marauder-Mini",                   family: "ESP32",}
