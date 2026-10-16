@@ -1,3 +1,4 @@
+#include "modules/wifi/wifite.h"
 #include "WifiMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
@@ -98,6 +99,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
+#if defined(T_EMBED_1101)
+    options.push_back({"WiFite", wifite_menu});
+#endif
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
