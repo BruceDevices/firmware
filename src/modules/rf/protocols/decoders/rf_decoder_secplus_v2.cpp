@@ -1,3 +1,4 @@
+#include "manchester_helpers.h"
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "rf_decoder_secplus_v2.h"
 #include "../rf_config.h"
@@ -146,34 +147,7 @@ static bool sp2_check_packet(uint64_t data, uint64_t& packet_1) {
 }
 
 // Manchester helpers for decoding
-typedef enum { ME_RESET, ME_LOW, ME_HIGH } manchester_state;
 
-static bool manchester_advance(manchester_state& state, bool high_pulse, bool& bit) {
-    switch (state) {
-    case ME_RESET:
-        state = high_pulse ? ME_HIGH : ME_LOW;
-        return false;
-    case ME_LOW:
-        if (high_pulse) {
-            state = ME_HIGH;
-            return false;
-        }
-        bit = 1; state = ME_LOW;
-        return true;
-    case ME_HIGH:
-        if (!high_pulse) {
-            state = ME_LOW;
-            return false;
-        }
-        bit = 0; state = ME_HIGH;
-        return true;
-    }
-    return false;
-}
-
-static void manchester_reset(manchester_state& state) {
-    state = ME_RESET;
-}
 
 bool rf_decode_secplus_v2(const std::vector<int>& durations, RfCodes& out) {
     if (durations.size() < 4) return false;
@@ -183,7 +157,7 @@ bool rf_decode_secplus_v2(const std::vector<int>& durations, RfCodes& out) {
     uint64_t data = 0;
     int bits = 0;
     uint64_t packet_1 = 0;
-    manchester_state man_state;
+    ManchesterHalfState man_state;
 
     for (int raw : durations) {
         bool level = raw > 0;
@@ -193,10 +167,10 @@ bool rf_decode_secplus_v2(const std::vector<int>& durations, RfCodes& out) {
         case ST_RESET:
             if (!level && sp2_diff(dur, SP2_TE_LONG * 130) < SP2_TE_DELTA * 100) {
                 data = 0; bits = 0; packet_1 = 0;
-                manchester_reset(man_state);
+                manchester_half_reset(man_state);
                 bool dummy = false;
-                manchester_advance(man_state, true, dummy);  // prime with long high
-                manchester_advance(man_state, false, dummy); // then short low
+                manchester_half_advance(man_state, true, dummy);  // prime with long high
+                manchester_half_advance(man_state, false, dummy); // then short low
                 step = ST_DATA;
             }
             break;
@@ -205,13 +179,13 @@ bool rf_decode_secplus_v2(const std::vector<int>& durations, RfCodes& out) {
             if (!level) {
                 if (sp2_diff(dur, SP2_TE_SHORT) < SP2_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         bits++;
                     }
                 } else if (sp2_diff(dur, SP2_TE_LONG) < SP2_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         bits++;
                     }
@@ -233,23 +207,23 @@ bool rf_decode_secplus_v2(const std::vector<int>& durations, RfCodes& out) {
                         }
                     }
                     data = 0; bits = 0;
-                    manchester_reset(man_state);
+                    manchester_half_reset(man_state);
                     bool dummy = false;
-                    manchester_advance(man_state, true, dummy);
-                    manchester_advance(man_state, false, dummy);
+                    manchester_half_advance(man_state, true, dummy);
+                    manchester_half_advance(man_state, false, dummy);
                 } else {
                     step = ST_RESET;
                 }
             } else {
                 if (sp2_diff(dur, SP2_TE_SHORT) < SP2_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         bits++;
                     }
                 } else if (sp2_diff(dur, SP2_TE_LONG) < SP2_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         bits++;
                     }

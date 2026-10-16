@@ -1,3 +1,4 @@
+#include "manchester_helpers.h"
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "rf_decoder_somfy_keytis.h"
 #include "../rf_config.h"
@@ -20,34 +21,7 @@ static uint8_t keytis_crc(uint64_t data) {
     return crc & 0xf;
 }
 
-typedef enum { ME_RESET, ME_LOW, ME_HIGH } manchester_state;
 
-static bool manchester_advance(manchester_state& state, bool high_pulse, bool& bit) {
-    switch (state) {
-    case ME_RESET:
-        state = high_pulse ? ME_HIGH : ME_LOW;
-        return false;
-    case ME_LOW:
-        if (high_pulse) {
-            state = ME_HIGH;
-            return false;
-        }
-        bit = 1; state = ME_LOW;
-        return true;
-    case ME_HIGH:
-        if (!high_pulse) {
-            state = ME_LOW;
-            return false;
-        }
-        bit = 0; state = ME_HIGH;
-        return true;
-    }
-    return false;
-}
-
-static void manchester_reset(manchester_state& state) {
-    state = ME_RESET;
-}
 
 bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
     if (durations.size() < 4) return false;
@@ -64,7 +38,7 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
     int bits = 0;
     int header_cnt = 0;
     uint32_t pdc = 0;
-    manchester_state man_state;
+    ManchesterHalfState man_state;
 
     for (int raw : durations) {
         bool level = raw > 0;
@@ -95,9 +69,9 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
                 } else if (header_cnt > 1 &&
                            keytis_diff(dur, KEYTIS_TE_SHORT * 7) < KEYTIS_TE_DELTA * 4) {
                     data = 0; bits = 0; pdc = 0;
-                    manchester_reset(man_state);
+                    manchester_half_reset(man_state);
                     bool dummy = false;
-                    manchester_advance(man_state, true, dummy);
+                    manchester_half_advance(man_state, true, dummy);
                     step = ST_DATA;
                 } else {
                     header_cnt = 0;
@@ -110,7 +84,7 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
             if (!level) {
                 if (keytis_diff(dur, KEYTIS_TE_SHORT) < KEYTIS_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         if (bits < 56) {
                             data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         } else {
@@ -120,7 +94,7 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
                     }
                 } else if (keytis_diff(dur, KEYTIS_TE_LONG) < KEYTIS_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         if (bits < 56) {
                             data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         } else {
@@ -147,9 +121,9 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
                         }
                     }
                     data = 0; bits = 0; pdc = 0;
-                    manchester_reset(man_state);
+                    manchester_half_reset(man_state);
                     bool dummy = false;
-                    manchester_advance(man_state, true, dummy);
+                    manchester_half_advance(man_state, true, dummy);
                     step = ST_RESET;
                 } else {
                     step = ST_RESET;
@@ -157,7 +131,7 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
             } else {
                 if (keytis_diff(dur, KEYTIS_TE_SHORT) < KEYTIS_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         if (bits < 56) {
                             data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         } else {
@@ -167,7 +141,7 @@ bool rf_decode_somfy_keytis(const std::vector<int>& durations, RfCodes& out) {
                     }
                 } else if (keytis_diff(dur, KEYTIS_TE_LONG) < KEYTIS_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         if (bits < 56) {
                             data = (data << 1) | (bit_out ? 1ULL : 0ULL);
                         } else {

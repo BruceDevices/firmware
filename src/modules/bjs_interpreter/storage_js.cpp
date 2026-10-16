@@ -4,6 +4,7 @@
 #include "core/sd_functions.h"
 
 #include "helpers_js.h"
+#include <vector>
 
 JSValue native_storageReaddir(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     (void)this_val;
@@ -96,7 +97,14 @@ JSValue native_storageWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue
     size_t dataSize = 0;
     const char *dataPtr = NULL;
     JSCStringBuf sb;
-    if (argc > 0 && JS_IsString(ctx, argv[1])) { dataPtr = JS_ToCStringLen(ctx, &dataSize, argv[1], &sb); }
+    if (argc < 2) return JS_ThrowTypeError(ctx, "storage.write: path and data required");
+    if (JS_IsString(ctx, argv[1])) dataPtr = JS_ToCStringLen(ctx, &dataSize, argv[1], &sb);
+    else if (JS_IsTypedArray(ctx, argv[1])) dataPtr = JS_GetTypedArrayBuffer(ctx, &dataSize, argv[1]);
+    else return JS_ThrowTypeError(ctx, "storage.write: string or Uint8Array required");
+    if (!dataPtr && dataSize) return JS_EXCEPTION;
+    // Path conversion can allocate/GC; retain binary bytes in native storage.
+    std::vector<uint8_t> writeBytes;
+    if (dataSize) writeBytes.assign((const uint8_t *)dataPtr, (const uint8_t *)dataPtr + dataSize);
 
     FileParamsJS fileParams = js_get_path_from_params(ctx, argv, true);
     if (!fileParams.path.startsWith("/")) fileParams.path = "/" + fileParams.path;
@@ -142,10 +150,11 @@ JSValue native_storageWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue
         free(fileContent);
     }
 
-    if (dataPtr != NULL && dataSize > 0) { file.write((const uint8_t *)dataPtr, dataSize); }
+    size_t written = dataSize ? file.write(writeBytes.data(), dataSize) : 0;
+    file.flush();
+    bool success = written == dataSize && file.getWriteError() == 0;
     file.close();
-
-    return JS_NewBool(true);
+    return JS_NewBool(success);
 }
 
 JSValue native_storageRename(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
