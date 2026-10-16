@@ -1,5 +1,6 @@
 #include "powerSave.h"
 #include "display.h"
+#include "mykeyboard.h"
 #include "settings.h"
 
 /* Check if it's time to put the device to sleep */
@@ -14,9 +15,15 @@ void fadeOutScreen(int startValue) {
 }
 
 void checkPowerSaveTime() {
+    unsigned long elapsed = millis() - previousMillis;
+
+    if (bruceConfig.autoDeepSleepSet != 0 && elapsed >= (unsigned long)bruceConfig.autoDeepSleepSet * 1000) {
+        if (!isScreenOff) fadeOutScreen(bruceConfig.bright);
+        goToDeepSleep();
+    }
+
     if (bruceConfig.dimmerSet == 0) return;
 
-    unsigned long elapsed = millis() - previousMillis;
     int startDimmerBright = bruceConfig.bright / 3;
     int dimmerSetMs = bruceConfig.dimmerSet * 1000;
 
