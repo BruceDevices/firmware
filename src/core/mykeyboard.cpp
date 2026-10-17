@@ -471,6 +471,7 @@ String generalKeyboard(
     bool selection_made = false; // used for detecting if an key or a button was selected
     bool redraw = true;
     long last_input_time = millis(); // used for input debouncing
+    bool show_password = false;
     // cursor coordinates: kep track of where the next character should be printed (in screen pixels)
     int cursor_x = 0;
     int cursor_y = 0;
@@ -486,7 +487,7 @@ String generalKeyboard(
 
     bool direction = true;
     bool last_dir = true;
-    const int buttons_number = 5 + HAS_1_BUTTON;
+    const int password_button = 5 + HAS_1_BUTTON;
 
     /*-----------------------------HOW btns_layout IS CALCULATED-----------------------------*/
     // const char *buttons_strings[] = {"OK", "CAP", "DEL", "SPACE", "BACK"};
@@ -521,15 +522,26 @@ String generalKeyboard(
     const int textbox_text_y = textbox_y + 2;
     const int keyboard_start_y = textbox_y + KBLH + 2;
 
-    const int btns_layout[buttons_number][3] = {
-        {1 * PAD + 0 * LW * FM,  3 * LW * FM, 1 * PAD + 0 * LW * FM + LW * FM / 2  }, // Ok
-        {2 * PAD + 3 * LW * FM,  3 * LW * FM, 2 * PAD + 3 * LW * FM + LW * FM / 2  }, // ab/A@
-        {3 * PAD + 6 * LW * FM,  3 * LW * FM, 3 * PAD + 6 * LW * FM + LW * FM / 2  }, // <-
-        {4 * PAD + 9 * LW * FM,  3 * LW * FM, 4 * PAD + 9.5 * LW * FM + LW * FM / 2}, // _ {Space}
-        {5 * PAD + 12 * LW * FM, 3 * LW * FM, 5 * PAD + 12 * LW * FM + LW * FM / 2 }, // Ex
-#if HAS_1_BUTTON
-        {6 * PAD + 15 * LW * FM, 4 * LW * FM, 6 * PAD + 15 * LW * FM + LW * FM / 2 }, // R/D or L/U
+    const int password_button_x = 6 * PAD + 15 * LW * FM + HAS_1_BUTTON * (PAD + 4 * LW * FM);
+    const int password_button_width = tftWidth - password_button_x - PAD;
+#if defined(HAS_TOUCH)
+    // Keep existing controls in place and only add Show/Hide when its label fits.
+    const bool password_toggle = mask_input && password_button_width >= 4 * LW * FP + 2 * PAD;
+#else
+    const bool password_toggle = false;
 #endif
+    const int buttons_number = password_button + (password_toggle ? 1 : 0);
+
+    const int btns_layout[6 + HAS_1_BUTTON][3] = {
+        {1 * PAD + 0 * LW * FM,  3 * LW * FM,           1 * PAD + 0 * LW * FM + LW * FM / 2  }, // Ok
+        {2 * PAD + 3 * LW * FM,  3 * LW * FM,           2 * PAD + 3 * LW * FM + LW * FM / 2  }, // ab/A@
+        {3 * PAD + 6 * LW * FM,  3 * LW * FM,           3 * PAD + 6 * LW * FM + LW * FM / 2  }, // <-
+        {4 * PAD + 9 * LW * FM,  3 * LW * FM,           4 * PAD + 9.5 * LW * FM + LW * FM / 2}, // _ {Space}
+        {5 * PAD + 12 * LW * FM, 3 * LW * FM,           5 * PAD + 12 * LW * FM + LW * FM / 2 }, // Ex
+#if HAS_1_BUTTON
+        {6 * PAD + 15 * LW * FM, 4 * LW * FM,           6 * PAD + 15 * LW * FM + LW * FM / 2 }, // R/D or L/U
+#endif
+        {password_button_x,      password_button_width, 0                                    }, // Show/Hide, when enabled
     };
 
     const int key_width = tftWidth / KeyboardWidth;
@@ -583,6 +595,8 @@ String generalKeyboard(
     // main loop
     while (1) {
         if (redraw) {
+            String visible_text =
+                mask_input && !show_password ? repeatString(current_text.length(), "*") : current_text;
             // setup
             tft.setCursor(0, 0);
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
@@ -687,6 +701,25 @@ String generalKeyboard(
                 } else tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
                 tft.drawString(direction ? "R/D" : "L/U", btns_layout[5][2], top_button_text_y);
 #endif
+                if (password_toggle) {
+                    bool highlighted = (x == password_button && y == -1);
+                    uint16_t fg = getComplementaryColor2(bruceConfig.bgColor);
+                    if (highlighted)
+                        tft.fillRect(
+                            btns_layout[password_button][0], 2, btns_layout[password_button][1], KBLH, fg
+                        );
+                    tft.setTextColor(
+                        highlighted ? bruceConfig.bgColor : fg, highlighted ? fg : bruceConfig.bgColor
+                    );
+                    tft.setTextSize(FP);
+                    tft.drawCentreString(
+                        show_password ? "Hide" : "Show",
+                        btns_layout[password_button][0] + btns_layout[password_button][1] / 2,
+                        2 + (KBLH - LH * FP) / 2,
+                        1
+                    );
+                    tft.setTextSize(FM);
+                }
             }
 
             // Prints the chars counter
@@ -716,6 +749,8 @@ String generalKeyboard(
             if (current_text.length() == (max_FM_size) || current_text.length() == (max_FM_size + 1) ||
                 current_text.length() == (max_FP_size) || current_text.length() == (max_FP_size + 1))
                 tft.fillRect(3, textbox_y, tftWidth - 3, KBLH, bruceConfig.bgColor);
+            // Clear all old glyphs when toggling visibility or deleting text.
+            if (mask_input) tft.fillRect(4, textbox_y + 1, tftWidth - 5, KBLH - 2, bruceConfig.bgColor);
             // write the text
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor));
 
@@ -725,30 +760,18 @@ String generalKeyboard(
 
                 if (current_text.length() >
                     max_FP_size) { // if its still too long, we divide it into two lines
+                    tft.drawString(visible_text.substring(0, max_FP_size), 5, textbox_text_y);
                     tft.drawString(
-                        (mask_input ? repeatString(current_text.substring(0, max_FP_size).length(), "*")
-                                    : current_text.substring(0, max_FP_size)),
-                        5,
-                        textbox_text_y
-                    );
-                    tft.drawString(
-                        (mask_input ? repeatString(current_text.length() - max_FP_size, "*")
-                                    : current_text.substring(max_FP_size, current_text.length())),
+                        visible_text.substring(max_FP_size, current_text.length()),
                         5,
                         textbox_text_y + LH * FP
                     );
                 } else {
-                    tft.drawString(
-                        (mask_input ? repeatString(current_text.length(), "*") : current_text),
-                        5,
-                        textbox_text_y
-                    );
+                    tft.drawString(visible_text, 5, textbox_text_y);
                 }
             } else {
                 // else if it fits, just draw the text
-                tft.drawString(
-                    (mask_input ? repeatString(current_text.length(), "*") : current_text), 5, textbox_text_y
-                );
+                tft.drawString(visible_text, 5, textbox_text_y);
             }
             // Draw the textbox border again(?)
             tft.drawRect(3, textbox_y, tftWidth - 3, KBLH, bruceConfig.priColor); // typed string border
@@ -855,6 +878,11 @@ String generalKeyboard(
                 y = -1;
 
                 bool touchHandled = false;
+                if (password_toggle &&
+                    box_list[buttons_start_index + password_button].contain(touchPoint.x, touchPoint.y)) {
+                    show_password = !show_password;
+                    touchHandled = true;
+                }
 
                 if (box_list[buttons_start_index].contain(touchPoint.x, touchPoint.y)) { // OK btn
                     break;
@@ -892,11 +920,21 @@ String generalKeyboard(
                     if (box_list[k].contain(touchPoint.x, touchPoint.y)) {
                         if (caps)
                             handleCharacterAdd(
-                                current_text, box_list[k].key_sh, cursor_x, cursor_y, max_size, mask_input
+                                current_text,
+                                box_list[k].key_sh,
+                                cursor_x,
+                                cursor_y,
+                                max_size,
+                                mask_input && !show_password
                             );
                         else
                             handleCharacterAdd(
-                                current_text, box_list[k].key, cursor_x, cursor_y, max_size, mask_input
+                                current_text,
+                                box_list[k].key,
+                                cursor_x,
+                                cursor_y,
+                                max_size,
+                                mask_input && !show_password
                             );
                         touchHandled = true;
                         break;
@@ -1164,7 +1202,7 @@ String generalKeyboard(
                     current_text += keyStr;
                     if (current_text.length() != (max_FM_size + 1) &&
                         current_text.length() != (max_FM_size + 1))
-                        tft.print(keyStr.c_str());
+                        tft.print(mask_input && !show_password ? repeatString(keyStr.length(), "*") : keyStr);
                     cursor_x = tft.getCursorX();
                     cursor_y = tft.getCursorY();
                     if (current_text.length() == (max_FM_size + 1)) redraw = true;
@@ -1189,6 +1227,7 @@ String generalKeyboard(
                     if (current_text.length() == max_FP_size) redraw = true;
                 }
                 if (KeyStroke.enter) { break; }
+                if (mask_input) redraw = true;
                 KeyStroke.Clear();
             }
 #if !defined(T_LORA_PAGER)   // T-LoRa-Pager does not have a select button
@@ -1293,8 +1332,24 @@ String generalKeyboard(
 
             if (selected_char == '\0') { continue; } // if we selected a key which have the value of
 
+            if (password_toggle && y == -1 && x == password_button) {
+                show_password = !show_password;
+                redraw = true;
+                last_input_time = millis();
+                continue;
+            }
+
             KeyboardAction action = handleKeyboardSelection(
-                x, y, current_text, caps, direction, cursor_x, cursor_y, max_size, selected_char, mask_input
+                x,
+                y,
+                current_text,
+                caps,
+                direction,
+                cursor_x,
+                cursor_y,
+                max_size,
+                selected_char,
+                mask_input && !show_password
             );
 
             if (action == KEYBOARD_OK) { // OK BTN
