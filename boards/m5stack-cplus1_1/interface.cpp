@@ -47,23 +47,57 @@ void _setBrightness(uint8_t brightval) {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = 0;
-    if (millis() - tm < 200 && !LongPress) return;
+    static unsigned long dwPressStart = 0;
+    static bool dwHolding = false;
+    static bool dwEscFired = false;
+
+    unsigned long now = millis();
 
     bool upPressed = (axp192.GetBtnPress());
     bool selPressed = (digitalRead(SEL_BTN) == LOW);
-    bool dwPressed = (digitalRead(DW_BTN) == LOW);
+    bool dwRaw = (digitalRead(DW_BTN) == LOW);
 
-    bool anyPressed = upPressed || selPressed || dwPressed;
-    if (anyPressed) tm = millis();
+    // Track DW_BTN (Next button, GPIO 39) for 2s long-press -> ESC
+    bool escFromHold = false;
+    if (dwRaw) {
+        if (!dwHolding) {
+            dwHolding = true;
+            dwEscFired = false;
+            dwPressStart = now;
+        } else if (!dwEscFired && (now - dwPressStart >= 2000)) {
+            dwEscFired = true;
+            escFromHold = true;
+        }
+    } else {
+        dwHolding = false;
+        dwEscFired = false;
+    }
+
+    if (escFromHold) {
+        tm = now;
+        if (wakeUpScreen()) return;
+        AnyKeyPress = true;
+        EscPress = true;
+        NextPress = false;
+        return;
+    }
+
+    // While DW_BTN is still held AFTER 2s ESC already fired, suppress further NextPress
+    if (dwRaw && dwEscFired) return;
+
+    if (now - tm < 200 && !LongPress && !upPressed) return;
+
+    bool anyPressed = upPressed || selPressed || dwRaw;
+    if (anyPressed) tm = now;
     if (anyPressed && wakeUpScreen()) return;
 
     AnyKeyPress = anyPressed;
-    if (upPressed && dwPressed) {
+    if (upPressed && dwRaw) {
         EscPress = true;
         return;
     }
     PrevPress = upPressed;
-    NextPress = dwPressed;
+    NextPress = dwRaw;
     SelPress = selPressed;
 }
 
