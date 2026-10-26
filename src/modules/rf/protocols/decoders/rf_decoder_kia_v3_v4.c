@@ -820,8 +820,12 @@ RfStreamProtocolStatus
     kia_protocol_decoder_v3_v4_deserialize(void* context, RfRecord* flipper_format) {
     RfStreamProtocolDecoderKiaV3V4* instance = context;
 
-    RfStreamProtocolStatus ret =
-        rf_stream_block_generic_deserialize_check_count_bit(&instance->generic, flipper_format, 64);
+    RfStreamProtocolStatus ret = rf_stream_block_generic_deserialize(&instance->generic, flipper_format);
+    // 64: legacy exports; 68: this codec's own frame layout (64-bit payload +
+    // 4-bit CRC), e.g. PFCW/Unleashed "KIA/HYU V4" key files.
+    if (ret == RfStreamProtocolStatusOk && instance->generic.data_count_bit != 64 &&
+        instance->generic.data_count_bit != 68)
+        ret = RfStreamProtocolStatusErrorValueBitCount;
 
     if(ret == RfStreamProtocolStatusOk) {
         uint32_t temp = 0;

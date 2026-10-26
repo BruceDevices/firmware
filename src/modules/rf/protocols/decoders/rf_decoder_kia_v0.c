@@ -602,17 +602,34 @@ static void kia_v0_build_mitsu_upload(RfStreamProtocolEncoderKIA* instance, uint
 static void kia_v0_build_suzuki_upload(RfStreamProtocolEncoderKIA* instance, uint64_t shifted) {
     size_t index = 0;
 
-    index =
-        kia_v0_append_short_pairs(instance->encoder.upload, index, KIA_V0_TYPE2_PREAMBLE_PAIRS);
-    index = kia_v0_append_data_pairs(
-        instance->encoder.upload, index, shifted, KIA_V0_BIT_COUNT_SUZUKI);
-    instance->encoder.upload[index++] = level_duration_make(false, KIA_V0_SUZUKI_GAP);
-    instance->encoder.upload[index++] = level_duration_make(true, KIA_V0_SUZUKI_GAP);
-    instance->encoder.upload[index++] =
-        level_duration_make(false, (uint32_t)kia_protocol_v0_const.te_short);
-    index = kia_v0_append_short_pairs(instance->encoder.upload, index, KIA_V0_TAIL_PREAMBLE_PAIRS);
-    index = kia_v0_append_data_pairs(
-        instance->encoder.upload, index, shifted, KIA_V0_BIT_COUNT_SUZUKI);
+    // Real-fob wire format: candidate preamble short pairs, then ONE long pair
+    // which the receiver's preamble heuristic scores as two constant '1' bits,
+    // then 62 pairs carrying bits 61..0 of (key >> 1). Each burst ends with a
+    // short-high trail whose low half rolls into the burst gap, and the
+    // gap-high that triggers the receiver's final commit.
+    const uint64_t d = (shifted >> 1U) & 0x3FFFFFFFFFFFFFFFULL;
+
+    for(uint8_t burst = 0U; burst < 2U; burst++) {
+        index = kia_v0_append_short_pairs(
+            instance->encoder.upload,
+            index,
+            (burst == 0U) ? KIA_V0_TYPE2_PREAMBLE_PAIRS : KIA_V0_TAIL_PREAMBLE_PAIRS);
+        instance->encoder.upload[index++] =
+            level_duration_make(true, (uint32_t)kia_protocol_v0_const.te_long);
+        instance->encoder.upload[index++] =
+            level_duration_make(false, (uint32_t)kia_protocol_v0_const.te_long);
+        for(int bit = 61; bit >= 0; bit--) {
+            const uint32_t duration = ((d >> bit) & 1ULL) ?
+                                          (uint32_t)kia_protocol_v0_const.te_long :
+                                          (uint32_t)kia_protocol_v0_const.te_short;
+            instance->encoder.upload[index++] = level_duration_make(true, duration);
+            instance->encoder.upload[index++] = level_duration_make(false, duration);
+        }
+        instance->encoder.upload[index++] =
+            level_duration_make(true, (uint32_t)kia_protocol_v0_const.te_short);
+        instance->encoder.upload[index++] = level_duration_make(false, KIA_V0_SUZUKI_GAP);
+        instance->encoder.upload[index++] = level_duration_make(true, KIA_V0_SUZUKI_GAP);
+    }
 
     instance->encoder.front = 0;
     instance->encoder.size_upload = index;
@@ -1093,8 +1110,13 @@ RfStreamProtocolStatus rf_stream_protocol_decoder_kia_serialize(
     KiaV0Fields scratch;
     kia_v0_parse_data(&instance->generic, instance->type, &scratch, &instance->packet_bit_count);
 
+    // Save each subtype under its own protocol name so captures reload as the
+    // right vehicle instead of a generic "Kia V0" record.
+    const char* saved_name = instance->generic.protocol_name;
+    instance->generic.protocol_name = kia_v0_protocol_name(instance->type);
     RfStreamProtocolStatus status =
         rf_stream_block_generic_serialize(&instance->generic, flipper_format, preset);
+    instance->generic.protocol_name = saved_name;
     if(status != RfStreamProtocolStatusOk) {
         return status;
     }

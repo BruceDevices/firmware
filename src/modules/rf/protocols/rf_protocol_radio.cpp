@@ -7,7 +7,7 @@
 #include <sstream>
 
 bool rf_protocol_transmit_raw(const char *input) {
-    if (!input || strlen(input) > 262144) return false;
+    if (!input || strlen(input) > 524288) return false;
     std::istringstream file(input);
     std::string line, preset, protocol;
     uint32_t frequency = 0;
@@ -48,7 +48,7 @@ bool rf_protocol_transmit_raw(const char *input) {
                 char *end;
                 long v = strtol(token.c_str(), &end, 10);
                 if (errno || *end || end == token.c_str() || !v || v < -1000000 || v > 1000000 ||
-                    pulses.size() >= 16384)
+                    pulses.size() >= 131072)
                     return false;
                 total += v > 0 ? v : -v;
                 if (total > 10000000) return false;
@@ -65,11 +65,15 @@ bool rf_protocol_transmit_raw(const char *input) {
         return false;
     if (!initRfModule("tx", frequency / 1000000.0f)) return false;
     ELECHOUSE_cc1101.setSidle();
-    ELECHOUSE_cc1101.setModulation(rp->modulation);
-    ELECHOUSE_cc1101.setDeviation(rp->deviation ? rp->deviation : 1.58f);
-    ELECHOUSE_cc1101.setRxBW(rp->rxBW ? rp->rxBW : 270.83f);
-    ELECHOUSE_cc1101.setDRate(rp->dataRate ? rp->dataRate : 10.f);
-    ELECHOUSE_cc1101.setPktFormat(3);
+    // 2FSK presets need Flipper's exact modem register block (see
+    // rf_utils.cpp); OOK presets keep the piecemeal ELECHOUSE config.
+    if (!cc1101ApplyFlipperPreset(rp->name)) {
+        ELECHOUSE_cc1101.setModulation(rp->modulation);
+        ELECHOUSE_cc1101.setDeviation(rp->deviation ? rp->deviation : 1.58f);
+        ELECHOUSE_cc1101.setRxBW(rp->rxBW ? rp->rxBW : 270.83f);
+        ELECHOUSE_cc1101.setDRate(rp->dataRate ? rp->dataRate : 10.f);
+        ELECHOUSE_cc1101.setPktFormat(3);
+    }
     pinMode(bruceConfigPins.CC1101_bus.io0, OUTPUT);
     ELECHOUSE_cc1101.SetTx();
     bool success = rf_tx_durations(pulses);

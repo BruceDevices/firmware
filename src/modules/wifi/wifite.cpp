@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-#include <Arduino.h>
-// CONFIG_IDF_TARGET_ESP32S3 comes from sdkconfig.h via Arduino.h; the vendored
-// wifite core only builds for ESP32-S3 (enforced likewise in BruceWifite's
-// build_private.py).
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(LITE_VERSION)
+#if defined(T_EMBED_1101) && !defined(LITE_VERSION)
 #include "wifite.h"
 #include <bruce_wifite.h>
 #include <bruce_wifite_platform.h>

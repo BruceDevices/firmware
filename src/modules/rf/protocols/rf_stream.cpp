@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #if !defined(LITE_VERSION)
 #include "rf_stream.h"
-#include "rf_decode_limits.h"
+#include "rf_keystore.h"
 #include <atomic>
 
 namespace {
@@ -28,7 +28,7 @@ const char *rf_stream_read_frames(
     // Merge consecutive equal levels exactly as the original pulse parser did.
     std::vector<int32_t> normalized;
     uint64_t duration = 0;
-    if (pulses.size() > RF_DECODE_MAX_PULSES) return "RAW capture exceeds pulse limit";
+    if (pulses.size() > 131072) return "Too many pulses";
     for (int pulse : pulses) {
         if (!pulse || pulse < -1000000 || pulse > 1000000) return "Invalid pulse";
         duration += pulse < 0 ? -pulse : pulse;
@@ -40,6 +40,7 @@ const char *rf_stream_read_frames(
         } else normalized.push_back(pulse);
     }
     if (busy.test_and_set()) return "Protocol engine is busy";
+    rf_keystore_load();
     const char *error = rf_stream_read(
         codec, record, normalized.empty() ? nullptr : normalized.data(), normalized.size(), frame, &frames
     );
@@ -51,6 +52,7 @@ const char *rf_stream_write_pulses(
 ) {
     pulses.clear();
     if (busy.test_and_set()) return "Protocol engine is busy";
+    rf_keystore_load();
     Encoded result{pulses, updated};
     const char *error = rf_stream_write(codec, record, encoded, &result);
     busy.clear();
