@@ -1,0 +1,178 @@
+/** @file
+    Honeywell ActivLink, wireless door bell, PIR Motion sensor.
+
+    Copyright (C) 2018 Benjamin Larsson
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+*/
+
+/**
+Honeywell ActivLink, wireless door bell, PIR Motion sensor.
+
+Frame documentation courtesy of https://github.com/klohner/honeywell-wireless-doorbell
+Updated to include Door/Window Contact sensor
+
+Frame bits used in Honeywell RCWL300A, RCWL330A, Series 3, 5, 9 and all Decor Series:
+
+Wireless Chimes
+
+    0000 0000 1111 1111 2222 2222 3333 3333 4444 4444 5555 5555
+    7654 3210 7654 3210 7654 3210 7654 3210 7654 3210 7654 3210
+    XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XX.. XXX. .... KEY DATA (any change and receiver doesn't seem to
+                                                                          recognize signal)
+    XXXX XXXX XXXX XXXX XXXX .... .... .... .... .... .... .... KEY ID (different for each transmitter)
+    .... .... .... .... .... 0000 0... 0000 0000 00.. 0... .... KEY UNKNOWN 0 (always 0 in devices I've tested)
+    .... .... .... .... .... .... .XXX .... .... .... .... .... DEVICE TYPE (10 = doorbell, 01 = PIR Motion sensor,
+                                                                            101 = door/window))
+    .... .... .... .... .... .... .... .... .... ..XX .XXX XXX. FLAG DATA (may be modified for possible effects on
+                                                                           receiver)
+    .... .... .... .... .... .... .... .... .... ..XX .... .... ALERT (00 = normal, 01 or 10 = right-left halo light
+                                                                       pattern, 11 = full volume alarm)
+    .... .... .... .... .... .... .... .... .... .... .XX. .... DOOR/WINDOW (10 = Closed, 01 = Opened)
+    .... .... .... .... .... .... .... .... .... .... ...X .... SECRET KNOCK (0 = default, 1 if doorbell is pressed 3x
+                                                                              rapidly)
+    .... .... .... .... .... .... .... .... .... .... .... X... RELAY (1 if signal is a retransmission of a received
+                                                                       transmission, only some models)
+    .... .... .... .... .... .... .... .... .... .... .... .X.. FLAG UNKNOWN (0 = default, but 1 is accepted and I don't
+                                                                              oberserve any effects)
+    .... .... .... .... .... .... .... .... .... .... .... ..X. LOWBAT (1 if battery is low, receiver gives low battery
+                                                                        alert)
+    .... .... .... .... .... .... .... .... .... .... .... ...X PARITY (LSB of count of set bits in previous 47 bits)
+*/
+
+#include "decoder.h"
+
+static int honeywell_wdb_callback(r_device *decoder, bitbuffer_t *bitbuffer)
+{
+    int row, secret_knock, relay, battery, parity, open, opened, closed, tampered;
+    uint8_t *bytes;
+    data_t *data;
+    unsigned int device, tmp, type;
+    char const *class, *alert;
+
+    // The device transmits many rows, check for 4 matching rows.
+    row = bitbuffer_find_repeated_row(bitbuffer, 4, 48);
+    if (row < 0) {
+        return DECODE_ABORT_EARLY;
+    }
+    bytes = bitbuffer->bb[row];
+
+    if (bitbuffer->bits_per_row[row] != 48)
+        return DECODE_ABORT_LENGTH;
+
+    bitbuffer_invert(bitbuffer);
+
+    /* Parity check (must be EVEN) */
+    parity = parity_bytes(bytes, 6);
+
+    // No need to decode/extract values for simple test
+    if ((!bytes[0] && !bytes[2] && !bytes[4] && !bytes[5])
+       || (bytes[0] == 0xff && bytes[2] == 0xff && bytes[4] == 0xff && bytes[5] == 0xff)) {
+        decoder_log(decoder, 2, __func__, "DECODE_FAIL_SANITY data all 0x00 or 0xFF");
+        return DECODE_FAIL_SANITY;
+    }
+
+    if (parity) { // ODD parity detected
+        decoder_logf_bitbuffer(decoder, 2, __func__, bitbuffer, "Parity check on row %d failed (%d)", row, parity);
+        return DECODE_FAIL_MIC;
+    }
+
+    device = bytes[0] << 12 | bytes[1] << 4 | (bytes[2] >> 4);
+    type = (bytes[3] & 0x70) >> 4;
+    switch (type) {
+    case 0x1: class = "PIR-Motion"; break;
+    case 0x2: class = "Doorbell"; break;
+    case 0x5: class = "Contact"; break;
+    default: class = "Unknown"; break;
+    }
+    tmp = bytes[4] & 0x3;
+    switch (tmp) {
+    case 0x0: alert = "Normal"; break;
+    case 0x1:
+    case 0x2: alert = "High"; break;
+    case 0x3: alert = "Full"; break;
+    default: alert = "Unknown"; break;
+    }
+    /* this bit appears to have two uses depending on whether the sensor is a bell push or contact sensor */
+    secret_knock = (bytes[5] & 0x10) >> 4;
+    tampered=secret_knock;
+    if (type == 0x5) {
+    	secret_knock=0;
+    }
+    else {
+    	tampered=0;
+    }
+    relay = (bytes[5] & 0x8) >> 3;
+    battery = (bytes[5] & 0x2) >> 1;
+    opened = (bytes[5] & 0x20) >> 5;
+    closed = (bytes[5] & 0x40) >> 6;
+    /* this catches the tamper signal when the open/close is not valid */
+    if (opened && !closed) {
+    	open = 1;
+    }
+    else if (!opened && closed) {
+    	open = 0;
+    }
+    else {
+    	open = -1;
+    }
+
+    /* clang-format off */
+    data = data_make(
+            "model",         "",            DATA_STRING, "Honeywell-ActivLink",
+            "subtype",       "Class",       DATA_STRING, class,
+            "id",            "Id",          DATA_FORMAT, "%x",   DATA_INT,    device,
+            "battery_ok",    "Battery",     DATA_INT,    !battery,
+            "alert",         "Alert",       DATA_STRING, alert,
+            "secret_knock",  "Secret Knock",DATA_FORMAT, "%d",   DATA_INT,    secret_knock,
+            "open",  		 "Open",		DATA_FORMAT, "%d",   DATA_INT,    open,
+            "tampered",  	 "Tampered",	DATA_FORMAT, "%d",   DATA_INT,    tampered,
+            "relay",         "Relay",       DATA_FORMAT, "%d",   DATA_INT,    relay,
+            "mic",           "Integrity",   DATA_STRING, "PARITY",
+            NULL);
+    /* clang-format on */
+
+    decoder_output_data(decoder, data);
+    return 1;
+}
+
+static char const *const output_fields[] = {
+        "model",
+        "subtype",
+        "id",
+        "battery_ok",
+        "alert",
+        "secret_knock",
+        "open",
+        "tampered",
+        "relay",
+        "mic",
+        NULL,
+};
+
+r_device const honeywell_wdb = {
+        .name        = "Honeywell ActivLink, Wireless Doorbell",
+        .modulation  = OOK_PULSE_PWM,
+        .short_width = 175,
+        .long_width  = 340,
+        .gap_limit   = 0,
+        .reset_limit = 5000,
+        .sync_width  = 500,
+        .decode_fn   = &honeywell_wdb_callback,
+        .fields      = output_fields,
+};
+
+r_device const honeywell_wdb_fsk = {
+        .name        = "Honeywell ActivLink, Wireless Doorbell (FSK)",
+        .modulation  = FSK_PULSE_PWM,
+        .short_width = 160,
+        .long_width  = 320,
+        .gap_limit   = 0,
+        .reset_limit = 560,
+        .sync_width  = 500,
+        .decode_fn   = &honeywell_wdb_callback,
+        .fields      = output_fields,
+};

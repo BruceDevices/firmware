@@ -7,7 +7,7 @@
 #include <sstream>
 
 bool rf_protocol_transmit_raw(const char *input) {
-    if (!input || strlen(input) > 262144) return false;
+    if (!input || strlen(input) > 524288) return false;
     std::istringstream file(input);
     std::string line, preset, protocol;
     uint32_t frequency = 0;
@@ -48,7 +48,7 @@ bool rf_protocol_transmit_raw(const char *input) {
                 char *end;
                 long v = strtol(token.c_str(), &end, 10);
                 if (errno || *end || end == token.c_str() || !v || v < -1000000 || v > 1000000 ||
-                    pulses.size() >= 16384)
+                    pulses.size() >= 131072)
                     return false;
                 total += v > 0 ? v : -v;
                 if (total > 10000000) return false;

@@ -5,8 +5,9 @@
 #include "core/scrollableTextArea.h"
 #include "core/sd_functions.h"
 #include "protocols/rf_presets.h"
-#include "protocols/rf_decode_limits.h"
 #include "protocols/rf_protocol_engine.h"
+#include "protocols/rf_keystore.h"
+#include "protocols/rf_stream.h"
 #include "rf_scan.h"
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -275,7 +276,9 @@ class ProtoPirate {
     }
     void emulate(Entry &entry) {
         if (!entry.encoder) {
-            displayError("No compatible encoder", true);
+            // Either the protocol has no encoder (Fiat V2, Ford V3,
+            // Scher-Khan) or the frame failed its CRC/validation check.
+            displayError("No encoder (RX-only or failed CRC)", true);
             return;
         }
         const char *counterField = field(entry.data, "Cnt").isEmpty() ? "Counter" : "Cnt";
@@ -350,7 +353,7 @@ class ProtoPirate {
             std::istringstream values(line.substr(9));
             long long pulse;
             while (values >> pulse) {
-                if (!pulse || pulse < -1000000 || pulse > 1000000 || count >= 16384) {
+                if (!pulse || pulse < -1000000 || pulse > 1000000 || count >= 131072) {
                     displayError("Invalid RAW durations", true);
                     return;
                 }
@@ -449,11 +452,7 @@ class ProtoPirate {
         // All frames from one capture share its immutable waveform. Copying it
         // per frame exhausted the history budget and silently discarded frames.
         std::shared_ptr<const String> raw;
-        // A large saved waveform must not consume the entire history budget
-        // and silently suppress every decoded result. Keep decoded metadata;
-        // the original large waveform remains in its saved .sub file.
-        const bool largeFile = !live && input.length() > 131072;
-        if (!largeFile && field(input, "Protocol") == "RAW") raw = std::make_shared<const String>(input);
+        if (field(input, "Protocol") == "RAW") raw = std::make_shared<const String>(input);
         if (!response(rf_protocol_decode_json(input.c_str()), decoded, live)) {
             // Keep the waveform and actual error so a failed live decode can
             // still be inspected or saved from History after leaving Receive.
@@ -489,7 +488,6 @@ class ProtoPirate {
                 frame["encoder"] | false,
                 frame["fieldEditing"] | true
             };
-            if (largeFile) entry.text += "\nOriginal large RAW waveform remains in the source file.";
             if (bytes + entry.metadataBytes() > 200000) break;
             bytes += entry.metadataBytes();
             entries.push_back(entry);
@@ -607,41 +605,13 @@ class ProtoPirate {
             directory = path.substring(0, path.lastIndexOf('/'));
             if (directory.isEmpty()) directory = "/";
             File file = fs->open(path, FILE_READ);
-            if (!file) {
+            if (!file || file.size() > 524288) {
                 file.close();
-                displayError("Cannot open SubGhz file", true);
+                displayError("File exceeds 512 KiB or is missing", true);
                 continue;
             }
-            const size_t expected = file.size();
-            if (expected > RF_DECODE_MAX_FILE_BYTES) {
-                file.close();
-                displayError("File exceeds 1 MiB import limit", true);
-                continue;
-            }
-            String input;
-            if (!input.reserve(expected + 1)) {
-                file.close();
-                displayError("Not enough memory to load file", true);
-                continue;
-            }
-            // Read in bounded blocks and check the byte count rather than
-            // passing a partial read to the decoder as a malformed file.
-            char buffer[512];
-            bool complete = true;
-            while (input.length() < expected) {
-                const size_t wanted = std::min(sizeof(buffer), expected - input.length());
-                const size_t got = file.readBytes(buffer, wanted);
-                if (!got || !input.concat(buffer, got)) {
-                    complete = false;
-                    break;
-                }
-                delay(0);
-            }
+            String input = file.readString();
             file.close();
-            if (!complete || input.length() != expected || strlen(input.c_str()) != expected) {
-                displayError("Incomplete or invalid text file", true);
-                continue;
-            }
             Entry unused;
             analyze(input, false, unused);
             if (receiveRequested) return;
@@ -678,6 +648,7 @@ class ProtoPirate {
 
 public:
     void run() {
+        rf_keystore_load(); // key material for Kia/VAG/Star Line (idempotent)
         for (;;) {
             if (!receiveRequested) drawCaptureBackground();
             int action = receiveRequested ? 0
@@ -712,15 +683,22 @@ public:
                 String text = "Shared Bruce beta + ProtoPirate protocols\nEmulation enabled by default\n\n";
                 for (JsonObject p : catalogue["protocols"].as<JsonArray>())
                     text += String(p["name"] | "") + ((p["encoder"] | false) ? ": RX + encoder\n" : ": RX\n");
+                text += "Keystore keys loaded: " + String(rf_stream_keystore_key_count()) + "\n";
                 view("Protocol catalogue", text);
             } else
                 view(
                     "About / limitations",
                     "Native Bruce UI and one shared RF engine.\nRocketGod ProtoPirate 4.0 / 4c9afe58\n\n"
                     "Same codecs are used by RF Scan, file handling and the JS app.\n"
-                    "Sending always requires confirmation. Encoding does not prove receiver acceptance.\n"
-                    "Custom radio profiles, encrypted ProtoPirate keystores, model database, remote analyzer "
-                    "and brute-force recovery are not ported."
+                    "Sending always requires confirmation. Encoding does not prove receiver acceptance.\n\n"
+                    "Key material (Kia V3/V4/V5/V6, VAG, Star\n"
+                    "Line): a plaintext keystore is built in\n"
+                    "(215 keys); a plaintext keystore file from\n"
+                    "/BruceRF/ProtoPirate/keystore and the VAG\n"
+                    "RAW keystore from /BruceRF/ProtoPirate/\n"
+                    "keystore/vag extend it; /mfcodes is merged.\n\n"
+                    "Custom radio profiles, model database, remote\n"
+                    "analyzer and brute-force recovery are not ported."
                 );
         }
         deinitRfModule();

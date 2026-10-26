@@ -209,7 +209,7 @@ void RfCodes::keeloq_step(uint16_t step) {
     // so it can be unit-tested without the SD keystore (see rf_keeloq_selftest).
     hop = keeloq_build_hop(mf_name, btn, serial, cnt);
 
-    // A null fs is fine: the keystore falls back to the encrypted built-in keys.
+    // A null fs is fine: the keystore falls back to the built-in keys.
     KeeloqKeystore keystore{keeloq_mfcodes_fs()};
 
     KeeloqKey current_key;

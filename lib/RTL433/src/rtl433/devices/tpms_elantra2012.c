@@ -1,0 +1,150 @@
+/** @file
+    TPMS for Hyundai Elantra, Honda Civic.
+
+    Copyright (C) 2019 Kumar Vivek <kv2000in@gmail.com>
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+*/
+
+#include "decoder.h"
+
+/**
+FSK 8 byte Manchester encoded TPMS with CRC8 checksum.
+Seen on Hyundai Elantra, Honda Civic.
+
+- TRW TPMS sensor FCC id GQ4-44T
+- Mode/Sensor status: shipping, test, parking, driving, first block mode
+- Battery voltage: Ok, low
+- Trigger information: LF initiate TM
+- Pressure: 1.4kPa
+- temperature: 27 deg C
+- acceleration: 0.5 g
+- Market: EU, America
+- Tire type: 450 kPa
+- Response time: 8.14 seconds
+- ID: 8 bytes
+
+Preamble is 111 0001 0101 0101 (0x7155).
+64 bits Manchester encoded data.
+
+    PPTT IDID IDID FFCC
+
+- P: Pressure in (8 bit), offset +60 = pressure in kPa
+- T: Temperature (8 bit), offset -50 = temp in C
+- I: ID (32 bit)
+- F: Flags (8 bit) = ???? ?SBT (Missing Acceleration, market - Europe/US/Asia, Tire type, Alert Mode, park mode, High Line vs Low LIne etc)
+  - S: Storage bit
+  - B: Battery low bit
+  - T: Triggered bit
+  - C0 =1100 0000 = Battery OK, Not Triggered
+  - C1 =1100 0001 = Battery OK, Triggered
+  - C2 =1100 0010 = Battery Low, Not Triggered
+  - C3 =1100 0011 = Battery Low, Triggered
+  - C5 =1100 0101 = Battery OK, Triggered, Storage Mode
+  - E1 =1110 0001 = Mx Sensor Clone for Elantra 2012 US market ? Low Line
+  - C1            = Mx Sensor Clone for Genesis Sedan 2012 US market ? High Line
+- C: CRC-8, poly 0x07, init 0x00
+
+*/
+
+static int tpms_elantra2012_decode(r_device *decoder, bitbuffer_t *bitbuffer, unsigned row, unsigned bitpos)
+{
+    bitbuffer_t packet_bits = {0};
+    bitbuffer_manchester_decode(bitbuffer, row, bitpos, &packet_bits, 64);
+    // require 64 data bits
+    if (packet_bits.bits_per_row[0] < 64) {
+        return DECODE_ABORT_LENGTH;
+    }
+    uint8_t *b = packet_bits.bb[0];
+
+    if (crc8(b, 8, 0x07, 0x00)) {
+        return DECODE_FAIL_MIC;
+    }
+
+    uint32_t id       = ((uint32_t)b[2] << 24) | (b[3] << 16) | (b[4] << 8) | (b[5]);
+    int flags         = b[6];
+    int pressure_kpa  = b[0] + 60;
+    int temperature_c = b[1] - 50;
+    int storage       = (b[6] & 0x04) >> 2;
+    int battery_low   = (b[6] & 0x02) >> 1;
+    int triggered     = (b[6] & 0x01) >> 0;
+
+    char id_str[9];
+    snprintf(id_str, sizeof(id_str), "%08x", id);
+    char flags_str[3];
+    snprintf(flags_str, sizeof(flags_str), "%x", flags);
+
+    /* clang-format off */
+    data_t *data = data_make(
+            "model",            "",             DATA_STRING, "Elantra2012",
+            "type",             "",             DATA_STRING, "TPMS",
+            "id",               "",             DATA_STRING, id_str,
+            "pressure_kPa",     "Pressure",     DATA_FORMAT, "%.1f kPa", DATA_DOUBLE, (float)pressure_kpa,
+            "temperature_C",    "Temperature",  DATA_FORMAT, "%.0f C", DATA_DOUBLE, (float)temperature_c,
+            "battery_ok",       "Battery",      DATA_INT,    !battery_low,
+            "triggered",        "LF Triggered", DATA_INT,    triggered,
+            "storage",          "Storage mode", DATA_INT,    storage,
+            "flags",            "All Flags",    DATA_STRING, flags_str,
+            "mic",              "Integrity",    DATA_STRING, "CRC",
+            NULL);
+    /* clang-format on */
+
+    decoder_output_data(decoder, data);
+    return 1;
+}
+
+/** @sa tpms_elantra2012_decode() */
+static int tpms_elantra2012_callback(r_device *decoder, bitbuffer_t *bitbuffer)
+{
+    // Note that there is a (de)sync preamble of long/short, short/short, triple/triple,
+    // i.e. 104 44, 52 48, 144 148 us pulse/gap.
+    /* preamble = 111000101010101 0x71 0x55 */
+    uint8_t const preamble_pattern[] = {0x71, 0x55}; // 16 bits
+
+    int row;
+    unsigned bitpos;
+    int ret    = 0;
+    int events = 0;
+
+    for (row = 0; row < bitbuffer->num_rows; ++row) {
+        bitpos = 0;
+        // Find a preamble with enough bits after it that it could be a complete packet
+        while ((bitpos = bitbuffer_search(bitbuffer, row, bitpos,
+                        preamble_pattern, 16)) + 128 <=
+                bitbuffer->bits_per_row[row]) {
+            ret = tpms_elantra2012_decode(decoder, bitbuffer, row, bitpos + 16);
+            if (ret > 0)
+                events += ret;
+            bitpos += 15;
+        }
+    }
+
+    return events > 0 ? events : ret;
+}
+
+static char const *const output_fields[] = {
+        "model",
+        "type",
+        "id",
+        "pressure_kPa",
+        "temperature_C",
+        "battery_ok",
+        "triggered",
+        "storage",
+        "flags",
+        "mic",
+        NULL,
+};
+
+r_device const tpms_elantra2012 = {
+        .name        = "Elantra2012 TPMS",
+        .modulation  = FSK_PULSE_PCM,
+        .short_width = 49,  // 12-13 samples @250k
+        .long_width  = 49,  // FSK
+        .reset_limit = 200, // Maximum gap size before End Of Message [us].
+        .decode_fn   = &tpms_elantra2012_callback,
+        .fields      = output_fields,
+};

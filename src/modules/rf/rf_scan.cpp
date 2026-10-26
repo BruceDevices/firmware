@@ -4,7 +4,6 @@
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
 #include "protocols/rf_presets.h"
-#include "protocols/rf_fsk_receive_profile.h"
 #include "protocols/rf_raw_capture.h"
 #include "protocols/rf_config.h"   // RF_DBG
 #include "protocols/rf_registry.h" // rf_flipper_protocol_name
@@ -249,7 +248,7 @@ bool RFScan::fast_scan() {
 }
 
 void keeloq_identify(RfCodes &instance) {
-    // A null fs is fine: the keystore falls back to the encrypted built-in keys.
+    // A null fs is fine: the keystore falls back to the built-in keys.
     KeeloqKeystore keystore{keeloq_mfcodes_fs()};
 
     // Secure/Erreka need a seed; mirror the reference fallback to the
@@ -1186,23 +1185,11 @@ String rfReceiveSignal(
         String &registers = state.registers;
         if (preset) {
             ELECHOUSE_cc1101.setSidle();
-            const auto fskProfile = rf_apply_fsk_receive_profile(
-                preset->name,
-                [](uint8_t address, uint8_t value) { return ELECHOUSE_cc1101.SpiWriteReg(address, value); },
-                [](uint8_t address) { return ELECHOUSE_cc1101.SpiReadReg(address); }
-            );
-            if (fskProfile == RfFskReceiveProfileResult::Failed) {
-                Serial.println("RF RX: FSK profile write/readback failed");
-                state.stop();
-                return "";
-            }
-            if (fskProfile == RfFskReceiveProfileResult::NotFsk) {
-                ELECHOUSE_cc1101.setModulation(preset->modulation);
-                ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
-                ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
-                ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
-                ELECHOUSE_cc1101.setPktFormat(3);
-            }
+            ELECHOUSE_cc1101.setModulation(preset->modulation);
+            ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
+            ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
+            ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
+            ELECHOUSE_cc1101.setPktFormat(3);
             ELECHOUSE_cc1101.SetRx();
             for (uint8_t address = 0; address <= 0x2e; ++address) {
                 char hex[4];

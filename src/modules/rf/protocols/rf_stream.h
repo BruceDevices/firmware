@@ -14,6 +14,17 @@ extern "C" {
 typedef void (*RfStreamFrame)(void *, const char *, const char *, bool, bool);
 typedef void (*RfStreamEncoded)(void *, const int32_t *, size_t, const char *);
 bool rf_stream_has_encoder(const RfStreamCodec *codec);
+// Keystore material for the vehicle codecs (Kia V3/V4/V5/V6, Star Line, VAG).
+// The Flipper app keeps its keystore device-encrypted; on ESP32 key material
+// is loaded in plaintext instead (rf_keystore.cpp: built-in community keyfile
+// plus optional storage files) and merged with Bruce's KeeLoq /mfcodes
+// manufacturer keys. Entries with type 10..13 provide the Kia V3/V4/V5/V6
+// keys, KeeLoq manufacturer codes feed Star Line.
+void rf_stream_keystore_reset_kl(void);
+void rf_stream_keystore_clear_keys(void);
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type);
+unsigned rf_stream_keystore_key_count(void);
+void rf_stream_keystore_raw_blob_set(const uint8_t *data, size_t length);
 const char *rf_stream_read(
     const RfStreamCodec *codec, const char *record, const int32_t *pulses, size_t count, RfStreamFrame frame,
     void *context

@@ -298,7 +298,7 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
         selected_code.protocol != "BinRAW" && selected_code.protocol != "KeeLoq" &&
         selected_code.protocol != "RcSwitch" && !rf_find_protocol(selected_code.protocol)) {
         File full = fs->open(filepath, FILE_READ);
-        if (!full || full.size() > 16384) { full.close(); return false; }
+        if (!full || full.size() > 131072) { full.close(); return false; }
         String text = full.readString(); full.close();
         RfCodes decoded;
         if (!rf_protocol_load(text.c_str(), decoded) || decoded.decodedFile.isEmpty()) return false;

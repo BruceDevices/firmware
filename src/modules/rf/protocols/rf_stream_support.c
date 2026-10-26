@@ -2,7 +2,6 @@
 // Derived from ProtoPirate and Flipper Zero; see THIRD_PARTY.md.
 #if !defined(LITE_VERSION)
 #include "rf_stream_internal.h"
-#include "rf_decode_limits.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -171,7 +170,7 @@ bool rf_record_read_hex(RfRecord *ff, const char *key, uint8_t *out, size_t n) {
 }
 bool rf_stream_ff_parse(RfRecord *ff, const char *text) {
     rf_stream_ff_clear(ff);
-    if (!text || strnlen(text, RF_DECODE_MAX_FILE_BYTES + 1) > RF_DECODE_MAX_FILE_BYTES) return false;
+    if (!text || strlen(text) > 524288) return false;
     const char *p = text;
     while (*p) {
         const char *e = strchr(p, '\n');
@@ -242,14 +241,8 @@ RfStreamKeystore *rf_stream_environment_get_keystore(RfStreamEnvironment *e) {
     return e ? e->keystore : NULL;
 }
 RfStreamKeyArray_t *rf_stream_keystore_get_data(RfStreamKeystore *k) { return k ? &k->data : NULL; }
-/* Device-encrypted Flipper keystores cannot be treated as plaintext on ESP32. */
-bool rf_stream_keystore_raw_get_data(const char *name, size_t off, uint8_t *out, size_t n) {
-    (void)name;
-    (void)off;
-    (void)out;
-    (void)n;
-    return false;
-}
+/* rf_stream_keystore_raw_get_data now serves the plaintext blob loaded by
+   rf_keystore.cpp; implemented in rf_stream.c. */
 
 #include <string.h>
 
