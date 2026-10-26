@@ -6,7 +6,8 @@
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 // ESP-IDF 5.5 based framework determines the channels autommatically
 // you do not have the hability to choose the channel
-rmt_channel_handle_t setup_rf_rx();
+// radioReady preserves a caller's already configured frequency and RX preset.
+rmt_channel_handle_t setup_rf_rx(bool radioReady = false);
 
 #define RMT_MAX_PULSES 10000 // Maximum number of pulses to record
 #define RMT_CLK_DIV 80       /*!< RMT counter clock divider */

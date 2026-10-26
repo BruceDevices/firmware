@@ -10,6 +10,7 @@ public:
     void setup();
     void end();
     void update_mtu(uint16_t mtu);
+    void on_disconnect();
 
 private:
     NimBLEServer *pServer;

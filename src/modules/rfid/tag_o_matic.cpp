@@ -388,6 +388,7 @@ void TagOMatic::emulate_card() {
     switch (result) {
         case RFIDInterface::SUCCESS:
             displaySuccess("Reader interaction complete.");
+            set_state(READ_MODE);
             delay(400);
             break;
         case RFIDInterface::TAG_NOT_PRESENT:

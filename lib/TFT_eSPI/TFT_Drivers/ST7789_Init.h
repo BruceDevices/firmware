@@ -124,8 +124,8 @@
 
 #ifdef TFT_BL
   // Turn on the back-light LED
-  digitalWrite(TFT_BL, HIGH);
   pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
 #endif
 }
 
@@ -231,8 +231,8 @@
 
 #ifdef TFT_BL
   // Turn on the back-light LED
-  digitalWrite(TFT_BL, HIGH);
   pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
 #endif
 }
 #endif

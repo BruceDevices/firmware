@@ -4,6 +4,8 @@
 #include <M5Unified.h>
 #include <interface.h>
 
+#define TFT_SCK 20
+
 constexpr uint32_t kBtnBDoublePressWindowMs = 270;
 constexpr uint32_t kBtnBLongPressMs = 500;
 
@@ -15,6 +17,39 @@ bool enableNessoGrovePower();
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    // Piezo buzzer (GPIO11 from schematic)
+    bruceConfigPins.buzzer = 11;
+    bruceConfigPins.i2c_bus = {(gpio_num_t)5, (gpio_num_t)4};  // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)10, (gpio_num_t)8}; // sda, scl
+    bruceConfigPins.rfTx = 5;
+    bruceConfigPins.rfRx = 4;
+    bruceConfigPins.irTx = 9;
+    bruceConfigPins.irRx = 5;
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.uart_bus = {(gpio_num_t)4, (gpio_num_t)5};    // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)4, (gpio_num_t)5};     // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)4, (gpio_num_t)5};  // rx, tx (CH9329, using Grove)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7};
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7, (gpio_num_t)2, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7, (gpio_num_t)2
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)6, (gpio_num_t)4, (gpio_num_t)5, (gpio_num_t)7, (gpio_num_t)2, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,int,rst
+    // LoRa shares the TFT SPI bus (sck=TFT_SCK=20, miso=TFT_MISO=22, mosi=TFT_MOSI=21)
+    bruceConfigPins.LoRa_bus = {
+        (gpio_num_t)20, (gpio_num_t)22, (gpio_num_t)21, (gpio_num_t)23, (gpio_num_t)-1, (gpio_num_t)15
+    }; // sck,miso,mosi,cs,rst,dio0
+#endif
+
     M5.begin(); // Need to test if SDCard inits with the new setup
     // ESP32-C6 only has one general-purpose I2C controller (SOC_HP_I2C_NUM == 1), so
     // I2C_NUM_1 doesn't exist in i2c_port_t here and M5.In_I2C is always on Wire/I2C_NUM_0.
@@ -53,10 +88,13 @@ void InputHandler(void) {
     static uint32_t btnBFirstReleaseMs = 0;
     static bool btnBWaitingSecondClick = false;
     static bool btnBLongPressFired = false;
+    static bool touchWasPressed = false;
     if (millis() - tm < 200 && !LongPress) return;
     if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
     unlockSysI2CBus();
+
+    checkPowerSaveTime();
 
     bool emitNext = false;
     bool emitPrev = false;
@@ -64,15 +102,20 @@ void InputHandler(void) {
     uint32_t now = millis();
 
     auto t = M5.Touch.getDetail();
-    if (t.isPressed() || t.isHolding()) {
+    bool touchPressed = t.isPressed() || t.isHolding();
+    if (touchPressed && !touchWasPressed) {
         tm = millis();
+        touchWasPressed = true;
         if (wakeUpScreen()) return;
 
         touchPoint.x = t.x;
         touchPoint.y = t.y;
         touchPoint.pressed = true;
         touchHeatMap(touchPoint);
-    } else touchPoint.pressed = false;
+        AnyKeyPress = true;
+        return;
+    }
+    touchWasPressed = touchPressed;
 
     bool btnAActive = M5.BtnA.isPressed() || M5.BtnA.isHolding();
     bool btnBActive = M5.BtnB.isPressed() || M5.BtnB.isHolding();
@@ -102,13 +145,14 @@ void InputHandler(void) {
         emitNext = true;
     }
 
-    AnyKeyPress = btnAActive || btnBActive || btnBWaitingSecondClick || M5.BtnA.wasClicked() || emitNext ||
-                  emitPrev || emitEsc;
+    bool btnAClicked = M5.BtnA.wasClicked();
+    AnyKeyPress =
+        btnAActive || btnBActive || btnBWaitingSecondClick || btnAClicked || emitNext || emitPrev || emitEsc;
     if (!AnyKeyPress) return;
 
     if ((btnAActive || btnBActive) && wakeUpScreen()) return;
 
-    if (M5.BtnA.wasClicked()) SelPress = true;
+    if (btnAClicked) SelPress = true;
     if (emitNext) NextPress = true;
     if (emitPrev) PrevPress = true;
     if (emitEsc) EscPress = true;

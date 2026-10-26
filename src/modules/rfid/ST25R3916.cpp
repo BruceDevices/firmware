@@ -62,6 +62,16 @@ static void _setNfcPower(bool enabled) {
     ioExpander.setPinDirection(IO_EXP_NFC, OUTPUT);
     ioExpander.turnPinOnOff(IO_EXP_NFC, enabled ? HIGH : LOW);
 #endif
+#ifdef CAP_CC1101_POWER_EN
+    // M5Stack Cap CC1101: POWER_EN gates the whole cap, and the cap's CC1101 hangs off
+    // this same SPI bus, so park its CS high before we talk to the NFC chip.
+    if (bruceConfigPins.ST25R_bus.cs == (gpio_num_t)CAP_NFC_SS_PIN) {
+        pinMode(CAP_CC1101_SS_PIN, OUTPUT);
+        digitalWrite(CAP_CC1101_SS_PIN, HIGH);
+        pinMode(CAP_CC1101_POWER_EN, OUTPUT);
+        digitalWrite(CAP_CC1101_POWER_EN, enabled ? HIGH : LOW);
+    }
+#endif
 }
 
 namespace {

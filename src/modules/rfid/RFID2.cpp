@@ -80,12 +80,18 @@ private:
 };
 } // namespace
 
-RFID2::RFID2(bool use_i2c) : _use_i2c(use_i2c) {
+RFID2::RFID2(bool use_i2c)
+    : _use_i2c(use_i2c), ss_pin((uint8_t)bruceConfigPins.PN532_bus.cs) {
     if (use_i2c) {
         _i2cWire = acquireI2CBus();
         if (_i2cWire != nullptr) _driver = new BruceMFRC522DriverI2C{RFID2_I2C_ADDRESS, *_i2cWire};
     } else {
-        _driver = new MFRC522DriverSPI{ss_pin, SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN};
+        _driver = new MFRC522DriverSPI{
+            ss_pin,
+            (int8_t)bruceConfigPins.PN532_bus.sck,
+            (int8_t)bruceConfigPins.PN532_bus.miso,
+            (int8_t)bruceConfigPins.PN532_bus.mosi
+        };
     }
     if (_driver != nullptr) mfrc522.SetDriver(*_driver);
 }

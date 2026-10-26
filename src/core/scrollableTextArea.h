@@ -19,6 +19,7 @@ public:
 
     String getLine(size_t lineNumber);
     size_t getMaxLines();
+    size_t getMaxVisibleLines() const { return _maxVisibleLines; }
 
     void addLine(const String &text);
 

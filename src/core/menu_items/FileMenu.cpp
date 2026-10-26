@@ -44,7 +44,7 @@ void FileMenu::drawIcon(float scale) {
     int foldSize = iconH / 4;
     int iconX = iconCenterX - iconW / 2;
     int iconY = iconCenterY - iconH / 2;
-    int iconDelta = 10;
+    int iconDelta = max(2, (int)(scale * 10)); // scales with the icon so it still fits in a grid cell
 
     // Files
     tft.drawRect(iconX + iconDelta, iconY - iconDelta, iconW, iconH, bruceConfig.priColor);

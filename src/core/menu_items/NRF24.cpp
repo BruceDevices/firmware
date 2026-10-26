@@ -15,9 +15,8 @@ void NRF24Menu::optionsMenu() {
     #endif
     options.push_back({"NRF Jammer", nrf_jammer});
 
-#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-    options.push_back({"Config pins", [this]() { configMenu(); }});
-#endif
+    if (!bruceConfigPins.NRF24_presets.empty())
+        options.push_back({"Config pins", [this]() { configMenu(); }});
 
     addOptionToMainMenu();
 
@@ -25,54 +24,29 @@ void NRF24Menu::optionsMenu() {
 }
 
 void NRF24Menu::configMenu() {
-    uint8_t opt = 0;
     int idx = 0;
-    if (bruceConfigPins.NRF24_bus.mosi == (gpio_num_t)SDCARD_MOSI) idx = 1;
-    options = {
-        {"NRF24 (legacy)",     [&]() { opt = 1; }         },
-        {"NRF24 (shared SPI)", [&]() { opt = 2; }         },
-        {"Back",               [this]() { optionsMenu(); }},
-    };
+    for (size_t i = 0; i < bruceConfigPins.NRF24_presets.size(); i++) {
+        const BruceConfigPins::SPIPins &p = bruceConfigPins.NRF24_presets[i].pins;
+        if (bruceConfigPins.NRF24_bus.sck == p.sck && bruceConfigPins.NRF24_bus.mosi == p.mosi &&
+            bruceConfigPins.NRF24_bus.cs == p.cs) {
+            idx = (int)i;
+            break;
+        }
+    }
+
+    options.clear();
+    for (size_t i = 0; i < bruceConfigPins.NRF24_presets.size(); i++) {
+        options.push_back(
+            {bruceConfigPins.NRF24_presets[i].label,
+             [this, i]() {
+                 bruceConfigPins.setNrf24Pins(bruceConfigPins.NRF24_presets[i].pins);
+                 bruceConfigPins.setCC1101Pins(bruceConfigPins.NRF24_presets[i].pins);
+             }}
+        );
+    }
+    options.push_back({"Back", [this]() { optionsMenu(); }});
 
     loopOptions(options, MENU_TYPE_SUBMENU, "RF Config", idx);
-    if (opt == 1) {
-        bruceConfigPins.setNrf24Pins(
-            {(gpio_num_t)NRF24_SCK_PIN,
-             (gpio_num_t)NRF24_MISO_PIN,
-             (gpio_num_t)NRF24_MOSI_PIN,
-             (gpio_num_t)NRF24_SS_PIN,
-             (gpio_num_t)NRF24_CE_PIN,
-             GPIO_NUM_NC}
-        );
-        bruceConfigPins.setCC1101Pins(
-            {(gpio_num_t)NRF24_SCK_PIN,
-             (gpio_num_t)NRF24_MISO_PIN,
-             (gpio_num_t)NRF24_MOSI_PIN,
-             (gpio_num_t)NRF24_SS_PIN,
-             (gpio_num_t)NRF24_CE_PIN,
-             GPIO_NUM_NC}
-        );
-    }
-#if CONFIG_SOC_GPIO_OUT_RANGE_MAX > 30
-    if (opt == 2) {
-        bruceConfigPins.setNrf24Pins(
-            {(gpio_num_t)SDCARD_SCK,
-             (gpio_num_t)SDCARD_MISO,
-             (gpio_num_t)SDCARD_MOSI,
-             GPIO_NUM_33,
-             GPIO_NUM_32,
-             GPIO_NUM_NC}
-        );
-        bruceConfigPins.setCC1101Pins(
-            {(gpio_num_t)SDCARD_SCK,
-             (gpio_num_t)SDCARD_MISO,
-             (gpio_num_t)SDCARD_MOSI,
-             GPIO_NUM_33,
-             GPIO_NUM_32,
-             GPIO_NUM_NC}
-        );
-    }
-#endif
 }
 
 void NRF24Menu::drawIcon(float scale) {

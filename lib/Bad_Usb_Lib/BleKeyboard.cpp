@@ -190,6 +190,11 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
         advertisementData.setFlags(BLE_HS_ADV_F_DISC_GEN);
         advertisementData.setName(deviceName.c_str());
         advertisementData.setAppearance(appearance);
+        // The custom payload above bypasses addServiceUUID() packing, and the
+        // scan response is disabled, so without this the HID UUID (0x1812) is
+        // never advertised. iOS Settings only lists pairable BLE HID
+        // accessories that advertise 0x1812; Android lists any BLE peripheral.
+        advertisementData.setCompleteServices(hid->getHidService()->getUUID());
         advertising->setAdvertisementData(advertisementData);
     }
 

@@ -50,7 +50,7 @@ esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t re
 /**
  * @brief tries to connect to min(found_networks, maxSearch) networks
  * using stored passwords
- * @TODO fix: rn it skips open networks due to password == "" check
+ * @note known open networks are stored with an empty password and joined without one
  */
 void wifiConnectTask(void *pvParameters);
 
@@ -63,8 +63,8 @@ void ensureWifiPlatform();
 /**
  * @brief Connects to wifiNetwork
  */
-bool _wifiConnect(const String &ssid, int encryption);
-bool _connectToWifiNetwork(const String &ssid, const String &pwd);
+bool _wifiConnect(const String &ssid, int encryption, int32_t channel = 0, const uint8_t* bssid = nullptr);
+bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channel = 0, const uint8_t* bssid = nullptr);
 
 /**
  * @brief sets up wifi in AP mode

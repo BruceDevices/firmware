@@ -66,15 +66,7 @@ void drawFish(Fish &f) {
 
 // Função para mover o tubarão
 void detectInputs() {
-#if defined(ARDUINO_M5STICK_C_PLUS) ||                                                                       \
-    defined(ARDUINO_M5STICK_C_PLUS2) // check(EscPress) is the same of check(PrevPress) in these devices
-    if (check(SelPress))
-#else
-    if (check(PrevPress) || check(UpPress))
-#endif
-    {
-        sharkUp = true;
-    }
+    if (check(PrevPress) || check(UpPress)) { sharkUp = true; }
     if (check(NextPress) || check(DownPress)) sharkDown = true;
 }
 

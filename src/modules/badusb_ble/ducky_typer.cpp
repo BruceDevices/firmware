@@ -8,6 +8,7 @@
 #include "esp_mac.h"
 #include "modules/ble/ble_common.h"
 #include <NimBLEDevice.h>
+#include <map>
 #if defined(USB_as_HID)
 #include "tusb.h"
 #endif
@@ -576,6 +577,49 @@ DuckyCombination *findDuckyCombination(const char *cmd) {
 }
 
 // ============================================================================
+// DUCKYSCRIPT 3.0 DEFINE - Constant substitution
+// ============================================================================
+
+// '#' is a token char because DEFINE names are conventionally '#'-prefixed.
+static bool isDuckyDefineTokenChar(char c) { return isAlphaNumeric(c) || c == '_' || c == '#'; }
+
+static bool parseDuckyDefine(const String &line, std::map<String, String> &defines) {
+    if (!line.startsWith("DEFINE ")) return false;
+
+    int nameStart = 7; // strlen("DEFINE ")
+    while (nameStart < (int)line.length() && line.charAt(nameStart) == ' ') nameStart++;
+
+    int nameEnd = line.indexOf(' ', nameStart);
+    String name = (nameEnd < 0) ? line.substring(nameStart) : line.substring(nameStart, nameEnd);
+    if (name.length() == 0) return true;
+
+    defines[name] = (nameEnd < 0) ? String("") : line.substring(nameEnd + 1);
+    return true;
+}
+
+// Replaces whole-token matches only, so a name never matches inside a larger token.
+static void applyDuckyDefines(String &line, const std::map<String, String> &defines) {
+    for (const auto &entry : defines) {
+        const String &name = entry.first;
+        const String &value = entry.second;
+        int from = 0;
+        while (true) {
+            int pos = line.indexOf(name, from);
+            if (pos < 0) break;
+            int after = pos + name.length();
+            bool leftOk = (pos == 0) || !isDuckyDefineTokenChar(line.charAt(pos - 1));
+            bool rightOk = (after >= (int)line.length()) || !isDuckyDefineTokenChar(line.charAt(after));
+            if (leftOk && rightOk) {
+                line = line.substring(0, pos) + value + line.substring(after);
+                from = pos + value.length();
+            } else {
+                from = pos + 1;
+            }
+        }
+    }
+}
+
+// ============================================================================
 // START KEYBOARD - Creates fresh BLE instance with new stack
 // ============================================================================
 
@@ -662,7 +706,9 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
 
             printStatusBadUSBBLE("USB Host Connected");
 #else
-            mySerial.begin(CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, BAD_RX, BAD_TX);
+            mySerial.begin(
+                CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, bruceConfigPins.badusb_bus.rx, bruceConfigPins.badusb_bus.tx
+            );
             delay(100);
             hid = new CH9329_Keyboard_();
 #endif
@@ -691,7 +737,9 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
         hid->begin(layout);
         hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
 #else
-        mySerial.begin(CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, BAD_RX, BAD_TX);
+        mySerial.begin(
+            CH9329_DEFAULT_BAUDRATE, SERIAL_8N1, bruceConfigPins.badusb_bus.rx, bruceConfigPins.badusb_bus.tx
+        );
         delay(100);
         const uint8_t *layout =
             (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
@@ -814,6 +862,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
     char Cmd[25];
     String Argument = "";
     String RepeatTmp = "";
+    std::map<String, String> duckyDefines;
 
     static int nextStringDelay = -1;
     static int defaultStringDelay = bruceConfig.badUSBBLEKeyDelay;
@@ -855,6 +904,10 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
         if (lineContent.endsWith("\r")) lineContent.remove(lineContent.length() - 1);
 
         if (lineContent.length() == 0) continue;
+
+        // DEFINE stores a constant; every other line has its constants expanded first.
+        if (parseDuckyDefine(lineContent, duckyDefines)) continue;
+        if (!duckyDefines.empty()) applyDuckyDefines(lineContent, duckyDefines);
 
         int spaceIndex = lineContent.indexOf(' ');
 
@@ -904,7 +957,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
                         delay(50);
                     }
                     printStatusBadUSBBLE("Running");
-                    tft.setTextSize(1);
+                    tft.setTextSize(FP);
                 } else if (PriCmd->type == DuckyCommandType_Delay) {
                     if ((int)PriCmd->key > 0) delay(DEF_DELAY);
                     else {
@@ -1026,10 +1079,12 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     drawMainBorder();
-    tft.setCursor(10, 28);
+    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y);
     if (ble) tft.println("BLE Keyboard:");
     else tft.println("USB Keyboard:");
-    tft.drawCentreString("> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - 20, 1);
+    tft.drawCentreString(
+        "> " + String(KB_HID_EXIT_MSG) + " <", tftWidth / 2, tftHeight - BORDER_PAD_X - LH * FP, 1
+    );
     tft.setTextSize(FP);
 
     while (1) {
@@ -1422,18 +1477,24 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawCentreString("Time", tftWidth / 2, tftHeight / 2 + 15, 1);
 
-        tft.setTextSize(1);
+        tft.setTextSize(FP);
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, tftHeight - 15, 1);
     };
 
-    auto updateSlideDisplay = [&]() {
-        tft.fillRect(0, tftHeight / 2 - 35, tftWidth, 40, bruceConfig.bgColor);
+    // Tuned for text size 4 at LW=6/LH=8 defaults; scaled proportionally for other boards.
+    const int slideSize = FG + 1;
+    const int slideClearH = 40 * slideSize / 4;
+    const int slideClearY = tftHeight / 2 - 35 * slideSize / 4;
+    const int slideDrawY = tftHeight / 2 - 30 * slideSize / 4;
 
-        tft.setTextSize(4);
+    auto updateSlideDisplay = [&]() {
+        tft.fillRect(0, slideClearY, tftWidth, slideClearH, bruceConfig.bgColor);
+
+        tft.setTextSize(slideSize);
         tft.setTextColor(TFT_WHITE, bruceConfig.bgColor);
         String slideStr = "Slide " + String(currentSlide);
-        tft.drawCentreString(slideStr, tftWidth / 2, tftHeight / 2 - 30, 1);
+        tft.drawCentreString(slideStr, tftWidth / 2, slideDrawY, 1);
         lastDisplayedSlide = currentSlide;
     };
 
@@ -1452,10 +1513,14 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
             snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", minutes, seconds);
         }
 
-        tft.fillRect(0, tftHeight / 2 + 30, tftWidth, 30, bruceConfig.bgColor);
-        tft.setTextSize(3);
+        const int timerSize = FG;
+        const int timerClearY = tftHeight / 2 + 30 * timerSize / 3;
+        const int timerClearH = 30 * timerSize / 3;
+        const int timerDrawY = tftHeight / 2 + 35 * timerSize / 3;
+        tft.fillRect(0, timerClearY, tftWidth, timerClearH, bruceConfig.bgColor);
+        tft.setTextSize(timerSize);
         tft.setTextColor(timerStarted ? TFT_GREEN : TFT_DARKGREY, bruceConfig.bgColor);
-        tft.drawCentreString(timeBuffer, tftWidth / 2, tftHeight / 2 + 35, 1);
+        tft.drawCentreString(timeBuffer, tftWidth / 2, timerDrawY, 1);
 
         lastDisplayedSeconds = elapsed;
     };

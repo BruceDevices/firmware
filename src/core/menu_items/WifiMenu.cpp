@@ -1,3 +1,4 @@
+#include "modules/wifi/wifite.h"
 #include "WifiMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
@@ -20,6 +21,9 @@
 #ifndef LITE_VERSION
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/channel_analyzer.h"
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+#include "modules/wifi/dual_band_analyzer.h"
+#endif
 #include "modules/wifi/jam_detect.h"
 #include "modules/wifi/wifi_recover.h"
 #endif
@@ -74,6 +78,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Channel Analyzer", channel_analyzer_setup});
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+    options.push_back({"Dual Band Analyzer", dual_band_analyzer_setup});
+#endif
     options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
@@ -92,6 +99,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    options.push_back({"WiFite", wifite_menu});
+#endif
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 

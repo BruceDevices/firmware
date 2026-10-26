@@ -10,15 +10,13 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/wifi/wifi_common.h"
+#include "wifi_spectrum.h"
 #include <Arduino.h>
 #include <globals.h>
 
 // 2.4GHz channels to sweep.
 static const uint8_t CA_CHANNELS[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 static const int CA_NCH = sizeof(CA_CHANNELS) / sizeof(CA_CHANNELS[0]);
-
-// Load% at/above which a bar is drawn solid (busy) instead of dimmed.
-static const uint8_t CA_BUSY_THRESHOLD = 50;
 
 // Counters updated from the promiscuous RX callback for the *current* channel.
 static volatile uint32_t ca_bytes = 0;
@@ -65,84 +63,28 @@ static void ca_stop_wifi() {
     vTaskDelay(1 / portTICK_RATE_MS);
 }
 
-static void
-ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t curCh, uint16_t dwell) {
-    drawMainBorder(false);
-
-    const int x0 = 8;                           // left of bars
-    const int top = 26;                         // below title
-    const int bottom = tftHeight - 2 * LH * FP; // leave room for footer
-    const int avail = bottom - top;
-    const int rowH = avail / CA_NCH;
-    const int labelW = 30; // "Ch11"
-    const int valW = 30;   // " 100%"
-    const int barX = x0 + labelW;
-    const int barW = tftWidth - barX - valW - 6;
-
-    tft.setTextSize(FP);
-    for (int i = 0; i < CA_NCH; i++) {
-        uint8_t ch = CA_CHANNELS[i];
-        int y = top + i * rowH;
-        bool isCur = (ch == curCh);
-
-        // label
-        tft.setTextColor(
-            isCur ? bruceConfig.bgColor : bruceConfig.priColor,
-            isCur ? bruceConfig.priColor : bruceConfig.bgColor
-        );
-        tft.drawString("Ch" + String(ch), x0, y, 1);
-
-        // bar frame
-        int bh = rowH - 3;
-        if (bh < 4) bh = 4;
-        tft.drawRect(barX, y, barW, bh, bruceConfig.priColor);
-
-        // filled portion ~ load%
-        int fillW = (barW - 2) * load[ch] / 100;
-
-        // solid above threshold, dimmed below
-        uint16_t c = (load[ch] >= CA_BUSY_THRESHOLD) ? bruceConfig.priColor : TFT_DARKGREY;
-        tft.fillRect(barX + 1, y + 1, fillW, bh - 2, c);
-        // clear remaining area
-        tft.fillRect(barX + 1 + fillW, y + 1, barW - 2 - fillW, bh - 2, bruceConfig.bgColor);
-
-        // peak-hold marker
-        int peakX = barX + 1 + (barW - 2) * peak[ch] / 100;
-        if (peakX > barX + 1) tft.drawFastVLine(peakX, y + 1, bh - 2, TFT_RED);
-
-        // value
-        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawString(String(load[ch]) + "%", barX + barW + 4, y, 1);
-    }
-
-    // footer: current channel detail + signal meter + dwell
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    String foot = "Ch" + String(curCh) + " " + String(load[curCh]) + "% pk" + String(peak[curCh]) + "% " +
-                  String(rssi[curCh]) + "dBm  dwell " + String(dwell) + "ms  ";
-    tft.drawString(foot, x0, bottom, 1);
-}
 
 void channel_analyzer_setup() {
     returnToMenu = false;
 
-    uint8_t load[12] = {0};
-    uint8_t peak[12] = {0};
-    int8_t rssi[12];
-    for (int i = 0; i < 12; i++) rssi[i] = -128;
+    uint8_t load[WifiSpectrumView::CH_MAX] = {0};
+    uint8_t peak[WifiSpectrumView::CH_MAX] = {0};
+    int8_t rssi[WifiSpectrumView::CH_MAX];
+    for (int i = 0; i < WifiSpectrumView::CH_MAX; i++) rssi[i] = -128;
 
     uint16_t dwell = 350; // ms per channel, adjustable with Up/Down
     int idx = 0;
 
-    ca_start_wifi();
+    WifiSpectrumView view;
+    if (!view.begin("Channel Analyzer")) {
+        displayError("Out of memory", true);
+        return;
+    }
 
-    tft.fillScreen(bruceConfig.bgColor);
-    drawMainBorderWithTitle("Channel Analyzer");
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    padprintln("");
-    padprintln(" sweeping 1-11 ...");
-    delay(1000);
-    drawMainBorder(true);
+    ca_start_wifi();
+    view.commit(load, CA_CHANNELS[0]);
+    view.status("CH" + String(CA_CHANNELS[0]) + " scanning...");
+
     for (;;) {
         if (returnToMenu) break;
         if (check(EscPress)) {
@@ -161,10 +103,17 @@ void channel_analyzer_setup() {
         ca_rssi_peak = -128;
 
         uint32_t t0 = millis();
+        uint32_t lastFrame = 0;
         while (millis() - t0 < dwell) {
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
+            }
+            // Animate while the radio dwells, so the trace glides toward the last
+            // measurement instead of snapping channel by channel.
+            if (millis() - lastFrame >= 60) {
+                lastFrame = millis();
+                view.animate(load, peak, ch);
             }
             vTaskDelay(20 / portTICK_PERIOD_MS);
         }
@@ -181,11 +130,17 @@ void channel_analyzer_setup() {
         if (load[ch] > peak[ch]) peak[ch] = load[ch];
         rssi[ch] = (ca_rssi_peak == -128) ? 0 : ca_rssi_peak;
 
-        ca_draw(load, peak, rssi, ch, dwell);
+        view.commit(load, ch);
+        view.status(
+            "CH" + String(ch) + " " + String(load[ch]) + "% PK" + String(peak[ch]) + "% " +
+            String(rssi[ch]) + "dBm " + String(dwell) + "ms"
+        );
 
         idx = (idx + 1) % CA_NCH;
+        if (idx == 0) drawStatusBar(); // keep battery/clock fresh once per sweep
     }
 
+    view.end();
     ca_stop_wifi();
 }
 
