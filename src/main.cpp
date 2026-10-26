@@ -496,7 +496,9 @@ void setup() {
     _pre_storage_gpio();
     begin_storage();
     RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
+    #if !defined(LITE_VERSION)
     rf_keystore_load();
+#endif
     begin_tft();
     init_clock();
     init_led();
