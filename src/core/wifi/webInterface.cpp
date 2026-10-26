@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
+#include <esp_system.h>
 #include <globals.h>
 
 File uploadFile;
@@ -30,10 +31,12 @@ String uploadFolder = "";
 static bool mdnsRunning = false;
 
 // Generate random token
-String generateToken(int length = 24) {
-    String token = "";
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    for (int i = 0; i < length; i++) { token += charset[random(0, sizeof(charset) - 1)]; }
+String generateToken(int length = 32) {
+    static const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    constexpr size_t charsetLen = sizeof(charset) - 1;
+    String token;
+    token.reserve(length);
+    for (int i = 0; i < length; i++) { token += charset[esp_random() % charsetLen]; }
     return token;
 }
 
@@ -44,10 +47,12 @@ String generateToken(int length = 24) {
 void stopWebUi() {
     tft.setLogging(false);
     isWebUIActive = false;
-    server->end();
-    server->~AsyncWebServer();
-    free(server);
-    server = nullptr;
+    if (server) {
+        server->end();
+        server->~AsyncWebServer();
+        free(server);
+        server = nullptr;
+    }
     if (mdnsRunning) {
         MDNS.end();
         mdnsRunning = false;
@@ -223,46 +228,62 @@ void createDirRecursive(const String &path, FS fs) {
 void handleUpload(
     AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final
 ) {
-    if (checkUserWebAuth(request)) {
-        if (uploadFolder == "/") uploadFolder = "";
-        if (!index) {
-            if (request->hasArg("password")) filename = filename + ".enc";
-            // Serial.println("File: " + uploadFolder + "/" + filename);
-            String relativePath = filename;
-            String fullPath = uploadFolder + "/" + relativePath;
-            String dirPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
-            if (dirPath.length() > 0) { createDirRecursive(dirPath, _webFS); }
-        RETRY:
-            request->_tempFile = _webFS.open(uploadFolder + "/" + filename, "w");
-            if (!request->_tempFile) {
-                // Serial.println("Failed to open file for writing: " + uploadFolder + "/" + filename);
-                goto RETRY;
-            }
-        }
+    static size_t chunk_no = 0;
+    if (!checkUserWebAuth(request)) {
+        if (request->_tempFile) request->_tempFile.close();
+        return;
+    }
 
-        if (len) {
-            if (request->hasArg("password")) {
-                // encryption requested
-                static int chunck_no = 0;
-                if (chunck_no != 0) {
-                    // TODO: handle multiple chunks
-                    request->send(404, "text/html", "file is too big");
-                    return;
-                } else chunck_no += 1;
-                String enc_password = request->arg("password");
-                String plaintext = String((char *)data).substring(0, len);
-                String cyphertxt = encryptString(plaintext, enc_password);
-                if (cyphertxt == "") { return; }
-                if (request->_tempFile)
-                    request->_tempFile.write((const uint8_t *)cyphertxt.c_str(), cyphertxt.length());
-            } else {
-                if (request->_tempFile) request->_tempFile.write(data, len);
+    if (uploadFolder == "/") uploadFolder = "";
+    if (!index) {
+        chunk_no = 0;
+        if (request->hasArg("password")) filename = filename + ".enc";
+        // Serial.println("File: " + uploadFolder + "/" + filename);
+        String relativePath = filename;
+        String fullPath = uploadFolder + "/" + relativePath;
+        String dirPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
+        if (dirPath.length() > 0) { createDirRecursive(dirPath, _webFS); }
+        request->_tempFile = _webFS.open(uploadFolder + "/" + filename, "w");
+        if (!request->_tempFile) {
+            request->send(500, "text/plain", "Failed to open file for writing");
+            return;
+        }
+    }
+
+    if (len) {
+        if (request->hasArg("password")) {
+            // encryption requested
+            if (chunk_no != 0) {
+                // TODO: handle multiple chunks
+                if (request->_tempFile) request->_tempFile.close();
+                request->send(404, "text/html", "file is too big");
+                return;
             }
+            chunk_no += 1;
+            String enc_password = request->arg("password");
+            String plaintext((const char *)data, len);
+            String cyphertxt = encryptString(plaintext, enc_password);
+            if (cyphertxt == "") {
+                if (request->_tempFile) request->_tempFile.close();
+                request->send(500, "text/plain", "Failed to encrypt uploaded file");
+                return;
+            }
+            if (request->_tempFile && request->_tempFile.write(
+                    (const uint8_t *)cyphertxt.c_str(), cyphertxt.length()
+                ) != cyphertxt.length()) {
+                request->_tempFile.close();
+                request->send(500, "text/plain", "Failed to write encrypted upload");
+                return;
+            }
+        } else if (request->_tempFile && request->_tempFile.write(data, len) != len) {
+            request->_tempFile.close();
+            request->send(500, "text/plain", "Failed to write upload");
+            return;
         }
-        if (final) {
-            // close the file handle as the upload is now done
-            if (request->_tempFile) request->_tempFile.close();
-        }
+    }
+    if (final) {
+        // close the file handle as the upload is now done
+        if (request->_tempFile) request->_tempFile.close();
     }
 }
 
@@ -395,7 +416,6 @@ static bool startMdnsResponder() {
 **********************************************************************/
 void configureWebServer() {
     mdnsRunning = startMdnsResponder();
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     server->onNotFound(notFound);
 
     // Index
@@ -415,7 +435,9 @@ void configureWebServer() {
                 String token = generateToken();
                 AsyncWebServerResponse *response = request->beginResponse(302);
                 response->addHeader("Location", "/");
-                response->addHeader("Set-Cookie", "BRUCESESSION=" + token + "; Path=/; HttpOnly");
+                response->addHeader(
+                    "Set-Cookie", "BRUCESESSION=" + token + "; Path=/; HttpOnly; SameSite=Strict"
+                );
                 request->send(response);
                 bruceConfig.addWebUISession(token);
                 return;
@@ -442,7 +464,10 @@ void configureWebServer() {
         }
         AsyncWebServerResponse *response = request->beginResponse(302);
         response->addHeader("Location", "/?loggedout");
-        response->addHeader("Set-Cookie", "BRUCESESSION=0; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+        response->addHeader(
+            "Set-Cookie",
+            "BRUCESESSION=0; Path=/; HttpOnly; SameSite=Strict; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        );
         request->send(response);
     });
 
@@ -577,7 +602,7 @@ void configureWebServer() {
     });
 
     // Reboot device
-    server->on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server->on("/reboot", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (checkUserWebAuth(request)) { ESP.restart(); }
     });
 
@@ -594,7 +619,7 @@ void configureWebServer() {
         }
     });
 
-    // Download, create folder and delete
+    // Download and read file contents
     server->on("/file", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (checkUserWebAuth(request)) {
             if (request->hasArg("name") && request->hasArg("action")) {
@@ -612,22 +637,13 @@ void configureWebServer() {
                 log_i("filename: %s\n", fileName.c_str());
                 log_i("fileAction: %s\n", fileAction.c_str());
 
+                if (fileAction == "delete" || fileAction == "create" || fileAction == "createfile") {
+                    request->send(405, "text/plain", "Use POST for file changes");
+                    return;
+                }
+
                 if (!fs->exists(fileName)) {
-                    if (strcmp(fileAction.c_str(), "create") == 0) {
-                        if (fs->mkdir(fileName)) {
-                            request->send(200, "text/plain", "Created new folder: " + String(fileName));
-                        } else {
-                            request->send(200, "text/plain", "FAIL creating folder: " + String(fileName));
-                        }
-                    } else if (strcmp(fileAction.c_str(), "createfile") == 0) {
-                        File newFile = fs->open(fileName, FILE_WRITE, true);
-                        if (newFile) {
-                            newFile.close();
-                            request->send(200, "text/plain", "Created new file: " + String(fileName));
-                        } else {
-                            request->send(200, "text/plain", "FAIL creating file: " + String(fileName));
-                        }
-                    } else request->send(400, "text/plain", "ERROR: file does not exist");
+                    request->send(400, "text/plain", "ERROR: file does not exist");
 
                 } else {
                     if (strcmp(fileAction.c_str(), "download") == 0) {
@@ -637,27 +653,6 @@ void configureWebServer() {
                         // https://www.iana.org/assignments/media-types/media-types.xhtml#image
                         if (extension == "jpg") extension = "jpeg"; // www.rfc-editor.org/rfc/rfc2046.html
                         request->send(*fs, fileName, "image/" + extension);
-                    } else if (strcmp(fileAction.c_str(), "delete") == 0) {
-                        if (deleteFromSd(*fs, fileName)) {
-                            request->send(200, "text/plain", "Deleted : " + String(fileName));
-                        } else {
-                            request->send(200, "text/plain", "FAIL deleting: " + String(fileName));
-                        }
-                    } else if (strcmp(fileAction.c_str(), "create") == 0) {
-                        if (fs->mkdir(fileName)) {
-                            request->send(200, "text/plain", "Created new folder: " + String(fileName));
-                        } else {
-                            request->send(200, "text/plain", "FAIL creating folder: " + String(fileName));
-                        }
-                    } else if (strcmp(fileAction.c_str(), "createfile") == 0) {
-                        File newFile = fs->open(fileName, FILE_WRITE, true);
-                        if (newFile) {
-                            newFile.close();
-                            request->send(200, "text/plain", "Created new file: " + String(fileName));
-                        } else {
-                            request->send(200, "text/plain", "FAIL creating file: " + String(fileName));
-                        }
-
                     } else if (strcmp(fileAction.c_str(), "edit") == 0) {
                         File editFile = fs->open(fileName, FILE_READ);
                         if (editFile) {
@@ -675,6 +670,52 @@ void configureWebServer() {
             } else {
                 request->send(400, "text/plain", "ERROR: name and action params required");
             }
+        }
+    });
+
+    // Create and delete files only through POST to prevent cross-site navigation requests.
+    server->on("/file", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) { return; }
+        if (!request->hasArg("name") || !request->hasArg("action")) {
+            request->send(400, "text/plain", "ERROR: name and action params required");
+            return;
+        }
+
+        String fileName = request->arg("name");
+        String fileAction = request->arg("action");
+        String fileSys = request->arg("fs");
+        FS *fs = fileSys == "SD" ? static_cast<FS *>(&SD) : static_cast<FS *>(&LittleFS);
+
+        if (fileAction == "delete") {
+            if (!fs->exists(fileName)) {
+                request->send(400, "text/plain", "ERROR: file does not exist");
+            } else if (deleteFromSd(*fs, fileName)) {
+                request->send(200, "text/plain", "Deleted : " + fileName);
+            } else {
+                request->send(500, "text/plain", "FAIL deleting: " + fileName);
+            }
+        } else if (fileAction == "create") {
+            if (fs->exists(fileName)) {
+                request->send(409, "text/plain", "ERROR: file already exists");
+            } else if (fs->mkdir(fileName)) {
+                request->send(200, "text/plain", "Created new folder: " + fileName);
+            } else {
+                request->send(500, "text/plain", "FAIL creating folder: " + fileName);
+            }
+        } else if (fileAction == "createfile") {
+            if (fs->exists(fileName)) {
+                request->send(409, "text/plain", "ERROR: file already exists");
+                return;
+            }
+            File newFile = fs->open(fileName, FILE_WRITE, true);
+            if (newFile) {
+                newFile.close();
+                request->send(200, "text/plain", "Created new file: " + fileName);
+            } else {
+                request->send(500, "text/plain", "FAIL creating file: " + fileName);
+            }
+        } else {
+            request->send(400, "text/plain", "ERROR: invalid action param supplied");
         }
     });
 
@@ -725,15 +766,15 @@ void configureWebServer() {
     );
 
     // Wi-Fi configuration
-    server->on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server->on("/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (checkUserWebAuth(request)) {
             if (request->hasArg("usr") && request->hasArg("pwd")) {
-                const char *usr = request->arg("usr").c_str();
-                const char *pwd = request->arg("pwd").c_str();
+                String usr = request->arg("usr");
+                String pwd = request->arg("pwd");
                 bruceConfig.setWebUICreds(usr, pwd);
-                request->send(
-                    200, "text/plain", "User: " + String(usr) + " configured with password: " + String(pwd)
-                );
+                request->send(200, "text/plain", "WebUI credentials updated");
+            } else {
+                request->send(400, "text/plain", "Username and password are required");
             }
         }
     });
@@ -762,7 +803,11 @@ void startWebUi(bool mode_ap) {
 
         Serial.println("Configuring Webserver ...");
         if (psramFound()) server = (AsyncWebServer *)ps_malloc(sizeof(AsyncWebServer));
-        else server = (AsyncWebServer *)malloc(sizeof(AsyncWebServer));
+        if (!server) server = (AsyncWebServer *)malloc(sizeof(AsyncWebServer));
+        if (!server) {
+            displayError("WebUI: Out of memory", true);
+            return;
+        }
 
         new (server) AsyncWebServer(default_webserverporthttp);
 

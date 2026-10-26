@@ -1047,7 +1047,7 @@ $(".container").addEventListener("click", async (e) => {
       return;
 
     Dialog.loading.show("Deleting...");
-    await requestGet("/file", {
+    await requestPost("/file", {
       fs: currentDrive,
       action: "delete",
       name: file,
@@ -1103,20 +1103,18 @@ $(".act-save-oinput-file").addEventListener("click", async (e) => {
     });
   } else if (actionType === "createFolder") {
     Dialog.loading.show("Creating Folder...");
-    let urlQuery = new URLSearchParams({
+    await requestPost("/file", {
       fs: currentDrive,
       action: "create",
       name: path.replace(/\/+$/, "") + "/" + fileName,
     });
-    await requestGet("/file?" + urlQuery.toString());
   } else if (actionType === "createFile") {
     Dialog.loading.show("Creating File...");
-    let urlQuery = new URLSearchParams({
+    await requestPost("/file", {
       fs: currentDrive,
       action: "createfile",
       name: path.replace(/\/+$/, "") + "/" + fileName,
     });
-    await requestGet("/file?" + urlQuery.toString());
   } else if (actionType === "serial") {
     Dialog.loading.show("Running Serial Command...");
     await runCommand(fileName);
@@ -1136,7 +1134,7 @@ $(".act-save-credential").addEventListener("click", async (e) => {
   }
 
   Dialog.loading.show("Saving WiFi Credentials...");
-  await requestGet("/wifi", {
+  await requestPost("/wifi", {
     usr: username,
     pwd: password,
   });
@@ -1174,7 +1172,7 @@ $(".act-reboot").addEventListener("click", async (e) => {
   e.preventDefault();
   if (!confirm("Are you sure you want to REBOOT the device?")) return;
   Dialog.loading.show("Rebooting...");
-  await requestGet("/reboot");
+  await requestPost("/reboot", {});
   setTimeout(() => {
     location.reload();
   }, 1000);
