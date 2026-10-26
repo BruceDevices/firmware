@@ -1185,11 +1185,17 @@ String rfReceiveSignal(
         String &registers = state.registers;
         if (preset) {
             ELECHOUSE_cc1101.setSidle();
-            ELECHOUSE_cc1101.setModulation(preset->modulation);
-            ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
-            ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
-            ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
-            ELECHOUSE_cc1101.setPktFormat(3);
+            // 2FSK presets need Flipper's exact modem register block; the
+            // piecemeal ELECHOUSE config leaves the wrong data rate, AGC and
+            // FOC tuning in place (see rf_utils.cpp). OOK presets fall back
+            // to the previous config.
+            if (!cc1101ApplyFlipperPreset(preset->name)) {
+                ELECHOUSE_cc1101.setModulation(preset->modulation);
+                ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
+                ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
+                ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
+                ELECHOUSE_cc1101.setPktFormat(3);
+            }
             ELECHOUSE_cc1101.SetRx();
             for (uint8_t address = 0; address <= 0x2e; ++address) {
                 char hex[4];

@@ -2,6 +2,7 @@
 #include "core/bus_HAL.h"
 #include "core/sd_functions.h"
 #include "core/settings.h"
+#include <string.h>
 
 // CRC-64-ECMA constants
 const uint64_t CRC64_ECMA_POLY = 0x42F0E1EBA9EA3693; // Polynomial for CRC-64-ECMA
@@ -165,6 +166,55 @@ void cc1101ApplyFixedFreqOokPreset(bool isTx) {
         ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0xC7);
         ELECHOUSE_cc1101.SpiWriteReg(CC1101_FREND1, 0xB6);
     }
+}
+
+// Load the exact CC1101 register block Flipper uses for its 2FSK async
+// presets. The ELECHOUSE-derived piecemeal config leaves the modem with the
+// wrong data rate, AGC and FOC tuning for FSK presets (a register dump on
+// device showed Bruce's fixed-freq OOK RX values still active during an
+// FM476 capture), so an FM remote demodulates to noise-only captures.
+// Bytes reproduce Flipper's subghz_device_cc1101_preset_2fsk_dev47_6khz_
+// async_regs / ..._dev2_38khz_async_regs tables (lib/subghz/devices/
+// cc1101_configs.c); the two tables are identical except DEVIATN.
+// FREQ*/FSCAL*/FSCTRL0/TEST0 stay from setMHZ() + the calibration, FIFOTHR
+// is untouched (Flipper's 2FSK tables do not write it either). Returns true
+// when the block was applied; the caller must then skip its own modem
+// config. OOK presets are NOT handled here - they keep the existing config.
+bool cc1101ApplyFlipperPreset(const char *canonicalName) {
+    if (canonicalName == nullptr || canonicalName[0] == 0) return false;
+    uint8_t deviatn;
+    if (strcmp(canonicalName, "2FSKDev476Async") == 0) {
+        deviatn = 0x47; // Deviation 47.60742 kHz
+    } else if (strcmp(canonicalName, "2FSKDev238Async") == 0) {
+        deviatn = 0x04; // Deviation 2.380371 kHz
+    } else {
+        return false;
+    }
+    const uint8_t regs[][2] = {
+        {CC1101_IOCFG0,   0x0D}, // GD0 as async serial data output/input
+        {CC1101_FSCTRL1,  0x06}, // IF = 152343.75 Hz
+        {CC1101_PKTCTRL0, 0x32}, // Async, continuous, no whitening
+        {CC1101_PKTCTRL1, 0x04},
+        {CC1101_MDMCFG0,  0x00}, // Channel spacing 25 kHz
+        {CC1101_MDMCFG1,  0x02},
+        {CC1101_MDMCFG2,  0x04}, // 2-FSK, no preamble/sync
+        {CC1101_MDMCFG3,  0x83}, // Data rate 4.79794 kBaud
+        {CC1101_MDMCFG4,  0x67}, // Rx BW filter 270.833333 kHz
+        {CC1101_DEVIATN,  deviatn},
+        {CC1101_MCSM0,    0x18}, // Autocal on idle-to-RX/TX
+        {CC1101_FOCCFG,   0x16}, // No frequency offset compensation
+        {CC1101_AGCCTRL0, 0x91}, // 16-sample AGC, 8 dB boundary
+        {CC1101_AGCCTRL1, 0x00},
+        {CC1101_AGCCTRL2, 0x07}, // MAIN_TARGET 42 dB
+        {CC1101_WORCTRL,  0xFB},
+        {CC1101_FREND0,   0x10},
+        {CC1101_FREND1,   0x56},
+        {0,               0},
+    };
+    for (size_t i = 0; regs[i][0]; ++i) {
+        ELECHOUSE_cc1101.SpiWriteReg(regs[i][0], regs[i][1]);
+    }
+    return true;
 }
 
 // Circular buffer (FIFO eviction) of the last RF signals sent/scanned, capped at

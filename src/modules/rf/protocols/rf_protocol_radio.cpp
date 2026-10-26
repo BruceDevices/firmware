@@ -65,11 +65,15 @@ bool rf_protocol_transmit_raw(const char *input) {
         return false;
     if (!initRfModule("tx", frequency / 1000000.0f)) return false;
     ELECHOUSE_cc1101.setSidle();
-    ELECHOUSE_cc1101.setModulation(rp->modulation);
-    ELECHOUSE_cc1101.setDeviation(rp->deviation ? rp->deviation : 1.58f);
-    ELECHOUSE_cc1101.setRxBW(rp->rxBW ? rp->rxBW : 270.83f);
-    ELECHOUSE_cc1101.setDRate(rp->dataRate ? rp->dataRate : 10.f);
-    ELECHOUSE_cc1101.setPktFormat(3);
+    // 2FSK presets need Flipper's exact modem register block (see
+    // rf_utils.cpp); OOK presets keep the piecemeal ELECHOUSE config.
+    if (!cc1101ApplyFlipperPreset(rp->name)) {
+        ELECHOUSE_cc1101.setModulation(rp->modulation);
+        ELECHOUSE_cc1101.setDeviation(rp->deviation ? rp->deviation : 1.58f);
+        ELECHOUSE_cc1101.setRxBW(rp->rxBW ? rp->rxBW : 270.83f);
+        ELECHOUSE_cc1101.setDRate(rp->dataRate ? rp->dataRate : 10.f);
+        ELECHOUSE_cc1101.setPktFormat(3);
+    }
     pinMode(bruceConfigPins.CC1101_bus.io0, OUTPUT);
     ELECHOUSE_cc1101.SetTx();
     bool success = rf_tx_durations(pulses);

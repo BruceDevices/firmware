@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <climits>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #if !defined(LITE_VERSION)
@@ -17,7 +18,7 @@
 
 namespace {
 using Fields = std::map<std::string, std::string>;
-    constexpr size_t MaxInput = 524288, MaxPulses = 131072;
+    constexpr size_t MaxInput = 1048576, MaxPulses = 131072;
 constexpr uint64_t MaxTransmitDuration = 10000000;
 
 String jsonString(const JsonDocument &doc) {
@@ -44,7 +45,7 @@ bool unsignedValue(const std::string &s, uint64_t &out, uint64_t limit, int base
     out = strtoull(s.c_str(), &end, base);
     return !errno && !*end && out <= limit;
 }
-bool parse(const char *input, Fields &fields, std::vector<int> *pulses = nullptr) {
+bool parse(const char *input, Fields &fields, std::vector<int> *pulses = nullptr, bool *truncated = nullptr) {
     if (!input || strlen(input) > MaxInput) return false;
     std::istringstream stream(input);
     std::string line;
@@ -72,10 +73,15 @@ bool parse(const char *input, Fields &fields, std::vector<int> *pulses = nullptr
                 char *end;
                 long duration = strtol(token.c_str(), &end, 10);
                 if (errno || *end || end == token.c_str() || !duration || duration < -1000000 ||
-                    duration > 1000000 || pulses->size() >= MaxPulses)
+                    duration > 1000000)
                     return false;
+                // Oversized captures truncate instead of failing: headers were
+                // already validated, so the leading frames stay decodable.
+                if (pulses->size() >= MaxPulses || total > RF_MAX_CAPTURE_DURATION_US) {
+                    if (truncated) *truncated = true;
+                    continue;
+                }
                 total += duration < 0 ? -duration : duration;
-                if (total > RF_MAX_CAPTURE_DURATION_US) return false;
                 pulses->push_back((int)duration);
             }
         } else if (!fields.emplace(key, value).second) return false;
@@ -273,7 +279,8 @@ String rf_protocol_serialize(const RfCodes &code) {
 String rf_protocol_decode_json(const char *input) {
     Fields fields;
     std::vector<int> pulses;
-    if (!parse(input, fields, &pulses)) return failure("Malformed or oversized SubGhz file");
+    bool truncated = false;
+    if (!parse(input, fields, &pulses, &truncated)) return failure("Malformed or oversized SubGhz file");
     const auto &name = fields["Protocol"];
     const bool raw = name == "RAW" || name == "BinRAW";
     if (raw && !validPulses(pulses, RF_MAX_CAPTURE_DURATION_US))
@@ -285,29 +292,67 @@ String rf_protocol_decode_json(const char *input) {
 #if !defined(LITE_VERSION)
     auto decode = [&](const RfProtocolDef *def) -> const char * {
         std::vector<RfStreamResult> records;
-        const char *error = rf_stream_read_frames(def->stream, input, pulses, records);
-        if (error) return error;
-        for (const auto &record : records) {
-            if (frames.size() >= 16) break;
-            JsonObject frame = frames.add<JsonObject>();
-            frame["protocol"] = def->name;
-            frame["encoder"] = record.encoder;
-            frame["validation"] = record.invalid ? "failed" : "not-verified";
-            frame["fieldEditing"] = true;
-            frame["data"] = std::string(record.data.c_str());
-            frame["text"] = std::string(record.text.c_str());
+        std::set<std::string> seen;
+        auto append = [&](const std::vector<RfStreamResult> &source) {
+            for (const auto &record : source) {
+                if (frames.size() >= 16) break;
+                // Frames re-decoded after a chunk restart (tail of one segment
+                // overlaps the search of the next) must not flood the budget.
+                if (!seen.insert(std::string(record.data.c_str())).second) continue;
+                JsonObject frame = frames.add<JsonObject>();
+                frame["protocol"] = def->name;
+                frame["encoder"] = record.encoder;
+                frame["validation"] = record.invalid ? "failed" : "not-verified";
+                frame["fieldEditing"] = true;
+                frame["data"] = std::string(record.data.c_str());
+                frame["text"] = std::string(record.text.c_str());
+            }
+        };
+        // A single decode feed accepts RF_STREAM_MAX_PULSES pulses; longer RAW
+        // captures are fed in segments. Segment boundaries restart the decoder,
+        // so only frames fully inside a segment are committed — the capture's
+        // repeated transmissions cover that.
+        if (pulses.empty() || pulses.size() <= RF_STREAM_MAX_PULSES) {
+            const char *error = rf_stream_read_frames(def->stream, input, pulses, records);
+            if (error) return error;
+            append(records);
+            return nullptr;
         }
-        return nullptr;
+        const char *error = nullptr;
+        const size_t before = frames.size();
+        for (size_t offset = 0; offset < pulses.size() && frames.size() < 16;
+             offset += RF_STREAM_MAX_PULSES) {
+            std::vector<int> segment(
+                pulses.begin() + offset,
+                pulses.begin() + std::min(offset + RF_STREAM_MAX_PULSES, pulses.size())
+            );
+            records.clear();
+            const char *chunkError = rf_stream_read_frames(def->stream, input, segment, records);
+            if (chunkError) {
+                if (!error) error = chunkError;
+                continue;
+            }
+            append(records);
+        }
+        // Only surface the protocol's failure when it contributed nothing.
+        return frames.size() == before && error ? error : nullptr;
     };
     if (raw) {
+        // A decoder that fails on unrelated noise must not abort the whole
+        // capture: continue over it and remember the first error for the
+        // no-frames case.
+        const char *firstError = nullptr;
         for (int i = 0; i < rf_protocol_ext_count() && frames.size() < 16; ++i) {
             const auto *def = rf_protocol_ext_at(i);
-            if (def->stream)
-                if (const char *error = decode(def)) return failure(error);
+            if (!def->stream) continue;
+            const char *error = decode(def);
+            if (error && !firstError) firstError = error;
         }
+        if (frames.size() == 0 && firstError) return failure(firstError);
     } else if (definition && definition->stream) {
         if (const char *error = decode(definition)) return failure(error);
     }
+    doc["truncated"] = truncated || (!pulses.empty() && pulses.size() > RF_STREAM_MAX_PULSES);
 #endif
     if (!raw && nativeName(name.c_str()) && !(definition && definition->stream)) {
         RfCodes code;

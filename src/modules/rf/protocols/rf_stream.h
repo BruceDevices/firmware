@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// A single decode feed accepts at most this many pulses. Callers decode
+// longer RAW captures in segments (see rf_protocol_engine.cpp).
+#define RF_STREAM_MAX_PULSES 65536U
+
 typedef struct RfStreamCodec RfStreamCodec;
 
 // C lifecycle boundary for stateful pulse codecs. The native RF registry owns

@@ -170,7 +170,7 @@ bool rf_record_read_hex(RfRecord *ff, const char *key, uint8_t *out, size_t n) {
 }
 bool rf_stream_ff_parse(RfRecord *ff, const char *text) {
     rf_stream_ff_clear(ff);
-    if (!text || strlen(text) > 524288) return false;
+    if (!text || strlen(text) > 1048576) return false;
     const char *p = text;
     while (*p) {
         const char *e = strchr(p, '\n');

@@ -173,7 +173,9 @@ class ProtoPirate {
         return bytes;
     }
     void remember(const Entry &entry) {
-        size_t bytes = entry.bytes();
+        // Bound metadata only. entry.bytes() would also count the shared RAW
+        // waveform, silently refusing large-file decodes (see analyze()).
+        size_t bytes = entry.metadataBytes();
         if (bytes > 200000) return;
         // Repeated reception of the same decoded record updates its RAW sample
         // and recency instead of filling the list with identical rows.
@@ -470,6 +472,8 @@ class ProtoPirate {
             };
             if (field(input, "Bruce_Buffer_Full") == "1")
                 unknown.text = "Capture buffer filled; waveform may be incomplete.";
+            if (decoded["truncated"] | false)
+                unknown.text = "RAW capture exceeds the decode limit; leading part decoded.";
             if (!live) {
                 remember(unknown);
                 result(unknown);
@@ -478,7 +482,12 @@ class ProtoPirate {
         }
         std::vector<Entry> entries;
         std::vector<String> names;
-        size_t bytes = raw ? raw->length() : 0;
+        // The RAW waveform is one shared allocation (shared_ptr), not
+        // per-frame data: don't charge it against the per-frame budget.
+        // Seeding with raw->length() made any RAW file whose text exceeds
+        // the budget drop every decoded frame and return to the picker
+        // with no message at all.
+        size_t bytes = 0;
         for (JsonObject frame : frames) {
             Entry entry = {
                 frame["protocol"] | "",
@@ -605,9 +614,9 @@ class ProtoPirate {
             directory = path.substring(0, path.lastIndexOf('/'));
             if (directory.isEmpty()) directory = "/";
             File file = fs->open(path, FILE_READ);
-            if (!file || file.size() > 524288) {
+            if (!file || file.size() > 1048576) {
                 file.close();
-                displayError("File exceeds 512 KiB or is missing", true);
+                displayError("File exceeds 1 MiB or is missing", true);
                 continue;
             }
             String input = file.readString();

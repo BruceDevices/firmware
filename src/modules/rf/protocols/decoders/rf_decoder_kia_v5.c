@@ -657,8 +657,13 @@ RfStreamProtocolStatus kia_protocol_decoder_v5_serialize(
 RfStreamProtocolStatus
     kia_protocol_decoder_v5_deserialize(void* context, RfRecord* flipper_format) {
     RfStreamProtocolDecoderKiaV5* instance = context;
-    return rf_stream_block_generic_deserialize_check_count_bit(
-        &instance->generic, flipper_format, kia_protocol_v5_const.min_count_bit_for_found);
+    RfStreamProtocolStatus ret = rf_stream_block_generic_deserialize(&instance->generic, flipper_format);
+    // 64: legacy exports; 67: this codec's own frame layout (64-bit payload +
+    // 3-bit CRC), e.g. PFCW/Unleashed "KIA/HYU V5" key files.
+    if (ret == RfStreamProtocolStatusOk && instance->generic.data_count_bit != 64 &&
+        instance->generic.data_count_bit != 67)
+        ret = RfStreamProtocolStatusErrorValueBitCount;
+    return ret;
 }
 
 void kia_protocol_decoder_v5_get_string(void* context, RfText* output) {

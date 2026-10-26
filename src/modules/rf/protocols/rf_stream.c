@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RF_STREAM_MAX_PULSES 65536U
 #define RF_STREAM_MAX_FRAMES 16U
 static RfStreamKeystore empty_keystore;
 static RfStreamEnvironment environment = {&empty_keystore};
@@ -169,7 +168,7 @@ static const char *read_impl(
     const RfStreamCodec *codec, const char *input, const int32_t *pulses, size_t count, RfStreamFrame frame,
     void *context
 ) {
-    if (!codec || !input || strlen(input) > 524288 || count > RF_STREAM_MAX_PULSES)
+    if (!codec || !input || strlen(input) > 1048576 || count > RF_STREAM_MAX_PULSES)
         return "Invalid protocol input";
     // Record storage belongs to the bounded stream allocation scope, not loopTask.
     RfRecord *record = calloc(1, sizeof(*record));

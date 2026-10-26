@@ -452,13 +452,18 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
         // derived from
         // https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/blob/master/examples/Rc-Switch%20examples%20cc1101/SendDemo_cc1101/SendDemo_cc1101.ino
-        ELECHOUSE_cc1101.setModulation(modulation);
-        if (deviation) ELECHOUSE_cc1101.setDeviation(deviation);
-        if (rxBW)
-            ELECHOUSE_cc1101.setRxBW(
-                rxBW
-            ); // Set the Receive Bandwidth in kHz. Value from 58.03 to 812.50. Default is 812.50 kHz.
-        if (dataRate) ELECHOUSE_cc1101.setDRate(dataRate);
+        // 2FSK presets (2FSKDev238/476) need Flipper's exact modem register
+        // block (see rf_utils.cpp); OOK presets and legacy numeric protocols
+        // keep the piecemeal ELECHOUSE config below.
+        if (!cc1101ApplyFlipperPreset(rp ? rp->name : nullptr)) {
+            ELECHOUSE_cc1101.setModulation(modulation);
+            if (deviation) ELECHOUSE_cc1101.setDeviation(deviation);
+            if (rxBW)
+                ELECHOUSE_cc1101.setRxBW(
+                    rxBW
+                ); // Set the Receive Bandwidth in kHz. Value from 58.03 to 812.50. Default is 812.50 kHz.
+            if (dataRate) ELECHOUSE_cc1101.setDRate(dataRate);
+        }
         pinMode(bruceConfigPins.CC1101_bus.io0, OUTPUT);
         ELECHOUSE_cc1101.setPA(
             12
