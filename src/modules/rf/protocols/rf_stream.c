@@ -2,14 +2,75 @@
 // Stateful protocol lifecycle; derived from ProtoPirate. See THIRD_PARTY.md.
 #if !defined(LITE_VERSION)
 #include "rf_stream.h"
-#include "rf_decode_limits.h"
 #include "rf_stream_internal.h"
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define RF_STREAM_MAX_PULSES 16384U
 #define RF_STREAM_MAX_FRAMES 16U
 static RfStreamKeystore empty_keystore;
 static RfStreamEnvironment environment = {&empty_keystore};
+
+// Keystore material. The keystore data persists across decode/encode runs;
+// only the KeeLoq manufacturer lookup state (mfname/kl_type) is reset per run.
+// Plaintext material is loaded from storage by rf_keystore.cpp.
+static uint8_t *keystore_raw_blob = NULL;
+static size_t keystore_raw_blob_len = 0;
+
+void rf_stream_keystore_reset_kl(void) {
+    empty_keystore.mfname = "";
+    empty_keystore.kl_type = 0;
+}
+
+void rf_stream_keystore_clear_keys(void) {
+    for M_EACH(key, empty_keystore.data, RfStreamKey) rf_text_free(key->name);
+    free(empty_keystore.data.items);
+    empty_keystore.data.items = NULL;
+    empty_keystore.data.count = 0;
+    rf_stream_keystore_reset_kl();
+}
+
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type) {
+    if (!name || !*name) return false;
+    RfStreamKey *keys = (RfStreamKey *)realloc(
+        empty_keystore.data.items, (empty_keystore.data.count + 1) * sizeof(RfStreamKey)
+    );
+    if (!keys) return false;
+    empty_keystore.data.items = keys;
+    RfStreamKey *entry = &keys[empty_keystore.data.count];
+    entry->name = rf_text_alloc();
+    if (!entry->name) return false;
+    rf_text_set(entry->name, name);
+    entry->key = key;
+    entry->type = type;
+    empty_keystore.data.count++;
+    return true;
+}
+
+unsigned rf_stream_keystore_key_count(void) { return (unsigned)empty_keystore.data.count; }
+
+void rf_stream_keystore_raw_blob_set(const uint8_t *data, size_t length) {
+    free(keystore_raw_blob);
+    keystore_raw_blob = NULL;
+    keystore_raw_blob_len = 0;
+    if (data && length) {
+        keystore_raw_blob = (uint8_t *)malloc(length);
+        if (keystore_raw_blob) {
+            memcpy(keystore_raw_blob, data, length);
+            keystore_raw_blob_len = length;
+        }
+    }
+}
+
+bool rf_stream_keystore_raw_get_data(const char *name, size_t off, uint8_t *out, size_t n) {
+    // Serves the (plaintext) VAG RAW blob loaded from storage or the
+    // built-in default; no decryption involved.
+    (void)name;
+    if (!out || !keystore_raw_blob || off > keystore_raw_blob_len || n > keystore_raw_blob_len - off)
+        return false;
+    memcpy(out, keystore_raw_blob + off, n);
+    return true;
+}
 
 static RfText *dump(const RfRecord *record) {
     RfText *text = rf_text_alloc();
@@ -40,6 +101,7 @@ static bool preset_read(RfRecord *record, RfStreamRadioPreset *preset) {
         if (!digits || digits % 2 || digits > 512) return false;
         preset->data_size = digits / 2;
         preset->data = calloc(preset->data_size, 1);
+        if (!preset->data) return false;
         if (!rf_record_read_hex(record, "Custom_preset_data", preset->data, preset->data_size)) return false;
         const char *module = rf_stream_ff_get(record, "Custom_preset_module");
         if (module && strcmp(module, "CC1101")) return false;
@@ -65,6 +127,10 @@ static void decoded(RfStreamProtocolDecoderBase *base, void *opaque) {
     if (d->count >= RF_STREAM_MAX_FRAMES) return;
     // Record storage belongs to the bounded stream allocation scope, not loopTask.
     RfRecord *record = calloc(1, sizeof(*record));
+    if (!record) {
+        d->failed = true;
+        return;
+    }
     if (d->codec->decoder->serialize(base, record, &d->preset) != RfStreamProtocolStatusOk) {
         d->failed = true;
         rf_stream_ff_clear(record);
@@ -102,11 +168,11 @@ static const char *read_impl(
     const RfStreamCodec *codec, const char *input, const int32_t *pulses, size_t count, RfStreamFrame frame,
     void *context
 ) {
-    if (!codec || !input || strnlen(input, RF_DECODE_MAX_FILE_BYTES + 1) > RF_DECODE_MAX_FILE_BYTES ||
-        count > RF_DECODE_MAX_PULSES)
+    if (!codec || !input || strlen(input) > 1048576 || count > RF_STREAM_MAX_PULSES)
         return "Invalid protocol input";
     // Record storage belongs to the bounded stream allocation scope, not loopTask.
     RfRecord *record = calloc(1, sizeof(*record));
+    if (!record) return "Out of memory";
     if (!rf_stream_ff_parse(record, input)) return "Malformed or duplicate fields";
     Decode d = {.codec = codec, .frame = frame, .context = context};
     if (!preset_read(record, &d.preset)) return "Missing or invalid frequency/preset";
@@ -133,10 +199,11 @@ static const char *read_impl(
 
 static const char *
 write_impl(const RfStreamCodec *codec, const char *input, RfStreamEncoded encoded, void *context) {
-    if (!input || strlen(input) > 16384 || !rf_stream_has_encoder(codec))
+    if (!input || strlen(input) > 524288 || !rf_stream_has_encoder(codec))
         return "Encoder unavailable or invalid file size";
     // Record storage belongs to the bounded stream allocation scope, not loopTask.
     RfRecord *record = calloc(1, sizeof(*record));
+    if (!record) return "Out of memory";
     if (!rf_stream_ff_parse(record, input)) return "Malformed or duplicate fields";
     if (!rf_stream_ff_get(record, "Repeat")) {
         uint32_t repeat = 3;
@@ -150,6 +217,11 @@ write_impl(const RfStreamCodec *codec, const char *input, RfStreamEncoded encode
     if (ops->deserialize(encoder, record) != RfStreamProtocolStatusOk)
         return "Encoder rejected fields, framing or unavailable key material";
     int32_t *pulses = calloc(RF_STREAM_MAX_PULSES, sizeof(int32_t));
+    if (!pulses) {
+        ops->stop(encoder);
+        (ops->free)(encoder);
+        return "Out of memory";
+    }
     size_t count = 0;
     uint64_t duration = 0;
     bool complete = false;
@@ -174,7 +246,7 @@ write_impl(const RfStreamCodec *codec, const char *input, RfStreamEncoded encode
 // longjmp is confined to C frames; C++ callers own their result vectors.
 #define RF_STREAM_RUN(expression)                                                                            \
     rf_stream_memory_begin();                                                                                \
-    empty_keystore = (RfStreamKeystore){.mfname = ""};                                                       \
+    rf_stream_keystore_reset_kl();                                                                           \
     if (setjmp(*rf_stream_memory_jump())) {                                                                  \
         rf_stream_shared_upload_release();                                                                   \
         rf_stream_memory_finish(NULL);                                                                       \

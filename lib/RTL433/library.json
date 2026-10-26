@@ -1,0 +1,20 @@
+{
+    "name": "RTL433",
+    "version": "1.1.8-bruce.1",
+    "description": "rtl_433 sensor decoder engine (ESP32 port of the Flipper RTL433 app library). GPL-3.0-or-later.",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "rtl_433 contributors",
+            "maintainer": true
+        }
+    ],
+    "build": {
+        "flags": [
+            "-Isrc/rtl433",
+            "-Isrc/rtl433/devices",
+            "-w"
+        ],
+        "srcFilter": ["+<*.c>", "+<rtl433/*.c>", "+<rtl433/devices/*.c>"]
+    }
+}

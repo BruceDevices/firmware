@@ -76,7 +76,6 @@ on:
           - "lilygo-t-hmi"
           - "lilygo-t-lora-pager"
           - "lilygo-t-watch-s3"
-          - "lilygo-t-watch-ultra"
           - "m5stack-atoms3"
           - "m5stack-cardputer"
           - "m5stack-core16mb"
@@ -103,7 +102,6 @@ on:
           - "smoochiee-board"
           - "WaveSentry-R1"
           - "waveshare-c5-tft"
-          - "waveshare-c5-35"
           - "xk404"
 
 jobs:

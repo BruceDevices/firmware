@@ -50,6 +50,13 @@ void _setup_gpio() {
     bruceConfig.startupApp = "WebUI";
 }
 
+/***************************************************************************************
+** Function name: getBattery()
+** location: utils.cpp
+** Description:   No battery gauge and no divider wired on the module itself
+***************************************************************************************/
+int getBattery() { return 0; }
+
 /*********************************************************************
 ** Function: setBrightness
 ** location: settings.cpp

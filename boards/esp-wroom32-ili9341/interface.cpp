@@ -138,3 +138,7 @@ void checkReboot() {
         }
     }
 }
+
+int getBattery() { return 0; }
+
+bool isCharging() { return false; }

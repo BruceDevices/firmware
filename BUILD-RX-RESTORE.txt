@@ -1,0 +1,31 @@
+Bruce T-Embed CC1101 — RX-Restore source
+
+This is the complete source snapshot used for the RX-Restore firmware supplied in this conversation. It includes the existing native ProtoPirate and WiFite integrations, compact menus and previous RF fixes. RTL433 is not included. The experimental receive-preset changes were reverted. Neither PR was modified for this export.
+
+Local source revision: f641827af52b17de58b5d6056e46bf162d578465
+RF baseline: af91cba1099b564c6de85a349093c31b00c8335b
+WiFite integration: 679fafa32283cdea3cc6ba0e7b3ccec5813c5541
+Bruce dev base: dc089b920aab214c32fba89ad863a45c821a1627
+
+All five Git submodule source trees are already included at the recorded revisions. PlatformIO downloads its compiler, framework and declared package dependencies on the first build; these downloaded packages and build caches are not bundled.
+
+Build:
+1. Extract the ZIP and open the Bruce-RX-Restore folder in VS Code with PlatformIO, or use PlatformIO Core (the supplied BIN was built with Core 6.2.0).
+2. Select environment lilygo-t-embed-cc1101. The default environment in platformio.ini is a different board, so specify this environment explicitly.
+3. Run: pio run -e lilygo-t-embed-cc1101
+
+To use the same local web-asset path as the supplied build, set BRUCE_OFFLINE_WEB_ASSETS=1 before building. For PowerShell:
+$env:BRUCE_OFFLINE_WEB_ASSETS = "1"
+pio run -e lilygo-t-embed-cc1101
+
+For Bash:
+BRUCE_OFFLINE_WEB_ASSETS=1 pio run -e lilygo-t-embed-cc1101
+
+The full interpreter build requires a working host C compiler, as noted in platformio.ini. Keep the pinned platform and framework URLs from that file. This snapshot was successfully built for ESP32-S3 with 16 MB flash and 8 MB PSRAM.
+
+Output:
+Bruce-lilygo-t-embed-cc1101.bin is the merged bootloader + partition table + application image for flashing at 0x0. The current partition table uses a factory app partition; the verified supplied BIN was this root-level merged image. Back up device settings first because the merged image clears NVS.
+
+The source snapshot is exact, but rebuilding may produce a different binary hash because toolchain dependencies and generated build metadata can differ. SOURCE-MANIFEST.json records source revisions and the SHA-256 of the supplied RX-Restore BIN.
+
+This export does not add protocol support or establish full compatibility with upstream ProtoPirate. Existing decoder-only entries and missing-key limitations remain.

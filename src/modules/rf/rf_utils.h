@@ -23,6 +23,10 @@ extern bool rmtInstalled;
 bool initRfModule(String mode = "", float frequency = 0);
 void deinitRfModule();
 void initCC1101once(SPIClass *SSPI);
+// Write Flipper's exact CC1101 modem register block for the 2FSK async
+// presets ("2FSKDev476Async" / "2FSKDev238Async"). Returns false (and writes
+// nothing) for any other preset name, so callers keep their existing config.
+bool cc1101ApplyFlipperPreset(const char *canonicalName);
 
 void setMHZ(float frequency);
 int find_pulse_index(const std::vector<int> &indexed_durations, int duration);

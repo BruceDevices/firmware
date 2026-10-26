@@ -24,10 +24,6 @@ header pointing back to this document.
   Files: `src/modules/rf/protocols/rf_keeloq.{h,cpp}`,
   `src/modules/rf/protocols/rf_decoder.{h,cpp}`,
   `src/modules/rf/protocols/rf_encoder.{h,cpp}`.
-- The receive-only FSK register profiles in
-  `src/modules/rf/protocols/rf_fsk_receive_profile.h` derive from
-  `lib/subghz/devices/cc1101_configs.c` at commit
-  `3fb1d51727733d2007abc5ec636a89328857803e`. They do not include the PA table.
 
 ### Momentum firmware — GPL-3.0-or-later
 - Upstream: <https://github.com/Next-Flip/Momentum-Firmware>

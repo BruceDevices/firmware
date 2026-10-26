@@ -1,0 +1,31 @@
+{
+  "source_commit": "f641827af52b17de58b5d6056e46bf162d578465",
+  "source_tree": "ccf3e7018da7f5eaef9203d3d5384b76c449d624",
+  "rf_baseline": "af91cba1099b564c6de85a349093c31b00c8335b",
+  "wifite_revision": "679fafa32283cdea3cc6ba0e7b3ccec5813c5541",
+  "bruce_dev_base": "dc089b920aab214c32fba89ad863a45c821a1627",
+  "submodules": [
+    {
+      "path": "lib/DisplayDrivers",
+      "commit": "c092910bcf793fbe2526b741fde0b93f25130c2b"
+    },
+    {
+      "path": "lib/ESP32_Button",
+      "commit": "5ad995f169cc3d5f06a97fda8fc1410e24c2a184"
+    },
+    {
+      "path": "lib/RotaryEncoder",
+      "commit": "5667576f657ec7107703676a340c3b1313a3d484"
+    },
+    {
+      "path": "lib/SensorLib",
+      "commit": "19a338eb271ef0ab6ad271a934cbfb2cd20086c6"
+    },
+    {
+      "path": "lib/XPowersLib",
+      "commit": "ef40b49af66fe3b1907ab74ca76e10c0dbf69012"
+    }
+  ],
+  "tracked_file_count": 2205,
+  "matching_flash_bin_sha256": "014465e975d79dc9d9a139dc850e5e3c3a9d99e8c10be8dd9c2eff207ebd3cc1"
+}
