@@ -12,16 +12,12 @@
 #include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_waterfall.h"
 #include "modules/rf/rf_protopirate.h"
-#include "modules/rf/rf_rtl433.h"
 
 void RFMenu::optionsMenu() {
     options = {
         {"Scan/copy",       [=]() { RFScan(); }       },
 #if !defined(LITE_VERSION)
         {"ProtoPirate",     rf_protopirate            },
-#if !defined(RTL433_DISABLED)
-        {"RTL433",          rf_rtl433                 },
-#endif
         {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
         {"Custom SubGhz",   sendCustomRF              },
 #endif
