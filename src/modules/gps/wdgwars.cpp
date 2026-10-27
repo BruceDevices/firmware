@@ -9,6 +9,7 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
+#include "certs.h"
 
 #define CBUFLEN 1024
 
@@ -135,9 +136,12 @@ bool WDGoWars::upload_all(FS *fs, const String &folder, bool auto_delete) {
 
 bool WDGoWars::_upload_file(File file, const String &upload_message) {
     WiFiClientSecure client;
-    client.setInsecure();
+    if (!configureSecureClient(client)) {
+        displayError("Set clock in Settings before TLS", true);
+        return false;
+    }
     if (!client.connect(host, 443)) {
-        displayError("WDGoWars connection failed", true);
+        displayError("WDGoWars TLS connection failed", true);
         return false;
     }
 
