@@ -1,3 +1,17 @@
+/*
+ * BLE Suite v4.0 - Complete BLE attack and analysis toolkit
+ * Author: Ninja-jr
+ * Version: 4.0
+ * Last Updated: 07/09/2026
+ *
+ * Contains: Smart device recon, connection caching, graduated connection
+ *           strategies, robust GATT client, device fingerprinting,
+ *           attack orchestration with rollback, BLE mirage/spoofing,
+ *           attack scheduler, attack logging with JSON export,
+ *           vulnerability scanning, HID attacks, FastPair exploits,
+ *           HFP attacks, Audio attacks, DuckyScript injection,
+ *           BLE Sniffer, Samsung detection, and expanded model database.
+ */
 #ifndef BLE_SUITE_H
 #define BLE_SUITE_H
 #if !defined(LITE_VERSION)
@@ -14,6 +28,7 @@
 #include <freertos/semphr.h>
 #include <functional>
 #include <vector>
+#include <map>
 
 extern volatile int tftWidth;
 extern volatile int tftHeight;
@@ -28,10 +43,10 @@ bool check(int key);
 // BLE Scan Constants
 //=============================================================================
 
-#define ACTIVE_SCAN_TIME 8
+#define ACTIVE_SCAN_TIME 10
 #define PASSIVE_SCAN_TIME 8
-#define SCAN_INT 100
-#define SCAN_WINDOW 99
+
+// SCAN_INT and SCAN_WINDOW are defined in ble_common.h
 
 //=============================================================================
 // Enums
@@ -50,12 +65,24 @@ enum FastPairExploitType {
     FP_EXPLOIT_ALL
 };
 
+enum ConnectionPhase {
+    CONN_PROBE,
+    CONN_FAST,
+    CONN_AGGRESSIVE,
+    CONN_EXPLOIT,
+    CONN_RECONNECT
+};
+
+// FastPair version is defined in fastpair_crypto.h
+typedef FastPairProtocolVersion FastPairVersion;
+
 //=============================================================================
 // DeviceInfo and DeviceSnapshot structures
 //=============================================================================
 
 struct DeviceInfo {
     String address;
+    uint8_t addressType = BLE_ADDR_PUBLIC;
     String name;
     int rssi;
     bool hasFastPair;
@@ -69,6 +96,7 @@ struct DeviceSnapshot {
     uint32_t timestamp;
     std::vector<String> names;
     std::vector<String> addresses;
+    std::vector<uint8_t> addressTypes;
     std::vector<int> rssi;
     std::vector<bool> fastPair;
     std::vector<bool> hfp;
@@ -78,11 +106,88 @@ struct DeviceSnapshot {
 };
 
 //=============================================================================
+// Device Scoring and Caching Structures
+//=============================================================================
+
+struct DeviceScore {
+    int rssi;
+    int stability;
+    uint32_t lastSeen;
+    float rssiVariance;
+    int attackPotential;
+};
+
+struct CachedConnection {
+    String address;
+    std::vector<String> serviceUUIDs;
+    std::vector<String> characteristicUUIDs;
+    uint16_t mtuSize;
+    uint32_t lastConnected;
+    uint8_t connectionAttempts;
+    bool isBonded;
+    uint32_t averageResponseTime;
+    uint16_t preferredParams[4];
+};
+
+struct ConnectionResult {
+    bool success;
+    ConnectionPhase phase;
+    String method;
+    uint32_t durationMs;
+    uint32_t connectionId;
+    String errorMessage;
+    uint8_t quality;
+};
+
+struct DevicePersonality {
+    String address;
+    uint32_t responseTime;
+    uint8_t mtuPreference;
+    bool supportsNotifications;
+    bool supportsIndications;
+    std::vector<String> characteristicOrder;
+    uint32_t appearance;
+    uint8_t addressType;
+    uint32_t firstSeen;
+    uint32_t lastSeen;
+    uint32_t seenCount;
+};
+
+struct AttackStep {
+    String name;
+    bool (*execute)(NimBLEAddress);
+    bool (*canRevert)(NimBLEAddress);
+    bool (*revert)(NimBLEAddress);
+    int priority;
+    uint32_t timeoutMs;
+};
+
+struct AttackResult {
+    bool success;
+    String attackName;
+    uint32_t durationMs;
+    String failureReason;
+    std::vector<String> diagnostics;
+    uint8_t connectionQuality;
+};
+
+struct AttackLogEntry {
+    uint32_t timestamp;
+    String target;
+    String attackType;
+    bool success;
+    String details;
+    uint32_t durationMs;
+    uint8_t connectionQuality;
+};
+
+//=============================================================================
 // SelectedDevice for passing device info to attacks
 //=============================================================================
 
 struct SelectedDevice {
     String address;
+    uint8_t addressType = BLE_ADDR_PUBLIC;
     String name;
     int rssi;
     bool hasFastPair;
@@ -97,6 +202,7 @@ struct SelectedDevice {
 struct ScannerData {
     std::vector<String> deviceNames;
     std::vector<String> deviceAddresses;
+    std::vector<uint8_t> deviceAddressTypes;
     std::vector<int> deviceRssi;
     std::vector<bool> deviceFastPair;
     std::vector<bool> deviceHasHFP;
@@ -111,7 +217,7 @@ struct ScannerData {
     ScannerData();
     ~ScannerData();
     void
-    addDevice(const String &name, const String &address, int rssi, bool fastPair, bool hasHFP, uint8_t type);
+    addDevice(const String &name, const String &address, int rssi, bool fastPair, bool hasHFP, uint8_t type, uint8_t addrType = BLE_ADDR_PUBLIC);
     void clear();
     size_t size();
     DeviceSnapshot *getSnapshot();
@@ -128,9 +234,12 @@ struct CharacteristicInfo {
 struct DeviceProfile {
     String address;
     bool connected;
+    int errorCode = 0;
+    String errorReason = "";
     bool hasFastPair;
     bool hasAVRCP;
     bool hasHID;
+    bool hasHFP;
     bool hasBattery;
     bool hasDeviceInfo;
     std::vector<String> services;
@@ -214,10 +323,26 @@ public:
 
 class BLEAttackManager {
 public:
-    void prepareForConnection();
+    void prepareForConnection(bool enableAuth = false);
     void cleanupAfterAttack();
-    bool connectToDevice(NimBLEAddress target, NimBLEClient **outClient, bool useExploitHandshake = false);
+    bool connectToDevice(NimBLEAddress target, NimBLEClient **outClient, bool useExploitHandshake = false, int *outError = nullptr);
     DeviceProfile profileDevice(NimBLEAddress target);
+};
+
+//=============================================================================
+// Robust GATT Client Class
+//=============================================================================
+
+class RobustGATTClient {
+public:
+    bool writeCharacteristic(NimBLERemoteCharacteristic *ch, 
+                             uint8_t *data, 
+                             size_t len, 
+                             bool response = true,
+                             int retries = 2);
+    std::string readCharacteristic(NimBLERemoteCharacteristic *ch, int retries = 2);
+    bool discoverServicesWithRetry(NimBLEClient *client, int maxRetries = 2);
+    bool waitForNotification(NimBLERemoteCharacteristic *ch, uint32_t timeoutMs = 1000);
 };
 
 //=============================================================================
@@ -240,14 +365,12 @@ struct FastPairModelInfo {
     const char *deviceType;
 };
 
-// v3.1: Samsung MAC OUI detection
+extern const FastPairModelInfo fastpair_models[];
+
 extern const char *SAMSUNG_MAC_OUIS[];
 extern const int SAMSUNG_MAC_OUIS_COUNT;
 bool isSamsungDevice(const NimBLEAddress &address);
 bool isSamsungDevice(const String &mac);
-
-// v3.1: FastPair version detection
-enum FastPairVersion { FP_VERSION_UNKNOWN = 0, FP_VERSION_1, FP_VERSION_2, FP_VERSION_3 };
 
 FastPairVersion detectFastPairVersion(NimBLEAddress target);
 
@@ -489,6 +612,58 @@ public:
 };
 
 //=============================================================================
+// Attack Orchestrator Class
+//=============================================================================
+
+class AttackOrchestrator {
+private:
+    std::vector<AttackStep> steps;
+    std::vector<AttackResult> results;
+    String currentTarget;
+
+public:
+    AttackOrchestrator();
+    void addStep(const AttackStep &step);
+    bool executeChain(NimBLEAddress target);
+    bool executeChainWithRollback(NimBLEAddress target);
+    std::vector<AttackResult> getResults();
+    void clearSteps();
+    bool canRevertChain();
+    bool revertChain();
+};
+
+//=============================================================================
+// BLE Mirage Class
+//=============================================================================
+
+class BLEMirage {
+private:
+    struct MirageInstance {
+        String address;
+        String name;
+        String originalName;
+        uint32_t modelId;
+        uint32_t startTime;
+        bool active;
+        NimBLEAdvertising *advertising;
+    };
+    std::vector<MirageInstance> instances;
+    std::map<String, String> knownDeviceNames;
+
+    String generatePlausibleName(const String &address);
+
+public:
+    BLEMirage();
+    ~BLEMirage();
+    bool spawnMirage(const String &targetAddress, const String &targetName);
+    void createMirageNetwork(int count);
+    void stopMirage(const String &address);
+    void stopAll();
+    bool isMirageActive(const String &address);
+    void updateKnownName(const String &address, const String &name);
+};
+
+//=============================================================================
 // Debug Memory Macros
 //=============================================================================
 
@@ -521,10 +696,60 @@ public:
 #endif
 
 //=============================================================================
+// Connection Management Functions
+//=============================================================================
+
+ConnectionResult graduatedConnect(NimBLEAddress target);
+bool hasCachedConnection(NimBLEAddress target);
+bool reconnectCached(NimBLEAddress target);
+CachedConnection *getCachedConnection(const String &address);
+void cacheDeviceProfile(const String &addr, NimBLEClient *client);
+void setOptimalParams(NimBLEClient *client, const String &deviceType);
+int calculateDeviceScore(const String &addr);
+uint32_t getDeviceScore(const String &addr);
+
+//=============================================================================
+// Attack Logging Functions
+//=============================================================================
+
+void logAttackResult(const AttackLogEntry &entry);
+bool exportAttackLog();
+std::vector<AttackLogEntry> getAttackLog();
+void clearAttackLog();
+
+//=============================================================================
+// UI Extension Functions
+//=============================================================================
+
+void drawAttackFlow(const String &title, const String &status, int progress);
+void showDevicePersonalityScreen(const DevicePersonality &personality);
+void showAttackLogScreen();
+
+//=============================================================================
+// New Attack Functions
+//=============================================================================
+
+void runSmartRecon(NimBLEAddress target);
+void runOrchestratedAttack(NimBLEAddress target);
+void runMirageAttack(NimBLEAddress target);
+void runDeviceFingerprinting(NimBLEAddress target);
+void runAttackScheduler(NimBLEAddress target);
+
+//=============================================================================
+// Device Name Resolution
+//=============================================================================
+
+String resolveBleDeviceName(const NimBLEAdvertisedDevice* device);
+
+//=============================================================================
 // Function Declarations
 //=============================================================================
 
 void cleanupBLEStack();
+
+extern int g_lastBleError;
+extern int g_lastBleDisconnectReason;
+String getBleErrorDescription(int reason);
 
 NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &connectionMethod);
 void BleSuiteMenu();
@@ -580,10 +805,11 @@ void executeAudioTest(int testIndex, NimBLEAddress target);
 void showAttackProgress(const char *message, uint16_t color = bruceConfig.priColor);
 void showAttackResult(bool success, const char *message = nullptr);
 bool confirmAttack(const char *targetName);
+bool performBleScan(const char *title = "SELECT TARGET");
 String selectTargetFromScan(const char *title);
 String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddress> &targets);
 String getScriptFromUser();
-NimBLEAddress parseAddress(const String &addressInfo);
+NimBLEAddress parseAddress(const String &addressInfo, uint8_t defaultType = 0xFF);
 bool requireSimpleConfirmation(const char *message);
 int8_t showAdaptiveMessage(
     const char *line1, const char *btn1, const char *btn2, const char *btn3, uint16_t color,
