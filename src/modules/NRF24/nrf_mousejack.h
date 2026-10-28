@@ -23,6 +23,7 @@ enum MjDeviceType : uint8_t {
     MJ_DEVICE_MICROSOFT = 1,
     MJ_DEVICE_MS_CRYPT = 2, // Microsoft encrypted
     MJ_DEVICE_LOGITECH = 3,
+    MJ_DEVICE_LOGITECH_CRYPT = 4, // Logitech encrypted (CVE-2019-13052 class)
 };
 
 // ── Target structure ──────────────────────────────────────────
@@ -32,6 +33,8 @@ struct MjTarget {
     uint8_t channel;
     MjDeviceType type;
     bool active;
+    uint32_t lastCounter; // Logitech encrypted: last AES counter seen on air
+    bool counterSeen;
 };
 
 // ── HID key mapping ──────────────────────────────────────────

