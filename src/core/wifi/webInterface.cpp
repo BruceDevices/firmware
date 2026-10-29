@@ -496,7 +496,7 @@ void configureWebServer() {
             static size_t screenBinBufferSize = 0;
 
             if (!screenBinBuffer) {
-                size_t desiredSize = MAX_LOG_ENTRIES * MAX_LOG_SIZE;
+                size_t desiredSize = MAX_LOG_BUFFER_SIZE;
                 if (psramFound()) screenBinBuffer = static_cast<uint8_t *>(ps_malloc(desiredSize));
                 if (!screenBinBuffer) screenBinBuffer = static_cast<uint8_t *>(malloc(desiredSize));
                 if (!screenBinBuffer) {

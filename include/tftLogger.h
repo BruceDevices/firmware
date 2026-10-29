@@ -32,7 +32,10 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
     SCREEN_INFO = 99 // 99
 };
 #if defined(BOARD_HAS_PSRAM)
-#define MAX_LOG_ENTRIES 64
+// The WebUI replays the log to rebuild the screen. Deeper menus need more
+// than 64 draw commands; a full but chronologically ordered ring still drops
+// the oldest fill/clear commands and leaves text stacking on top of itself.
+#define MAX_LOG_ENTRIES 128
 #define MAX_LOG_SIZE 128
 #define MAX_LOG_IMAGES 1
 #define MAX_LOG_IMG_PATH 512
@@ -42,6 +45,7 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
 #define MAX_LOG_IMAGES 1
 #define MAX_LOG_IMG_PATH 256
 #endif
+#define MAX_LOG_BUFFER_SIZE (MAX_LOG_ENTRIES * MAX_LOG_SIZE + 16)
 #define LOG_PACKET_HEADER 0xAA
 
 struct tftLog {

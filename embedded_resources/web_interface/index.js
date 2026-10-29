@@ -812,7 +812,7 @@ async function renderTFT(data) {
       case 15: // DRAWRIGHTSTRING
       case 16: // DRAWSTRING
       case 17: // PRINT
-        // This must be enhanced to make font width be multiple of 6px, the font used here is multiple of 4.5px,
+        // Clear using the firmware font cell (6 px per size unit); the browser font is narrower.
         // "\n" are not treated, and long lines do not split into multi lines..
         if (input.bg == input.fg) {
           input.bg = 0;
@@ -822,7 +822,7 @@ async function renderTFT(data) {
         input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
         screenText.push(input.txt); // Collect text for WiFi detection
 
-        var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
+        var fw = input.size * 6; // the TFT font cell is LW=6 px wide per size unit
         var o = 0;
         if (fn === 15) o = input.txt.length * fw;
         if (fn === 14) o = (input.txt.length * fw) / 2;
