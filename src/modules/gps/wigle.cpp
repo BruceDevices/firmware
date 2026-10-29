@@ -10,6 +10,7 @@
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
+#include "certs.h"
 
 #define CBUFLEN 1024
 
@@ -37,8 +38,14 @@ bool Wigle::get_user() {
     padprintln("Connecting to Wigle...");
 
     WiFiClientSecure client;
-    client.setInsecure();
-    if (!client.connect(host, 443)) return false;
+    if (!configureSecureClient(client)) {
+        displayError("Set clock in Settings before TLS", true);
+        return false;
+    }
+    if (!client.connect(host, 443)) {
+        displayError("Wigle TLS connection failed", true);
+        return false;
+    }
 
     client.println("GET /api/v2/profile/user HTTP/1.0");
     client.print("Host: ");
@@ -192,9 +199,12 @@ bool Wigle::upload_all(FS *fs, const String &folder, bool auto_delete) {
 
 bool Wigle::_upload_file(File file, const String &upload_message) {
     WiFiClientSecure client;
-    client.setInsecure();
+    if (!configureSecureClient(client)) {
+        displayError("Set clock in Settings before TLS", true);
+        return false;
+    }
     if (!client.connect(host, 443)) {
-        displayError("Wigle API connection failed", true);
+        displayError("Wigle TLS connection failed", true);
         return false;
     }
 
