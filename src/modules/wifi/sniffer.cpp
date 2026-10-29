@@ -217,6 +217,13 @@ const uint16_t DEAUTH_BG = TFT_BLACK; // background color used to clear the text
 // Thank you 7h30th3r0n3 for helping me solve this issue! and for sharing your EAPOL/Handshake sniffer
 // please, give stars to his project: https://github.com/7h30th3r0n3/Evil-M5Core2/
 
+static bool isQosDataFrame(const uint8_t *payload) {
+    const uint8_t frameControl = payload[0];
+    const bool isData = (frameControl & 0x0C) == 0x08;
+    const bool hasQosSubtype = (frameControl & 0x80) != 0;
+    return isData && hasQosSubtype;
+}
+
 // Handshake detection
 bool isItEAPOL(const wifi_promiscuous_pkt_t *packet) {
     const uint8_t *payload = packet->payload;
@@ -235,8 +242,8 @@ bool isItEAPOL(const wifi_promiscuous_pkt_t *packet) {
     }
 
     // handle QoS tagging which shifts the start of the LLC/SNAP headers by 2 bytes
-    // check if the frame control field's subtype indicates a QoS data subtype (0x08)
-    if ((payload[0] & 0x0F) == 0x08) {
+    // QoS data subtypes have the data type bits and subtype bit 3 set.
+    if (isQosDataFrame(payload)) {
         // Adjust for the QoS Control field and recheck for LLC/SNAP header
         if (payload[26] == 0xAA && payload[27] == 0xAA && payload[28] == 0x03 && payload[29] == 0x00 &&
             payload[30] == 0x00 && payload[31] == 0x00 && payload[32] == 0x88 && payload[33] == 0x8E) {
@@ -255,7 +262,7 @@ bool handshakeUsable(const HandshakeTracker &hs) { return hs.msg1 && hs.msg2 && 
 int classifyEapolMessage(const wifi_promiscuous_pkt_t *pkt) {
     const uint8_t *payload = pkt->payload;
     // QoS frames add 2 bytes to MAC header
-    int qosOffset = ((payload[0] & 0x0F) == 0x08) ? 2 : 0;
+    int qosOffset = isQosDataFrame(payload) ? 2 : 0;
 
     // Offset to Key Information field:
     // MAC header (24 + qosOffset) + LLC/SNAP (8) + EAPOL header (4) + Descriptor Type (1)
