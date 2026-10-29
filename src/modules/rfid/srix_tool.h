@@ -63,6 +63,15 @@ public:
     uint8_t *getDump() { return _dump; }
     uint8_t *getUID() { return _uid; }
     bool isDumpValid() { return _dump_valid_from_read || _dump_valid_from_load; }
+    uint8_t getBlockCount() { return _block_count; }
+
+    // SRIX/ST25TB parts differ in size: ST25TB512/SRIX512 have 16 blocks,
+    // ST25TB02K has 64, ST25TB04K/SRIX4K have 128. Reading stops at the first
+    // block the tag does not answer, instead of assuming 128.
+    static const uint8_t BLOCKS_MAX = 128;
+    // Blocks 0-6 are the resettable OTP area (0-4) and the 32-bit counters
+    // (5-6): they are not EEPROM user area and must not be written blindly.
+    static const uint8_t FIRST_USER_BLOCK = 7;
 
 private:
 // PN532 for SRIX - uses IRQ/RST if board has them defined
@@ -83,9 +92,33 @@ private:
 
     // RAM storage for 128 blocks (512 bytes)
     uint8_t _dump[128 * 4];
+    uint8_t _block_count = 128;
     uint8_t _uid[8];
     bool _dump_valid_from_read = false;
     bool _dump_valid_from_load = false;
+
+    // Dump editor bookkeeping
+    bool _block_edited[BLOCKS_MAX] = {false};
+    uint8_t _edited_count = 0;
+
+    struct WriteStats {
+        uint8_t tagBlocks = 0;
+        uint16_t written = 0;
+        uint16_t unchanged = 0;
+        uint16_t mismatches = 0;
+        uint8_t mismatchBlocks[10] = {0};
+        uint8_t mismatchCount = 0;
+    };
+
+    bool readBlockRetry(uint8_t b, uint8_t *out, uint8_t attempts = 3);
+    // Reads the tag until the first block that does not answer. When diffMask
+    // is not null it is filled with 1 for every user block that differs from
+    // _dump, and diffCount receives the number of differences.
+    uint8_t scanTag(uint8_t *diffMask, uint16_t *diffCount, bool showProgress);
+    // Writes every differing user block, then re-reads the tag to verify.
+    // Returns 0 = verified, -1 = no tag, -2 = size mismatch, -3 = no dump,
+    // -5 = write not accepted, -6 = verification failed.
+    int writeDumpToTag(bool ui, int timeoutSeconds, WriteStats *st);
 
     void display_banner();
     void dump_tag_details();
@@ -94,6 +127,9 @@ private:
     void select_state();
     void set_state(SRIX_State state);
     bool waitForTag();
+    // Waits indefinitely for a tag, refreshing the RF field periodically.
+    // Returns false when the user cancels with the Back/Esc button.
+    bool waitForTagCancelable(const char *title);
     void delayWithReturn(uint32_t ms);
 
     void read_tag();
@@ -104,6 +140,9 @@ private:
     void save_file();
     void load_file();
     void load_file_data(FS *fs, const String &filepath);
+    void verify_tag();
+    void edit_dump();
+    void edit_block(uint8_t b);
 };
 
 void PN532_SRIX();

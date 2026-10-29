@@ -322,6 +322,96 @@ bool Arduino_PN532_SRIX::SRIX_write_block(uint8_t address, uint8_t *block) {
     return true;
 }
 
+int Arduino_PN532_SRIX::SRIX_write_block_status(uint8_t address, uint8_t *block) {
+    _packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
+    _packetbuffer[1] = SRIX4K_WRITEBLOCK;
+    _packetbuffer[2] = address;
+    _packetbuffer[3] = block[0];
+    _packetbuffer[4] = block[1];
+    _packetbuffer[5] = block[2];
+    _packetbuffer[6] = block[3];
+
+    if (!sendCommandCheckAck(_packetbuffer, 7)) {
+        SRIX_LIB_LOG("[SRIX_LIB] Write FAIL (no ACK)");
+        return -1;
+    }
+
+    // Not every tag answers a Write_block. Only read the frame when the PN532
+    // reports it is ready, otherwise readData() would return junk.
+    if (!waitReady(200)) {
+        SRIX_LIB_LOG("[SRIX_LIB] Write sent, no response frame");
+        return 0;
+    }
+
+    readData(_packetbuffer, 8);
+
+    SRIX_LIB_LOG("[SRIX_LIB] Write status 0x%02X", _packetbuffer[7]);
+    return _packetbuffer[7];
+}
+
+bool Arduino_PN532_SRIX::SRIX_prepareRead(bool applyRFConfig) {
+    // Match the RF setup used by kpn532 (gentilkiwi) and the ST25TB tools built
+    // on it. The PN532 defaults are tuned for card detection; on a weak or
+    // small antenna they read ST25TB parts noticeably worse.
+    setRFField(false);
+    delay(100);
+    setRFField(true);
+    delay(200);
+
+    if (!applyRFConfig) {
+        SRIX_LIB_LOG("[SRIX_LIB] RF field cycled, default configuration kept");
+        return true;
+    }
+
+    // CIU registers: initiator, 106 kbps ISO14443-B with CRC, max carrier and
+    // modulation conductance (higher receive gain for weakly coupled tags).
+    writeCIURegister(0x633C, 0x10); // CIU_Control: initiator mode
+    writeCIURegister(0x6302, 0x83); // CIU_TxMode: TxCRCEn, 106 kbps, type B
+    writeCIURegister(0x6303, 0x83); // CIU_RxMode: RxCRCEn, 106 kbps, type B
+    writeCIURegister(0x6318, 0x3F); // CIU_CWGsP: max carrier conductance
+    writeCIURegister(0x6319, 0x12); // CIU_ModGsP: modulation conductance
+
+    // MaxRetries: ATR=0, PSL=0x0B (longer wait for the tag's answer), then
+    // MaxRtyCOM=0xFF as kpn532 does before every Initiate.
+    uint8_t timing[3] = {0x00, 0x00, 0x0B};
+    setRFConfiguration(0x02, timing, 3);
+    uint8_t comRetries = 0xFF;
+    setRFConfiguration(0x04, &comRetries, 1);
+
+    SRIX_LIB_LOG("[SRIX_LIB] ISO14443-B RF configuration applied");
+    return true;
+}
+
+bool Arduino_PN532_SRIX::setRFConfiguration(uint8_t item, const uint8_t *params, uint8_t len) {
+    if (len > 5) return false;
+
+    uint8_t cmd[8];
+    cmd[0] = PN532_COMMAND_RFCONFIGURATION;
+    cmd[1] = item;
+    for (uint8_t i = 0; i < len; i++) { cmd[2 + i] = params[i]; }
+
+    if (!sendCommandCheckAck(cmd, 2 + len)) return false;
+    readData(_packetbuffer, 8);
+    return true;
+}
+
+void Arduino_PN532_SRIX::setRFField(bool on) {
+    uint8_t value = on ? 0x01 : 0x00;
+    setRFConfiguration(0x01, &value, 1);
+}
+
+bool Arduino_PN532_SRIX::writeCIURegister(uint16_t reg, uint8_t value) {
+    uint8_t cmd[4];
+    cmd[0] = PN532_COMMAND_WRITEREGISTER;
+    cmd[1] = (uint8_t)(reg >> 8);
+    cmd[2] = (uint8_t)(reg & 0xFF);
+    cmd[3] = value;
+
+    if (!sendCommandCheckAck(cmd, 4)) return false;
+    readData(_packetbuffer, 8);
+    return true;
+}
+
 bool Arduino_PN532_SRIX::SRIX_get_uid(uint8_t *buffer) {
     _packetbuffer[0] = PN532_COMMAND_INCOMMUNICATETHRU;
     _packetbuffer[1] = SRIX4K_GETUID;

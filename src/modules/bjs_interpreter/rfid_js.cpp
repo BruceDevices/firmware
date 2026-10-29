@@ -314,6 +314,14 @@ JSValue native_srixWrite(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
             JS_SetPropertyStr(ctx, obj, "success", JS_NewBool(false));
             JS_SetPropertyStr(ctx, obj, "message", JS_NewString(ctx, "Tag types do not match"));
             break;
+        case -3:
+            JS_SetPropertyStr(ctx, obj, "success", JS_NewBool(false));
+            JS_SetPropertyStr(ctx, obj, "message", JS_NewString(ctx, "No dump loaded in memory"));
+            break;
+        case -6:
+            JS_SetPropertyStr(ctx, obj, "success", JS_NewBool(false));
+            JS_SetPropertyStr(ctx, obj, "message", JS_NewString(ctx, "Verification failed"));
+            break;
         default:
             JS_SetPropertyStr(ctx, obj, "success", JS_NewBool(false));
             JS_SetPropertyStr(ctx, obj, "message", JS_NewString(ctx, "Error writing data to tag"));

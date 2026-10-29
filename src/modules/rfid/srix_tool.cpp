@@ -66,9 +66,9 @@ void SRIXTool::setup() {
         return;
     }
 
-    padprintln("Testing SRIX init...");
-    if (!nfc->SRIX_init()) {
-        displayError("SRIX init failed!", true);
+    padprintln("Configuring ISO14443-B...");
+    if (!nfc->SRIX_prepareRead()) {
+        displayError("RF config failed!", true);
         return;
     }
     uint32_t ver = nfc->getFirmwareVersion();
@@ -127,15 +127,20 @@ void SRIXTool::select_state() {
     options.emplace_back("Main Menu", [this]() { set_state(IDLE_MODE); });
     options.emplace_back("Read tag", [this]() { set_state(READ_TAG_MODE); });
 
-    if (_dump_valid_from_read) {
+    if (isDumpValid()) {
         options.emplace_back(" -Save dump", [this]() { set_state(SAVE_MODE); });
-        options.emplace_back(" -Clone tag", [this]() { set_state(WRITE_TAG_MODE); });
+        options.emplace_back(" -Write to tag", [this]() { set_state(WRITE_TAG_MODE); });
+        options.emplace_back(" -Verify tag", [this]() {
+            verify_tag();
+            _screen_drawn = false;
+        });
+        options.emplace_back(" -View/Edit dump", [this]() {
+            edit_dump();
+            _screen_drawn = false;
+        });
     }
     options.emplace_back("Read UID", [this]() { set_state(READ_UID_MODE); });
     options.emplace_back("Load dump", [this]() { set_state(LOAD_MODE); });
-    if (_dump_valid_from_load) {
-        options.emplace_back(" -Write to tag", [this]() { set_state(WRITE_TAG_MODE); });
-    }
     options.emplace_back("PN532 Info", [this]() { set_state(PN_INFO_MODE); });
 
     loopOptions(options);
@@ -184,7 +189,9 @@ void SRIXTool::show_main_menu() {
     padprintln("");
 #endif
     padprintln("Features:");
-    padprintln("- Read/Clone complete tag (512B)");
+    padprintln("- Read/Write tag (16/64/128 blocks)");
+    padprintln("- Verify tag against dump");
+    padprintln("- View/Edit dump blocks");
     padprintln("- Save/Load .srix dumps");
     padprintln("- Read 8-byte UID");
     padprintln("- PN532 module info");
@@ -252,6 +259,12 @@ void SRIXTool::read_tag() {
         return;
     }
 
+    // Same RF preparation the kpn532/ST25TB tools do before touching a tag:
+    // field cycle + ISO14443-B registers + longer timeouts. Without it the
+    // PN532 reads weakly coupled ST25TB parts much worse.
+    _lastReadTime = 0; // bypass the 2s throttle in waitForTag()
+    nfc->SRIX_prepareRead();
+
     if (!waitForTag()) return;
 
     display_banner();
@@ -279,18 +292,22 @@ void SRIXTool::read_tag() {
     padprintln("UID: " + uid_str);
     padprintln("");
 
-    // Read 128 blocks
-    padprintln("Reading 128 blocks...");
+    // Read blocks until the tag stops answering. ST25TB512/SRIX512 have 16
+    // blocks, ST25TB02K has 64 and ST25TB04K/SRIX4K have 128, so reaching the
+    // end of memory is a normal stop condition, not an error.
+    //
+    // Do not probe past the end here to guess the size: a failed block read
+    // leaves the PN532/tag exchange out of sync and the following block 0 read
+    // fails ("Read failed!"). The bar is scaled to 128 while reading and then
+    // filled to 100% when the end of memory is reached.
+    padprintln("Reading blocks...");
     padprint("Please Wait");
     uint8_t block[4];
+    uint8_t blocks_read = 0;
+    const uint8_t total = BLOCKS_MAX;
 
-    for (uint8_t b = 0; b < 128; b++) {
-        if (!nfc->SRIX_read_block(b, block)) {
-            displayError("Read failed at block " + String(b));
-            delay(2000);
-            set_state(READ_TAG_MODE);
-            return;
-        }
+    for (uint8_t b = 0; b < BLOCKS_MAX; b++) {
+        if (!readBlockRetry(b, block)) break;
 
         const uint16_t off = (uint16_t)b * 4;
         _dump[off + 0] = block[0];
@@ -298,15 +315,57 @@ void SRIXTool::read_tag() {
         _dump[off + 2] = block[2];
         _dump[off + 3] = block[3];
 
+        blocks_read = b + 1;
+
         // Progress indicator
-        progressHandler(b + 1, 128, "Reading data blocks");
+        progressHandler(blocks_read, total, "Reading data blocks");
     }
 
+    if (blocks_read == 0) {
+        // Recovery: a failed exchange can leave the tag out of sync. Retry once
+        // with the tuned RF config (field restart), then once with the PN532
+        // defaults in case the CIU register writes are not accepted by this
+        // module.
+        for (uint8_t attempt = 0; attempt < 2 && blocks_read == 0; attempt++) {
+            delay(100);
+            nfc->SRIX_prepareRead(attempt == 0);
+            if (!waitForTag()) break;
+
+            for (uint8_t b = 0; b < BLOCKS_MAX; b++) {
+                if (!readBlockRetry(b, block)) break;
+
+                const uint16_t off = (uint16_t)b * 4;
+                _dump[off + 0] = block[0];
+                _dump[off + 1] = block[1];
+                _dump[off + 2] = block[2];
+                _dump[off + 3] = block[3];
+
+                blocks_read = b + 1;
+                progressHandler(blocks_read, total, "Reading data blocks");
+            }
+        }
+    }
+
+    if (blocks_read > 0) {
+        // The read is complete at the end of memory: show a full bar.
+        progressHandler(blocks_read, blocks_read, "Read complete");
+    }
+
+    if (blocks_read == 0) {
+        displayError("Read failed!");
+        delay(2000);
+        set_state(READ_TAG_MODE);
+        return;
+    }
+
+    _block_count = blocks_read;
     _dump_valid_from_read = true;
     _dump_valid_from_load = false;
+    memset(_block_edited, 0, sizeof(_block_edited));
+    _edited_count = 0;
     padprintln("");
     padprintln("");
-    displaySuccess("Tag read successfully!");
+    displaySuccess("Read " + String(_block_count) + " blocks!");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     padprintln("");
 
@@ -320,7 +379,7 @@ void SRIXTool::read_tag() {
 }
 
 void SRIXTool::write_tag() {
-    if (!_dump_valid_from_read && !_dump_valid_from_load) {
+    if (!isDumpValid()) {
         displayError("No data in memory!");
         displayError("Read or load a dump first.");
         delay(2000);
@@ -341,7 +400,7 @@ void SRIXTool::write_tag() {
     Serial.println("\n");
 
     uint8_t block[4];
-    for (uint8_t b = 0; b < 128; b++) {
+    for (uint8_t b = 0; b < _block_count; b++) {
         const uint16_t off = (uint16_t)b * 4;
         block[0] = _dump[off + 0];
         block[1] = _dump[off + 1];
@@ -355,7 +414,7 @@ void SRIXTool::write_tag() {
     }
 
     Serial.println("\n========== SIMULATION COMPLETE ==========");
-    Serial.printf("Total: %d blocks (%d bytes)\n", 128, 512);
+    Serial.printf("Total: %d blocks (%d bytes)\n", _block_count, _block_count * 4);
     Serial.println("===========================================\n");
 
     displaySuccess("Simulation complete!");
@@ -366,69 +425,49 @@ void SRIXTool::write_tag() {
 
 #else
 
-    if (!waitForTag()) return;
-
     display_banner();
-    padprintln("Tag detected!");
-    padprintln("");
-    padprintln("Writing 128 blocks...");
+    padprintln("Place the tag on the reader");
     padprintln("");
     padprint("Please Wait");
 
-    uint8_t block[4];
-    uint8_t blocks_written = 0;
-    uint8_t blocks_failed = 0;
-    String failed_blocks = "";
+    WriteStats st;
+    int result = writeDumpToTag(true, 0, &st);
 
-    for (uint8_t b = 0; b < 128; b++) {
-        const uint16_t off = (uint16_t)b * 4;
-        block[0] = _dump[off + 0];
-        block[1] = _dump[off + 1];
-        block[2] = _dump[off + 2];
-        block[3] = _dump[off + 3];
+    padprintln("");
+    padprintln("");
 
-        if (!nfc->SRIX_write_block(b, block)) {
-            SRIX_LOG("[WriteBlock_GUI] ❌ WRITE BLOCK FAILED");
-            blocks_failed++;
-            if (blocks_failed <= 10) { // Max 10 block for report
-                if (failed_blocks.length() > 0) failed_blocks += ",";
-                failed_blocks += String(b);
+    switch (result) {
+        case 0:
+            padprintln("Written: " + String(st.written));
+            padprintln("Unchanged: " + String(st.unchanged));
+            padprintln("OTP/counter blocks skipped: " + String((int)FIRST_USER_BLOCK));
+            displaySuccess("Write verified!");
+            break;
+        case -1:
+            displayError("No tag detected!");
+            break;
+        case -2:
+            padprintln("Dump: " + String(_block_count) + " blocks");
+            padprintln("Tag: " + String(st.tagBlocks) + " blocks");
+            displayError("Size mismatch, nothing written");
+            break;
+        case -6:
+            padprintln("Written: " + String(st.written));
+            padprintln("Mismatched blocks: " + String(st.mismatches));
+            if (st.mismatchCount > 0) {
+                String list = "";
+                for (uint8_t i = 0; i < st.mismatchCount; i++) {
+                    if (i) list += ",";
+                    list += String(st.mismatchBlocks[i]);
+                }
+                if (st.mismatches > st.mismatchCount) list += ",...";
+                padprintln("Blocks: " + list);
             }
-        } else {
-            SRIX_LOG("[WriteBlock_GUI] ✅ WRITE BLOCK: %u", blocks_written);
-            blocks_written++;
-            delay(SRIX_EEPROM_WRITE_DELAY_MS); // Delay for write
-            waitForTagHeadless(600);
-        }
-
-        progressHandler(b + 1, 128, "Writing data blocks");
-    }
-
-    padprintln("");
-    padprintln("");
-
-    // Final report
-    if (blocks_failed == 0) {
-        displaySuccess("Write complete!", true);
-
-    } else if (blocks_written > 0) {
-        displayWarning("Partial write!", true);
-        padprintln("");
-        padprintln("Written: " + String(blocks_written) + "/128");
-        padprintln("Failed: " + String(blocks_failed));
-        padprintln("");
-        tft.setTextSize(FP);
-
-        // Over 10 failed block add "..."
-        if (blocks_failed > 10) {
-            padprintln("Failed blocks: " + failed_blocks + "...");
-        } else {
-            padprintln("Failed blocks: " + failed_blocks);
-        }
-
-    } else {
-        displayError("Write failed!", true);
-        padprintln("No blocks written");
+            displayError("Verification failed");
+            break;
+        default:
+            displayError("Write failed!");
+            break;
     }
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
@@ -539,9 +578,9 @@ void SRIXTool::show_pn_info() {
 }
 
 void SRIXTool::save_file() {
-    if (!_dump_valid_from_read) {
+    if (!isDumpValid()) {
         displayError("No data in memory!");
-        displayError("Read a tag first.");
+        displayError("Read or load a dump first.");
         delay(2000);
         set_state(IDLE_MODE);
         return;
@@ -610,12 +649,12 @@ void SRIXTool::save_file() {
     // Write header
     file.println("Filetype: Bruce SRIX Dump");
     file.println("UID: " + uid_str);
-    file.println("Blocks: 128");
-    file.println("Data size: 512");
+    file.println("Blocks: " + String(_block_count));
+    file.println("Data size: " + String(_block_count * 4));
     file.println("# Data:");
 
     // Write all blocks in [XX] format YYYYYYYY
-    for (uint8_t block = 0; block < 128; block++) {
+    for (uint8_t block = 0; block < _block_count; block++) {
         uint16_t offset = block * 4;
 
         String line = "[";
@@ -734,6 +773,7 @@ void SRIXTool::load_file_data(FS *fs, const String &filepath) {
 
     bool header_passed = false;
     int blocks_loaded = 0;
+    int max_block = -1;
     String uid_from_file = "";
 
     // Parse file line by line
@@ -785,23 +825,29 @@ void SRIXTool::load_file_data(FS *fs, const String &filepath) {
                     _dump[offset + i] = strtoul(byteStr.c_str(), NULL, 16);
                 }
                 blocks_loaded++;
+                if ((int)block_num > max_block) max_block = block_num;
             }
         }
     }
     file.close();
 
-    // Verify that all 128 blocks have been loaded
-    if (blocks_loaded < 128) {
+    // Verify that the dump is complete and contiguous. Any tag size is valid
+    // (16, 64 or 128 blocks), only gaps in the block numbers are rejected.
+    if (blocks_loaded < 1 || (max_block + 1) != blocks_loaded) {
         displayError("Incomplete dump!");
-        displayError("Loaded " + String(blocks_loaded) + "/128 blocks");
+        displayError("Loaded " + String(blocks_loaded) + " blocks");
         delay(2000);
         set_state(IDLE_MODE);
         return;
     }
 
+    _block_count = (uint8_t)(max_block + 1);
+
     // Successo!
     _dump_valid_from_load = true;
     _dump_valid_from_read = false;
+    memset(_block_edited, 0, sizeof(_block_edited));
+    _edited_count = 0;
 
     displaySuccess("Dump loaded successfully!");
     delay(1000);
@@ -877,7 +923,7 @@ SRIXTool::SRIXTool(bool headless_mode) {
         if (nfc->init()) {
             SRIX_LOG("[SRIX] Init OK. Configuring...");
             nfc->setPassiveActivationRetries(0xFF);
-            nfc->SRIX_init();
+            nfc->SRIX_prepareRead();
             SRIX_LOG("[SRIX] Ready.");
         } else {
             SRIX_LOG("[SRIX] ❌ Init FAILED! (Check wiring)");
@@ -929,31 +975,42 @@ String SRIXTool::read_tag_headless(int timeout_seconds) {
             continue;
         }
 
-        // Read all 128 blocks (512 bytes)
+        // Read blocks until the tag stops answering (16/64/128 depending on
+        // the part). End of memory is a valid result, not a failure.
         uint8_t block[4];
-        bool read_success = true;
+        uint8_t blocks_read = 0;
 
-        for (uint8_t b = 0; b < 128; b++) {
-            if (!nfc->SRIX_read_block(b, block)) {
-                read_success = false;
-                break;
+        for (uint8_t b = 0; b < BLOCKS_MAX; b++) {
+            bool ok = false;
+            for (uint8_t attempt = 0; attempt < 3 && !ok; attempt++) {
+                ok = nfc->SRIX_read_block(b, block);
+                if (!ok && attempt < 2) {
+                    nfc->SRIX_initiate_select();
+                    delay(20);
+                }
             }
+            if (!ok) break;
 
             const uint16_t off = (uint16_t)b * 4;
             _dump[off + 0] = block[0];
             _dump[off + 1] = block[1];
             _dump[off + 2] = block[2];
             _dump[off + 3] = block[3];
+            blocks_read = b + 1;
         }
 
-        if (!read_success) {
+        if (blocks_read == 0) {
             delay(100);
             continue;
         }
 
+        _block_count = blocks_read;
+
         // Mark dump as valid
         _dump_valid_from_read = true;
         _dump_valid_from_load = false;
+        memset(_block_edited, 0, sizeof(_block_edited));
+        _edited_count = 0;
 
         // Build UID string (8 bytes with spaces)
         String uid_str = "";
@@ -964,9 +1021,9 @@ String SRIXTool::read_tag_headless(int timeout_seconds) {
         }
         uid_str.toUpperCase();
 
-        // Build data hex string (1024 hex chars = 512 bytes)
+        // Build data hex string (4 hex chars per byte)
         String dump_str = "";
-        for (uint16_t i = 0; i < 512; i++) {
+        for (uint16_t i = 0; i < (uint16_t)_block_count * 4; i++) {
             if (_dump[i] < 0x10) dump_str += "0";
             dump_str += String(_dump[i], HEX);
         }
@@ -975,8 +1032,8 @@ String SRIXTool::read_tag_headless(int timeout_seconds) {
         // Build JSON response
         String result = "{";
         result += "\"uid\":\"" + uid_str + "\",";
-        result += "\"blocks\":128,";
-        result += "\"size\":512,";
+        result += "\"blocks\":" + String(_block_count) + ",";
+        result += "\"size\":" + String(_block_count * 4) + ",";
         result += "\"data\":\"" + dump_str + "\"";
         result += "}";
 
@@ -990,67 +1047,27 @@ int SRIXTool::write_tag_headless(int timeout_seconds) {
 
     if (!nfc) {
         SRIX_LOG("[WriteTag_Headless] ❌ NFC object is NULL");
-        return -6;
+        return -5;
     }
 
-    if (!_dump_valid_from_read && !_dump_valid_from_load) {
+    if (!isDumpValid()) {
         SRIX_LOG("[WriteTag_Headless] ❌ No dump loaded in memory");
-        return -2;
+        return -3;
     }
 
-    // Wait tag headless mode
-    if (!waitForTagHeadless((uint32_t)timeout_seconds * 1000UL)) {
-        SRIX_LOG("[WriteTag_Headless] ❌ Timeout waiting for tag");
-        return -1;
-    }
-
-    SRIX_LOG("[WriteTag_Headless] ✅ Tag detected, starting write");
-
-    uint8_t block[4];
-    uint8_t readCheck[4];
-
-    uint8_t blocks_written = 0;
-    uint8_t blocks_verified = 0;
-
-    // Write
-    for (uint8_t b = 0; b < 128; b++) {
-
-        const uint16_t off = (uint16_t)b * 4;
-        block[0] = _dump[off + 0];
-        block[1] = _dump[off + 1];
-        block[2] = _dump[off + 2];
-        block[3] = _dump[off + 3];
-
-        // WRITE (critical)
-        if (!nfc->SRIX_write_block(b, block)) {
-            SRIX_LOG("[WriteTag_Headless] ❌ WRITE FAILED at block %u", b);
-            return -5; // Error
-        }
-
-        blocks_written++;
-        delay(SRIX_EEPROM_WRITE_DELAY_MS);
-        SRIX_LOG("[WriteTag_Headless] ✅ WRITE BLOCK: %u", blocks_written);
-
-        // VERIFY (best-effort)
-        if (nfc->SRIX_read_block(b, readCheck)) {
-            if (memcmp(block, readCheck, 4) == 0) { blocks_verified++; }
-        }
-        if (!waitForTagHeadless(600)) {
-            SRIX_LOG("[WriteTag_Headless] ❌ Tag lost at block %u", b);
-            return blocks_written;
-        }
-    }
+    WriteStats st;
+    int result = writeDumpToTag(false, timeout_seconds, &st);
 
     SRIX_LOG(
-        "[WriteTag_Headless] ✅ WRITE COMPLETE. Written=%u Verified=%u", blocks_written, blocks_verified
+        "[WriteTag_Headless] result=%d tagBlocks=%u written=%u unchanged=%u mismatches=%u",
+        result,
+        st.tagBlocks,
+        st.written,
+        st.unchanged,
+        st.mismatches
     );
 
-    // Return if OK
-    if (blocks_verified == 128) {
-        return 0; // WRITE + VERIFY OK
-    }
-
-    return blocks_verified; // WRITE OK, VERIFY partial / skipped
+    return result;
 }
 
 String SRIXTool::save_file_headless(const String &filename) {
@@ -1090,12 +1107,12 @@ String SRIXTool::save_file_headless(const String &filename) {
     // Write header
     file.println("Filetype: Bruce SRIX Dump");
     file.println("UID: " + uid_str);
-    file.println("Blocks: 128");
-    file.println("Data size: 512");
+    file.println("Blocks: " + String(_block_count));
+    file.println("Data size: " + String(_block_count * 4));
     file.println("# Data:");
 
     // Write blocks in format: [XX] YYYYYYYY
-    for (uint8_t block = 0; block < 128; block++) {
+    for (uint8_t block = 0; block < _block_count; block++) {
         uint16_t offset = block * 4;
         String line = "[";
         if (block < 0x10) line += "0";
@@ -1136,6 +1153,7 @@ int SRIXTool::load_file_headless(const String &filename) {
 
     bool header_passed = false;
     int blocks_loaded = 0;
+    int max_block = -1;
 
     // Parse file line by line
     while (file.available()) {
@@ -1181,17 +1199,23 @@ int SRIXTool::load_file_headless(const String &filename) {
                     _dump[offset + i] = strtoul(byteStr.c_str(), NULL, 16);
                 }
                 blocks_loaded++;
+                if ((int)block_num > max_block) max_block = block_num;
             }
         }
     }
 
     file.close();
 
-    if (blocks_loaded < 128) return -3; // Incomplete dump
+    // Any tag size is valid (16/64/128 blocks), only gaps are rejected
+    if (blocks_loaded < 1 || (max_block + 1) != blocks_loaded) return -3; // Incomplete dump
+
+    _block_count = (uint8_t)(max_block + 1);
 
     // Mark dump as valid
     _dump_valid_from_load = true;
     _dump_valid_from_read = false;
+    memset(_block_edited, 0, sizeof(_block_edited));
+    _edited_count = 0;
 
     return 0; // Success
 }
@@ -1201,8 +1225,14 @@ int SRIXTool::write_single_block_headless(uint8_t block_num, const uint8_t *bloc
         SRIX_LOG("[WriteBlock_Headless] ❌ NFC object is NULL");
         return -6;
     }
-    if (block_num > 127) {
+    if (block_num >= BLOCKS_MAX) {
         SRIX_LOG("[WriteBlock_Headless] ❌ Invalid block num: %d", block_num);
+        return -4;
+    }
+    // Blocks 0-6 are the OTP area and the 32-bit counters: writing them either
+    // fails or permanently clears bits, so refuse instead of corrupting them.
+    if (block_num < FIRST_USER_BLOCK) {
+        SRIX_LOG("[WriteBlock_Headless] ❌ Block %u is OTP/counter, not writable", block_num);
         return -4;
     }
     if (!block_data) {
@@ -1261,6 +1291,364 @@ int SRIXTool::write_single_block_headless(uint8_t block_num, const uint8_t *bloc
         SRIX_LOG("[WriteBlock_Headless] ❌ WRITE FAILED");
         return -5;
     }
+}
+
+// ========== SHARED READ / WRITE / VERIFY HELPERS ==========
+
+bool SRIXTool::readBlockRetry(uint8_t b, uint8_t *out, uint8_t attempts) {
+    for (uint8_t attempt = 0; attempt < attempts; attempt++) {
+        if (nfc->SRIX_read_block(b, out)) return true;
+        // A single failed read can be a coupling dropout with the weak internal
+        // antenna: re-select and retry before accepting that the block is gone.
+        if (attempt + 1 < attempts) {
+            nfc->SRIX_initiate_select();
+            delay(20);
+        }
+    }
+    return false;
+}
+
+uint8_t SRIXTool::scanTag(uint8_t *diffMask, uint16_t *diffCount, bool showProgress) {
+    uint8_t block[4];
+    uint8_t blocks = 0;
+    uint8_t total = (_block_count > 0) ? _block_count : BLOCKS_MAX;
+
+    if (diffCount) *diffCount = 0;
+    if (diffMask) memset(diffMask, 0, BLOCKS_MAX);
+
+    for (uint8_t b = 0; b < BLOCKS_MAX; b++) {
+        if (!readBlockRetry(b, block)) break;
+
+        blocks = b + 1;
+        if (blocks > total) total = blocks;
+
+        if (diffMask && b >= FIRST_USER_BLOCK && b < _block_count) {
+            if (memcmp(block, &_dump[b * 4], 4) != 0) {
+                diffMask[b] = 1;
+                if (diffCount) (*diffCount)++;
+            }
+        }
+
+        if (showProgress) progressHandler(blocks, total, "Reading tag");
+    }
+
+    if (showProgress && blocks > 0) progressHandler(blocks, blocks, "Read complete");
+
+    return blocks;
+}
+
+int SRIXTool::writeDumpToTag(bool ui, int timeoutSeconds, WriteStats *st) {
+    if (st) *st = WriteStats();
+    if (!nfc) return -5;
+    if (!isDumpValid()) return -3;
+
+    // waitForTag() ignores calls for 2s after a read; bypass that so a write
+    // right after reading does not report a false "no tag".
+    if (ui) _lastReadTime = 0;
+    nfc->SRIX_prepareRead();
+    bool tagOk = ui ? waitForTag() : waitForTagHeadless((uint32_t)timeoutSeconds * 1000UL);
+    if (!tagOk) return -1;
+
+    // 1. Size + difference scan: also proves which blocks actually need writing.
+    uint8_t diffMask[BLOCKS_MAX];
+    uint16_t diffCount = 0;
+    uint8_t tagBlocks = scanTag(diffMask, &diffCount, ui);
+    if (st) st->tagBlocks = tagBlocks;
+    if (tagBlocks == 0) return -1;
+    if (tagBlocks != _block_count) return -2;
+
+    if (diffCount == 0) {
+        if (st) st->unchanged = (_block_count > FIRST_USER_BLOCK) ? (_block_count - FIRST_USER_BLOCK) : 0;
+        SRIX_LOG("[Write] Tag already matches the dump");
+        return 0;
+    }
+
+    // The scan above ends on a failed read (the first block past the end of
+    // memory). Restart the field and select the tag again so the write
+    // sequence does not inherit a desynchronised exchange.
+    nfc->SRIX_prepareRead();
+    if (ui) _lastReadTime = 0;
+    bool reselectOk = ui ? waitForTag() : waitForTagHeadless((uint32_t)timeoutSeconds * 1000UL);
+    if (!reselectOk) return -1;
+
+    // 2. Write only the blocks that differ; never touch OTP/counters (0-6).
+    const uint8_t writable = (_block_count > FIRST_USER_BLOCK) ? (_block_count - FIRST_USER_BLOCK) : 1;
+    for (uint8_t b = FIRST_USER_BLOCK; b < _block_count; b++) {
+        if (!diffMask[b]) {
+            if (st) st->unchanged++;
+            if (ui) progressHandler(b - FIRST_USER_BLOCK + 1, writable, "Writing data blocks");
+            continue;
+        }
+
+        bool accepted = false;
+        for (uint8_t attempt = 0; attempt < 3 && !accepted; attempt++) {
+            int status = nfc->SRIX_write_block_status(b, &_dump[b * 4]);
+            delay(SRIX_EEPROM_WRITE_DELAY_MS);
+            if (status >= 0) {
+                accepted = true;
+            } else {
+                nfc->SRIX_initiate_select();
+                delay(20);
+            }
+        }
+
+        if (accepted) {
+            if (st) st->written++;
+        }
+        SRIX_LOG("[Write] block %u accepted=%d", b, (int)accepted);
+
+        if (ui) progressHandler(b - FIRST_USER_BLOCK + 1, writable, "Writing data blocks");
+    }
+
+    // 3. Verify by re-reading the whole tag: this is the authoritative result.
+    uint8_t afterMask[BLOCKS_MAX];
+    uint16_t mismatches = 0;
+    uint8_t afterBlocks = scanTag(afterMask, &mismatches, ui);
+    if (st) st->mismatches = mismatches;
+
+    if (afterBlocks != _block_count) {
+        // Tag lost or unreadable during verification: report every block we wrote.
+        if (st) {
+            st->mismatchCount = 0;
+            for (uint8_t b = FIRST_USER_BLOCK; b < _block_count && st->mismatchCount < 10; b++) {
+                if (diffMask[b]) st->mismatchBlocks[st->mismatchCount++] = b;
+            }
+        }
+        return -6;
+    }
+
+    if (st && mismatches > 0) {
+        for (uint8_t b = FIRST_USER_BLOCK; b < _block_count && st->mismatchCount < 10; b++) {
+            if (afterMask[b]) st->mismatchBlocks[st->mismatchCount++] = b;
+        }
+    }
+
+    SRIX_LOG(
+        "[Write] done written=%u unchanged=%u mismatches=%u",
+        st ? st->written : 0,
+        st ? st->unchanged : 0,
+        mismatches
+    );
+
+    return (mismatches == 0) ? 0 : -6;
+}
+
+bool SRIXTool::waitForTagCancelable(const char *title) {
+    drawMainBorderWithTitle(title);
+    tft.setTextSize(FP);
+    padprintln("");
+    padprintln("Place the tag on the reader");
+    padprintln("");
+    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+    padprintln("Press [BACK] to cancel");
+    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+
+    unsigned long start = millis();
+    unsigned long lastDraw = 0;
+    uint8_t misses = 0;
+
+    while (true) {
+        if (check(EscPress)) return false; // user cancelled
+        if (nfc->SRIX_initiate_select()) return true;
+
+        // Every ~5 s without a tag, restart the RF field so a stale exchange
+        // does not keep the tag from being detected.
+        if (++misses >= 50) {
+            misses = 0;
+            nfc->SRIX_prepareRead();
+        }
+
+        if (millis() - lastDraw > 500) {
+            lastDraw = millis();
+            int y = tftHeight - 40;
+            tft.fillRect(6, y, tftWidth - 12, 24, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+            tft.setCursor(8, y + 4);
+            tft.print("Waiting " + String((millis() - start) / 1000) + "s");
+        }
+
+        delay(50);
+    }
+}
+
+void SRIXTool::verify_tag() {
+    if (!isDumpValid()) {
+        displayError("No dump in memory!");
+        delay(1500);
+        return;
+    }
+
+    _lastReadTime = 0; // bypass the 2s throttle in waitForTag()
+    nfc->SRIX_prepareRead();
+
+    // Wait for the tag without timing out: verify is a deliberate action, so
+    // the user decides when to give up (Back button).
+    if (!waitForTagCancelable("SRIX VERIFY")) return;
+
+    uint8_t mask[BLOCKS_MAX];
+    uint16_t mismatches = 0;
+    uint8_t tagBlocks = scanTag(mask, &mismatches, true);
+
+    drawMainBorderWithTitle("SRIX VERIFY");
+    tft.setTextSize(FP);
+    padprintln("");
+
+    if (tagBlocks == 0) {
+        displayError("No tag detected!");
+        delayWithReturn(2500);
+        return;
+    }
+
+    padprintln("Tag:  " + String((int)tagBlocks) + " blocks");
+    padprintln("Dump: " + String((int)_block_count) + " blocks");
+    padprintln("");
+
+    if (tagBlocks != _block_count) {
+        displayError("Size mismatch!");
+        padprintln("");
+        padprintln("Nothing to compare.");
+    } else if (mismatches == 0) {
+        displaySuccess("All user blocks match!");
+        padprintln("");
+        padprintln("System blocks 0-6 not compared.");
+    } else {
+        String list = "";
+        uint8_t shown = 0;
+        for (uint8_t b = FIRST_USER_BLOCK; b < _block_count && shown < 10; b++) {
+            if (!mask[b]) continue;
+            if (shown) list += ",";
+            list += String((int)b);
+            shown++;
+        }
+        if (mismatches > shown) list += ",...";
+
+        displayError("Mismatch: " + String((int)mismatches) + " blocks");
+        padprintln("");
+        padprintln("Blocks: " + list);
+        padprintln("");
+        padprintln("System blocks 0-6 not compared.");
+    }
+
+    delayWithReturn(4000);
+}
+
+// ========== DUMP EDITOR ==========
+
+void SRIXTool::edit_block(uint8_t b) {
+    String current = "";
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t v = _dump[b * 4 + i];
+        if (v < 0x10) current += "0";
+        current += String(v, HEX);
+    }
+    current.toUpperCase();
+
+    // System area: resettable OTP (blocks 0-4) and 32-bit counters (5-6).
+    // Still viewable so the whole dump can be scrolled, but not editable.
+    if (b < FIRST_USER_BLOCK) {
+        drawMainBorderWithTitle("SRIX DUMP");
+        tft.setTextSize(FP);
+        padprintln("");
+        padprintln("Block " + String((int)b) + ": " + current);
+        padprintln("");
+        padprintln(b < 5 ? "Resettable OTP bit area." : "32-bit count-down counter.");
+        padprintln("Read only, never written.");
+        delayWithReturn(2500);
+        return;
+    }
+
+    String input = hex_keyboard(current, 8, "Block " + String((int)b) + " (8 hex)");
+    if (input == "\x1B") return; // cancelled
+
+    input.trim();
+    input.replace(" ", "");
+    input.toUpperCase();
+
+    if (input.length() != 8) {
+        displayError("Need 8 hex chars");
+        delay(1500);
+        return;
+    }
+    for (uint8_t i = 0; i < 8; i++) {
+        if (!isxdigit((unsigned char)input[i])) {
+            displayError("Invalid hex value");
+            delay(1500);
+            return;
+        }
+    }
+
+    for (uint8_t i = 0; i < 4; i++) {
+        String pair = input.substring(i * 2, i * 2 + 2);
+        _dump[b * 4 + i] = (uint8_t)strtoul(pair.c_str(), NULL, 16);
+    }
+
+    if (!_block_edited[b]) {
+        _block_edited[b] = true;
+        _edited_count++;
+    }
+
+    SRIX_LOG("[Edit] block %u = %s", b, input.c_str());
+}
+
+void SRIXTool::edit_dump() {
+    if (!isDumpValid()) {
+        displayError("No dump in memory!");
+        delay(1500);
+        return;
+    }
+
+    bool saveRequested = false;
+    bool exitEditor = false;
+
+    while (!exitEditor && !saveRequested) {
+        std::vector<Option> opts;
+        opts.reserve(_block_count + 2);
+
+        for (uint8_t b = 0; b < _block_count; b++) {
+            String label = "B";
+            if (b < 100) label += "0";
+            if (b < 10) label += "0";
+            label += String((int)b) + " ";
+            for (uint8_t i = 0; i < 4; i++) {
+                if (_dump[b * 4 + i] < 0x10) label += "0";
+                label += String(_dump[b * 4 + i], HEX);
+            }
+            label.toUpperCase();
+            if (b < FIRST_USER_BLOCK) {
+                label += " sys";
+            } else if (_block_edited[b]) {
+                label += " *";
+            }
+
+            Option opt(label, [this, b]() { edit_block(b); });
+            opts.push_back(opt);
+        }
+
+        opts.emplace_back("Save dump", [&saveRequested]() { saveRequested = true; });
+        opts.emplace_back("Back", [&exitEditor]() { exitEditor = true; });
+
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "SRIX DUMP");
+        if (sel < 0) break; // long-press Back exits the editor
+    }
+
+    if (saveRequested) {
+        save_file();
+        _screen_drawn = false;
+        return;
+    }
+
+    drawMainBorderWithTitle("SRIX DUMP");
+    tft.setTextSize(FP);
+    padprintln("");
+    if (_edited_count > 0) {
+        padprintln("Edited blocks: " + String((int)_edited_count));
+        padprintln("Save or write to apply.");
+    } else {
+        padprintln("No changes made.");
+    }
+    delayWithReturn(1500);
+    _screen_drawn = false;
 }
 
 // Entry point
