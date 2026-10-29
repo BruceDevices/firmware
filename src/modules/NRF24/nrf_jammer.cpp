@@ -4,6 +4,8 @@
 #include "nrf_common.h"
 #include <globals.h>
 
+static constexpr unsigned long NRF_SAFETY_TIMEOUT_MS = 30000UL;
+
 static void shuffleChannels(uint8_t *arr, size_t count) {
     for (size_t i = count - 1; i > 0; i--) {
         size_t j = esp_random() % (i + 1);
@@ -91,6 +93,8 @@ void nrf_jammer() {
         int hopIndex = 0;
         bool redraw = true;
         bool need_reshuffle = true;
+        bool safetyTimeoutReached = false;
+        unsigned long jamStartMs = millis();
         uint8_t shuffled_idx[124];
         if (CHECK_NRF_SPI(mode)) {
             NRFradio.setPALevel(RF24_PA_MAX);
@@ -114,6 +118,10 @@ void nrf_jammer() {
         vTaskDelay(50 / portTICK_PERIOD_MS);
 
         while (true) {
+            if (millis() - jamStartMs >= NRF_SAFETY_TIMEOUT_MS) {
+                safetyTimeoutReached = true;
+                break;
+            }
 
             if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) {
                 if (OnX == 0) {
@@ -204,6 +212,8 @@ void nrf_jammer() {
 
         }
         if ((CHECK_NRF_UART(mode)) || (CHECK_NRF_BOTH(mode))) { NRFSerial.println("OFF"); }
+
+        if (safetyTimeoutReached) { displayWarning("Safety timeout (30s) reached", true); }
 
     } else {
         displayError("NRF24 not found", true);
