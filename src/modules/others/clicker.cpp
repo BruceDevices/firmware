@@ -890,12 +890,12 @@ void usbClickerSetup() { clicker_setup(); }
 void bleClickerSetup() {
     tft.fillScreen(bruceConfig.bgColor);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor(10, tftHeight / 2 - 8);
+    tft.setTextSize(FM);
+    tft.setCursor(BORDER_PAD_X, tftHeight / 2 - LH * FM / 2);
     tft.print("BLE Mode");
 
-    tft.setTextSize(1);
-    tft.setCursor(10, tftHeight / 2 + 20);
+    tft.setTextSize(FP);
+    tft.setCursor(BORDER_PAD_X, tftHeight / 2 + LH * FM + 4);
     tft.print("Not yet implemented");
 
     delay(2000);

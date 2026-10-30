@@ -1,480 +1,238 @@
 #ifndef LITE_VERSION
 #include "emv_reader.hpp"
-#include "BerTlv.h"
 #include "core/display.h"
+#include "core/scrollableTextArea.h"
+#include <cstring>
+#include <ctime>
+#include <esp_random.h>
 #include <globals.h>
 
-void EMVReader::setup() {
-    _cancelled = false;
-    switch (bruceConfigPins.rfidModule) {
-        case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
-#ifdef M5STICK
-        case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C_SPI); break;
-#endif
-        case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
-        default: {
-            Serial.println("EMVReader: Unsupported RFID module for EMV reading.");
-            return;
-        }
+namespace {
+constexpr size_t FrameSize = 280; // Extended PN532 frame + maximum 258-byte R-APDU
+const emv::Bytes Ack = {0, 0, 0xff, 0, 0xff, 0};
+String cardText(const emv::Card &card) {
+    String text = "Application: " + String(card.label.empty() ? "EMV" : card.label.c_str()) + "\nAID: ";
+    for (auto b : card.aid) {
+        char hex[3];
+        snprintf(hex, sizeof(hex), "%02X", b);
+        text += hex;
     }
-
-    _rfid->begin();
-    nfc = &(_rfid->nfc);
-
-    displayInfo("Waiting for EMV card...");
-    EMVCard card = read_emv_card();
-    if (_cancelled) return;
-    display_emv(card);
-
-    free(card.pan);
-    free(card.validfrom);
-    free(card.validto);
-    free(card.aid);
-}
-
-void EMVReader::parse_pan(std::vector<uint8_t> *afl_content, EMVCard *card) {
-    auto pos = find(afl_content->begin(), afl_content->end(), 0x5A);
-    uint8_t len = *(pos + 1);
-    uint8_t pan_begin = distance(afl_content->begin(), pos) + 2;
-    card->pan = (uint8_t *)malloc(len);
-    memcpy(card->pan, &afl_content->data()[pan_begin], len);
-    card->pan_len = len;
-}
-
-void EMVReader::parse_validfrom(std::vector<uint8_t> *afl_content, EMVCard *card) {
-    bool found = false;
-    for (size_t i = 0; i < afl_content->size() && !found; i++) {
-        if (afl_content->at(i) == 0x5F && afl_content->at(i + 1) == 0x25) {
-            size_t begin = i + 3; // The format is 0x5F 0x25 SIZE DATA so skip 3 bytes
-            card->validfrom = (uint8_t *)malloc(2);
-            // The format in card is YEAR/MONTH but I want MONTH/YEAR since is the standard format
-            card->validfrom[0] = afl_content->at(begin + 1);
-            card->validfrom[1] = afl_content->at(begin);
-            found = true;
-        }
+    text += "\nPAN: ";
+    for (size_t i = 0; i < card.pan.size(); ++i) {
+        if (i && i % 4 == 0) text += ' ';
+        text += card.pan[i];
     }
+    if (!card.holder.empty()) text += "\nName: " + String(card.holder.c_str());
+    if (!card.validFrom.empty()) text += "\nValid from: " + String(card.validFrom.c_str());
+    text += "\nExpires: " + String(card.validTo.empty() ? "Not supplied" : card.validTo.c_str());
+    return text;
 }
+} // namespace
 
-void EMVReader::parse_validto(std::vector<uint8_t> *afl_content, EMVCard *card) {
-    bool found = false;
-    for (size_t i = 0; i < afl_content->size() && !found; i++) {
-        if (afl_content->at(i) == 0x5F && afl_content->at(i + 1) == 0x24) {
-            size_t begin = i + 3; // The format is 0x5F 0x24 SIZE DATA so skip 3 bytes
-            card->validto = (uint8_t *)malloc(2);
-            // The format in card is YEAR/MONTH but I want MONTH/YEAR since is the standard format
-            card->validto[0] = afl_content->at(begin + 1);
-            card->validto[1] = afl_content->at(begin);
-            found = true;
-        }
+EMVReader::~EMVReader() {
+    if (nfc) {
+        // ACK aborts an outstanding command after cancellation/timeout.
+        writeFrame(Ack);
+        delay(2);
+        _cancelled = false;
+        emv::Bytes ignored;
+        if (_target) command({PN532_COMMAND_INRELEASE, _target}, ignored, 300);
+        command({PN532_COMMAND_RFCONFIGURATION, 0x01, 0x00}, ignored, 300);
+        // This driver has no destructor for its dynamically allocated bus adapters.
+        delete nfc->i2c_dev;
+        nfc->i2c_dev = nullptr;
+        delete nfc->spi_dev;
+        nfc->spi_dev = nullptr;
     }
+    delete _rfid;
 }
 
-std::vector<uint8_t> EMVReader::emv_ask_for_aid() {
-    uint8_t uid[7];
-    uint8_t len;
-    uint8_t response[240];
-    uint8_t response_len = 0;
-    std::vector<uint8_t> aid;
-    while (!_cancelled) {
+bool EMVReader::writeFrame(const emv::Bytes &frame) {
+    if (frame.empty()) return false;
+    if (nfc->spi_dev) {
+        const uint8_t prefix = PN532_SPI_DATAWRITE;
+        return nfc->spi_dev->write(frame.data(), frame.size(), &prefix, 1);
+    }
+    if (!nfc->i2c_dev) return false;
+    Wire.beginTransmission(PN532_I2C_ADDRESS);
+    const bool complete = Wire.write(frame.data(), frame.size()) == frame.size();
+    return Wire.endTransmission() == 0 && complete;
+}
+
+bool EMVReader::readFrame(emv::Bytes &frame, size_t length) {
+    frame.assign(length, 0);
+    if (nfc->spi_dev) {
+        const uint8_t prefix = PN532_SPI_DATAREAD;
+        return nfc->spi_dev->write_then_read(&prefix, 1, frame.data(), frame.size());
+    }
+    // ONE transaction: BusIO's chunked reads insert extra PN532 RDY bytes.
+    if (Wire.requestFrom(uint8_t(PN532_I2C_ADDRESS), length + 1, true) != length + 1) {
+        while (Wire.available()) Wire.read();
+        return false;
+    }
+    if (Wire.read() != 0x01) {
+        while (Wire.available()) Wire.read();
+        return false;
+    }
+    for (auto &b : frame) b = Wire.read();
+    return true;
+}
+
+bool EMVReader::waitReady(uint32_t timeout) {
+    uint32_t start = millis();
+    do {
         if (check(EscPress)) {
             _cancelled = true;
-            break;
+            return false;
         }
-
-        // Short timeout allows us to poll for EscPress while waiting for a card
-        if (nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 100)) {
-            /* Select Application */
-            uint8_t ask_for_aid_apdu[] = {0x00, 0xA4, 0x04, 0x00, 0x0e, 0x32, 0x50, 0x41, 0x59, 0x2e,
-                                          0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0x00};
-            if (nfc->EMVinDataExchange(ask_for_aid_apdu, sizeof(ask_for_aid_apdu), response, &response_len)) {
-                std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-                BerTlv Tlv;
-                Tlv.SetTlv(response_vector);
-                if (Tlv.GetValue("4F", &aid) != OK) { // Application ID
-                    Serial.println("Can't get aidFeliCa");
-                    aid.clear();
-                }
-                Serial.println("Success AID");
-            }
-            break;
-        }
-
-        delay(50);
-    }
-    return aid;
-}
-
-std::vector<uint8_t> EMVReader::emv_ask_for_app_name() {
-    uint8_t uid[7];
-    uint8_t len;
-    uint8_t response[240];
-    uint8_t response_len = 0;
-    std::vector<uint8_t> app_name;
-    uint8_t ask_for_aid_apdu[] = {0x00, 0xA4, 0x04, 0x00, 0x0e, 0x32, 0x50, 0x41, 0x59, 0x2e,
-                                  0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0x00};
-    if (nfc->EMVinDataExchange(ask_for_aid_apdu, sizeof(ask_for_aid_apdu), response, &response_len)) {
-        std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-        BerTlv Tlv;
-        Tlv.SetTlv(response_vector);
-        if (Tlv.GetValue("50", &app_name) != OK) { // Card name
-            Serial.println("Can't get app name");
-            app_name.clear();
-        }
-        Serial.println("Success app_name");
-    }
-    return app_name;
-}
-
-std::vector<uint8_t> EMVReader::emv_ask_for_pdol(std::vector<uint8_t> *aid) {
-    uint8_t uid[7];
-    uint8_t len;
-    uint8_t response[240];
-    uint8_t response_len = 0;
-    std::vector<uint8_t> pdol;
-    /* ------------------- AID -----------------*/
-    uint8_t ask_for_pdol[] = {0x00, 0xa4, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00};
-    memcpy(ask_for_pdol + 5, aid->data(), 7);
-
-    if (nfc->EMVinDataExchange(ask_for_pdol, sizeof(ask_for_pdol), response, &response_len)) {
-        std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-
-        BerTlv Tlv;
-        Tlv.SetTlv(response_vector);
-        if (Tlv.GetValue("9F38", &pdol) != OK) { // PDOL(Some card doesn't have it)
-            Serial.println("Can't get PDOL");
-            pdol.clear();
-        }
-    }
-    return pdol;
-}
-
-void EMVReader::emv_read_visa(std::vector<uint8_t> *pdol_data, EMVCard *card) {
-    uint8_t response[240];
-    uint8_t response_len = 0;
-
-    uint8_t payload[] = {
-        // --- HEADER ---
-        0x80,
-        0xA8,
-        0x00,
-        0x00, // CLA, INS, P1, P2
-
-        0x23, // Len: 35 bytes (0x23 Hex)
-
-        // --- DATA FIELD ---
-        0x83,
-        0x21, // Payload len
-
-        // Payload
-        0x20,
-        0x00,
-        0x00,
-        0x00, // 9F66 (TTQ - Visa Standard)
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00, // 9F02 (Amount 0)
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00, // 9F03 (Amount Other 0)
-        0x03,
-        0x80, // 9F1A (Country: Italy)
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00, // 95   (TVR: No errors)
-        0x09,
-        0x78, // 5F2A (Currency: Euro)
-        0x25,
-        0x11,
-        0x25, // 9A   (Date: 25 Nov 25)
-        0x00, // 9C   (Tx Type: Purchase)
-        0x12,
-        0x34,
-        0x56,
-        0x78, // 9F37 (Unpredictable Num)
-
-        0x00 // Len of response expected by the card(0 means all)
-    };
-
-    if (nfc->EMVinDataExchange(payload, sizeof(payload), response, &response_len)) {
-        std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-
-        BerTlv Tlv;
-        Tlv.SetTlv(response_vector);
-        std::vector<uint8_t> container;
-        if (Tlv.GetValue("57", &container) != OK) {
-            Serial.println("Can't get Track 2 Equivalent Data(PAN for VISA)");
-        } else {
-            Serial.println("PAN found in Track 2 Equivalent Data");
-            card->pan = (uint8_t *)malloc(8);
-            memcpy(card->pan, container.data(), 8 * sizeof(uint8_t)); // Copy data from TLV to struct
-            card->pan_len = 8;
-
-            // Index 8 is separator 'D' and first digit of ValidTo month
-            // Index 9 is second digit of ValidTo month and first digit of ValidTo year
-            // Index 10 is second digit of ValidTo year and first digit of Service Code
-            card->validto = (uint8_t *)malloc(2);
-            card->validto[0] = ((container[9] & 0x0F) << 4) + ((container[10] & 0xF0) >> 4);
-            card->validto[1] = ((container[8] & 0x0F) << 4) + ((container[9] & 0xF0) >> 4);
-
-            container.clear();
-        }
-    }
-}
-
-std::vector<uint8_t> EMVReader::emv_get_processing_options_no_pdol() {
-    uint8_t response[240];
-    uint8_t response_len = 0;
-    std::vector<uint8_t> afl;
-    uint8_t ask_for_afl[] = {0x80, 0xa8, 0x00, 0x00, 0x02, 0x83, 0x00, 0x00}; // Get AFL
-
-    if (nfc->EMVinDataExchange(ask_for_afl, sizeof(ask_for_afl), response, &response_len)) {
-        std::vector<uint8_t> response_vector(&response[0], &response[response_len]);
-        BerTlv Tlv;
-        Tlv.SetTlv(response_vector);
-        if (Tlv.GetValue("94", &afl) != OK) { // AFL
-            Serial.println("Can't get AFL");
-            afl.clear();
-        }
-    }
-    return afl;
-}
-
-std::vector<uint8_t> EMVReader::emv_read_record(uint8_t p1, uint8_t p2) {
-    uint8_t response[240];
-    uint8_t response_len = 0;
-    std::vector<uint8_t> result;
-
-    uint8_t read_afl[] = {0x00, 0xB2, p1, p2, 0x00};
-
-    if (nfc->EMVinDataExchange(read_afl, sizeof(read_afl), response, &response_len)) {
-        result = std::vector<uint8_t>(&response[0], &response[response_len]);
-    }
-    return result;
-}
-
-void EMVReader::read_afl(EMVCard *card, std::vector<uint8_t> *afl) {
-    for (size_t i = 0; i < afl->size(); i += 4) {
-        uint8_t sfi = (afl->at(i) >> 3); // Get SFI from AFL entry
-        uint8_t record_start = afl->at(i + 1);
-        uint8_t record_end = afl->at(i + 2);
-
-        std::vector<uint8_t> afl_content = emv_read_record(record_start, (sfi << 3) | 0b00000100);
-        if (!afl_content.empty()) {
-            BerTlv Tlv;
-            Tlv.SetTlv(afl_content);
-            std::vector<uint8_t> container;
-            if (Tlv.GetValue("5A", &container) !=
-                OK) { // Get PAN(Credit Card Number). If TLV is corrupted(happens often with PN532) fallback
-                      // to a workaround to find information
-                parse_pan(&afl_content, card);
-                parse_validfrom(&afl_content, card);
-                parse_validto(&afl_content, card);
-                Serial.println("PAN parsed with workaround");
-                return;
-            } else {
-                memcpy(card->pan, container.data(), container.size()); // Copy data from TLV to struct
-                container.clear();
-                if (Tlv.GetValue("5F25", &container) != OK) { // Get ValidFrom date
-                    parse_validfrom(&afl_content, card);
-                    parse_validto(&afl_content, card);
-                } else {
-                    memcpy(card->validfrom, container.data(), container.size());
-                    if (Tlv.GetValue("5F24", &container) != OK) { // Get ValidTo date
-                        parse_validto(&afl_content, card);
-                    } else {
-                        memcpy(card->validto, container.data(), container.size());
-                    }
-                }
-                Serial.println("PAN parsed without workaround");
-                return;
-            }
-
-            if (Tlv.GetValue("5A", &container) == OK) { // Get PAN(Credit Card Number)
-                card->pan = (uint8_t *)malloc(container.size());
-                memcpy(card->pan, container.data(), container.size()); // Copy data from TLV to struct
-                card->pan_len = container.size();
-                Serial.println("PAN parsed without workaround");
-                return;
-            }
-        } else {
-            Serial.println("Can't parse AFL data for P2");
-        }
-    }
-}
-
-bool is_visa(EMVCard *card) {
-    for (size_t i = 0; i < AID_DICT_SIZE; i++) {
-        if (memcmp(card->aid, known_aid[i].aid, 7) == 0) {
-            if (known_aid[i].vendor == EMV_VISA) return true;
-            else return false;
-        }
-    }
-
+        if (nfc->spi_dev ? nfc->isready() : (nfc->_irq >= 0 ? digitalRead(nfc->_irq) == LOW : nfc->isready()))
+            return true;
+        delay(2);
+    } while (millis() - start < timeout);
     return false;
 }
 
-EMVCard EMVReader::read_emv_card() {
-    EMVCard res;
-    if (_cancelled) return res;
-
-    std::vector<uint8_t> aid = emv_ask_for_aid(); // Perform Application Selection
-    if (_cancelled) return res;
-
-    if (aid.empty()) { // If we can't get AID, we can't read the card
-        res.parsed = false;
-        Serial.println("Can't read card");
-    } else {
-        // Copy AID to result card
-        res.aid = (uint8_t *)malloc(aid.size());
-        memcpy(res.aid, aid.data(), aid.size());
-
-        // Initialize Application Process
-        std::vector<uint8_t> pdol = emv_ask_for_pdol(&aid); // Check if card require PDOL(for example, VISA)
-
-        if (pdol.empty()) { // No PDOL(for example Mastercard)
-            std::vector<uint8_t> afl = emv_get_processing_options_no_pdol(); // Try to get AFL without PDOL
-
-            if (!afl.empty()) {
-                // Read Application data
-                read_afl(&res, &afl); // Read AFL
-            } else {
-                Serial.println("Can't get AFL ID");
-            }
-        } else {
-            if (is_visa(&res)) {
-                Serial.println("VISA card detected");
-                emv_read_visa(&pdol, &res);
-
-            } else {
-                Serial.println("Non-VISA card with PDOL detected, not supported yet");
-                // std::vector<uint8_t> afl = emv_get_processing_options(&pdol);
-
-                // std::vector<uint8_t> afl = emv_get_processing_options_no_pdol();
-                // if (!afl.empty()) {
-                //     read_afl(&res, &afl);
-                //     Serial.println("Got AFL with PDOL");
-                // } else {
-                //     Serial.println("Can't get AFL with PDOL");
-                // }
-            }
-        }
+bool EMVReader::command(const emv::Bytes &cmd, emv::Bytes &response, uint32_t timeout) {
+    if (_cancelled || cmd.empty()) return false;
+    emv::Bytes frame;
+    if (!writeFrame(emv::pn532Command(cmd))) return false;
+    delay(1);
+    if (!waitReady(timeout) || !readFrame(frame, Ack.size()) || frame != Ack) {
+        writeFrame(Ack);
+        delay(2);
+        return false;
     }
-
-    Serial.println("EMV Read complete");
-    return res;
+    delay(1);
+    if (!waitReady(timeout) || !readFrame(frame, FrameSize)) {
+        writeFrame(Ack);
+        delay(2);
+        return false;
+    }
+    return emv::pn532Response(frame, cmd[0], response);
 }
 
-// From https://github.com/huckor/BER-TLV
-std::string BinToAscii(uint8_t *BinData, size_t size)
-
-{
-    char AsciiHexNo[5];
-    std::string Return;
-    for (int i = 0; i < size; i++) {
-        sprintf(AsciiHexNo, "%02X", BinData[i]);
-        Return += AsciiHexNo;
-    }
-
-    return Return;
+bool EMVReader::exchange(const emv::Bytes &apdu, emv::Bytes &response) {
+    emv::Bytes cmd = {PN532_COMMAND_INDATAEXCHANGE, _target}, payload;
+    cmd.insert(cmd.end(), apdu.begin(), apdu.end());
+    // PN532 performs ISO14443-4 chaining internally. Reject unexpected NAD/MI
+    // and errors rather than passing status bytes into the BER-TLV parser.
+    if (!command(cmd, payload) || payload.empty() || payload[0] != 0) return false;
+    response.assign(payload.begin() + 1, payload.end());
+    return true;
 }
 
-void EMVReader::display_emv(EMVCard card) {
-    drawMainBorderWithTitle("Read EMV Card");
-    std::string aid;
-    std::string pan;
-    std::string issuedate;
-    std::string validto;
-
-    if (card.parsed) {
-        bool found = false;
-        for (size_t i = 0; i < AID_DICT_SIZE && !found; i++) {
-            if (memcmp(card.aid, known_aid[i].aid, 7) == 0) {
-                found = true;
-                aid = known_aid[i].name;
-                padprintln(known_aid[i].name);
-                break;
-            }
+bool EMVReader::detect() {
+    while (!_cancelled) {
+        emv::Bytes target;
+        if (!command({PN532_COMMAND_INLISTPASSIVETARGET, 1, PN532_MIFARE_ISO14443A}, target)) {
+            if (!_cancelled) displayError("PN532 polling failed", true);
+            return false;
         }
-
-        if (!found) { padprintln("Unknown card vendor"); }
-        if (card.pan != nullptr) {
-            pan = BinToAscii(card.pan, card.pan_len);
-            // Add some spacing
-            size_t pad = 0;
-            for (size_t i = 0; i < pan.size(); i++) {
-                if (i % 4 == 0 && i != 0) { pan.insert(pan.begin() + i + (pad++), ' '); }
-            }
-
-            padprintln(pan.c_str());
-        } else {
-            padprintln("Unknown PAN");
+        if (target.size() == 1 && target[0] == 0) continue;
+        if (target.size() < 6 || target[0] != 1 || !target[1] || target[5] > 10 || target[5] < 4 ||
+            target.size() < size_t(6 + target[5])) {
+            displayError("Invalid NFC target", true);
+            return false;
         }
-        if (card.validfrom != nullptr) {
-            issuedate = BinToAscii(card.validfrom, 2);
-            issuedate.insert(issuedate.begin() + 2, '/');
-            padprintln(issuedate.c_str());
-        } else {
-            padprintln("Unknown issue date");
+        _target = target[1];
+        if (!(target[4] & 0x20)) {
+            displayError("Not an ISO14443-4 card", true);
+            return false;
         }
-
-        if (card.validto != nullptr) {
-            validto = BinToAscii(card.validto, 2);
-            validto.insert(validto.begin() + 2, '/');
-            padprintln(validto.c_str());
-        } else {
-            padprintln("Unknown valid to date");
-        }
-    } else {
-        padprintln("Failed to read EMV Card.");
+        return true;
     }
-
-    padprintln("Press any key to continue...");
-
-    while (!AnyKeyPress) { delay(100); }
-
-    options = {};
-    options.emplace_back("Save", [this, aid, pan, issuedate, validto]() {
-        this->save_emv(aid.c_str(), pan.c_str(), issuedate.c_str(), validto.c_str());
-    });
-    options.emplace_back("Exit", [this]() { return; });
-
-    loopOptions(options);
+    return false;
 }
 
-void EMVReader::save_emv(const char *aid, const char *pan, const char *validfrom, const char *validto) {
-    FS *fs;
-    if (!getFsStorage(fs)) return;
-
-    if (!(*fs).exists("/BruceRFID")) (*fs).mkdir("/BruceRFID");
-    if (!(*fs).exists("/BruceRFID/Scans")) (*fs).mkdir("/BruceRFID/Scans");
-
-    String filename = "emv_";
-    String pan_dashed = String(pan);
-    pan_dashed.replace(" ", "_");
-    filename += pan_dashed;
-    filename += ".txt";
-
-    File file = (*fs).open("/BruceRFID/Scans/" + filename, FILE_WRITE);
-
-    if (!file) {
-        displayError("Error opening file.");
+void EMVReader::setup() {
+    switch (bruceConfigPins.rfidModule) {
+        case PN532_I2C_MODULE: _rfid = new PN532(PN532::I2C); break;
+#ifdef M5STICK
+        case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::I2C_SPI); break;
+#endif
+        case PN532_SPI_MODULE: _rfid = new PN532(PN532::SPI); break;
+        default: displayError("EMV requires a PN532", true); return;
+    }
+    nfc = &_rfid->nfc;
+    if (!_rfid->begin()) {
+        displayError("PN532 initialization failed", true);
         return;
     }
+    if (nfc->i2c_dev && Wire.setBufferSize(FrameSize + 1) < FrameSize + 1) {
+        displayError("NFC buffer allocation failed", true);
+        return;
+    }
+    emv::Bytes response;
+    // Restore automatic RATS after other NFC modes, and finite polling for Back.
+    if (!command({PN532_COMMAND_SETPARAMETERS, 0x14}, response) ||
+        !command({PN532_COMMAND_RFCONFIGURATION, 0x05, 0x00, 0x00, 0x00}, response) ||
+        !command({PN532_COMMAND_RFCONFIGURATION, 0x01, 0x01}, response)) {
+        if (!_cancelled) displayError("PN532 configuration failed", true);
+        return;
+    }
+    displayInfo("Hold EMV card near NFC");
+    if (!detect()) return;
+    displayInfo("Reading - keep card still");
+    emv::Terminal terminal;
+    const uint32_t random = esp_random();
+    for (unsigned i = 0; i < 4; ++i) terminal.unpredictable[i] = random >> (8 * i);
+    time_t now = time(nullptr);
+    struct tm date{};
+    localtime_r(&now, &date);
+    if (date.tm_year < 120 || date.tm_year > 199) {
+        // A freshly flashed device may not have its clock set. Use a valid
+        // build date instead of the old hard-coded date or an invalid 000000.
+        char month[4] = {};
+        int year = 0;
+        sscanf(__DATE__, "%3s %d %d", month, &date.tm_mday, &year);
+        const char *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+        const char *found = strstr(months, month);
+        date.tm_mon = found ? (found - months) / 3 : 0;
+        date.tm_year = year - 1900;
+    }
+    auto bcd = [](int n) { return uint8_t((n / 10) * 16 + n % 10); };
+    terminal.date = {bcd((date.tm_year + 1900) % 100), bcd(date.tm_mon + 1), bcd(date.tm_mday)};
+    emv::Card card;
+    std::string error;
+    bool ok = emv::readCard(
+        [this](const emv::Bytes &a, emv::Bytes &r) { return exchange(a, r); }, terminal, card, error
+    );
+    if (_cancelled) return;
+    if (!ok) {
+        displayError(error.c_str(), true);
+        return;
+    }
+    displayCard(card);
+}
 
-    file.println("Vendor: " + String(aid));
-    file.println("Credit Card Number: " + String(pan));
-    file.println("Valid From: " + String(validfrom));
-    file.println("Valid To: " + String(validto));
+void EMVReader::displayCard(const emv::Card &card) {
+    drawMainBorderWithTitle("Read EMV Card");
+    ScrollableTextArea area(
+        1, BORDER_PAD_X, BORDER_PAD_Y, tftWidth - 2 * BORDER_PAD_X, tftHeight - BORDER_PAD_Y - 12, false, true
+    );
+    area.fromString(cardText(card));
+    area.show(true);
+    options = {
+        {"Save", [this, card]() { saveCard(card); }},
+        {"Exit", []() {}}
+    };
+    loopOptions(options);
+    options.clear();
+}
 
+void EMVReader::saveCard(const emv::Card &card) {
+    FS *fs;
+    if (!getFsStorage(fs)) return;
+    if (!fs->exists("/BruceRFID")) fs->mkdir("/BruceRFID");
+    if (!fs->exists("/BruceRFID/Scans")) fs->mkdir("/BruceRFID/Scans");
+    String filename = "/BruceRFID/Scans/emv_" + String(card.pan.c_str()) + ".txt";
+    File file = fs->open(filename, FILE_WRITE);
+    if (!file) {
+        displayError("Error opening file");
+        return;
+    }
+    file.println(cardText(card));
     file.close();
-    displaySuccess("EMV data saved.");
+    displaySuccess("EMV data saved");
 }
 #endif

@@ -8,9 +8,9 @@
 
 static void setupCoreS3SharedSpiPins() {
     pinMode(TFT_CS, OUTPUT);
-    pinMode(SDCARD_CS, OUTPUT);
+    pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
-    digitalWrite(SDCARD_CS, HIGH);
+    digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
 
     // CoreS3 shares the display D/C pin with SPI MISO. M5.begin() and the first
     // TFT_eSPI draw happen before storage is mounted, so release GPIO35 back to
@@ -31,6 +31,37 @@ static void setupCoreS3SharedSpiPins() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    bruceConfigPins.i2c_bus = {(gpio_num_t)2, (gpio_num_t)1};   // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)12, (gpio_num_t)11}; // sda, scl
+    bruceConfigPins.rfTx = 2;
+    bruceConfigPins.rfRx = 1;
+    bruceConfigPins.irTx = 2;
+    bruceConfigPins.irRx = 1;
+    bruceConfigPins.rotation = 1;
+    bruceConfigPins.badusb_bus = {(gpio_num_t)1, (gpio_num_t)2}; // rx, tx (CH9329)
+    // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
+    bruceConfigPins.outer_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)26};
+    bruceConfigPins.PN532_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)26};
+    // CC1101/NRF24/W5500 share the SD Card's SPI bus (sck, miso, mosi)
+    bruceConfigPins.CC1101_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)0, (gpio_num_t)10, GPIO_NUM_NC
+    }; // sck,miso,mosi,cs,gdo0,gdo2
+    bruceConfigPins.NRF24_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)6, (gpio_num_t)7
+    }; // sck,miso,mosi,cs(ss),ce
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)4
+    }; // sck,miso,mosi,cs
+#if !defined(LITE_VERSION)
+    bruceConfigPins.W5500_bus = {
+        (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)7
+    }; // sck,miso,mosi,cs,int,rst
+#endif
+    // Head mounted on an M5Stack StackChan body (K151): its ST25R3916 NFC hangs off the
+    // sys I2C bus at 0x50 (G12/G11, no IRQ pin). These are only the defaults for the
+    // "ST25R3916 I2C" module — a plain CoreS3 has no NFC, so rfidModule stays M5_RFID2
+    // until the user picks it. See boards/m5stack-stackchan for the full body support.
+    bruceConfigPins.ST25R_bus = {(gpio_num_t)12, (gpio_num_t)11, GPIO_NUM_NC, GPIO_NUM_NC};
+
     M5.begin();
     M5.Power.setUsbOutput(false);
     M5.Power.setExtOutput(true);
@@ -75,7 +106,7 @@ void InputHandler(void) {
         tm = millis();
 
         if (bruceConfigPins.rotation == 3) {
-            t.y = (tftHeight + 20) - t.y;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - t.y;
             t.x = tftWidth - t.x;
         }
         if (bruceConfigPins.rotation == 0) {
@@ -86,7 +117,7 @@ void InputHandler(void) {
         if (bruceConfigPins.rotation == 2) {
             int tmp = t.x;
             t.x = t.y;
-            t.y = (tftHeight + 20) - tmp;
+            t.y = (tftHeight + TOUCH_FOOTER_HEIGHT) - tmp;
         }
 
         if (!wakeUpScreen()) AnyKeyPress = true;

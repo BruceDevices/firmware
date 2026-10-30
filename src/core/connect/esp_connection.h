@@ -1,3 +1,4 @@
+#include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #ifndef __ESP_CONNECTION_H__
 #define __ESP_CONNECTION_H__
 #if !defined(LITE_VERSION)
@@ -8,6 +9,7 @@
 #define ESP_FILENAME_SIZE 30
 #define ESP_FILEPATH_SIZE 50
 #define ESP_DATA_SIZE 150
+#define ESP_MAX_PEERS 32
 
 class EspConnection {
 public:
@@ -22,21 +24,21 @@ public:
 
     // Struct has to be 250 B max
     struct Message {
-        char filename[ESP_FILENAME_SIZE];
-        char filepath[ESP_FILEPATH_SIZE];
-        char data[ESP_DATA_SIZE];
-        size_t dataSize;
-        size_t totalBytes;
-        size_t bytesSent;
-        bool isFile;
-        bool done;
-        bool ping;
-        bool pong;
+        char filename[ESP_FILENAME_SIZE] = {};
+        char filepath[ESP_FILEPATH_SIZE] = {};
+        char data[ESP_DATA_SIZE] = {};
+        size_t dataSize = 0;
+        size_t totalBytes = 0;
+        size_t bytesSent = 0;
+        bool isFile = false;
+        bool done = false;
+        bool ping = false;
+        bool pong = false;
 
         // Constructor to initialize defaults
         Message()
-            : dataSize(0), totalBytes(0), bytesSent(0), isFile(false), done(false), ping(false), pong(false) {
-        }
+            : filename{}, filepath{}, data{}, dataSize(0), totalBytes(0), bytesSent(0), isFile(false),
+              done(false), ping(false), pong(false) {}
     };
 
     EspConnection();
@@ -48,10 +50,12 @@ public:
     static void onDataRecvStatic(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len);
 
 protected:
-    Status recvStatus;
-    Status sendStatus;
-    uint8_t dstAddress[6];
+    Status recvStatus = WAITING;
+    Status sendStatus = WAITING;
+    uint8_t dstAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t lastSenderMac[6] = {0};
     uint8_t broadcastAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    bool hasAuthorizedPeer = false;
     std::vector<Message> recvQueue;
 
     bool beginSend();
@@ -67,7 +71,13 @@ protected:
 
     bool setupPeer(const uint8_t *mac);
     void appendPeerToList(const uint8_t *mac);
-    void setDstAddress(const uint8_t *address) { memcpy(dstAddress, address, 6); }
+    void setDstAddress(const uint8_t *address) {
+        memcpy(dstAddress, address, 6);
+        hasAuthorizedPeer = (memcmp(dstAddress, broadcastAddress, 6) != 0);
+    }
+    bool isAuthorizedPeer(const uint8_t *mac) const {
+        return hasAuthorizedPeer && mac && (memcmp(dstAddress, mac, 6) == 0);
+    }
 
     String macToString(const uint8_t *mac);
     void printMessage(Message message);

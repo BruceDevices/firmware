@@ -46,8 +46,8 @@ JSValue native_menuShow(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
         options.push_back({labels.back().c_str(), []() {}});
     }
 
-    // Show the native Bruce menu and get the selected index
-    int selected = loopOptions(options, MENU_TYPE_SUBMENU, title);
+    // Keep the native menu active while called from the running interpreter.
+    int selected = loopOptions(options, MENU_TYPE_SUBMENU, title, 0, true);
 
     options.clear();
 

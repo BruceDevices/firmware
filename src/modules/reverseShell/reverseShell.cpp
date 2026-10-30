@@ -1,10 +1,10 @@
 #if !defined(LITE_VERSION)
 #include "core/display.h"
+#include <AsyncTCP.h>
 #include <DNSServer.h>
+#include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
 
 void ReverseShell() {
     AsyncWebServer webServer(80);
@@ -17,21 +17,23 @@ void ReverseShell() {
     bool wsConnected = false;
 
     // ── WebSocket Event Handler ────────────────────────────────
-    auto onWsEvent = [&](AsyncWebSocket *server, AsyncWebSocketClient *client,
-                         AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    auto onWsEvent = [&](AsyncWebSocket *server,
+                         AsyncWebSocketClient *client,
+                         AwsEventType type,
+                         void *arg,
+                         uint8_t *data,
+                         size_t len) {
         switch (type) {
             case WS_EVT_CONNECT:
                 wsConnected = true;
                 client->text("Connected to BruceShell!\r\n");
                 break;
 
-            case WS_EVT_DISCONNECT:
-                wsConnected = false;
-                break;
+            case WS_EVT_DISCONNECT: wsConnected = false; break;
 
             case WS_EVT_DATA:
                 if (shellConnected && tcpClient) {
-                    String cmd = String((char*)data);
+                    String cmd = String((char *)data);
                     cmd.trim();
                     if (cmd.length() > 0) {
                         tcpClient.println(cmd);
@@ -40,10 +42,9 @@ void ReverseShell() {
                         String output = "";
                         unsigned long timeout = millis() + 3000;
                         while (millis() < timeout) {
-                            if (tcpClient.available()) {
-                                output += tcpClient.readString();
-                            }
-                            if (output.endsWith("\n> ") || output.endsWith("\n$ ") || output.endsWith("\n# ")) {
+                            if (tcpClient.available()) { output += tcpClient.readString(); }
+                            if (output.endsWith("\n> ") || output.endsWith("\n$ ") ||
+                                output.endsWith("\n# ")) {
                                 break;
                             }
                             delay(10);
@@ -60,6 +61,10 @@ void ReverseShell() {
                 break;
 
             case WS_EVT_ERROR:
+                // Handle error silently
+                break;
+
+            default:
                 // Handle error silently
                 break;
         }
