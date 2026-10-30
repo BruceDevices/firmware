@@ -21,6 +21,22 @@
 #define NDEF_DATA_SIZE 100
 #define SCAN_DUMP_SIZE 5
 
+namespace {
+void displaySmallErrorToast(const String &txt) {
+    constexpr int textSize = FP;
+    int boxWidth = txt.length() * LW * textSize + 18;
+    if (boxWidth > tftWidth - 20) boxWidth = tftWidth - 20;
+    int boxHeight = LH * textSize + 10;
+    int boxX = (tftWidth - boxWidth) / 2;
+    int boxY = tftHeight / 2 - boxHeight / 2;
+
+    tft.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 5, TFT_RED);
+    tft.setTextColor(TFT_WHITE, TFT_RED);
+    tft.setTextSize(textSize);
+    tft.drawCentreString(txt, tftWidth / 2, boxY + 5);
+}
+} // namespace
+
 TagOMatic::TagOMatic() {
     _initial_state = READ_MODE;
     setup();
@@ -274,12 +290,39 @@ void TagOMatic::dump_scan_results() {
     }
 }
 
+void TagOMatic::show_not_implemented_card() {
+    displaySmallErrorToast(_rfid->statusMessage(RFIDInterface::NOT_IMPLEMENTED));
+
+    while (!returnToMenu) {
+        delay(200);
+        if (check(EscPress)) {
+            returnToMenu = true;
+            break;
+        }
+        if (_rfid->read() != RFIDInterface::NOT_IMPLEMENTED) break;
+    }
+
+    delay(700);
+    display_banner();
+    _lastReadTime = millis();
+}
+
 void TagOMatic::read_card() {
     if (millis() - _lastReadTime < 2000) return;
 
-    if (_rfid->read() != RFIDInterface::SUCCESS) {
+    int readStatus = _rfid->read();
+    if (readStatus != RFIDInterface::SUCCESS) {
+        if (readStatus == RFIDInterface::NOT_IMPLEMENTED) {
+            show_not_implemented_card();
+            return;
+        }
         if (bruceConfigPins.rfidModule != M5_RFID2_MODULE) { // Read felica if module is PN532
-            if (_rfid->read(1) != RFIDInterface::SUCCESS) return;
+            readStatus = _rfid->read(1);
+            if (readStatus == RFIDInterface::NOT_IMPLEMENTED) {
+                show_not_implemented_card();
+                return;
+            }
+            if (readStatus != RFIDInterface::SUCCESS) return;
         } else {
             return;
         }

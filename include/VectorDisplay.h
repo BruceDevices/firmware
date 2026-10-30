@@ -1256,7 +1256,13 @@ public:
 #ifndef NO_SERIAL
         if (doSerialBegin) {
             Serial.begin(speed);
-            while (!Serial);
+            // Wait for a USB CDC host (serial monitor) with a timeout instead of blocking
+            // forever. When the device is powered from a charger/wall adapter no USB host
+            // ever connects, so `while(!Serial)` kept headless boards stuck here before
+            // storage/WiFi/WebUI could start. With a PC attached the CDC link comes up
+            // well within the window, so the previous behavior is preserved.
+            uint32_t cdcWaitStart = millis();
+            while (!Serial && millis() - cdcWaitStart < 2000) delay(10);
         }
 #endif
         VectorDisplayClass::begin(width, height);

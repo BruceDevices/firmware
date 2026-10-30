@@ -7,6 +7,8 @@
 constexpr uint32_t kBtnBDoublePressWindowMs = 270;
 constexpr uint32_t kBtnBLongPressMs = 500;
 
+bool enableNessoGrovePower();
+
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
@@ -17,6 +19,7 @@ void _setup_gpio() {
     // ESP32-C6 only has one general-purpose I2C controller (SOC_HP_I2C_NUM == 1), so
     // I2C_NUM_1 doesn't exist in i2c_port_t here and M5.In_I2C is always on Wire/I2C_NUM_0.
     setSysI2CBus(&Wire);
+    enableNessoGrovePower();
     bruceConfig.colorInverted = 0;
     M5.BtnA.setDebounceThresh(8);
     M5.BtnB.setDebounceThresh(8);

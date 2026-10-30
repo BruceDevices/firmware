@@ -90,16 +90,18 @@ public:
     void beginTransmission(uint8_t address) override {
         lockSysI2CBus();
         _addr = address;
+        _error = 0;
         _open = _i2c.start(address, false, _freq);
+        if (!_open) _error = 4;
     }
 
     uint8_t endTransmission(bool stopBit) override {
         if (stopBit) {
-            _i2c.stop();
+            if (_open && !_i2c.stop()) _error = 4;
             _open = false;
             unlockSysI2CBus();
         }
-        return 0;
+        return _error;
     }
     uint8_t endTransmission() override { return endTransmission(true); }
 
@@ -116,8 +118,20 @@ public:
     }
     size_t requestFrom(uint8_t address, size_t len) override { return requestFrom(address, len, true); }
 
-    size_t write(uint8_t data) override { return _i2c.write(data) ? 1 : 0; }
-    size_t write(const uint8_t *buf, size_t len) override { return _i2c.write(buf, len) ? len : 0; }
+    size_t write(uint8_t data) override {
+        if (!_open || !_i2c.write(data)) {
+            _error = 4;
+            return 0;
+        }
+        return 1;
+    }
+    size_t write(const uint8_t *buf, size_t len) override {
+        if (!_open || !_i2c.write(buf, len)) {
+            _error = 4;
+            return 0;
+        }
+        return len;
+    }
 
     int available() override { return (int)(_rxLen - _rxPos); }
     int read() override { return _rxPos < _rxLen ? _rxbuf[_rxPos++] : -1; }
@@ -131,6 +145,7 @@ private:
     uint32_t _freq = 400000;
     uint8_t _addr = 0;
     bool _open = false;
+    uint8_t _error = 0;
     uint8_t _rxbuf[64];
     size_t _rxLen = 0;
     size_t _rxPos = 0;
@@ -145,6 +160,17 @@ static TwoWire *sysWireAdapter() {
     return adapter;
 }
 #endif
+
+TwoWire *__attribute__((weak)) acquireBoardI2CBus(int8_t sda, int8_t scl) {
+    (void)sda;
+    (void)scl;
+    return nullptr;
+}
+
+bool __attribute__((weak)) releaseBoardI2CBus(TwoWire *wire) {
+    (void)wire;
+    return false;
+}
 
 static TwoWire *userWire = nullptr;
 static bool userBusShared = false;
@@ -185,6 +211,15 @@ TwoWire *acquireI2CBus(int8_t sda, int8_t scl) {
 #endif
     }
 
+    TwoWire *boardWire = acquireBoardI2CBus(sda, scl);
+    if (boardWire != nullptr) {
+        userWire = boardWire;
+        userBusShared = false;
+        activeSda = sda;
+        activeScl = scl;
+        return boardWire;
+    }
+
 #ifdef BRUCE_HAS_DUAL_I2C
     TwoWire *wire = (sysWire == &Wire) ? &Wire1 : &Wire;
 #else
@@ -208,8 +243,10 @@ void releaseI2CBus() {
     BUSHAL_DBG("[busHAL] release(): userBusShared=%d userWire=%p\n", (int)userBusShared, (void *)userWire);
     if (userBusShared) return;
     if (userWire == nullptr) return;
-    BUSHAL_DBG("[busHAL] release(): calling userWire->end()\n");
-    userWire->end();
+    if (!releaseBoardI2CBus(userWire)) {
+        BUSHAL_DBG("[busHAL] release(): calling userWire->end()\n");
+        userWire->end();
+    }
     userWire = nullptr;
     activeSda = -1;
     activeScl = -1;
