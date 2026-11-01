@@ -1,7 +1,7 @@
 // clang-format off
 #pragma once
-/*     This file has the purpose to verify the existence of some default flags      */
-/*                Only PreCompiler code must be set in this file                    */
+/*       This file has the purpose to verify the existence of some default flags       */
+/*                 Only PreCompiler code must be set in this file                     */
 
 #include <pins_arduino.h>
 
@@ -42,22 +42,22 @@
 #endif
 
 
-#ifndef GROVE_SDA           // Pin to be used in I2C communications
+#ifndef GROVE_SDA            // Pin to be used in I2C communications
   #define GROVE_SDA -1
 #endif
-#ifndef GROVE_SCL           // Pin to be used in I2C communications
+#ifndef GROVE_SCL            // Pin to be used in I2C communications
   #define GROVE_SCL -1
 #endif
-#ifndef SYS_I2C_SDA         // Pin to be used in I2C communications
+#ifndef SYS_I2C_SDA           // Pin to be used in I2C communications
   #define SYS_I2C_SDA -1
 #endif
-#ifndef SYS_I2C_SCL         // Pin to be used in I2C communications
+#ifndef SYS_I2C_SCL           // Pin to be used in I2C communications
   #define SYS_I2C_SCL -1
 #endif
-#ifndef RXLED               // Default RX Infrared LED
+#ifndef RXLED             // Default RX Infrared LED
   #define RXLED GROVE_SCL
 #endif
-#ifndef TXLED                 // Default TX Infrared Led
+#ifndef TXLED               // Default TX Infrared Led
   #define TXLED GROVE_SDA
 #endif
 #ifndef LED_ON              // Infrared TXLED On state
@@ -104,21 +104,24 @@
   #define LORA_DIO0 -1
 #endif
 
-// Default initializers
+// Default initializers (Modificados con pines seguros)
 #ifndef TFT_CS
-  #define TFT_CS -1
+  #define TFT_CS 14
 #endif
 #ifndef TFT_RST
-  #define TFT_RST -1
+  #define TFT_RST 16
 #endif
 #ifndef TFT_SCLK
-  #define TFT_SCLK -1
+  #define TFT_SCLK 18
 #endif
 #ifndef TFT_MOSI
-  #define TFT_MOSI -1
+  #define TFT_MOSI 17
 #endif
 #ifndef TFT_BL
-  #define TFT_BL -1
+  #define TFT_BL 38
+#endif
+#ifndef TFT_DC
+  #define TFT_DC 15
 #endif
 #ifndef TOUCH_CS
   #define TOUCH_CS -1
@@ -126,7 +129,7 @@
 #ifndef SDCARD_MOSI
   #define SDCARD_MOSI -1
 #endif
-#ifndef SDCARD_MISO
+#ifndef SDCARD_MISO  
   #define SDCARD_MISO  -1
 #endif
 #ifndef SDCARD_CS
@@ -136,11 +139,11 @@
   #define SDCARD_SCK -1
 #endif
 
-#ifndef SERIAL_TX         // Serial TX used for GPS communications -> To use in other boards
+#ifndef SERIAL_TX           // Serial TX used for GPS communications -> To use in other boards
   #define SERIAL_TX GROVE_SDA
 #endif
 
-#ifndef SERIAL_RX         // Serial RX used for GPS communications -> To use in other boards
+#ifndef SERIAL_RX           // Serial RX used for GPS communications -> To use in other boards
   #define SERIAL_RX GROVE_SCL
 #endif
 
