@@ -173,6 +173,7 @@ volatile int tftHeight = TFT_WIDTH;
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
 #include "modules/others/audio.h"                // for playAudioFile
 #include "modules/rf/rf_utils.h"                 // for initCC1101once
+#include "modules/rf/protocols/rf_keystore.h" // for rf_keystore_load
 #include <Wire.h>
 
 /*********************************************************************
@@ -496,6 +497,9 @@ void setup() {
     _pre_storage_gpio();
     begin_storage();
     RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
+    #if !defined(LITE_VERSION)
+    rf_keystore_load();
+#endif
     begin_tft();
     init_clock();
     init_led();

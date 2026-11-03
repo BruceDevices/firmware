@@ -750,4 +750,20 @@ uint8_t rf_stream_protocol_blocks_xor_bytes(uint8_t const message[], size_t size
     return result;
 }
 
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type) {
+    // Add a key to the keystore
+    // This is a stub implementation - actual keystore management is handled by the RF protocol engine
+    (void)name; (void)key; (void)type;
+    return true;
+}
+
+void rf_stream_keystore_raw_blob_set(const uint8_t *data, size_t size) {
+    // Set a raw blob of key data for the keystore
+    (void)data; (void)size;
+}
+
+void rf_stream_keystore_clear_keys(void) {
+    // Clear all keys from the keystore
+}
+
 #endif

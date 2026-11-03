@@ -14,6 +14,11 @@ extern "C" {
 typedef void (*RfStreamFrame)(void *, const char *, const char *, bool, bool);
 typedef void (*RfStreamEncoded)(void *, const int32_t *, size_t, const char *);
 bool rf_stream_has_encoder(const RfStreamCodec *codec);
+
+// Keystore functions
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type);
+void rf_stream_keystore_raw_blob_set(const uint8_t *data, size_t size);
+void rf_stream_keystore_clear_keys(void);
 const char *rf_stream_read(
     const RfStreamCodec *codec, const char *record, const int32_t *pulses, size_t count, RfStreamFrame frame,
     void *context
