@@ -54,6 +54,8 @@ jobs:
           - { env: "esp32-c5",                        family: "ESP32-C5",}
           - { env: "esp32-c5-tft",                    family: "ESP32-C5",}
           - { env: "esp32-c5-tft-ST7789-170x320",     family: "ESP32-C5",}
+          - { env: "esp-wroom32-ili9341",             family: "ESP32",}
+          - { env: "esp-wroom32-st7789",              family: "ESP32",}
           - { env: "esp32-c5-tft-ST7789-240x320",     family: "ESP32-C5",}
           - { env: "nm-cyd-c5",                       family: "ESP32-C5",}
           - { env: "CYD-2432S028",                    family: "ESP32",}
