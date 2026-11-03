@@ -53,7 +53,6 @@ void tft_display::begin(uint32_t speed) {
 #elif defined(LOVYAN_I2C_BUS)
 #if !defined(TFT_I2C_PORT) || !defined(TFT_I2C_WRITE) || !defined(TFT_I2C_READ) || !defined(TFT_SDA) ||      \
     !defined(TFT_SCL) || !defined(TFT_ADDR)
-#else
 #error "To use LOVYAN_I2C_BUS, need to define:\n \
         - TFT_I2C_PORT\n \
         - TFT_I2C_WRITE\n \
@@ -72,7 +71,6 @@ void tft_display::begin(uint32_t speed) {
 #if !defined(TFT_WRITE_FREQ) || !defined(TFT_WR) || !defined(TFT_RD) || !defined(TFT_DC) ||                  \
     !defined(TFT_D0) || !defined(TFT_D1) || !defined(TFT_D2) || !defined(TFT_D3) || !defined(TFT_D4) ||      \
     !defined(TFT_D5) || !defined(TFT_D6) || !defined(TFT_D7)
-#else
 #error "To use LOVYAN_8PARALLEL_BUS, need to define:\n \
         - TFT_WRITE_FREQ\n \
         - TFT_WR\n \
