@@ -1,4 +1,5 @@
 import hashlib
+import subprocess
 from typing import TYPE_CHECKING, Any
 import requests
 
@@ -16,40 +17,50 @@ Import("env")  # type: ignore
 FRAMEWORK_DIR = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
 board_mcu = env.BoardConfig()
 mcu = board_mcu.get("build.mcu", "")
-patchflag_path = join(FRAMEWORK_DIR,mcu, "lib", ".patched")
+patchflag_path = join(FRAMEWORK_DIR, mcu, "lib", ".patched-v2")
 
-# patch file only if we didn't do it befored
-if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
+if not isfile(patchflag_path):
     original_file = join(FRAMEWORK_DIR,mcu, "lib", "libnet80211.a")
     patched_file = join(
         FRAMEWORK_DIR, mcu, "lib", "libnet80211.a.patched"
     )
 
-    if mcu=="esp32c5" or mcu=="esp32c6" :
-        env.Execute(
-            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (original_file, patched_file)
+    if mcu != "esp32p4":
+        backup_file = "%s.old" % original_file
+        if not isfile(original_file):
+            if isfile(backup_file):
+                rename(backup_file, original_file)
+            else:
+                raise FileNotFoundError(f"Original library not found: {original_file}")
+
+        if mcu in ("esp32c5", "esp32c6"):
+            toolchain_package = "toolchain-riscv32-esp"
+            objcopy_name = "riscv32-esp-elf-objcopy"
+        else:
+            toolchain_package = "toolchain-xtensa-esp-elf"
+            objcopy_name = f"xtensa-{mcu}-elf-objcopy"
+
+        toolchain_dir = env.PioPlatform().get_package_dir(toolchain_package)
+        objcopy = join(toolchain_dir, "bin", objcopy_name)
+        if not isfile(objcopy):
+            raise FileNotFoundError(f"objcopy tool not found: {objcopy}")
+
+        subprocess.run(
+            [
+                objcopy,
+                "--weaken-symbol=ieee80211_raw_frame_sanity_check",
+                original_file,
+                patched_file,
+            ],
+            check=True,
         )
-    elif mcu=="esp32p4":
-        """Do nothing"""
-    else:
-        env.Execute(
-            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (mcu, mcu, original_file, patched_file)
-        )
+        if not isfile(patched_file):
+            raise FileNotFoundError(f"Patched library not found: {patched_file}")
 
-    if isfile("%s.old" % (original_file)):
-        remove("%s.old" % (original_file))
-
-    if isfile(original_file):
-        rename(original_file, "%s.old" % (original_file))
-    else:
-        print("Patch: Original file not found")
-
-    if isfile(patched_file):
+        if isfile(backup_file):
+            remove(backup_file)
+        rename(original_file, backup_file)
         rename(patched_file, original_file)
-    else:
-        print("Patch: Patched file not found")
 
 
     def _touch(path):
