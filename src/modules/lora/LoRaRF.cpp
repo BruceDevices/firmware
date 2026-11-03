@@ -43,7 +43,14 @@ SX1262 *lora1262 = nullptr;
 volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
+#ifdef LORA_DEFAULT_SX126X
+// Boards with an SX126x (SX1262/SX1268) radio default to the SX126x driver
+#define LORA_DEFAULT_RADIO_NAME "SX1262"
+LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1262;
+#else
+#define LORA_DEFAULT_RADIO_NAME "SX1276"
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+#endif
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -131,7 +138,18 @@ bool startLoraRadio(float bandMHz) {
         if (state == RADIOLIB_ERR_NONE) state = lora1276->startReceive();
     } else {
         lora1262 = new SX1262(loraModule);
+#ifdef LORA_TCXO_VOLTAGE
+        // Modules with TCXO on DIO3 (e.g. EBYTE E22 series)
+        state = lora1262->begin(
+            bandMHz, 125.0, 9, 7, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, 10, 8, LORA_TCXO_VOLTAGE
+        );
+#else
         state = lora1262->begin(bandMHz);
+#endif
+#if defined(LORA_RXEN) && defined(LORA_TXEN)
+        // External RF switch (e.g. EBYTE E22 RXEN/TXEN)
+        if (state == RADIOLIB_ERR_NONE) lora1262->setRfSwitchPins(LORA_RXEN, LORA_TXEN);
+#endif
         if (state == RADIOLIB_ERR_NONE) { lora1262->setDio1Action(onLoraPacket); }
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setSpreadingFactor(spreadingFactor);
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setBandwidth(SignalBandwidth / 1000.0);
@@ -293,7 +311,7 @@ void downpress() {
 }
 
 void selectRadioVariant(JsonDocument &doc) {
-    String stored = doc["LoRa_Radio"] | "SX1276";
+    String stored = doc["LoRa_Radio"] | LORA_DEFAULT_RADIO_NAME;
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
@@ -389,7 +407,7 @@ void lorachat() {
         File file = LittleFS.open("/lora_settings.json", "w");
         doc["LoRa_Frequency"] = "434500000.00";
         doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] = LORA_DEFAULT_RADIO_NAME;
         serializeJson(doc, file);
         file.close();
     }
