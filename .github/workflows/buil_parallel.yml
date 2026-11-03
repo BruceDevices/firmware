@@ -107,6 +107,7 @@ jobs:
           - { env: "LAUNCHER_Marauder-v61",           family: "ESP32",}
           - { env: "Awok-Touch",                      family: "ESP32",}
           - { env: "WaveSentry-R1",                   family: "ESP32",}
+          - { env: "waveshare-c5-35",                 family: "ESP32-C5",}
           - { env: "LAUNCHER_WaveSentry-R1",          family: "ESP32",}
           - { env: "lilka",                           family: "ESP32-S3",}
 
