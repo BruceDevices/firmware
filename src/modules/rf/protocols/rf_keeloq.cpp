@@ -10,6 +10,9 @@
 #include "core/sd_functions.h" // getFsStorage
 #include "rf_config.h"         // RF_DEBUG, RF_DBG
 #include "rf_keeloq_mfcodes_data.h"
+#if !defined(LITE_VERSION)
+#include "rf_stream.h" // engine keystore primitives (add_key/clear_keys)
+#endif
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <cstdlib>
@@ -102,6 +105,21 @@ FS *keeloq_mfcodes_fs() {
     if (LittleFS.exists("/mfcodes")) return &LittleFS;
     return fs; // may be nullptr
 }
+
+#if !defined(LITE_VERSION)
+void keeloq_engine_keystore_load() {
+    // One pass through the existing KeeLoq reader (/mfcodes or the embedded
+    // blob), copied into the engine keystore. No second parser, no second
+    // decrypt, no duplicate key table — the ProtoPirate decoders see exactly
+    // what keeloq_identify sees.
+    rf_stream_keystore_clear_keys();
+    KeeloqKeystore keeloq{keeloq_mfcodes_fs()};
+    for (const KeeloqKey &k : keeloq.get_keys())
+        rf_stream_keystore_add_key(k.mf_name.c_str(), k.key, (uint16_t)k.type);
+}
+
+void keeloq_engine_keystore_free() { rf_stream_keystore_clear_keys(); }
+#endif
 
 uint32_t keeloq_build_hop(const String &mf_name, uint8_t btn, uint32_t serial, uint16_t cnt) {
     const uint32_t b = (uint32_t)btn << 28;

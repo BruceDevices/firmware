@@ -7,6 +7,7 @@
 #include "protocols/rf_presets.h"
 #include "protocols/rf_decode_limits.h"
 #include "protocols/rf_protocol_engine.h"
+#include "protocols/rf_keeloq.h" // keeloq_engine_keystore_load/free
 #include "rf_scan.h"
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -730,7 +731,14 @@ public:
 } // namespace
 
 void rf_protopirate() {
-    ProtoPirate app;
-    app.run();
+    // Load the manufacturer keystore (via the shared KeeLoq reader) only while
+    // ProtoPirate is open, and free it on exit, so the ~150 keys do not sit in
+    // RAM the rest of the session.
+    keeloq_engine_keystore_load();
+    {
+        ProtoPirate app;
+        app.run();
+    }
+    keeloq_engine_keystore_free();
 }
 #endif
