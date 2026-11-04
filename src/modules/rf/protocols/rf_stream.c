@@ -11,6 +11,8 @@
 static RfStreamKeystore empty_keystore;
 static RfStreamEnvironment environment = {&empty_keystore};
 
+RfStreamKeystore *rf_stream_default_keystore(void) { return &empty_keystore; }
+
 static RfText *dump(const RfRecord *record) {
     RfText *text = rf_text_alloc();
     for (size_t i = 0; i < record->count; ++i)

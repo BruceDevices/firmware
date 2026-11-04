@@ -242,6 +242,43 @@ RfStreamKeystore *rf_stream_environment_get_keystore(RfStreamEnvironment *e) {
     return e ? e->keystore : NULL;
 }
 RfStreamKeyArray_t *rf_stream_keystore_get_data(RfStreamKeystore *k) { return k ? &k->data : NULL; }
+
+// ---------------------------------------------------------------------------
+// Engine keystore storage primitive.
+//
+// The single default keystore (rf_stream_default_keystore()) is filled on
+// demand by keeloq_engine_keystore_load() (rf_keeloq.cpp), which reuses the one
+// KeeLoq /mfcodes reader. Star Line manufacturer ID, the KIA vehicle keys
+// (types 10..13) and the KeeLoq families therefore all share that one source.
+// ---------------------------------------------------------------------------
+
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type) {
+    RfStreamKeystore *k = rf_stream_default_keystore();
+    if (!k || !name) return false;
+
+    RfStreamKey *grown = realloc(k->data.items, (k->data.count + 1) * sizeof(RfStreamKey));
+    if (!grown) return false;
+    k->data.items = grown;
+
+    RfStreamKey *slot = &k->data.items[k->data.count];
+    slot->name = rf_text_alloc();
+    if (!slot->name) return false;
+    rf_text_set(slot->name, name);
+    slot->key = key;
+    slot->type = type;
+    k->data.count++;
+    return true;
+}
+
+void rf_stream_keystore_clear_keys(void) {
+    RfStreamKeystore *k = rf_stream_default_keystore();
+    if (!k) return;
+    for (size_t i = 0; i < k->data.count; i++) rf_text_free(k->data.items[i].name);
+    free(k->data.items);
+    k->data.items = NULL;
+    k->data.count = 0;
+}
+
 /* Device-encrypted Flipper keystores cannot be treated as plaintext on ESP32. */
 bool rf_stream_keystore_raw_get_data(const char *name, size_t off, uint8_t *out, size_t n) {
     (void)name;

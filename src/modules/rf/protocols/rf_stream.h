@@ -14,6 +14,13 @@ extern "C" {
 typedef void (*RfStreamFrame)(void *, const char *, const char *, bool, bool);
 typedef void (*RfStreamEncoded)(void *, const int32_t *, size_t, const char *);
 bool rf_stream_has_encoder(const RfStreamCodec *codec);
+
+// Engine keystore storage primitive (implemented in rf_stream_support.c, backed
+// by the default keystore in rf_stream.c). Filled on demand from the single
+// KeeLoq /mfcodes reader by keeloq_engine_keystore_load() (rf_keeloq.cpp) while
+// ProtoPirate is open.
+bool rf_stream_keystore_add_key(const char *name, uint64_t key, uint16_t type);
+void rf_stream_keystore_clear_keys(void);
 const char *rf_stream_read(
     const RfStreamCodec *codec, const char *record, const int32_t *pulses, size_t count, RfStreamFrame frame,
     void *context

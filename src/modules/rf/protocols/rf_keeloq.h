@@ -49,6 +49,17 @@ private:
 // it and no storage is available.
 FS *keeloq_mfcodes_fs();
 
+#if !defined(LITE_VERSION)
+// Bridge the KeeLoq keystore reader (above) into the shared RF protocol engine
+// (ProtoPirate) keystore, so the Star Line / KeeLoq-family / KIA vehicle-key
+// decoders read the SAME /mfcodes source instead of a duplicate key table or a
+// second reader. load() fills the engine keystore from one KeeloqKeystore pass;
+// free() releases it. Called when the ProtoPirate feature opens / closes, so
+// the keys only occupy RAM while that feature is in use.
+void keeloq_engine_keystore_load();
+void keeloq_engine_keystore_free();
+#endif
+
 // Build the KeeLoq "hop" plaintext (button | manufacturer-masked serial |
 // counter) for a manufacturer. Pure function so every framing route is testable
 // without the SD keystore. Centurion/Merlin/Monarch use a fixed serial field;
