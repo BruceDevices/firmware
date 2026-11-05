@@ -1,0 +1,252 @@
+/*
+ * Helper to render simple 5x7 bitmap text onto the ESL image buffer.
+ */
+
+#ifndef TAGTINKER_FONT_H
+#define TAGTINKER_FONT_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+
+#define FONT_CHAR_W 5
+#define FONT_CHAR_H 7
+
+/* Standard 5x7 ASCII bitmap font (characters 32-127) */
+static const uint8_t font_5x7[][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, /*   */
+    {0x00, 0x00, 0x5f, 0x00, 0x00}, /* ! */
+    {0x00, 0x07, 0x00, 0x07, 0x00}, /* " */
+    {0x14, 0x7f, 0x14, 0x7f, 0x14}, /* # */
+    {0x24, 0x2a, 0x7f, 0x2a, 0x12}, /* $ */
+    {0x23, 0x13, 0x08, 0x64, 0x62}, /* % */
+    {0x36, 0x49, 0x55, 0x22, 0x50}, /* & */
+    {0x00, 0x05, 0x03, 0x00, 0x00}, /* ' */
+    {0x00, 0x1c, 0x22, 0x41, 0x00}, /* ( */
+    {0x00, 0x41, 0x22, 0x1c, 0x00}, /* ) */
+    {0x08, 0x2a, 0x1c, 0x2a, 0x08}, /* * */
+    {0x08, 0x08, 0x3e, 0x08, 0x08}, /* + */
+    {0x00, 0x50, 0x30, 0x00, 0x00}, /* , */
+    {0x08, 0x08, 0x08, 0x08, 0x08}, /* - */
+    {0x00, 0x60, 0x60, 0x00, 0x00}, /* . */
+    {0x20, 0x10, 0x08, 0x04, 0x02}, /* / */
+    {0x3e, 0x51, 0x49, 0x45, 0x3e}, /* 0 */
+    {0x00, 0x42, 0x7f, 0x40, 0x00}, /* 1 */
+    {0x42, 0x61, 0x51, 0x49, 0x46}, /* 2 */
+    {0x21, 0x41, 0x45, 0x4b, 0x31}, /* 3 */
+    {0x18, 0x14, 0x12, 0x7f, 0x10}, /* 4 */
+    {0x27, 0x45, 0x45, 0x45, 0x39}, /* 5 */
+    {0x3c, 0x4a, 0x49, 0x49, 0x30}, /* 6 */
+    {0x01, 0x71, 0x09, 0x05, 0x03}, /* 7 */
+    {0x36, 0x49, 0x49, 0x49, 0x36}, /* 8 */
+    {0x06, 0x49, 0x49, 0x29, 0x1e}, /* 9 */
+    {0x00, 0x36, 0x36, 0x00, 0x00}, /* : */
+    {0x00, 0x56, 0x36, 0x00, 0x00}, /* ; */
+    {0x00, 0x08, 0x14, 0x22, 0x41}, /* < */
+    {0x14, 0x14, 0x14, 0x14, 0x14}, /* = */
+    {0x41, 0x22, 0x14, 0x08, 0x00}, /* > */
+    {0x02, 0x01, 0x51, 0x09, 0x06}, /* ? */
+    {0x32, 0x49, 0x79, 0x41, 0x3e}, /* @ */
+    {0x7e, 0x11, 0x11, 0x11, 0x7e}, /* A */
+    {0x7f, 0x49, 0x49, 0x49, 0x36}, /* B */
+    {0x3e, 0x41, 0x41, 0x41, 0x22}, /* C */
+    {0x7f, 0x41, 0x41, 0x22, 0x1c}, /* D */
+    {0x7f, 0x49, 0x49, 0x49, 0x41}, /* E */
+    {0x7f, 0x09, 0x09, 0x01, 0x01}, /* F */
+    {0x3e, 0x41, 0x41, 0x51, 0x32}, /* G */
+    {0x7f, 0x08, 0x08, 0x08, 0x7f}, /* H */
+    {0x00, 0x41, 0x7f, 0x41, 0x00}, /* I */
+    {0x20, 0x40, 0x41, 0x3f, 0x01}, /* J */
+    {0x7f, 0x08, 0x14, 0x22, 0x41}, /* K */
+    {0x7f, 0x40, 0x40, 0x40, 0x40}, /* L */
+    {0x7f, 0x02, 0x04, 0x02, 0x7f}, /* M */
+    {0x7f, 0x04, 0x08, 0x10, 0x7f}, /* N */
+    {0x3e, 0x41, 0x41, 0x41, 0x3e}, /* O */
+    {0x7f, 0x09, 0x09, 0x09, 0x06}, /* P */
+    {0x3e, 0x41, 0x51, 0x21, 0x5e}, /* Q */
+    {0x7f, 0x09, 0x19, 0x29, 0x46}, /* R */
+    {0x46, 0x49, 0x49, 0x49, 0x31}, /* S */
+    {0x01, 0x01, 0x7f, 0x01, 0x01}, /* T */
+    {0x3f, 0x40, 0x40, 0x40, 0x3f}, /* U */
+    {0x1f, 0x20, 0x40, 0x20, 0x1f}, /* V */
+    {0x7f, 0x20, 0x18, 0x20, 0x7f}, /* W */
+    {0x63, 0x14, 0x08, 0x14, 0x63}, /* X */
+    {0x03, 0x04, 0x78, 0x04, 0x03}, /* Y */
+    {0x61, 0x51, 0x49, 0x45, 0x43}, /* Z */
+    {0x00, 0x00, 0x7f, 0x41, 0x41}, /* [ */
+    {0x02, 0x04, 0x08, 0x10, 0x20}, /* \ */
+    {0x41, 0x41, 0x7f, 0x00, 0x00}, /* ] */
+    {0x04, 0x02, 0x01, 0x02, 0x04}, /* ^ */
+    {0x40, 0x40, 0x40, 0x40, 0x40}, /* _ */
+    {0x00, 0x01, 0x02, 0x04, 0x00}, /* ` */
+    {0x20, 0x54, 0x54, 0x54, 0x78}, /* a */
+    {0x7f, 0x48, 0x44, 0x44, 0x38}, /* b */
+    {0x38, 0x44, 0x44, 0x44, 0x20}, /* c */
+    {0x38, 0x44, 0x44, 0x48, 0x7f}, /* d */
+    {0x38, 0x54, 0x54, 0x54, 0x18}, /* e */
+    {0x08, 0x7e, 0x09, 0x01, 0x02}, /* f */
+    {0x08, 0x14, 0x54, 0x54, 0x3c}, /* g */
+    {0x7f, 0x08, 0x04, 0x04, 0x78}, /* h */
+    {0x00, 0x44, 0x7d, 0x40, 0x00}, /* i */
+    {0x20, 0x40, 0x44, 0x3d, 0x00}, /* j */
+    {0x00, 0x7f, 0x10, 0x28, 0x44}, /* k */
+    {0x00, 0x41, 0x7f, 0x40, 0x00}, /* l */
+    {0x7c, 0x04, 0x18, 0x04, 0x78}, /* m */
+    {0x7c, 0x08, 0x04, 0x04, 0x78}, /* n */
+    {0x38, 0x44, 0x44, 0x44, 0x38}, /* o */
+    {0x7c, 0x14, 0x14, 0x14, 0x08}, /* p */
+    {0x08, 0x14, 0x14, 0x18, 0x7c}, /* q */
+    {0x7c, 0x08, 0x04, 0x04, 0x08}, /* r */
+    {0x48, 0x54, 0x54, 0x54, 0x20}, /* s */
+    {0x04, 0x3f, 0x44, 0x40, 0x20}, /* t */
+    {0x3c, 0x40, 0x40, 0x20, 0x7c}, /* u */
+    {0x1c, 0x20, 0x40, 0x20, 0x1c}, /* v */
+    {0x3c, 0x40, 0x30, 0x40, 0x3c}, /* w */
+    {0x44, 0x28, 0x10, 0x28, 0x44}, /* x */
+    {0x0c, 0x50, 0x50, 0x50, 0x3c}, /* y */
+    {0x44, 0x64, 0x54, 0x4c, 0x44}, /* z */
+    {0x00, 0x08, 0x36, 0x41, 0x00}, /* { */
+    {0x00, 0x00, 0x7f, 0x00, 0x00}, /* | */
+    {0x00, 0x41, 0x36, 0x08, 0x00}, /* } */
+    {0x08, 0x04, 0x08, 0x10, 0x08}, /* ~ */
+};
+
+/* Sets a pixel in a 1-byte-per-pixel buffer */
+static inline void set_pixel(uint8_t* buf, uint16_t w, uint16_t h, uint16_t x, uint16_t y, uint8_t val) {
+    if(x < w && y < h) buf[y * w + x] = val;
+}
+
+static inline void set_region_pixel(
+    uint8_t* buf,
+    uint16_t region_w,
+    uint16_t region_h,
+    uint16_t x,
+    uint16_t global_y,
+    uint16_t region_y,
+    uint8_t val) {
+    if(x < region_w && global_y >= region_y && global_y < (uint16_t)(region_y + region_h)) {
+        buf[(global_y - region_y) * region_w + x] = val;
+    }
+}
+
+/*
+ * Render text to fill the entire buffer.
+ * bg_val/fg_val control polarity:
+ *   Normal:   bg=1 (white), fg=0 (black)
+ *   Inverted: bg=0 (black), fg=1 (white)
+ * No outer margin is added.
+ */
+static inline void render_text_ex(uint8_t* buf, uint16_t w, uint16_t h,
+                                    const char* text, uint8_t bg_val, uint8_t fg_val, uint8_t padding_pct) {
+    memset(buf, bg_val, (size_t)w * h);
+
+    size_t len = strlen(text);
+    if(len == 0) return;
+
+    if(padding_pct > 45) padding_pct = 45;
+
+    uint16_t pad_w = (w * padding_pct) / 100;
+    uint16_t pad_h = (h * padding_pct) / 100;
+
+    uint16_t avail_w = (w > 2 * pad_w) ? (uint16_t)(w - 2 * pad_w) : 1U;
+    uint16_t avail_h = (h > 2 * pad_h) ? (uint16_t)(h - 2 * pad_h) : 1U;
+
+    uint16_t scale_w = avail_w / (len * (FONT_CHAR_W + 1));
+    uint16_t scale_h = avail_h / FONT_CHAR_H;
+
+    if(scale_w < 1) scale_w = 1;
+    if(scale_h < 1) scale_h = 1;
+
+    /* Use uniform scale = min(w,h) for proportional text + better RLE */
+    uint16_t scale = (scale_w < scale_h) ? scale_w : scale_h;
+
+    uint16_t text_w = len * (FONT_CHAR_W + 1) * scale;
+    uint16_t text_h = FONT_CHAR_H * scale;
+
+    uint16_t start_x = (w - text_w) / 2;
+    uint16_t start_y = (h - text_h) / 2;
+
+    for(size_t i = 0; i < len; i++) {
+        char c = text[i];
+        if(c < 32 || c > 126) c = '?';
+        uint8_t glyph_idx = c - 32;
+
+        for(uint8_t gx = 0; gx < FONT_CHAR_W; gx++) {
+            uint8_t col = font_5x7[glyph_idx][gx];
+            for(uint8_t gy = 0; gy < FONT_CHAR_H; gy++) {
+                if(col & (1 << gy)) {
+                    for(uint16_t sx = 0; sx < scale; sx++) {
+                        for(uint16_t sy = 0; sy < scale; sy++) {
+                            uint16_t px = start_x + (i * (FONT_CHAR_W + 1) + gx) * scale + sx;
+                            uint16_t py = start_y + gy * scale + sy;
+                            set_pixel(buf, w, h, px, py, fg_val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+static inline void render_text_region_ex(
+    uint8_t* buf,
+    uint16_t full_w,
+    uint16_t full_h,
+    uint16_t region_y,
+    uint16_t region_h,
+    const char* text,
+    uint8_t bg_val,
+    uint8_t fg_val,
+    uint8_t padding_pct) {
+    memset(buf, bg_val, full_w * region_h);
+
+    size_t len = strlen(text);
+    if(len == 0) return;
+
+    if(padding_pct > 45) padding_pct = 45; /* Max 90% total padding */
+
+    uint16_t pad_w = (full_w * padding_pct) / 100;
+    uint16_t pad_h = (full_h * padding_pct) / 100;
+
+    uint16_t avail_w = (full_w > 2 * pad_w) ? (uint16_t)(full_w - 2 * pad_w) : 1U;
+    uint16_t avail_h = (full_h > 2 * pad_h) ? (uint16_t)(full_h - 2 * pad_h) : 1U;
+
+    uint16_t scale_w = avail_w / (len * (FONT_CHAR_W + 1));
+    uint16_t scale_h = avail_h / FONT_CHAR_H;
+
+    if(scale_w < 1) scale_w = 1;
+    if(scale_h < 1) scale_h = 1;
+
+    uint16_t scale = (scale_w < scale_h) ? scale_w : scale_h;
+    uint16_t text_w = len * (FONT_CHAR_W + 1) * scale;
+    uint16_t text_h = FONT_CHAR_H * scale;
+    uint16_t start_x = (full_w - text_w) / 2;
+    uint16_t start_y = (full_h - text_h) / 2;
+
+    for(size_t i = 0; i < len; i++) {
+        char c = text[i];
+        if(c < 32 || c > 126) c = '?';
+        uint8_t glyph_idx = c - 32;
+
+        for(uint8_t gx = 0; gx < FONT_CHAR_W; gx++) {
+            uint8_t col = font_5x7[glyph_idx][gx];
+            for(uint8_t gy = 0; gy < FONT_CHAR_H; gy++) {
+                if(col & (1 << gy)) {
+                    for(uint16_t sx = 0; sx < scale; sx++) {
+                        for(uint16_t sy = 0; sy < scale; sy++) {
+                            uint16_t px = start_x + (i * (FONT_CHAR_W + 1) + gx) * scale + sx;
+                            uint16_t py = start_y + gy * scale + sy;
+                            set_region_pixel(buf, full_w, region_h, px, py, region_y, fg_val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* Convenience: normal polarity (white bg=1, black text=0) */
+static inline void render_text(uint8_t* buf, uint16_t w, uint16_t h, const char* text) {
+    render_text_ex(buf, w, h, text, 1, 0, 0);
+}
+
+#endif
