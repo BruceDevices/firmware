@@ -200,6 +200,50 @@ conflicts = [
         r'#define RFAL_NFCA_N_RETRANS         2U',
         '#define RFAL_NFCA_N_RETRANS         4U'
     ),
+    # NimBLEClient: Use standard ble_gap_connect when m_phyMask == 1M (Legacy PHY).
+    # On ESP32-S3, calling ble_gap_ext_connect for legacy peers causes the controller's
+    # Extended Link-Layer scheduler to reject the connection with 0x0D (Limited Resources).
+    (
+        ".pio/libdeps/*/NimBLE-Arduino/src/NimBLEClient.cpp",
+        r'#include "NimBLEClient\.h"',
+        '#include "NimBLEClient.h"\n#include <Arduino.h>'
+    ),
+    (
+        ".pio/libdeps/*/NimBLE-Arduino/src/NimBLEClient.cpp",
+        r'(?s)rc = ble_gap_ext_connect\(NimBLEDevice::m_ownAddrType,\s*peerAddr,\s*m_connectTimeout,\s*m_phyMask,\s*\(m_phyMask & BLE_GAP_LE_PHY_1M_MASK\) \? &m_connParams : nullptr,\s*\(m_phyMask & BLE_GAP_LE_PHY_2M_MASK\) \? &m_connParams : nullptr,\s*\(m_phyMask & BLE_GAP_LE_PHY_CODED_MASK\) \? &m_connParams : nullptr,\s*NimBLEClient::handleGapEvent,\s*this\);',
+        'if (m_phyMask == BLE_GAP_LE_PHY_1M_MASK) {\n'
+        '            rc = ble_gap_connect(NimBLEDevice::m_ownAddrType,\n'
+        '                                 peerAddr,\n'
+        '                                 m_connectTimeout,\n'
+        '                                 &m_connParams,\n'
+        '                                 NimBLEClient::handleGapEvent,\n'
+        '                                 this);\n'
+        '            Serial.printf("[NIMBLE-RAW] ble_gap_connect called -> rc=%d\\n", rc);\n'
+        '        } else {\n'
+        '            rc = ble_gap_ext_connect(NimBLEDevice::m_ownAddrType,\n'
+        '                                     peerAddr,\n'
+        '                                     m_connectTimeout,\n'
+        '                                     m_phyMask,\n'
+        '                                     (m_phyMask & BLE_GAP_LE_PHY_1M_MASK) ? &m_connParams : nullptr,\n'
+        '                                     (m_phyMask & BLE_GAP_LE_PHY_2M_MASK) ? &m_connParams : nullptr,\n'
+        '                                     (m_phyMask & BLE_GAP_LE_PHY_CODED_MASK) ? &m_connParams : nullptr,\n'
+        '                                     NimBLEClient::handleGapEvent,\n'
+        '                                     this);\n'
+        '            Serial.printf("[NIMBLE-RAW] ble_gap_ext_connect called -> rc=%d\\n", rc);\n'
+        '        }'
+    ),
+    # NimBLEClient: Zero min_ce_len / max_ce_len by default. Standard non-zero defaults (10ms-480ms)
+    # cause controllers to reject connections with 0x0D when they cannot guarantee 10ms uninterruptible CE.
+    (
+        ".pio/libdeps/*/NimBLE-Arduino/src/NimBLEClient.cpp",
+        r'BLE_GAP_INITIAL_CONN_MIN_CE_LEN,\s*BLE_GAP_INITIAL_CONN_MAX_CE_LEN',
+        '0, 0'
+    ),
+    (
+        ".pio/libdeps/*/NimBLE-Arduino/src/NimBLEClient.cpp",
+        r'm_connParams\.scan_window\s*=\s*scanWindow;\s*}',
+        'm_connParams.scan_window         = scanWindow;\n    m_connParams.min_ce_len          = 0;\n    m_connParams.max_ce_len          = 0;\n}'
+    ),
 ]
 
 for file_pattern, search, replace in conflicts:

@@ -7,6 +7,8 @@
 #include "modules/ble/ble_spam.h"
 #if !defined(LITE_VERSION)
 #include "modules/ble/BLE_Suite.h"
+#include "modules/ble/gatt_explorer.h"
+#include "modules/ble/gatt_server.h"
 #else
 #include "modules/ble/ble_sniffer.h"
 #endif
@@ -27,6 +29,8 @@ void BleMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
     options.push_back({"Media Cmds", [=]() { MediaCommands(hid_ble, true); }});
     options.push_back({"BLE Scan", ble_scan});
+    options.push_back({"GATT Explorer", gattExplorerMenu});
+    options.push_back({"GATT Server", gattServerMenu});
     options.push_back({"iBeacon", [=]() {
                            ibeacon("Bruce", "e4c159a0-8c82-11e6-bdf4-0800200c9a66", 0x004C);
                        }});
