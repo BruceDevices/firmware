@@ -119,18 +119,30 @@ void _post_setup_gpio() {
 ***************************************************************************************/
 int getBattery() {
     int percent = 0;
-#if defined(GAUGE_BQ27220)
-    if (gaugeOn) percent = hal_gauge_get_percent();
-#endif
+    if (gaugeOn) {
+        percent = hal_gauge_get_percent();
+    } else {
+        int voltage = hal_pmic_get_batt_voltage_mv();
+        percent = (voltage - 3300) * 100 / (float)(4150 - 3350);
+
+        if (percent < 0) return 1;
+        if (percent > 100) percent = 100;
+
+        if (hal_pmic_is_charging() && percent >= 97) {
+            hal_pmic_disable_bat_load();
+            percent = 95; // estimate still charging
+        }
+
+        if (hal_pmic_is_charge_done()) { percent = 100; }
+    }
 
     return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
 
-#ifdef GAUGE_BQ27220
 bool isCharging() {
-    return gaugeOn ? hal_gauge_is_charging() : false; // Return the charging status from BQ27220
+    if (gaugeOn) return hal_gauge_is_charging();
+    return hal_pmic_is_charging();
 }
-#endif
 
 /*********************************************************************
 ** Function: setBrightness
