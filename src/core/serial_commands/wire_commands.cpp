@@ -180,6 +180,42 @@ uint32_t wireJtagIdcodeCallback(cmd *c) {
 }
 
 /*********************************************************************
+**  wire la ...
+**********************************************************************/
+uint32_t wireLaCaptureCallback(cmd *c) {
+    Command command(c);
+    uint32_t res = strtoul(command.getArgument("res").getValue().c_str(), nullptr, 10);
+    uint32_t depth = strtoul(command.getArgument("depth").getValue().c_str(), nullptr, 10);
+    int pins[4];
+    for (int i = 0; i < 4; i++) pins[i] = (int)strtol(command.getArgument("pin" + String(i + 1)).getValue().c_str(), nullptr, 10);
+    serialDevice->println(
+        wire_la_capture(res, depth, (int8_t)pins[0], (int8_t)pins[1], (int8_t)pins[2], (int8_t)pins[3])
+    );
+    return true;
+}
+
+uint32_t wireLaDumpCallback(cmd *c) {
+    wire_la_dump();
+    return true;
+}
+
+uint32_t wireLaStatusCallback(cmd *c) {
+    serialDevice->println(wire_la_status());
+    return true;
+}
+
+/*********************************************************************
+**  wire cont ...
+**********************************************************************/
+uint32_t wireContTestCallback(cmd *c) {
+    Command command(c);
+    int pinA = (int)strtol(command.getArgument("pin_a").getValue().c_str(), nullptr, 10);
+    int pinB = (int)strtol(command.getArgument("pin_b").getValue().c_str(), nullptr, 10);
+    serialDevice->println(wire_cont_test((int8_t)pinA, (int8_t)pinB));
+    return true;
+}
+
+/*********************************************************************
 **  Registration
 **********************************************************************/
 void createWireUartCommand(Command *wireCmd) {
@@ -248,11 +284,38 @@ void createWireJtagCommand(Command *wireCmd) {
     idcodeCmd.addPosArg("tdo", "-1");
 }
 
+void createWireLaCommand(Command *wireCmd) {
+    Command wireLaCmd = wireCmd->addCompositeCmd("la");
+
+    Command captureCmd = wireLaCmd.addCommand("capture", wireLaCaptureCallback);
+    captureCmd.addPosArg("res", "1000000");
+    captureCmd.addPosArg("depth", "2048");
+    captureCmd.addPosArg("pin1", "-1"); // -1 pins reuse the Logic Analyzer menu's session pins
+    captureCmd.addPosArg("pin2", "-1");
+    captureCmd.addPosArg("pin3", "-1");
+    captureCmd.addPosArg("pin4", "-1");
+
+    wireLaCmd.addCommand("dump", wireLaDumpCallback);
+    wireLaCmd.addCommand("status", wireLaStatusCallback);
+}
+
+void createWireContCommand(Command *wireCmd) {
+    Command wireContCmd = wireCmd->addCompositeCmd("cont");
+
+    Command testCmd = wireContCmd.addCommand("test", wireContTestCallback);
+    testCmd.addPosArg("pin_a");
+    testCmd.addPosArg("pin_b", "-1"); // pin_b < 0 tests pin_a against GND
+}
+
 void createWireCommands(SimpleCLI *cli) {
     Command wireCmd = cli->addCompositeCmd("wire");
     createWireUartCommand(&wireCmd);
     createWireI2cCommand(&wireCmd);
     createWireSpiCommand(&wireCmd);
     createWireJtagCommand(&wireCmd);
+    createWireContCommand(&wireCmd);
+    // TODO(logic-analyzer): held back from this release; re-enable together with the
+    // Logic Analyzer menu entry in WireToolsMenu.cpp:
+    // createWireLaCommand(&wireCmd);
 }
 #endif

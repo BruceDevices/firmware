@@ -209,7 +209,11 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   - [x] CS-framed HEX console (arbitrary transfers)
 - [x] JTAG Scanner
   - [x] IDCODE read (TAP reset + DR shift, bit-banged TCK/TMS/TDI/TDO)
-- [x] Serial control: `wire uart|i2c|spi|jtag ...` commands over the serial CLI
+- [x] Multimeter
+  - [x] Continuity: pin <-> pin (A driven LOW, B pulled up) with beeper
+  - [x] Continuity: pin -> GND (internal pull-up) with beeper
+  - [x] Held-pin detection (probe driven by another device, e.g. ADV Grove on CH9329)
+- [x] Serial control: `wire uart|i2c|spi|jtag|cont ...` commands over the serial CLI
 </details>
 
 <details>
