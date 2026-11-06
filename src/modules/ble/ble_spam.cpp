@@ -500,6 +500,13 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
+    // Same DMA-memory guard as bleSpamInitAdvertiser: a half-initialized
+    // controller crashes on the first advertisement call
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return;
+    }
+
     // FIX: Always init - if already init'd, it's a no-op
     // This handles the case where another module deinit'd the stack
     BLEDevice::init(DeviceName);
@@ -1536,9 +1543,17 @@ bleSpamSelectAdvertisement(BleSpamRunState &state, BleSpamAttackType attackType,
 // BLE Spam Advertiser Functions - FIXED: Always init/deinit
 // ============================================================================
 
-static void bleSpamInitAdvertiser(
+static bool bleSpamInitAdvertiser(
     BleSpamRunState &state, const BleSpamConfig &config, const uint8_t *mac, bool resetStats
 ) {
+    // BLE controller init mallocs a big contiguous DMA block; on low-memory
+    // boards (e.g. after Wi-Fi/SD churn) it fails half-initialized and the
+    // first advertisement call crashes. Same guard as BLE_Suite/ble_common.
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return false;
+    }
+
     if (mac) {
         bleSpamSetMac(mac);
         state.mac_initialized = true;
@@ -1570,6 +1585,7 @@ static void bleSpamInitAdvertiser(
     uint32_t now = millis();
     if (resetStats) state.next_send_ms = now;
     else if (state.next_send_ms < now) state.next_send_ms = now;
+    return true;
 }
 
 static void bleSpamDeinitAdvertiser() {
@@ -1960,7 +1976,9 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
         BleSpamRunState runState;
         uint8_t initialMac[6];
         bool haveMac = bleSpamGetNextMac(runState, config.mac_rand_mode, initialMac);
-        bleSpamInitAdvertiser(runState, config, haveMac ? initialMac : nullptr, true);
+        if (!bleSpamInitAdvertiser(runState, config, haveMac ? initialMac : nullptr, true)) {
+            return; // init failed (low RAM): back to menu, no crash
+        }
 
         BleSpamEditState editState;
         editState.editing = false;

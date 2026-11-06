@@ -53,6 +53,7 @@
 #include <Arduino.h> // pulls sdkconfig.h
 
 #include <esp_heap_caps.h>
+#include <esp_heap_caps_init.h> // heap_caps_add_region: SDR bank <-> heap hand-off
 #include <esp_private/regi2c_ctrl.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
@@ -176,6 +177,44 @@ void stop_tx_tone(unsigned int en);
 #if J_RESERVE_BANK
 SOC_RESERVE_MEMORY_REGION(J_BANK_ADDR, J_BANK_ADDR + J_BANK_LEN, bruce_sdr_bank);
 #endif
+
+// ---------------------------------------------------------------------------
+// Bank <-> heap hand-off
+//
+// The reserved bank is the ADC dump target, so it must never hold live heap
+// data while a capture runs — but leaving it out of the heap permanently
+// starves Wi-Fi/BLE bring-up (esp_bt_controller_init needs a big contiguous
+// DMA block; on Cardputer the menu heap drops from ~90 kB to ~24 kB free).
+//
+// Fence protocol:
+//   boot        bank reserved, invisible to the heap (SDR always usable)
+//   sdrBankHeapInit()   (lazy, first radio bring-up) returns the bank to the
+//                       heap and immediately allocates it all back as a fence;
+//                       the fence keeps every other allocation out of the bank
+//   radio low on memory radio_mem.h frees the fence so Wi-Fi/BLE can use the
+//                       bank; SDR then refuses to start until reboot (clean
+//                       error, never a crash)
+// ---------------------------------------------------------------------------
+static uint8_t *s_fence = nullptr;     // whole-bank allocation; null once a radio took the bank
+static bool s_region_in_heap = false;  // heap_caps_add_region already done
+
+void sdrBankHeapInit() {
+    if (s_region_in_heap) return;
+    if (heap_caps_add_region(J_BANK_ADDR, J_BANK_ADDR + J_BANK_LEN) != ESP_OK) return;
+    s_region_in_heap = true;
+    // The freshly added region is the largest free block, so this allocation
+    // lands inside it and reserves the whole bank for the SDR engine.
+    s_fence = (uint8_t *)heap_caps_malloc(J_BANK_LEN, MALLOC_CAP_8BIT);
+}
+
+// Called by radio_mem.h before Wi-Fi/BLE bring-up when the heap looks tight.
+void sdrBankReleaseForRadio() {
+    sdrBankHeapInit();
+    if (s_fence != nullptr) {
+        heap_caps_free(s_fence);
+        s_fence = nullptr;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -365,7 +404,13 @@ static void tx_prepare(void) {
     delayMicroseconds(J_RETUNE_SETTLE_US);
 }
 
-static void sdr_init_radio(void) {
+static bool sdr_init_radio(void) {
+    // If a radio session released the bank fence, heap allocations may live in
+    // the bank now; capturing would corrupt the heap. Refuse cleanly instead.
+    if (s_region_in_heap && s_fence == nullptr) {
+        displayError("SDR needs reboot (bank busy)", true);
+        return false;
+    }
     // esp_wifi must be running: the PHY brings the radio up and calibrates it.
     esp_wifi_set_ps(WIFI_PS_NONE);
     // Promiscuous first: NULL mode only accepts a channel in promiscuous mode.
@@ -379,6 +424,7 @@ static void sdr_init_radio(void) {
 
     rx_front_end(true, J_RETUNE_SETTLE_US);
     s_ready = true;
+    return true;
 }
 
 static void sdr_deinit_radio(void) {
@@ -555,7 +601,7 @@ static bool jammer_start(void) {
     Serial.println("[SDR] webui stopped, starting wifi");
     if (!jammer_wifi_start()) return false;
     Serial.println("[SDR] wifi up, taking over the radio");
-    sdr_init_radio();
+    if (!sdr_init_radio()) return false;
     Serial.println("[SDR] radio takeover complete");
     return true;
 }
