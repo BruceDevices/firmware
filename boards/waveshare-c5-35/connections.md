@@ -29,21 +29,49 @@ External I2C modules (for example PN532) share the onboard bus at SDA 27 / SCL 2
 | 9 | NC | 10 | EXIO10 |
 | 11 | GPIO22 (C6 boards only) | 12 | EXIO11 |
 | 13 | GPIO21 (C6 boards only) | 14 | EXIO12 |
-| 15 | **GPIO0**: IR / RF RX | 16 | EXIO13 |
-| 17 | **GPIO1**: IR / RF TX | 18 | EXIO14 |
-| 19 | GPIO9 (SD card CS, do not use) | 20 | EXIO15 |
+| 15 | GPIO0, **not connected as shipped** (R55) | 16 | EXIO13 |
+| 17 | GPIO1, **not connected as shipped** (R58) | 18 | EXIO14 |
+| 19 | GPIO9, **not connected as shipped** (R57; GPIO9 is the SD card CS) | 20 | EXIO15 |
 | 21 | **GPIO28** (BOOT button = Back in Bruce, strapping pin) | 22 | CHIP_PU (reset) |
 | 23 | EXIO_ADC | 24 | PWRON |
-| 25 | I2C SCL (GPIO26) | 26 | UART0 TX (GPIO11) |
-| 27 | I2C SDA (GPIO27) | 28 | UART0 RX (GPIO12) |
+| 25 | I2C SCL (GPIO26) | 26 | UART0 TX (GPIO11), **not connected as shipped** (R56) |
+| 27 | I2C SDA (GPIO27) | 28 | UART0 RX (GPIO12), **not connected as shipped** (R59) |
 | 29 | GND | 30 | GND |
 | 31 | 3V3 | 32 | 3V3 |
 
-GPIO0/1 reach the header through 0R selectors (R55/R58) that pick between the header and the
-camera connector; boards without a camera route them to the header.
+### Header GPIOs behind 0R selectors
+
+Per Waveshare's schematic ([waveshareteam/ESP32-C5-Touch-LCD-3.5](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-3.5),
+`hardware/schematic/ESP32-C5-Touch-LCD-3.5.pdf`), these ESP32 GPIOs reach J3 only through a
+3-pad 0R selector: pad 1 is the ESP32 pin, pad 2 is marked **0R** (fitted, the on-board
+function) and pad 3 is marked **NC** (not fitted, the header). As shipped, the header side is
+open, so these J3 holes are not connected to the chip, even on boards without a camera:
+
+| Selector | Pad 1 (ESP32) | Pad 2, 0R (fitted) | Pad 3, NC (header) |
+| :---: | --- | --- | --- |
+| R55 | GPIO0  | CAM_D0     | J3-15 |
+| R58 | GPIO1  | CAM_D1     | J3-17 |
+| R56 | GPIO11 | CAM_PCLK   | J3-26 (U0TXD) |
+| R59 | GPIO12 | CAM_VSYNC  | J3-28 (U0RXD) |
+| R57 | GPIO9  | SD card CS | J3-19 |
+
+R57 is the same part used for GPIO9, and it shows which pad is live: the microSD card works,
+so pad 2 (0R, SD CS) is the connected side and pad 3 (the header) is the open one. Hardware
+testing agrees: on two no-camera units, a firmware pin probe saw no signal reach GPIO0, 1, 11
+or 12 from the header holes, even with a known-good source on the wire (GPS TX measured
+3.247 V at the wire tip).
+
+So the header UART, IR and RF holes do nothing without rework. Per the schematic, moving a
+selector's 0R from pad 2 to pad 3 connects the header and disconnects the on-board function
+(for R57, that would cut the SD card).
+
 The EXIO lines belong to the I/O expander (a CH32V006 MCU at 0x24), not to the ESP32.
 
-UART (GPS / CH9329 BadUSB): TX 11, RX 12 (J3-26 / J3-28).
+UART GPS over the header (TX 11 / RX 12, J3-26 / J3-28) did NOT work on the no-camera units
+tested — no bytes reached the chip. GPS can work on this board over I2C on SDA/SCL (GPIO27/26)
+using the LC76G's I2C mode — verified here with a standalone I2C test driver; Bruce has no I2C
+GPS driver yet, so GPS is unsupported in Bruce on this board for now. CH9329 BadUSB over the
+header UART is untested here.
 
 GPIO 16 and 17 are the module's internal flash/PSRAM pins. Never assign them.
 Audio: I2S BCLK 23, LRCK 10, DOUT 25 to the ES8311, then the NS4150B amp and the onboard speaker.
