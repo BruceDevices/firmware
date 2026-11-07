@@ -1,6 +1,7 @@
 #include "sd_functions.h"
 #include "bus_HAL.h"
 #include "display.h" // using displayRedStripe as error msg
+#include "file_hash_stream.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/wdgwars.h"
@@ -480,11 +481,13 @@ size_t getFileSize(FS &fs, String filepath) {
 }
 
 String md5File(FS &fs, const String &filepath) {
-    if (!fs.exists(filepath)) return "";
-    String txt = readSmallFile(fs, filepath);
+    File file = fs.open(filepath, FILE_READ);
+    if (!file || file.isDirectory()) return "";
     MD5Builder md5;
     md5.begin();
-    md5.add(txt);
+    const bool complete = feedFileToHash(file, md5, []() { yield(); });
+    file.close();
+    if (!complete) return "";
     md5.calculate();
     return (md5.toString());
 }

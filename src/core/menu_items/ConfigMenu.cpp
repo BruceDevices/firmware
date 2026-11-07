@@ -270,7 +270,9 @@ void ConfigMenu::devMenu() {
     while (true) {
         std::vector<Option> localOptions = {
             {"Serial use USB",  [this]() { switchToUSBSerial(); }          },
+#ifndef HELTEC_V4_EXPANSION_V2
             {"Serial use UART", [this]() { switchToUARTSerial(); }         },
+#endif
             {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }},
             {"Back",            []() {}                                    },
         };
@@ -300,14 +302,20 @@ void ConfigMenu::pinsMenu() {
             {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
             {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
 #if !defined(LITE_VERSION)
+#ifndef HELTEC_V4_EXPANSION_V2
             {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
+#endif
             {"ST25R3916 Pins", [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
             {"W5500 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
 #endif
+#ifndef HELTEC_V4_EXPANSION_V2
             {"SDCard Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
+#endif
             {"I2C Pins",       [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
             {"UART Pins",      [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
+#ifndef HELTEC_V4_EXPANSION_V2
             {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
+#endif
             //{"Serial use USB",  [this]() { switchToUSBSerial(); }                       },
             //{"Serial use UART", [this]() { switchToUARTSerial(); }                      },
             {"Back",           []() {}                                                 },
@@ -335,6 +343,10 @@ void ConfigMenu::switchToUSBSerial() {
 **  Switch serial output to UART (handles pin conflicts)
 **********************************************************************/
 void ConfigMenu::switchToUARTSerial() {
+#ifdef HELTEC_V4_EXPANSION_V2
+    displayError("Use USB serial on this board");
+    return;
+#else
     // Check and resolve SD card pin conflicts
     if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
@@ -354,6 +366,7 @@ void ConfigMenu::switchToUARTSerial() {
     pinMode(bruceConfigPins.uart_bus.tx, OUTPUT);
     Serial1.begin(115200, SERIAL_8N1, bruceConfigPins.uart_bus.rx, bruceConfigPins.uart_bus.tx);
     USBserial.setSerialOutput(&Serial1);
+#endif
 }
 /*********************************************************************
 **  Function: drawIcon

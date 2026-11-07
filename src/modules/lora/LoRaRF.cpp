@@ -13,6 +13,7 @@
 #include <core/utils.h>
 #include <globals.h>
 #include <vector>
+#include "lora_board.h"
 
 extern BruceConfigPins bruceConfigPins;
 
@@ -20,7 +21,7 @@ bool update = false;
 String msg;
 String rcvmsg;
 String displayName;
-bool intlora = true;
+bool intlora = false;
 // scrolling thing
 std::vector<String> messages;
 int scrollOffset = 0;
@@ -43,7 +44,24 @@ SX1262 *lora1262 = nullptr;
 volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
+#ifdef LORA_FIXED_SX1262
+LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1262;
+#else
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+#endif
+
+static void disableLoraFrontend() {
+#if defined(LORA_FEM_POWER) && defined(LORA_FEM_ENABLE)
+    pinMode(LORA_FEM_ENABLE, OUTPUT);
+    digitalWrite(LORA_FEM_ENABLE, LOW);
+#ifdef LORA_FEM_CTX
+    pinMode(LORA_FEM_CTX, OUTPUT);
+    digitalWrite(LORA_FEM_CTX, LOW);
+#endif
+    pinMode(LORA_FEM_POWER, OUTPUT);
+    digitalWrite(LORA_FEM_POWER, LOW);
+#endif
+}
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -65,11 +83,17 @@ int getLoraResetPin() { return bruceConfigPins.LoRa_bus.io0; }
 int getLoraCsPin() { return bruceConfigPins.LoRa_bus.cs; }
 
 void clearLoraRadio() {
+    intlora = false;
+    loraInterruptEnabled = false;
     if (lora1276) {
+        lora1276->clearDio0Action();
+        lora1276->sleep();
         delete lora1276;
         lora1276 = nullptr;
     }
     if (lora1262) {
+        lora1262->clearDio1Action();
+        lora1262->sleep();
         delete lora1262;
         lora1262 = nullptr;
     }
@@ -77,6 +101,8 @@ void clearLoraRadio() {
         delete loraModule;
         loraModule = nullptr;
     }
+    disableLoraFrontend();
+    loraPacketReceived = false;
 }
 
 void onLoraPacket() {
@@ -87,17 +113,16 @@ void onLoraPacket() {
 SPIClass *selectLoraSPIBus() {
     SPIClass *bus =
         acquireSPIBus(bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi);
-    if (!bus) {
-        Serial.println("No hardware SPI bus available for LoRa, falling back to default SPI");
-        return &SPI;
-    }
+    if (!bus) Serial.println("No hardware SPI bus available for LoRa");
     return bus;
 }
 
 bool startLoraRadio(float bandMHz) {
-    intlora = false;
-    loraPacketReceived = false;
-    loraInterruptEnabled = true;
+    clearLoraRadio();
+    if (!loraFrequencySupported(bandMHz, SignalBandwidth / 1000.0)) {
+        displayError("Frequency outside board band", true);
+        return false;
+    }
     const int irqPin = getLoraIrqPin();
     if (getLoraCsPin() == GPIO_NUM_NC || bruceConfigPins.LoRa_bus.mosi == GPIO_NUM_NC ||
         bruceConfigPins.LoRa_bus.miso == GPIO_NUM_NC || bruceConfigPins.LoRa_bus.sck == GPIO_NUM_NC) {
@@ -112,13 +137,34 @@ bool startLoraRadio(float bandMHz) {
     }
 
     loraSpi = selectLoraSPIBus();
-    clearLoraRadio();
+    if (!loraSpi) {
+        displayError("LoRa SPI unavailable", true);
+        return false;
+    }
     const int busyPin = (loraRadioVariant == LoRaRadioVariant::SX1262) ? getLoraBusyPin() : GPIO_NUM_NC;
     if (loraRadioVariant == LoRaRadioVariant::SX1262 && busyPin == GPIO_NUM_NC) {
         Serial.println("Warning: SX1262 selected but BUSY pin is not configured");
     }
     loraModule = new Module(getLoraCsPin(), irqPin, getLoraResetPin(), busyPin, *loraSpi);
 
+#if defined(LORA_FEM_POWER) && defined(LORA_FEM_ENABLE) && defined(LORA_FEM_CTX)
+    // KCT8103L: enable only after its supply settles. DIO2 drives CPS, while
+    // CTX must change with the radio mode (LOW = LNA receive, HIGH = transmit).
+    digitalWrite(LORA_FEM_POWER, HIGH);
+    delay(5);
+    static const uint32_t switchPins[Module::RFSWITCH_MAX_PINS] = {
+        LORA_FEM_CTX, LORA_FEM_ENABLE, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC
+    };
+    static const Module::RfSwitchMode_t switchTable[] = {
+        {Module::MODE_IDLE, {HIGH, LOW}},
+        {Module::MODE_RX, {LOW, HIGH}},
+        {Module::MODE_TX, {HIGH, HIGH}},
+        END_OF_MODE_TABLE
+    };
+    loraModule->setRfSwitchTable(switchPins, switchTable);
+#endif
+
+    loraInterruptEnabled = true;
     int state = RADIOLIB_ERR_NONE;
     if (loraRadioVariant == LoRaRadioVariant::SX1276) {
         lora1276 = new SX1276(loraModule);
@@ -131,7 +177,16 @@ bool startLoraRadio(float bandMHz) {
         if (state == RADIOLIB_ERR_NONE) state = lora1276->startReceive();
     } else {
         lora1262 = new SX1262(loraModule);
+#ifdef LORA_FIXED_SX1262
+        // Raw chip drive, not antenna-port power: this board includes a PA.
+        state = lora1262->begin(
+            bandMHz, SignalBandwidth / 1000.0, spreadingFactor, codingRateDenominator,
+            RADIOLIB_SX126X_SYNC_WORD_PRIVATE, LORA_MAX_TX_POWER, preambleLength, LORA_TCXO_VOLTAGE, false
+        );
+        if (state == RADIOLIB_ERR_NONE) state = lora1262->setDio2AsRfSwitch(true);
+#else
         state = lora1262->begin(bandMHz);
+#endif
         if (state == RADIOLIB_ERR_NONE) { lora1262->setDio1Action(onLoraPacket); }
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setSpreadingFactor(spreadingFactor);
         if (state == RADIOLIB_ERR_NONE) state = lora1262->setBandwidth(SignalBandwidth / 1000.0);
@@ -142,8 +197,8 @@ bool startLoraRadio(float bandMHz) {
 
     if (state != RADIOLIB_ERR_NONE) {
         Serial.printf("Starting LoRa failed! Err %d\n", state);
-        displayError("LoRa Init Failed", true);
         clearLoraRadio();
+        displayError("LoRa Init Failed", true);
         return false;
     }
     intlora = true;
@@ -155,17 +210,28 @@ bool sendLoraMessage(String &payload) {
     if (!intlora) return false;
     loraInterruptEnabled = false;
     int state = RADIOLIB_ERR_NONE;
+    int receiveState = RADIOLIB_ERR_NONE;
     if (loraRadioVariant == LoRaRadioVariant::SX1276 && lora1276) {
         state = lora1276->transmit(payload);
-        lora1276->startReceive();
+        loraPacketReceived = false;
+        loraInterruptEnabled = true;
+        receiveState = lora1276->startReceive();
     } else if (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) {
         state = lora1262->transmit(payload);
-        lora1262->startReceive();
+        loraPacketReceived = false;
+        loraInterruptEnabled = true;
+        receiveState = lora1262->startReceive();
     } else {
         loraInterruptEnabled = true;
         return false;
     }
     loraInterruptEnabled = true;
+    if (receiveState != RADIOLIB_ERR_NONE) {
+        Serial.printf("LoRa resume receive failed: %d\n", receiveState);
+        clearLoraRadio();
+        displayError("LoRa receive failed");
+        return false;
+    }
     if (state != RADIOLIB_ERR_NONE) {
         Serial.printf("LoRa transmit failed: %d\n", state);
         displayError("LoRa send failed");
@@ -194,12 +260,18 @@ void reciveMessage() {
     } else {
         Serial.printf("LoRa read failed: %d\n", state);
     }
-    if (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) {
-        lora1262->startReceive();
-    } else if (lora1276) {
-        lora1276->startReceive();
-    }
     loraInterruptEnabled = true;
+    int receiveState = RADIOLIB_ERR_NONE;
+    if (loraRadioVariant == LoRaRadioVariant::SX1262 && lora1262) {
+        receiveState = lora1262->startReceive();
+    } else if (lora1276) {
+        receiveState = lora1276->startReceive();
+    }
+    if (receiveState != RADIOLIB_ERR_NONE) {
+        Serial.printf("LoRa resume receive failed: %d\n", receiveState);
+        clearLoraRadio();
+        displayError("LoRa receive failed");
+    }
 }
 
 // render stuff
@@ -257,9 +329,12 @@ void sendmsg() {
         return;
     }
     msg = keyboard(msg, 256, "Message:");
-    if (msg == "\x1B") return;
+    if (msg == "\x1B" || msg == "") {
+        msg = "";
+        update = true;
+        return;
+    }
     msg = String(displayName) + ": " + msg;
-    if (msg == "") return;
     Serial.println(msg);
     if (!sendLoraMessage(msg)) {
         update = true;
@@ -286,13 +361,17 @@ void upress() {
 
 void downpress() {
     Serial.println("Down Pressed");
-    if (scrollOffset < messages.size() - maxMessages) {
+    if (scrollOffset < static_cast<int>(messages.size()) - maxMessages) {
         scrollOffset++;
         update = true;
     }
 }
 
 void selectRadioVariant(JsonDocument &doc) {
+#ifdef LORA_FIXED_SX1262
+    loraRadioVariant = LoRaRadioVariant::SX1262;
+    return; // Integrated radio cannot be changed by an imported settings file.
+#else
     String stored = doc["LoRa_Radio"] | "SX1276";
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
@@ -309,6 +388,7 @@ void selectRadioVariant(JsonDocument &doc) {
         serializeJson(doc, cfg);
         cfg.close();
     }
+#endif
 }
 
 void mainloop() {
@@ -376,21 +456,35 @@ void mainloop() {
     }
 }
 
-void lorachat() {
-    // set filesystem thing
-    if (!LittleFS.exists("/chats.txt")) {
-        File file = LittleFS.open("/chats.txt", "w");
-        file.close();
-        Serial.println("chat file created :)");
-    }
+// Every entry point must establish defaults: editing the name/frequency can
+// precede the first visit to Chat. Existing user settings are never replaced.
+static bool ensureLoraSettings() {
     if (!LittleFS.exists("/lora_settings.json")) {
         Serial.println("creating lora settings .json file");
         JsonDocument doc;
         File file = LittleFS.open("/lora_settings.json", "w");
-        doc["LoRa_Frequency"] = "434500000.00";
+        doc["LoRa_Frequency"] = LORA_DEFAULT_FREQ_HZ;
         doc["LoRa_Name"] = "BruceTest";
+#ifdef LORA_FIXED_SX1262
+        doc["LoRa_Radio"] = "SX1262";
+#else
         doc["LoRa_Radio"] = "SX1276";
-        serializeJson(doc, file);
+#endif
+        const bool saved = file && serializeJson(doc, file) > 0;
+        file.close();
+        if (!saved) {
+            LittleFS.remove("/lora_settings.json");
+            displayError("Cannot save LoRa settings", true);
+            return false;
+        }
+    }
+    return true;
+}
+
+void lorachat() {
+    if (!ensureLoraSettings()) return;
+    if (!LittleFS.exists("/chats.txt")) {
+        File file = LittleFS.open("/chats.txt", "w");
         file.close();
     }
     File file = LittleFS.open("/lora_settings.json", "r");
@@ -401,8 +495,8 @@ void lorachat() {
     file.close();
     selectRadioVariant(doc);
     float bandMHz = (BAND > 1000) ? BAND / 1000000.0f : BAND;
-    if (bandMHz <= 0) {
-        displayError("Invalid LoRa frequency", true);
+    if (!loraFrequencySupported(bandMHz, SignalBandwidth / 1000.0)) {
+        displayError("Frequency outside board band", true);
         return;
     }
     tft.fillScreen(TFT_BLACK);
@@ -425,18 +519,24 @@ void lorachat() {
     tft.setTextDatum(TL_DATUM);
     loadMessages();
     mainloop();
+    clearLoraRadio();
 }
 
 // settings
 // check the saving and loading
 void changeusername() {
+    if (!ensureLoraSettings()) return;
     tft.fillScreen(TFT_BLACK);
-    String username = keyboard(username, 64, "");
-    if (username == "" || username == "\x1B") return;
     File file = LittleFS.open("/lora_settings.json", "r");
     JsonDocument doc;
-    deserializeJson(doc, file);
+    const auto error = deserializeJson(doc, file);
     file.close();
+    if (error) {
+        displayError("Invalid LoRa settings", true);
+        return;
+    }
+    String username = keyboard(doc["LoRa_Name"] | "BruceTest", 64, "LoRa name:");
+    if (username == "" || username == "\x1B") return;
     doc["LoRa_Name"] = username;
     file = LittleFS.open("/lora_settings.json", "w");
     serializeJson(doc, file);
@@ -444,6 +544,7 @@ void changeusername() {
 }
 
 void chfreq() {
+    if (!ensureLoraSettings()) return;
     tft.fillScreen(TFT_BLACK);
     char buf[15];
     File file = LittleFS.open("/lora_settings.json", "r");
@@ -456,11 +557,9 @@ void chfreq() {
     snprintf(buf, sizeof(buf), "%.3f", dfreq);
     String freq = num_keyboard(buf, 12, "in Mhz");
     dfreq = freq.toDouble();
-    if (dfreq == 0 || freq == "\x1B") {
-        displayError("Invalid value");
-        return;
-    } else if (dfreq > 1000) {
-        displayError("Invalid value, Exceeds 1Ghz");
+    if (freq == "\x1B") return;
+    if (!loraFrequencySupported(dfreq, SignalBandwidth / 1000.0)) {
+        displayError("Frequency outside board band");
         return;
     }
     dfreq = dfreq * 1000000;

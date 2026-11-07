@@ -38,6 +38,11 @@ jobs:
               partitions: { bootloader_addr: "0x0000" },
             }
           - {
+              name: "ESP32-S3 - Heltec V4-R8 Expansion Kit V2",
+              env: "heltec-v4-expansion-v2",
+              partitions: { bootloader_addr: "0x0000" },
+            }
+          - {
               name: "ESP32 - M5StickCPlus2",
               env: "m5stack-cplus2",
               partitions: { bootloader_addr: "0x1000" },
@@ -100,10 +105,21 @@ jobs:
         run: |
           platformio run -e ${{ matrix.board.env }}
 
+      - name: Check Heltec board policies
+        if: matrix.board.env == 'heltec-v4-expansion-v2'
+        run: |
+          python tests/heltec_pins/run.py
+          python tests/heltec_v4_expansion_v2/run.py
+          python tests/heltec_packaging/test_package_release.py
+          python tests/serial_adapter/run.py
+
       - name: Upload ${{ matrix.board.name }}
         uses: actions/upload-artifact@v4
         with:
           name: Bruce-${{ matrix.board.env }}
-          path: Bruce-*.bin
+          path: |
+            Bruce-*.bin
+            Bruce-*.sha256
+            Bruce-*.json
           retention-days: 5
           if-no-files-found: error

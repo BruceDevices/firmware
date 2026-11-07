@@ -18,6 +18,7 @@ jobs:
       matrix:
         board:
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
+          - { env: "heltec-v4-expansion-v2",          family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
           - { env: "LAUNCHER_m5stack-cplus1_1",       family: "ESP32",}
@@ -143,6 +144,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bruce-${{ matrix.board.env }}
-          path: Bruce-*.bin
+          path: |
+            Bruce-*.bin
+            Bruce-*.sha256
+            Bruce-*.json
           retention-days: 5
           if-no-files-found: error

@@ -81,10 +81,14 @@ static void taskEncoderPoll(void *parameter) {
 #endif
 
 TaskHandle_t xHandle;
+// Boards with edge-triggered input can sample every tick, then publish queued
+// events only when the UI has consumed the previous event.
+void __attribute__((weak)) _pollInput() {}
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
     while (true) {
         checkPowerSaveTime();
+        _pollInput();
         // Sometimes this task run 2 or more times before looptask,
         // and navigation gets stuck, the idea here is run the input detection
         // if AnyKeyPress is false, or rerun if it was not renewed within 75ms (arbitrary)

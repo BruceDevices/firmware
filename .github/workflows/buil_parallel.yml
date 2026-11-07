@@ -36,6 +36,7 @@ jobs:
         board:
           - { env: "arduino-nesso-n1",                family: "ESP32-C6",}
           - { env: "m5stack-cardputer",               family: "ESP32-S3",}
+          - { env: "heltec-v4-expansion-v2",          family: "ESP32-S3",}
           - { env: "m5stack-sticks3",                 family: "ESP32-S3",}
           - { env: "m5stack-cplus2",                  family: "ESP32",}
           - { env: "m5stack-cplus1_1",                family: "ESP32",}
@@ -348,6 +349,8 @@ jobs:
           generate_release_notes: true
           files: |
             Bruce-*.bin
+            Bruce-*.sha256
+            Bruce-*.json
 
       - name: Close "Fixed on Beta" issues
         env:

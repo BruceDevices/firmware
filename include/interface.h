@@ -43,6 +43,8 @@ void _setBrightness(uint8_t brightval);
 ** Function: InputHandler
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
+// Optional sampler called every input-task tick, before UI-event consumption.
+void _pollInput(void);
 void InputHandler(void);
 
 /*********************************************************************
