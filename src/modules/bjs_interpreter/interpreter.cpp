@@ -19,9 +19,24 @@ char *scriptName = NULL;
 
 TaskHandle_t interpreterTaskHandler = NULL;
 
+static int js_interrupt_handler(JSContext *ctx, void *opaque) {
+    (void)ctx;
+    (void)opaque;
+    return interpreter_state < 0 || (interpreter_state == 2 && check(EscPress));
+}
+
+static void stopInterpreterTask() {
+    interpreter_state = -1;
+    interpreterTaskHandler = NULL;
+    vTaskDelete(NULL);
+}
+
 void interpreterHandler(void *pvParameters) {
     printMemoryUsage("init interpreter");
-    if (script == NULL) { return; }
+    if (script == NULL) {
+        stopInterpreterTask();
+        return;
+    }
 
     while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
 
@@ -53,21 +68,20 @@ void interpreterHandler(void *pvParameters) {
     );
     if (mem_size < 2000) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
     if (mem_buf == NULL) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
+    JS_SetInterruptHandler(ctx, js_interrupt_handler);
 
     log_d("Script length: %zu\n", scriptSize);
 
@@ -132,8 +146,7 @@ void interpreterHandler(void *pvParameters) {
 
     printMemoryUsage("deinit interpreter");
 
-    interpreter_state = -1;
-    vTaskDelete(NULL);
+    stopInterpreterTask();
     return;
 }
 
