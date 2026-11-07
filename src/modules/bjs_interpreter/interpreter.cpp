@@ -11,6 +11,7 @@ extern "C" {
 
 #include "display_js.h"
 #include "globals_js.h"
+#include "i2c_js.h"
 
 char *script = NULL;
 size_t scriptSize = 0;
@@ -127,6 +128,7 @@ void interpreterHandler(void *pvParameters) {
     scriptName = NULL;
 
     js_timers_deinit(ctx);
+    i2c_js_release(); // frees the i2c_bus pins (or restores sys_i2c clock) taken by i2c.begin()
     JS_FreeContext(ctx);
     free(mem_buf);
 

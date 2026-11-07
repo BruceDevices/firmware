@@ -80,11 +80,33 @@ private:
 };
 } // namespace
 
+// The address ACK alone could be another chip at 0x28 on the other bus: require a VersionReg value
+// the MFRC522 family actually reports (WS1850S on M5 RFID2, NXP v0/v1/v2, common clones).
+static bool verifyMfrc522(TwoWire &wire, uint8_t addr) {
+    wire.beginTransmission(addr);
+    wire.write((uint8_t)MFRC522::PCD_Register::VersionReg);
+    if (wire.endTransmission(false) != 0) return false;
+    if (wire.requestFrom(addr, (size_t)1) != 1) return false;
+    switch (wire.read()) {
+        case WS1850S_VERSION:
+        case 0x12: // counterfeit
+        case 0x88: // FM17522 clone
+        case 0x90:
+        case 0x91:
+        case 0x92:
+        case 0xB2: // FM17522
+            return true;
+        default: return false;
+    }
+}
+
 RFID2::RFID2(bool use_i2c)
     : _use_i2c(use_i2c), ss_pin((uint8_t)bruceConfigPins.PN532_bus.cs) {
     if (use_i2c) {
-        _i2cWire = acquireI2CBus();
-        if (_i2cWire != nullptr) _driver = new BruceMFRC522DriverI2C{RFID2_I2C_ADDRESS, *_i2cWire};
+        I2CDeviceQuery query{RFID2_I2C_ADDRESS};
+        query.verify = verifyMfrc522;
+        _i2cLease = i2cLeaseDevice(query);
+        if (_i2cLease) _driver = new BruceMFRC522DriverI2C{RFID2_I2C_ADDRESS, *_i2cLease.wire()};
     } else {
         _driver = new MFRC522DriverSPI{
             ss_pin,
@@ -97,16 +119,12 @@ RFID2::RFID2(bool use_i2c)
 }
 
 RFID2::~RFID2() {
-    delete _driver;
-    if (_use_i2c) releaseI2CBus();
+    delete _driver; // before the lease (a member) releases the bus it talks through
 }
 
 bool RFID2::begin() {
     bool i2c_check = false;
-    if (_use_i2c && _i2cWire != nullptr) {
-        _i2cWire->beginTransmission(RFID2_I2C_ADDRESS);
-        i2c_check = _i2cWire->endTransmission() == 0;
-    }
+    if (_use_i2c && _i2cLease) i2c_check = i2cProbe(_i2cLease, RFID2_I2C_ADDRESS);
 
     if (_driver == nullptr) return false;
 

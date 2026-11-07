@@ -17,12 +17,30 @@
 /*********************************************************************
 **  Helpers
 **********************************************************************/
-static TwoWire *i2c_acquire(int8_t sda, int8_t scl) {
-    if (sda < 0) sda = (int8_t)bruceConfigPins.i2c_bus.sda;
-    if (scl < 0) scl = (int8_t)bruceConfigPins.i2c_bus.scl;
-    if (sda < 0 || scl < 0) return nullptr;
-    return acquireI2CBus(sda, scl);
+// Explicit pins win; otherwise the requested bus as configured.
+static I2CLease i2c_open(I2CBusId bus, int8_t sda, int8_t scl) {
+    if (sda >= 0 && scl >= 0) return i2cLeasePins(sda, scl);
+    return i2cLeaseBus(bus);
 }
+
+static String i2c_read_reg_on(const I2CLease &lease, uint8_t addr, uint8_t reg) {
+    TwoWire *bus = lease.wire();
+    bus->beginTransmission(addr);
+    bus->write(reg);
+    if (bus->endTransmission(false) != 0) return "ERR: no ack (addr)";
+    if (bus->requestFrom((int)addr, 1) != 1) return "ERR: read failed";
+    return "OK 0x" + String(bus->read(), HEX);
+}
+
+static String i2c_write_reg_on(const I2CLease &lease, uint8_t addr, uint8_t reg, uint8_t value) {
+    TwoWire *bus = lease.wire();
+    bus->beginTransmission(addr);
+    bus->write(reg);
+    bus->write(value);
+    return bus->endTransmission() == 0 ? "OK written" : "ERR: no ack";
+}
+
+static const char *i2c_bus_tag(I2CBusId bus) { return bus == I2CBusId::Sys ? "SYS" : "EXT"; }
 
 static int parseHex(String value) {
     value.trim();
@@ -35,48 +53,34 @@ static int parseHex(String value) {
 /*********************************************************************
 **  Serial-command primitives (wire i2c ...), see wire_tools.h
 **********************************************************************/
-int wire_i2c_scan(std::vector<uint8_t> &found, int8_t sda, int8_t scl) {
+int wire_i2c_scan(std::vector<WireI2cDevice> &found, int8_t sda, int8_t scl) {
     found.clear();
-    TwoWire *bus = i2c_acquire(sda, scl);
-    if (bus == nullptr) return -1;
-
-    for (uint8_t addr = I2C_SCAN_FIRST; addr <= I2C_SCAN_LAST; addr++) {
-        bus->beginTransmission(addr);
-        if (bus->endTransmission() == 0) found.push_back(addr);
+    if (sda >= 0 && scl >= 0) {
+        I2CLease lease = i2cLeasePins(sda, scl);
+        if (!lease) return -1;
+        for (uint8_t addr = I2C_SCAN_FIRST; addr <= I2C_SCAN_LAST; addr++) {
+            if (i2cProbe(lease, addr)) found.push_back({lease.bus(), addr});
+        }
+        return (int)found.size();
     }
-    releaseI2CBus();
-    return (int)found.size();
+    return i2cScanAll(
+        [](I2CBusId bus, uint8_t addr, void *ctx) {
+            static_cast<std::vector<WireI2cDevice> *>(ctx)->push_back({bus, addr});
+        },
+        &found
+    );
 }
 
-String wire_i2c_read_reg(uint8_t addr, uint8_t reg, int8_t sda, int8_t scl) {
-    TwoWire *bus = i2c_acquire(sda, scl);
-    if (bus == nullptr) return "ERR: no bus pins";
-
-    bus->beginTransmission(addr);
-    bus->write(reg);
-    if (bus->endTransmission(false) != 0) {
-        releaseI2CBus();
-        return "ERR: no ack (addr)";
-    }
-    if (bus->requestFrom((int)addr, 1) != 1) {
-        releaseI2CBus();
-        return "ERR: read failed";
-    }
-    uint8_t value = bus->read();
-    releaseI2CBus();
-    return "OK 0x" + String(value, HEX);
+String wire_i2c_read_reg(uint8_t addr, uint8_t reg, I2CBusId bus, int8_t sda, int8_t scl) {
+    I2CLease lease = i2c_open(bus, sda, scl);
+    if (!lease) return "ERR: bus unavailable";
+    return i2c_read_reg_on(lease, addr, reg);
 }
 
-bool wire_i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value, int8_t sda, int8_t scl) {
-    TwoWire *bus = i2c_acquire(sda, scl);
-    if (bus == nullptr) return false;
-
-    bus->beginTransmission(addr);
-    bus->write(reg);
-    bus->write(value);
-    bool ok = (bus->endTransmission() == 0);
-    releaseI2CBus();
-    return ok;
+String wire_i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value, I2CBusId bus, int8_t sda, int8_t scl) {
+    I2CLease lease = i2c_open(bus, sda, scl);
+    if (!lease) return "ERR: bus unavailable";
+    return i2c_write_reg_on(lease, addr, reg, value);
 }
 
 /*********************************************************************
@@ -94,38 +98,69 @@ static int i2c_pick_register(const char *msg) {
     return parsed;
 }
 
+// System peripherals (PMIC, IMU, RTC, touch...) live on sys_i2c: a stray write there can cut
+// power or brick a setting, so it takes an explicit confirmation once per device menu.
+static bool i2c_confirm_sys_write() {
+    drawMainBorder(true);
+    int8_t choice = displayMessage(
+        "Write to the SYSTEM\nI2C bus?\nPMIC/IMU/RTC live here!", "No", nullptr, "Yes", TFT_RED
+    );
+    return choice == 1;
+}
+
 /*********************************************************************
 **  Function: i2c_device_menu
 **  Per-device register read/write/dump on the picked address
 **********************************************************************/
-static void i2c_device_menu(uint8_t addr) {
+static void i2c_device_menu(WireI2cDevice dev) {
+    bool sysWriteAllowed = false;
     while (!returnToMenu) {
         options = {
-            {String("Read Register"), [addr]() {
+            {String("Read Register"),
+             [dev]() {
                  int reg = i2c_pick_register("Register address:");
                  if (reg < 0) return;
-                 String result = wire_i2c_read_reg(addr, (uint8_t)reg, -1, -1);
-                 displayInfo(String(addr, HEX) + ":reg " + String(reg, HEX) + " -> " + result, true);
+                 String result = wire_i2c_read_reg(dev.addr, (uint8_t)reg, dev.bus, -1, -1);
+                 displayInfo(String(dev.addr, HEX) + ":reg " + String(reg, HEX) + " -> " + result, true);
              }},
-            {String("Write Register"), [addr]() {
+            {String("Write Register"),
+             [dev, &sysWriteAllowed]() {
+                 if (dev.bus == I2CBusId::Sys && !sysWriteAllowed) {
+                     if (!i2c_confirm_sys_write()) return;
+                     sysWriteAllowed = true;
+                 }
                  int reg = i2c_pick_register("Register address:");
                  if (reg < 0) return;
                  int value = i2c_pick_register("Value to write:");
                  if (value < 0) return;
-                 bool ok = wire_i2c_write_reg(addr, (uint8_t)reg, (uint8_t)value, -1, -1);
-                 if (ok) displaySuccess("Write OK", true);
-                 else displayError("Write failed (no ack)", true);
+                 String result =
+                     wire_i2c_write_reg(dev.addr, (uint8_t)reg, (uint8_t)value, dev.bus, -1, -1);
+                 if (result.startsWith("OK")) displaySuccess("Write OK", true);
+                 else displayError("Write failed: " + result.substring(5), true);
              }},
-            {String("Dump 256 Bytes"), [addr]() {
+            {String("Dump 256 Bytes"),
+             [dev]() {
+                 I2CLease lease = i2cLeaseBus(dev.bus); // one lease for the whole dump
+                 if (!lease) {
+                     displayError("I2C bus unavailable", true);
+                     return;
+                 }
                  displayRedStripe("Dumping..");
-                 ScrollableTextArea area(FP, BORDER_PAD_X, BORDER_PAD_Y, tftWidth - 2 * BORDER_PAD_X,
-                                         tftHeight - BORDER_PAD_X - BORDER_PAD_Y, false, false);
+                 ScrollableTextArea area(
+                     FP,
+                     BORDER_PAD_X,
+                     BORDER_PAD_Y,
+                     tftWidth - 2 * BORDER_PAD_X,
+                     tftHeight - BORDER_PAD_X - BORDER_PAD_Y,
+                     false,
+                     false
+                 );
                  bool any = false;
                  for (int base = 0; base < 256; base += 16) {
                      String row = String(base, HEX) + ":";
                      while (row.length() < 5) row = " " + row;
                      for (int reg = base; reg < base + 16; reg++) {
-                         String result = wire_i2c_read_reg(addr, (uint8_t)reg, -1, -1);
+                         String result = i2c_read_reg_on(lease, dev.addr, (uint8_t)reg);
                          String byteText = result.startsWith("OK") ? result.substring(3) : "--";
                          row += " " + byteText;
                          if (result.startsWith("OK")) any = true;
@@ -133,27 +168,32 @@ static void i2c_device_menu(uint8_t addr) {
                      area.addLine(row);
                      if (check(EscPress)) break;
                  }
-                 releaseI2CBus();
+                 lease.release();
                  if (!any) {
                      displayError("Device stopped answering", true);
                      return;
                  }
                  area.draw(true);
-                 while (!check(SelPress) && !check(EscPress)) { wakeUpScreen(); vTaskDelay(pdMS_TO_TICKS(20)); }
-                 check(SelPress); check(EscPress);
+                 while (!check(SelPress) && !check(EscPress)) {
+                     wakeUpScreen();
+                     vTaskDelay(pdMS_TO_TICKS(20));
+                 }
+                 check(SelPress);
+                 check(EscPress);
              }},
         };
         addOptionToMainMenu();
-        loopOptions(options, MENU_TYPE_SUBMENU, ("I2C 0x" + String(addr, HEX)).c_str());
+        String title = "I2C 0x" + String(dev.addr, HEX) + " " + i2c_bus_tag(dev.bus);
+        loopOptions(options, MENU_TYPE_SUBMENU, title.c_str());
     }
 }
 
 /*********************************************************************
 **  Function: i2c_scan_menu
-**  Probe the bus and list responding addresses
+**  Probe sys_i2c and i2c_bus and list responding addresses per bus
 **********************************************************************/
 static void i2c_scan_menu() {
-    std::vector<uint8_t> found;
+    std::vector<WireI2cDevice> found;
     displayRedStripe("Scanning..");
     int count = wire_i2c_scan(found, -1, -1);
     if (count < 0) {
@@ -166,8 +206,11 @@ static void i2c_scan_menu() {
     }
 
     options.clear();
-    for (uint8_t addr : found) {
-        options.push_back({String("0x") + String(addr, HEX), [addr]() { i2c_device_menu(addr); }});
+    for (const WireI2cDevice &dev : found) {
+        options.push_back(
+            {String("0x") + String(dev.addr, HEX) + " " + i2c_bus_tag(dev.bus),
+             [dev]() { i2c_device_menu(dev); }}
+        );
     }
     options.push_back({String("Scan again"), []() { i2c_scan_menu(); }});
     addOptionToMainMenu();
@@ -184,8 +227,8 @@ void i2c_bus_setup() {
         BruceConfigPins::I2CPins pins = bruceConfigPins.i2c_bus;
         options = {
             {String("Pins: SDA ") + int(pins.sda) + " SCL " + int(pins.scl),
-             []() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }                             },
-            {String("Scan Devices"),       i2c_scan_menu                                   },
+             []() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }},
+            {String("Scan Devices"), i2c_scan_menu},
         };
         addOptionToMainMenu();
         loopOptions(options, MENU_TYPE_SUBMENU, "I2C Bus");

@@ -25,8 +25,19 @@ SRIXTool::SRIXTool() {
 }
 
 SRIXTool::~SRIXTool() {
-    delete nfc;
-    releaseI2CBus();
+    delete nfc; // before the lease (a member) releases the bus it talks through
+}
+
+// Finds the PN532 on sys_i2c or i2c_bus. An asleep PN532 may NACK the probe: retry, and fall
+// back to the user bus so init() (reset + wakeup) can still try.
+bool SRIXTool::openBus() {
+    I2CDeviceQuery query{PN532_I2C_ADDRESS};
+    query.retries = 3;
+    query.fallbackToUser = true;
+    _i2cLease = i2cLeaseDevice(query);
+    if (!_i2cLease) return false;
+    _i2cLease.setClock(100000);
+    return true;
 }
 
 void SRIXTool::setup() {
@@ -34,9 +45,11 @@ void SRIXTool::setup() {
     padprintln("");
     padprintln("Initializing I2C...");
 
-    // Init I2C
-    TwoWire *Wire = acquireI2CBus();
-    Wire->setClock(100000);
+    if (!openBus()) {
+        displayError("I2C bus unavailable", true);
+        return;
+    }
+    padprintln("Bus: " + i2cBusLabel(_i2cLease.bus()));
 
     padprintln("Initializing PN532...");
 
@@ -50,7 +63,7 @@ void SRIXTool::setup() {
     nfc = new Arduino_PN532_SRIX(-1, -1);
     padprintln("I2C-only mode");
 #endif
-    nfc->setWire(Wire);
+    nfc->setWire(_i2cLease.wire());
 
     if (!nfc->init()) {
         displayError("PN532 not found!", true);
@@ -856,12 +869,11 @@ SRIXTool::SRIXTool(bool headless_mode) {
     memset(_dump, 0, sizeof(_dump));
     memset(_uid, 0, sizeof(_uid));
 
-    SRIX_LOG(
-        "[SRIX] I2C pins: SDA=%d, SCL=%d", bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl
-    );
-
-    TwoWire *Wire = acquireI2CBus();
-    Wire->setClock(100000);
+    if (!openBus()) {
+        SRIX_LOG("[SRIX] No I2C bus available");
+        return; // nfc stays nullptr: every headless call bails out
+    }
+    SRIX_LOG("[SRIX] I2C bus: %s", i2cBusLabel(_i2cLease.bus()).c_str());
 
 #if defined(PN532_IRQ) && defined(PN532_RF_REST)
     SRIX_LOG("[SRIX] Using HW IRQ: %d, RST: %d", PN532_IRQ, PN532_RF_REST);
@@ -872,7 +884,7 @@ SRIXTool::SRIXTool(bool headless_mode) {
 #endif
 
     if (nfc) {
-        nfc->setWire(Wire);
+        nfc->setWire(_i2cLease.wire());
         SRIX_LOG("[SRIX] NFC object created. Initializing...");
         if (nfc->init()) {
             SRIX_LOG("[SRIX] Init OK. Configuring...");

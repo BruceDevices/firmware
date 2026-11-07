@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/i2c_finder.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
@@ -20,8 +21,12 @@ void IRAM_ATTR expanderISR() { expanderInterrupt = true; }
 ***************************************************************************************/
 void _setup_gpio() {
     bruceConfigPins.i2c_bus = {(gpio_num_t)4, (gpio_num_t)5}; // sda, scl (Grove)
-    bruceConfigPins.rfTx = 4;
-    bruceConfigPins.rfRx = 5;
+    // The IO expander (buttons, NRF/UART/NFC power) sits on these same Grove pins: declaring them
+    // as sys_i2c makes the I2C tools/modules share this Wire (the C5's only controller) instead of
+    // re-pinning it and ending it on release, which took the expander down until reboot.
+    bruceConfigPins.sys_i2c = {(gpio_num_t)4, (gpio_num_t)5}; // sda, scl
+    bruceConfigPins.rfTx = -1;
+    bruceConfigPins.rfRx = -1;
     bruceConfigPins.irTx = 26;
     bruceConfigPins.irRx = 25;
     bruceConfigPins.rotation = 1;
@@ -53,7 +58,8 @@ void _setup_gpio() {
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
 
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    setSysI2CBus(&Wire); // IO expander lives on the default Wire object (GROVE == sys_i2c)
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
 
     // Configure buttons on expander as inputs
     ioExpander.button(IO_EXP_UP);

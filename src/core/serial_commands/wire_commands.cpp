@@ -81,22 +81,29 @@ uint32_t wireI2cScanCallback(cmd *c) {
     int sda = (int)strtol(command.getArgument("sda").getValue().c_str(), nullptr, 10);
     int scl = (int)strtol(command.getArgument("scl").getValue().c_str(), nullptr, 10);
 
-    std::vector<uint8_t> found;
+    std::vector<WireI2cDevice> found;
     int count = wire_i2c_scan(found, (int8_t)sda, (int8_t)scl);
     if (count < 0) {
         serialDevice->println("ERROR: set sda/scl pins or configure i2c_bus first");
         return false;
     }
     serialDevice->println("FOUND " + String(count) + " device(s):");
-    for (uint8_t addr : found) serialDevice->println("0x" + String(addr, HEX));
+    for (const WireI2cDevice &dev : found) {
+        serialDevice->println("0x" + String(dev.addr, HEX) + " " + i2cBusLabel(dev.bus));
+    }
     return true;
 }
 
-static bool wireI2cParseAddrReg(Command &command, uint8_t &addr, uint8_t &reg, int8_t &sda, int8_t &scl) {
+// Target bus: explicit sda/scl pins win; otherwise i2c_bus, or sys_i2c only with -sys (system
+// peripherals live there, so it is never picked implicitly).
+static bool wireI2cParseAddrReg(
+    Command &command, uint8_t &addr, uint8_t &reg, I2CBusId &bus, int8_t &sda, int8_t &scl
+) {
     addr = (uint8_t)strtoul(command.getArgument("addr").getValue().c_str(), nullptr, 16);
     reg = (uint8_t)strtoul(command.getArgument("reg").getValue().c_str(), nullptr, 16);
     sda = (int8_t)strtol(command.getArgument("sda").getValue().c_str(), nullptr, 10);
     scl = (int8_t)strtol(command.getArgument("scl").getValue().c_str(), nullptr, 10);
+    bus = command.getArgument("sys").isSet() ? I2CBusId::Sys : I2CBusId::User;
     if (addr < 0x08 || addr > 0x77) {
         serialDevice->println("ERROR: addr must be 0x08..0x77");
         return false;
@@ -107,20 +114,25 @@ static bool wireI2cParseAddrReg(Command &command, uint8_t &addr, uint8_t &reg, i
 uint32_t wireI2cReadCallback(cmd *c) {
     Command command(c);
     uint8_t addr, reg;
+    I2CBusId bus;
     int8_t sda, scl;
-    if (!wireI2cParseAddrReg(command, addr, reg, sda, scl)) return false;
-    serialDevice->println("0x" + String(addr, HEX) + ":reg 0x" + String(reg, HEX) + " -> " +
-                          wire_i2c_read_reg(addr, reg, sda, scl));
+    if (!wireI2cParseAddrReg(command, addr, reg, bus, sda, scl)) return false;
+    serialDevice->println(
+        "0x" + String(addr, HEX) + ":reg 0x" + String(reg, HEX) + " -> " +
+        wire_i2c_read_reg(addr, reg, bus, sda, scl)
+    );
     return true;
 }
 
 uint32_t wireI2cWriteCallback(cmd *c) {
     Command command(c);
     uint8_t addr, reg;
+    I2CBusId bus;
     int8_t sda, scl;
-    if (!wireI2cParseAddrReg(command, addr, reg, sda, scl)) return false;
+    if (!wireI2cParseAddrReg(command, addr, reg, bus, sda, scl)) return false;
     uint8_t value = (uint8_t)strtoul(command.getArgument("value").getValue().c_str(), nullptr, 16);
-    serialDevice->println(wire_i2c_write_reg(addr, reg, value, sda, scl) ? "OK written" : "ERROR: no ack");
+    String result = wire_i2c_write_reg(addr, reg, value, bus, sda, scl);
+    serialDevice->println(result.startsWith("OK") ? result : "ERROR: " + result.substring(5));
     return true;
 }
 
@@ -248,6 +260,7 @@ void createWireI2cCommand(Command *wireCmd) {
     readCmd.addPosArg("reg");
     readCmd.addPosArg("sda", "-1");
     readCmd.addPosArg("scl", "-1");
+    readCmd.addFlagArg("sys"); // target sys_i2c instead of i2c_bus
 
     Command writeCmd = wireI2cCmd.addCommand("write", wireI2cWriteCallback);
     writeCmd.addPosArg("addr");
@@ -255,6 +268,7 @@ void createWireI2cCommand(Command *wireCmd) {
     writeCmd.addPosArg("value");
     writeCmd.addPosArg("sda", "-1");
     writeCmd.addPosArg("scl", "-1");
+    writeCmd.addFlagArg("sys"); // target sys_i2c instead of i2c_bus
 }
 
 void createWireSpiCommand(Command *wireCmd) {

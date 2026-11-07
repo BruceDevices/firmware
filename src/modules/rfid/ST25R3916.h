@@ -2,6 +2,7 @@
 #if !defined(LITE_VERSION)
 
 #include "RFIDInterface.h"
+#include "core/bus_HAL.h"
 #include "crypto1.h"
 #include <SPI.h>
 #include <Wire.h>
@@ -65,6 +66,7 @@ private:
     RfalRfST25R3916Class *_hw = nullptr;
     RfalNfcClass *_nfc = nullptr;
     SPIClass *_spi = nullptr;
+    I2CLease _i2cLease; // I2C mode: the bus the chip answered on (sys_i2c, i2c_bus or board preset)
     bool _discoveryStarted = false;
 
     bool _initSPI();
