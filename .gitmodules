@@ -13,3 +13,9 @@
 [submodule "lib/RotaryEncoder"]
 	path = lib/RotaryEncoder
 	url = https://github.com/mathertel/RotaryEncoder
+[submodule "lib/Adafruit-PN532"]
+	path = lib/Adafruit-PN532
+	url = https://github.com/BruceDevices/Adafruit-PN532_Bruce
+[submodule "lib/Adafruit-BusIO"]
+	path = lib/Adafruit-BusIO
+	url = https://github.com/BruceDevices/Adafruit-BusIO_Bruce
