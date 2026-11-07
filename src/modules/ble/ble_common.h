@@ -44,6 +44,8 @@ bool ble_scan_setup();
 void ble_scan();
 void stopBLEStack();
 
+String resolveBleDeviceName(const NimBLEAdvertisedDevice *dev);
+
 bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries = 8);
 bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries = 8);
 
