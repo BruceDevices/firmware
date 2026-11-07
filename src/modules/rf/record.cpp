@@ -224,9 +224,8 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
     rf_raw_record_draw(status);
 
     // Initialize RF module and update display
-    initRfModule(
-        "rx", 433.92
-    ); // Frequency scan doesnt work when initializing the module with a different frequency
+    // Frequency scan requires initializing the module at 433.92 MHz.
+    if (!initRfModule("rx", 433.92)) return;
     Serial.println("RF Module Initialized");
 
     // Set frequency if fixed frequency mode is enabled

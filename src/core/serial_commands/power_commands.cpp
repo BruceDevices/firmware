@@ -4,7 +4,11 @@
 
 uint32_t poweroffCallback(cmd *c) {
     powerOff();
+#ifndef HELTEC_V4_EXPANSION_V2
     esp_deep_sleep_start(); // only wake up via hardware reset
+#endif
+    // The Heltec hook configures USER wake and may return after refusing sleep
+    // with a held wake key. Do not bypass that refusal with an unarmed sleep.
     return true;
 }
 

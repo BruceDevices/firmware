@@ -240,6 +240,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 | [Lilygo T&#x2011;Deck](https://lilygo.cc/products/t-deck) ([and pro](https://lilygo.cc/products/t-deck-plus-1))                                                                             |  :ok:  |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
 | [Lilygo T-Watch-S3](https://lilygo.cc/products/t-watch-s3)                                                                                                                                  |  :x:   |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
 | [Lilygo T-LoRa Pager](https://lilygo.cc/products/t-lora-pager)                                                                                                                              |  :x:   |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
+| [Heltec WiFi LoRa 32 V4-R8 Expansion Kit V2 (high-band)](boards/heltec-v4-expansion-v2/)                                                                                                    |  :x:   |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |  Tone   |    :x:     |     :x:      |
 | [Smoochiee V2](https://www.pcbway.com/project/shareproject/Bruce_PCB_Smoochiee_d6a0284b.html)                                                                                               |  :ok:  | :ok:  |   :x:    |         :ok:         | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
 | [ESP32-C5](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c5/esp32-c5-devkitc-1/user_guide.html)                                                                           |  :ok:  | :ok:  |   :x:    |         :ok:         | :x:  |  :x:   |   :x:   |   :x:   |    :x:     |     :x:      |
 | [Bruce RF Reaper](https://www.elecrow.com/bruce-pcb-rf-reaper.html)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: but w/ ST25R3916 | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
@@ -250,6 +251,8 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 ¹ Core, CYD and StickCs Bad-USB: [here](https://wiki.bruce.computer/features/others/#badusb)
 
 _LITE_VERSION_: TelNet, SSH, WireGuard, ScanHosts, RawSniffer, Brucegotchi, BLEBacon, BLEScan and Interpreter are NOT available for M5Launcher Compatibility
+
+The `heltec-v4-expansion-v2` build targets the high-band V4-R8 board with the Expansion Kit V2: 16 MB flash, 8 MB PSRAM, a 240 × 320 touchscreen, microSD, GNSS, SX1262 LoRa and a buzzer. It does not target the bare V4, Expansion Kit V1 or low-band radio variant. Optional external modules are not included in this kit; its fixed display, touch, storage and radio pins must not be reassigned to them.
 
 ## :sparkles: Why and how does it look?
 

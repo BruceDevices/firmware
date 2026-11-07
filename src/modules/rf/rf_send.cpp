@@ -432,7 +432,7 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
             Serial.println(modulation);
             return;
         }
-        initRfModule("tx", frequency / 1000000.0);
+        if (!initRfModule("tx", frequency / 1000000.0)) return;
     }
 
     if (protocol == "RAW") {

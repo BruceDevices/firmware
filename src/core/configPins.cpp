@@ -2,6 +2,102 @@
 #include "esp_mac.h"
 #include "sd_functions.h"
 #include <globals.h>
+
+#ifdef HELTEC_V4_EXPANSION_V2
+namespace {
+bool heltecReservedPin(int pin) {
+    // GPIO22-37 are absent or connected to the module's flash/OPI PSRAM.
+    if (pin < 0 || pin > 48 || (pin >= 22 && pin <= 37) || pin == 43) return true;
+    const int reserved[] = {
+        HELTEC_USER_BUTTON,
+        HELTEC_NEXT_BUTTON,
+        HELTEC_BATTERY_ADC,
+        BUZZ_PIN,
+        HELTEC_VEXT_ENABLE,
+        HELTEC_GNSS_ENABLE,
+        HELTEC_GNSS_PPS,
+        TFT_SCLK,
+        TFT_MISO,
+        TFT_MOSI,
+        TFT_CS,
+        TFT_DC,
+        TFT_RST,
+        TFT_BL,
+        SDCARD_CS,
+        SYS_I2C_SDA,
+        SYS_I2C_SCL,
+        GPS_SERIAL_RX,
+        GPS_SERIAL_TX,
+        LORA_SCK,
+        LORA_MISO,
+        LORA_MOSI,
+        LORA_CS,
+        LORA_RST,
+        LORA_IRQ,
+        LORA_BUSY,
+        LORA_FEM_POWER,
+        LORA_FEM_ENABLE,
+        LORA_FEM_CTX,
+        19,
+        20 // Native USB D-/D+.
+    };
+    for (int used : reserved) {
+        if (pin == used) return true;
+    }
+    return false;
+}
+
+bool heltecOptionalPinInvalid(int pin) { return pin != GPIO_NUM_NC && heltecReservedPin(pin); }
+
+void constrainHeltecOptionalSPI(BruceConfigPins::SPIPins &bus) {
+    if (heltecReservedPin(bus.sck) || heltecReservedPin(bus.miso) || heltecReservedPin(bus.mosi) ||
+        heltecReservedPin(bus.cs) || heltecOptionalPinInvalid(bus.io0) || heltecOptionalPinInvalid(bus.io2)) {
+        bus = BruceConfigPins::SPIPins();
+    }
+    // Only GPIO6 is unassigned on this kit; duplicate signals are not a bus.
+    if (bus.sck == bus.miso || bus.sck == bus.mosi || bus.sck == bus.cs || bus.miso == bus.mosi ||
+        bus.miso == bus.cs || bus.mosi == bus.cs) {
+        bus = BruceConfigPins::SPIPins();
+    }
+}
+} // namespace
+
+void BruceConfigPins::enforceBoardPinConstraints() {
+    SDCARD_bus = {
+        (gpio_num_t)SDCARD_SCK, (gpio_num_t)SDCARD_MISO, (gpio_num_t)SDCARD_MOSI, (gpio_num_t)SDCARD_CS
+    };
+    sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
+    gps_bus = {(gpio_num_t)GPS_SERIAL_RX, (gpio_num_t)GPS_SERIAL_TX};
+    gpsBaudrate = 9600;
+#if !defined(LITE_VERSION)
+    LoRa_bus = {
+        (gpio_num_t)LORA_SCK,
+        (gpio_num_t)LORA_MISO,
+        (gpio_num_t)LORA_MOSI,
+        (gpio_num_t)LORA_CS,
+        (gpio_num_t)LORA_RST,
+        (gpio_num_t)LORA_DIO0
+    };
+    constrainHeltecOptionalSPI(W5500_bus);
+#endif
+    constrainHeltecOptionalSPI(ST25R_bus);
+    constrainHeltecOptionalSPI(CC1101_bus);
+    constrainHeltecOptionalSPI(NRF24_bus);
+    constrainHeltecOptionalSPI(PN532_bus);
+    if (heltecReservedPin(i2c_bus.sda) || heltecReservedPin(i2c_bus.scl) || i2c_bus.sda == i2c_bus.scl) {
+        i2c_bus = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
+    }
+    if (heltecReservedPin(uart_bus.rx) || heltecReservedPin(uart_bus.tx) || uart_bus.rx == uart_bus.tx) {
+        uart_bus = {(gpio_num_t)SERIAL_RX, (gpio_num_t)SERIAL_TX};
+    }
+    if (heltecOptionalPinInvalid(irTx)) irTx = GPIO_NUM_NC;
+    if (heltecOptionalPinInvalid(irRx)) irRx = GPIO_NUM_NC;
+    if (heltecOptionalPinInvalid(rfTx)) rfTx = GPIO_NUM_NC;
+    if (heltecOptionalPinInvalid(rfRx)) rfRx = GPIO_NUM_NC;
+    if (heltecOptionalPinInvalid(iButton)) iButton = GPIO_NUM_NC;
+}
+#endif
+
 String getMacAddress() {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -290,6 +386,9 @@ void BruceConfigPins::toJson(JsonObject obj) const {
 }
 
 void BruceConfigPins::loadFile(JsonDocument &jsonDoc, bool checkFS) {
+#ifdef HELTEC_V4_EXPANSION_V2
+    enforceBoardPinConstraints();
+#endif
     FS *fs;
     if (checkFS) {
         if (!getFsStorage(fs)) return;
@@ -317,6 +416,9 @@ void BruceConfigPins::loadFile(JsonDocument &jsonDoc, bool checkFS) {
 }
 
 void BruceConfigPins::fromFile(bool checkFS) {
+#ifdef HELTEC_V4_EXPANSION_V2
+    enforceBoardPinConstraints();
+#endif
     JsonDocument jsonDoc;
     loadFile(jsonDoc, checkFS);
 
@@ -325,6 +427,9 @@ void BruceConfigPins::fromFile(bool checkFS) {
 }
 
 void BruceConfigPins::createFile() {
+#ifdef HELTEC_V4_EXPANSION_V2
+    enforceBoardPinConstraints();
+#endif
     JsonDocument jsonDoc;
     toJson(jsonDoc.to<JsonObject>());
     serializeJsonPretty(jsonDoc, Serial);
@@ -350,6 +455,10 @@ void BruceConfigPins::createFile() {
 }
 
 void BruceConfigPins::saveFile() {
+#ifdef HELTEC_V4_EXPANSION_V2
+    // Apply before loadFile(), which can mount the SD card using these pins.
+    enforceBoardPinConstraints();
+#endif
     JsonDocument jsonDoc;
     loadFile(jsonDoc);
 
@@ -384,6 +493,9 @@ void BruceConfigPins::factoryReset() {
 }
 
 void BruceConfigPins::validateConfig() {
+#ifdef HELTEC_V4_EXPANSION_V2
+    enforceBoardPinConstraints();
+#endif
     validateRotationValue();
     validateRfScanRangeValue();
     validateRfModuleValue();
@@ -410,7 +522,7 @@ void BruceConfigPins::setLoRaPins(SPIPins value) {
     saveFile();
 }
 void BruceConfigPins::setW5500Pins(SPIPins value) {
-    LoRa_bus = value;
+    W5500_bus = value;
     validateSpiPins(W5500_bus);
     saveFile();
 }

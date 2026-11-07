@@ -15,6 +15,7 @@ on:
         type: choice
         options:
           - "m5stack-cardputer"
+          - "heltec-v4-expansion-v2"
           - "m5stack-cplus2"
           - "m5stack-cplus1_1"
           - "LAUNCHER_m5stack-cplus1_1"

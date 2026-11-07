@@ -239,6 +239,12 @@ bool initRfModule(String mode, float frequency) {
     if (!frequency) frequency = bruceConfigPins.rfFreq;
 
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+        const auto &pins = bruceConfigPins.CC1101_bus;
+        if (pins.sck == GPIO_NUM_NC || pins.miso == GPIO_NUM_NC || pins.mosi == GPIO_NUM_NC ||
+            pins.cs == GPIO_NUM_NC || pins.io0 == GPIO_NUM_NC) {
+            displayError("CC1101 pins not configured", true);
+            return false;
+        }
         SPIClass *ccSpi = acquireSPIBus(
             bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
         );
@@ -328,6 +334,10 @@ bool initRfModule(String mode, float frequency) {
 
         if (mode == "tx") {
             gsetRfTxPin(false);
+            if (bruceConfigPins.rfTx == GPIO_NUM_NC) {
+                displayError("RF TX pin not configured", true);
+                return false;
+            }
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfTx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfTx);
             pinMode(bruceConfigPins.rfTx, OUTPUT);
@@ -336,6 +346,10 @@ bool initRfModule(String mode, float frequency) {
         } else if (mode == "rx") {
             // Rx Mode
             gsetRfRxPin(false);
+            if (bruceConfigPins.rfRx == GPIO_NUM_NC) {
+                displayError("RF RX pin not configured", true);
+                return false;
+            }
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
             pinMode(bruceConfigPins.rfRx, INPUT);
