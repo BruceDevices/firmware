@@ -113,16 +113,17 @@ void _post_setup_gpio() {
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
     ledcWrite(TFT_BL, 255);
 
-    // Force sync color inversion to prevent bruceConf.json from overriding
-    // the value set in _setup_gpio(). For CYD variants with TFT_INVERSION_ON,
-    // the init() sequence sends INVON; we send INVOFF here to ensure normal colors.
+    // Apply the board-appropriate color inversion default only on first boot,
+    // when bruceConf.json has no stored value. Once the user changes "Invert
+    // Color" in Settings the stored value must persist across reboots (#3053).
+    if (!bruceConfig.colorInvertedSet) {
 #ifdef TFT_INVERSION_ON
-    bruceConfig.colorInverted = 0;
-    tft.invertDisplay(0);
+        bruceConfig.colorInverted = 0;
 #else
-    bruceConfig.colorInverted = 1;
-    tft.invertDisplay(1);
+        bruceConfig.colorInverted = 1;
 #endif
+    }
+    tft.invertDisplay(bruceConfig.colorInverted);
 
     bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
     bruceConfigPins.gps_bus.tx = (gpio_num_t)GPS_SERIAL_TX;

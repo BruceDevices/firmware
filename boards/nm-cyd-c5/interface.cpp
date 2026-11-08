@@ -55,17 +55,15 @@ void _post_setup_gpio() {
     bruceConfigPins.rfTx = 8;
     bruceConfigPins.rfRx = 9;
 
-    // Force disable color inversion for ST7789/ILI9341 on nm-cyd-c5.
-    // Must be done here because begin_storage() loads bruceConf.json which may
-    // override the value set in _setup_gpio().
-#ifdef ST7789_DRIVER
-    bruceConfig.colorInverted = 0;
-    tft.invertDisplay(0);
+    // Apply the color inversion default for ST7789/ILI9341 only on first boot,
+    // when bruceConf.json has no stored value. Once the user changes "Invert
+    // Color" in Settings the stored value must persist across reboots (#3053).
+    if (!bruceConfig.colorInvertedSet) {
+#if defined(ST7789_DRIVER) || defined(ILI9341_DRIVER)
+        bruceConfig.colorInverted = 0;
 #endif
-#ifdef ILI9341_DRIVER
-    bruceConfig.colorInverted = 0;
-    tft.invertDisplay(0);
-#endif
+    }
+    tft.invertDisplay(bruceConfig.colorInverted);
 
     // Force set I2C bus pins for nm-cyd-c5.
     // brucePins.conf may have stale/wrong i2c_bus values, so override them
