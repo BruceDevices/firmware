@@ -26,3 +26,4 @@ vite.config.ts.timestamp-*
 
 # Vendor files
 static/vendor/*
+venv/*
