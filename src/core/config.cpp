@@ -382,6 +382,7 @@ void BruceConfig::fromFile(bool checkFS) {
     }
     if (!setting["colorInverted"].isNull()) {
         colorInverted = setting["colorInverted"].as<int>();
+        colorInvertedSet = true;
     } else {
         count++;
         log_e("Fail");
