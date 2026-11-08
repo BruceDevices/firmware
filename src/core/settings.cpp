@@ -1944,7 +1944,7 @@ void installAppStoreJS() {
         displayWarning("Failed to save App Store", true);
         return;
     }
-    file.write(http.getString().c_str(), http.getString().length());
+    file.print(http.getString());
     http.end();
     file.close();
 
