@@ -217,7 +217,8 @@ void _post_setup_gpio() {
     applyBoardDefault(
         bruceConfigPins.CC1101_bus.mosi, brucePinsSetupDefaults.CC1101_bus.mosi, (gpio_num_t)14
     );
-    applyBoardDefault(bruceConfigPins.CC1101_bus.cs, brucePinsSetupDefaults.CC1101_bus.cs, (gpio_num_t)13);
+    // GPIO13 is the Cardputer ADV GPS TX pin; leave CC1101 CS unassigned by default.
+    applyBoardDefault(bruceConfigPins.CC1101_bus.cs, brucePinsSetupDefaults.CC1101_bus.cs, (gpio_num_t)-1);
     applyBoardDefault(bruceConfigPins.CC1101_bus.io0, brucePinsSetupDefaults.CC1101_bus.io0, (gpio_num_t)5);
 
     applyBoardDefault(bruceConfigPins.NRF24_bus.sck, brucePinsSetupDefaults.NRF24_bus.sck, (gpio_num_t)40);
@@ -227,10 +228,8 @@ void _post_setup_gpio() {
     applyBoardDefault(bruceConfigPins.NRF24_bus.io0, brucePinsSetupDefaults.NRF24_bus.io0, (gpio_num_t)4);
 
     pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
-    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
     pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
     digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
-    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
     tca.matrix(7, 8);
