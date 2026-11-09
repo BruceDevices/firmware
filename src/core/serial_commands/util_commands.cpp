@@ -339,7 +339,7 @@ uint32_t displayCallback(cmd *c) {
         if (tft.getLogging()) serialDevice->println("Display: Logging tft is ACTIVATED");
         else serialDevice->println("Display: Logging tft is DEACTIVATED");
     } else if (opt == "dump") {
-        uint8_t binData[MAX_LOG_ENTRIES * MAX_LOG_SIZE];
+        static uint8_t binData[MAX_LOG_BUFFER_SIZE];
         size_t binSize = 0;
         tft.getBinLog(binData, binSize);
 

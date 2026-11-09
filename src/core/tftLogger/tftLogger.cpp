@@ -162,7 +162,12 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     outSize += pos;
 
     if (!log) return;
-    for (int i = 0; i < logCount; i++) {
+    // The log is a ring buffer. When it is full, logWriteIndex points at the
+    // oldest entry. Walk the ring in chronological order so the WebUI replays
+    // draw commands in the same order they were issued.
+    const int start = (logCount == MAX_LOG_ENTRIES) ? logWriteIndex : 0;
+    for (int n = 0; n < logCount; n++) {
+        const int i = (start + n) % MAX_LOG_ENTRIES;
         if (log[i].data[0] != LOG_PACKET_HEADER) continue;
         uint8_t *entry = log[i].data;
         uint8_t fn = entry[2];
@@ -174,7 +179,7 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
             const char *imgPath = images[imageSlot];
             size_t baseLen = 12; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS + PATH
             size_t imgLen = strlen(imgPath);
-            if (outSize + baseLen + imgLen > MAX_LOG_SIZE * MAX_LOG_ENTRIES) continue;
+            if (outSize + baseLen + imgLen > MAX_LOG_BUFFER_SIZE) continue;
 
             memcpy(outBuffer + outSize, entry, baseLen);
             outSize += baseLen;
@@ -184,7 +189,7 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
             outBuffer[outSize - imgLen - baseLen + 1] = baseLen + imgLen; // update packet size
         } else {
             uint8_t size = entry[1];
-            if (outSize + size > MAX_LOG_SIZE * MAX_LOG_ENTRIES) continue;
+            if (outSize + size > MAX_LOG_BUFFER_SIZE) continue;
             memcpy(outBuffer + outSize, entry, size);
             outSize += size;
         }
@@ -217,18 +222,39 @@ void tft_logger::pushLogIfUnique(const tftLog &l) {
 
 bool tft_logger::removeLogEntriesInsideRect(int rx, int ry, int rw, int rh) {
     bool r = false;
-    int rx1 = rx;
-    int ry1 = ry;
-    int rx2 = rx + rw;
-    int ry2 = ry + rh;
+    const int rx1 = rx;
+    const int ry1 = ry;
+    const int rx2 = rx + rw;
+    const int ry2 = ry + rh;
 
     if (!log) return false;
     for (int i = 0; i < logCount; i++) {
         uint8_t *data = log[i].data;
         if (data[0] != LOG_PACKET_HEADER) continue;
+
+        const uint8_t fn = data[2];
         int px = (data[3] << 8) | data[4];
         int py = (data[5] << 8) | data[6];
-        if (px >= rx1 && px < rx2 && py >= ry1 && py < ry2) {
+        int ex1 = px, ey1 = py, ex2 = px, ey2 = py;
+
+        // Text entries store the anchor point, not the top-left corner. Give
+        // them a real bounding box, otherwise centered/right-aligned text is
+        // never erased and old menu labels stay on top of new ones.
+        if (fn == DRAWSTRING || fn == DRAWCENTRESTRING || fn == DRAWRIGHTSTRING || fn == PRINT) {
+            const int size = (data[7] << 8) | data[8];
+            const int len = data[1] > 13 ? data[1] - 13 : 0;
+            const int w = len * LW * size;
+            const int h = LH * size;
+            ex1 = px;
+            if (fn == DRAWCENTRESTRING) ex1 -= w / 2;
+            else if (fn == DRAWRIGHTSTRING) ex1 -= w;
+            ey1 = py;
+            ex2 = ex1 + w;
+            ey2 = ey1 + h;
+        }
+
+        const bool overlaps = ex2 > rx1 && ex1 < rx2 && ey2 > ry1 && ey1 < ry2;
+        if (overlaps) {
             data[0] = 0; // Mark as deleted
             r = true;
         }
@@ -441,9 +467,13 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
     if (!log) return;
-    if (removeLogEntriesInsideRect(
-            x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize()
-        )) {
+    const int textSize = currentTextSize();
+    const int textW = s.length() * LW * textSize;
+    const int textH = LH * textSize;
+    int textX = x;
+    if (fn == DRAWCENTRESTRING) textX -= textW / 2;
+    else if (fn == DRAWRIGHTSTRING) textX -= textW;
+    if (removeLogEntriesInsideRect(textX, y, textW, textH)) {
         // debug purpose
         // Serial.printf("Something was removed while processing: %s\n", s.c_str());
     }
@@ -507,7 +537,7 @@ void tft_logger::log_print(String s) {
         getCursorX() - 1,
         getCursorY() - 1,
         s.length() * LW * currentTextSize() + 2,
-        s.length() * LH * currentTextSize() + 2
+        LH * currentTextSize() + 2
     );
 
     uint8_t buffer[MAX_LOG_SIZE];
