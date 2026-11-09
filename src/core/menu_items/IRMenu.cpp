@@ -6,16 +6,19 @@
 #include "modules/ir/custom_ir.h"
 #include "modules/ir/ir_jammer.h"
 #include "modules/ir/ir_read.h"
+#include "modules/ir/conditioners.h" // <--- ДОБАВЛЕНО ДЛЯ AC
 
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
     bool prevPower = M5.Power.getExtOutput();
     M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT
 #endif
+
     options = {
-        {"TV-B-Gone", StartTvBGone              },
-        {"Custom IR", otherIRcodes              },
-        {"IR Read",   [=]() { IrRead(); }       },
+        {"TV-B-gone", StartTvBGone              }, // Переименовано
+        {"Custom IR", otherIRcodes              }, // Переименовано
+        {"Ir read",   [=]() { IrRead(); }       }, // Переименовано
+        {"AC",        [=]() { conditionersMenu(); } }, // <--- НОВЫЙ ПУНКТ
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
 #endif

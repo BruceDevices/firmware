@@ -77,11 +77,13 @@ static String getParsedProtocolName(const decode_results &r) {
 }
 
 void IrRead::setup() {
+    // === КАК В 1.11.1 ===
     irrecv.enableIRIn();
 
 #ifdef USE_BOOST
     PPM.enableOTG();
 #endif
+    // Проверяем, что пин приёмника есть в списке IR_RX_PINS
     const std::vector<std::pair<String, int>> pins = IR_RX_PINS;
     int count = 0;
     for (auto pin : pins) {
@@ -89,9 +91,12 @@ void IrRead::setup() {
     }
     if (count == 0) gsetIrRxPin(true);
 
-    setup_ir_pin(bruceConfigPins.irRx, INPUT);
+    // КАК В 1.11.1: обычный INPUT, без setup_ir_pin (он и был источником шума).
+    pinMode(bruceConfigPins.irRx, INPUT);
+
     if (headless) return;
     returnToMenu = true;
+
     std::vector<Option> quickRemoteOptions = {
         {"TV",
          [&]() {
@@ -241,15 +246,10 @@ void IrRead::read_signal() {
 
     _read_signal = true;
 
-    raw = (results.decode_type == decode_type_t::UNKNOWN) || hasACState(results.decode_type);
+    // КАК В 1.11.1: всегда пишем RAW, без разбора протокола.
+    raw = true;
 
     display_banner();
-
-    if (!raw) {
-        String proto = getParsedProtocolName(results);
-        padprintln("Protocol: " + (proto.length() ? proto : "UNKNOWN"));
-        padprintln("Bits: " + String(results.bits));
-    }
 
     padprint("RAW Data Captured:");
     String raw_signal = parse_raw_signal();
@@ -269,32 +269,15 @@ void IrRead::discard_signal() {
 }
 
 void IrRead::emulate_signal() {
+    // В 1.11.1 эмуляции не было. Здесь реализуем её только через RAW,
+    // потому что raw всегда = true (как в 1.11.1).
     IRCode code;
-    if (raw) {
-        code.type = "raw";
-        code.frequency = IR_FREQUENCY;
-        code.data = _captured_raw_signal;
-    } else {
-        code.type = "parsed";
-        code.protocol = getParsedProtocolName(results);
-        code.address = uint32ToString(results.address);
-        code.command = (results.decode_type == decode_type_t::NEC)
-            ? uint32ToString(necCommandWithInverse(results.command))
-            : uint32ToString(results.command);
-        code.bits = results.bits;
-        code.data = resultToHexidecimal(&results);
-        if (code.protocol == "") {
-            code.type = "raw";
-            code.frequency = IR_FREQUENCY;
-            code.data = _captured_raw_signal;
-        }
-    }
+    code.type = "raw";
+    code.frequency = IR_FREQUENCY;
+    code.data = _captured_raw_signal;
+
     sendIRCommand(&code);
-    if (code.type == "parsed" &&
-        (code.protocol == "RC5" || code.protocol == "RC5X" || code.protocol == "RC6")) {
-        delay(35);
-        sendIRCommand(&code);
-    }
+
     _emulate_mode = true;
     display_banner();
     tft.setTextSize(FP);
@@ -329,12 +312,10 @@ String IrRead::parse_state_signal() {
 }
 
 String IrRead::parse_raw_signal() {
-
     rawcode = resultToRawArray(&results);
     raw_data_len = getCorrectedRawLength(&results);
 
     String signal_code = "";
-
     for (uint16_t i = 0; i < raw_data_len; i++) { signal_code += String(rawcode[i]) + " "; }
 
     delete[] rawcode;
@@ -353,6 +334,8 @@ void IrRead::append_to_file_str(const String &btn_name) {
         strDeviceContent += "duty_cycle: " + String(DUTY_CYCLE) + "\n";
         strDeviceContent += "data: " + parse_raw_signal() + "\n";
     } else {
+        // Эта ветка в текущей логике недостижима (raw всегда true),
+        // но оставлена для совместимости с ir_read.h.
         strDeviceContent += "type: parsed\n";
         switch (results.decode_type) {
             case decode_type_t::RC5: {
@@ -421,7 +404,6 @@ void IrRead::save_device() {
             {"SD Card",  [&]() { fs = &SD; }      },
             {"LittleFS", [&]() { fs = &LittleFS; }},
         };
-
         loopOptions(options);
     } else if (sdCardAvailable) {
         fs = &SD;
@@ -448,7 +430,6 @@ void IrRead::save_device() {
 }
 
 String IrRead::loop_headless(int max_loops) {
-
     while (!irrecv.decode(&results)) {
         max_loops -= 1;
         if (max_loops <= 0) {
@@ -496,7 +477,6 @@ bool IrRead::write_file(String filename, FS *fs) {
             {"Overwrite ",    [&]() { ch = 2; }},
             {"Change name",   [&]() { ch = 3; }},
         };
-
         loopOptions(options);
 
         switch (ch) {
@@ -515,7 +495,6 @@ bool IrRead::write_file(String filename, FS *fs) {
     }
 
     File file = (*fs).open("/BruceIR/" + filename + ".ir", FILE_WRITE);
-
     if (!file) { return false; }
 
     file.println("Filetype: Bruce IR File");
