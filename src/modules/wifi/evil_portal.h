@@ -51,6 +51,7 @@ public:
 
 private:
     String apName = "Free Wifi";
+    String apPassword = "";
     uint8_t _channel;
     bool _deauth;
     bool isDeauthHeld = false;
@@ -112,6 +113,7 @@ private:
     String ssid_POST(void);
 
     void apName_from_keyboard(void);
+    void apPassword_from_keyboard(void);
 };
 
 #endif
