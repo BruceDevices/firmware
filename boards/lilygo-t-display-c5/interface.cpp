@@ -1,7 +1,7 @@
-#include "hal/device.h"
-#include "hal/inputs/buttons.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/device.h"
+#include "hal/inputs/buttons.h"
 #include <interface.h>
 
 #define BTN_A 0
@@ -86,18 +86,6 @@ void _setup_gpio() {
 void _post_setup_gpio() {
     // No touch controller on this board — nothing to calibrate.
 }
-
-/***************************************************************************************
-** Function name: getBattery()
-** NOTE: battery gauge lives in the AXP2602 PMU over I2C (SDA=2, SCL=3, INT=10).
-**       Returning 0 for now — implement AXP2602 readout here if you want % / charge.
-***************************************************************************************/
-int getBattery() { return 0; }
-
-/***************************************************************************************
-** Function name: isCharging()
-***************************************************************************************/
-bool isCharging() { return false; }
 
 /*********************************************************************
 ** Function: setBrightness

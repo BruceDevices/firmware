@@ -1,10 +1,15 @@
 #include "rf_scan.h"
 #include "core/led_control.h"
+#include "core/scrollableTextArea.h"
 #include "core/sd_functions.h"
 #include "core/type_convertion.h"
+#include "protocols/rf_presets.h"
+#include "protocols/rf_fsk_receive_profile.h"
+#include "protocols/rf_raw_capture.h"
 #include "protocols/rf_config.h"   // RF_DBG
 #include "protocols/rf_registry.h" // rf_flipper_protocol_name
 #include "rf_send.h"
+#include "protocols/rf_protocol_engine.h"
 #include <globals.h>
 #include <sstream>
 
@@ -14,7 +19,7 @@
 #define RF_M5_RAW_MIN_BITS 24
 #define RF_M5_RAW_MIN_TE_US 300
 
-static void rf_clear_nav_state() {
+void rf_clear_nav_state() {
     NextPress = false;
     PrevPress = false;
     UpPress = false;
@@ -106,6 +111,9 @@ bool RFScan::handle_list_input() {
 
     if (check(SelPress)) {
         _rx.end(); // stop the RMT receiver while a menu is open
+        deinitRfModule(); // release the shared bus before drawing the menu
+        rf_clear_nav_state();
+        returnToMenu = false;
         if (captures.empty()) open_scan_options();
         else open_signal_menu(selected);
         if (exitRequested) {
@@ -143,6 +151,9 @@ void RFScan::loop() {
         if (bruceConfigPins.rfFxdFreq) frequency = bruceConfigPins.rfFreq;
         if (frequency <= 0) init_freqs();
 
+        // Do not leave an armed RMT receiver attached while frequency hunting
+        // changes CC1101 registers or tears down its SPI/pin configuration.
+        if (frequency <= 0) _rx.end();
         while (frequency <= 0) { // FastScan
             if (handle_list_input()) {
                 if (exitRequested) return;
@@ -186,7 +197,11 @@ void RFScan::loop() {
 void RFScan::enable_receive() {
     // (Re)start the native RMT RX session used to capture signals.
     _rx.end();
-    _rx.begin();
+#if defined(BOARD_HAS_PSRAM) && !defined(LITE_VERSION)
+    if (!_rx.begin(false, 8192)) initFailed = true;
+#else
+    if (!_rx.begin()) initFailed = true;
+#endif
 }
 
 void RFScan::init_freqs() {
@@ -222,8 +237,8 @@ bool RFScan::fast_scan() {
             frequency = _freqs[max_index].freq;
             setMHZ(frequency);
             Serial.println("Frequency Found: " + String(frequency));
-            // When changing to fixed frequency, need to restart the module to reset the registers
-            // so we get good signal reception at this frequency
+            // Stop RMT before resetting the radio and its shared pins.
+            _rx.end();
             deinitRfModule();
 
             return true;
@@ -288,6 +303,7 @@ bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received) {
 }
 
 bool RFScan::decode_signal(const std::vector<int> &durations) {
+    received = RfCodes{};
     received.fix = 0;
     received.hop = 0;
     received.btn = 0;
@@ -297,7 +313,7 @@ bool RFScan::decode_signal(const std::vector<int> &durations) {
 
     // Decode-only mode: show the signal only if a registry protocol (or KeeLoq)
     // matched.
-    if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
+    if (rf_try_keeloq(durations, received) || rf_protocol_decode_capture(durations, uint32_t(frequency * 1000000), "Ook270Async", received)) {
         if (is_m5_duplicate_capture(received)) return false;
 
         found_freq = frequency;
@@ -328,6 +344,7 @@ bool RFScan::decode_signal(const std::vector<int> &durations) {
 }
 
 bool RFScan::read_raw(const std::vector<int> &durations) {
+    received = RfCodes{};
     found_freq = frequency;
 
     received.fix = 0;
@@ -352,9 +369,10 @@ bool RFScan::read_raw(const std::vector<int> &durations) {
     received.frequency = long(frequency * 1000000);
 
     // if a registry protocol (or KeeLoq) decoded the signal, show it
-    if (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received)) {
+    if (rf_try_keeloq(durations, received) || rf_protocol_decode_capture(durations, uint32_t(frequency * 1000000), "Ook270Async", received)) {
         if (is_m5_duplicate_capture(received)) return false;
 
+        received.data = _data;
         received.indexed_durations = {};
         received.filepath = "signal_" + String(captures.size() + 1);
         if (!add_capture()) return false;
@@ -445,6 +463,10 @@ bool RFScan::is_m5_duplicate_capture(const RfCodes &data) {
 bool RFScan::is_duplicate_capture(const RfCodes &data) const {
     // Undecoded RAW captures have no key: timing jitter makes them impossible to
     // compare reliably, so they are always kept.
+    if (!data.decodedFile.isEmpty()) {
+        for (const auto &cap : captures) if (cap.code.decodedFile == data.decodedFile) return true;
+        return false;
+    }
     if (data.key == 0) return false;
 
     for (const auto &cap : captures) {
@@ -460,6 +482,10 @@ bool RFScan::add_capture() {
         RF_DBG("duplicate capture ignored: key=%llX", (unsigned long long)received.key);
         return false;
     }
+    size_t bytes = received.data.length() + received.decodedFile.length() + received.decodedText.length();
+    for (const auto &capture : captures)
+        bytes += capture.code.data.length() + capture.code.decodedFile.length() + capture.code.decodedText.length();
+    if (bytes > 200000) return false;
     if ((int)captures.size() >= _MAX_CAPTURED) return false; // list full, keep the oldest
 
     RfCapture cap;
@@ -514,10 +540,19 @@ String RFScan::capture_label(int index) const {
     return out;
 }
 
-void RFScan::draw_capture_list() {
-    listDirty = false;
-
-    drawMainBorderWithTitle(title);
+void rf_draw_capture_list(
+    const String &title, const String &status, const String &footer,
+    const std::vector<String> &labels, int selected, int &scrollOffset, size_t capacity,
+    RfCaptureListState *previous
+) {
+    const bool full = !previous || !previous->valid || previous->title != title ||
+                      previous->width != tftWidth || previous->height != tftHeight;
+    const bool statusChanged = full || previous->status != status ||
+                               previous->labels.size() != labels.size() || previous->capacity != capacity;
+    const bool rowsChanged = full || previous->labels != labels || previous->selected != selected;
+    const bool footerChanged = full || previous->footer != footer;
+    if (!statusChanged && !rowsChanged && !footerChanged) return;
+    if (full) drawMainBorderWithTitle(title);
 
     int y = BORDER_PAD_Y + FM * LH + 4;
     int lineH = FP * LH + 4;
@@ -526,19 +561,19 @@ void RFScan::draw_capture_list() {
     tft.setTextSize(FP);
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
 
-    // Single status line so small screens keep as many list rows as possible.
-    String modeLabel = !ReadRAW ? "Decode" : (codesOnly ? "RAW+CRC" : "RAW");
-    String freqLabel = bruceConfigPins.rfFxdFreq
-                           ? String(bruceConfigPins.rfFreq) + "MHz"
-                           : String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]);
-    String status = freqLabel + " " + modeLabel + (autoSave ? " A" : "");
+    if (statusChanged) {
+    if (!full) tft.fillRect(BORDER_PAD_X, y, tftWidth - 2 * BORDER_PAD_X, lineH, bruceConfig.bgColor);
     tft.drawString(status, BORDER_PAD_X, y, SMOOTH_FONT);
 
-    String counter = String((int)captures.size()) + "/" + String(_MAX_CAPTURED);
+    String counter = String((int)labels.size()) + "/" + String(capacity);
     tft.drawString(counter, tftWidth - BORDER_PAD_X - (int)counter.length() * FP * LW, y, SMOOTH_FONT);
+    }
     y += lineH + 2;
 
-    if (captures.empty()) {
+    if (rowsChanged) {
+    if (!full && previous->labels.size() > labels.size())
+        tft.fillRect(BORDER_PAD_X, y - 1, tftWidth - 2 * BORDER_PAD_X, listBottom - y + lineH, bruceConfig.bgColor);
+    if (labels.empty()) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawString("Waiting for a signal...", BORDER_PAD_X, y, SMOOTH_FONT);
     } else {
@@ -548,14 +583,14 @@ void RFScan::draw_capture_list() {
         // Keep the highlighted entry inside the visible window.
         if (selected < scrollOffset) scrollOffset = selected;
         if (selected >= scrollOffset + visibleItems) scrollOffset = selected - visibleItems + 1;
-        if (scrollOffset > (int)captures.size() - visibleItems)
-            scrollOffset = (int)captures.size() - visibleItems;
+        if (scrollOffset > (int)labels.size() - visibleItems)
+            scrollOffset = (int)labels.size() - visibleItems;
         if (scrollOffset < 0) scrollOffset = 0;
 
         int rowW = tftWidth - 2 * BORDER_PAD_X;
         int maxChars = max(8, (rowW - 6) / (FP * LW));
 
-        for (int i = 0; i < visibleItems && (scrollOffset + i) < (int)captures.size(); i++) {
+        for (int i = 0; i < visibleItems && (scrollOffset + i) < (int)labels.size(); i++) {
             int itemIdx = scrollOffset + i;
             bool isSelected = (itemIdx == selected);
             uint16_t fg = isSelected ? bruceConfig.bgColor : bruceConfig.priColor;
@@ -564,28 +599,54 @@ void RFScan::draw_capture_list() {
             tft.fillRect(BORDER_PAD_X, y - 1, rowW, lineH, bg);
             tft.setTextColor(fg, bg);
 
-            String label = capture_label(itemIdx);
+            String label = labels[itemIdx];
             if ((int)label.length() > maxChars) label = label.substring(0, maxChars - 1) + ".";
             tft.drawString(label, BORDER_PAD_X + 3, y, SMOOTH_FONT);
             y += lineH;
         }
 
         // Scroll hints when the list does not fit on screen
-        if ((int)captures.size() > visibleItems) {
+        if ((int)labels.size() > visibleItems) {
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             if (scrollOffset > 0) tft.drawString("^", tftWidth - BORDER_PAD_X - 6, listBottom, SMOOTH_FONT);
-            if (scrollOffset + visibleItems < (int)captures.size())
+            if (scrollOffset + visibleItems < (int)labels.size())
                 tft.drawString("v", tftWidth - BORDER_PAD_X - 6, listBottom + FP * LH, SMOOTH_FONT);
         }
     }
 
+    }
+    if (footerChanged) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
+    if (!full) tft.fillRect(BORDER_PAD_X, tftHeight - BORDER_PAD_X - FP * LH,
+                           tftWidth - 2 * BORDER_PAD_X, FP * LH, bruceConfig.bgColor);
     tft.drawCentreString(
-        captures.empty() ? "[SEL] Scan options" : "[SEL] Signal menu",
+        footer,
         tftWidth / 2,
         tftHeight - BORDER_PAD_X - FP * LH,
         SMOOTH_FONT
+    );
+    }
+    if (previous) {
+        previous->valid = true;
+        previous->title = title; previous->status = status; previous->footer = footer;
+        previous->labels = labels; previous->selected = selected; previous->scrollOffset = scrollOffset;
+        previous->width = tftWidth; previous->height = tftHeight; previous->capacity = capacity;
+    }
+}
+
+void RFScan::draw_capture_list() {
+    listDirty = false;
+    std::vector<String> labels;
+    for (size_t i = 0; i < captures.size(); ++i) labels.push_back(capture_label(i));
+    String modeLabel = !ReadRAW ? "Decode" : (codesOnly ? "RAW+CRC" : "RAW");
+    String freqLabel = bruceConfigPins.rfFxdFreq
+                           ? String(bruceConfigPins.rfFreq) + "MHz"
+                           : String(subghz_frequency_ranges[bruceConfigPins.rfScanRange]);
+    rf_draw_capture_list(
+        title, freqLabel + " " + modeLabel + (autoSave ? " A" : ""),
+        captures.empty() ? "[SEL] Scan options" : "[SEL] Signal menu",
+        labels, selected, scrollOffset, _MAX_CAPTURED
     );
 }
 
@@ -601,7 +662,8 @@ void RFScan::open_signal_menu(int index) {
 
     options = {};
     options.emplace_back("Signal Info", [&]() { action = SIGNAL_INFO; });
-    options.emplace_back("Replay", [&]() { action = REPLAY; });
+    if (code.decodedFile.isEmpty() || code.encoderAvailable)
+        options.emplace_back("Replay", [&]() { action = REPLAY; });
     if (code.data != "" && code.protocol != "RAW")
         options.emplace_back("Replay as RAW", [&]() { action = REPLAY_RAW; });
     options.emplace_back("Save Signal", [&]() { action = SAVE; });
@@ -611,7 +673,10 @@ void RFScan::open_signal_menu(int index) {
     options.emplace_back("Scan Options", [&]() { action = SCAN_OPTIONS; });
     options.emplace_back("Close Menu", [&]() { action = CLOSE_MENU; });
 
-    loopOptions(options);
+    draw_capture_list();
+    loopOptions(options, MENU_TYPE_REGULAR, "RF signal", 0, false, false, 0, true, true);
+    rf_clear_nav_state();
+    returnToMenu = false;
 
     set_option(action, index);
 }
@@ -665,7 +730,12 @@ void RFScan::open_scan_options() {
         options.emplace_back("Close Menu", [&]() { action = CLOSE_MENU; });
         options.emplace_back("Main Menu", [&]() { action = MAIN_MENU; });
 
-        loopOptions(options);
+        rf_clear_nav_state();
+        returnToMenu = false;
+        draw_capture_list();
+        loopOptions(options, MENU_TYPE_REGULAR, "RF scan options", 0, false, false, 0, true, true);
+        rf_clear_nav_state();
+        returnToMenu = false;
     }
 
     set_option(action, selected);
@@ -719,6 +789,13 @@ void RFScan::show_signal_info(int index) {
 
     rf_clear_nav_state();
 
+    if (!captures[index].code.decodedFile.isEmpty()) {
+        ScrollableTextArea area(captures[index].code.protocol);
+        area.fromString(captures[index].code.decodedText + "\n\n" + captures[index].code.decodedFile);
+        area.show(true);
+        rf_clear_nav_state();
+        return;
+    }
     drawMainBorderWithTitle("Signal " + String(index + 1));
     display_signal_data(captures[index].code);
 
@@ -767,6 +844,7 @@ void RFScan::reset_signals() {
     scrollOffset = 0;
     listDirty = true;
 
+    received = RfCodes{};
     received.Bit = 0;
     received.data = "";
     received.key = 0;
@@ -790,7 +868,8 @@ void RFScan::set_threshold() {
         {"(-75)",               [&]() { rssiThreshold = -75; }},
         {"(-80) Less Accurate", [&]() { rssiThreshold = -80; }},
     };
-    loopOptions(options, idx);
+    draw_capture_list();
+    loopOptions(options, MENU_TYPE_REGULAR, "RF threshold", idx, false, false, 0, true, true);
 }
 /*
 // Using similar function from rf_utils.h
@@ -868,6 +947,10 @@ void display_info(
 }
 
 void display_signal_data(RfCodes received, bool headless) {
+    if (!received.decodedFile.isEmpty()) {
+        rf_info_line(headless, received.decodedText);
+        return;
+    }
     std::string txt = received.data.c_str();
     std::stringstream ss(txt);
     std::string palavra;
@@ -956,40 +1039,16 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
         return false;
     }
 
-    if (!codes.key && codes.data == "") {
+    if (!codes.key && codes.data == "" && codes.decodedFile.isEmpty()) {
         Serial.println("Empty signal, it was not saved.");
         return false;
     }
 
     String subfile_out = rf_subghz_header(frequency);
     if (!raw) {
-        subfile_out += "Preset: " + String(codes.preset) + "\n";
-        // Write the identified protocol under its Flipper-standard name (so the
-        // `.sub` is portable), falling back to RcSwitch only if unidentified.
-        subfile_out +=
-            "Protocol: " +
-            (codes.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(codes.protocol)) + "\n";
-        subfile_out += "Bit: " + String(codes.Bit) + "\n";
-        // The Key (64-bit) is always written so the signal can be replayed; when
-        // KeeLoq or a rolling-code protocol is detected the extra fields are also
-        // included so the encoder can reconstruct the frame on re-transmit.
-        subfile_out += "Key: " + String(key) + "\n";
-        if (codes.hop != 0 || codes.serial != 0 || codes.cnt != 0) {
-            char hexString[64] = {0};
-            decimalToHexString(codes.serial, hexString);
-            if (codes.seed != 0) {
-                char seedHex[32] = {0};
-                decimalToHexString(codes.seed, seedHex);
-                subfile_out += "Seed: " + String(seedHex) + "\n";
-            }
-            subfile_out += "Manufacture: " + String(codes.mf_name) + "\n";
-            subfile_out += "Serial: " + String(hexString) + "\n";
-            subfile_out += "Button: " + String(codes.btn) + "\n";
-            subfile_out += "Counter: " + String(codes.cnt) + "\n";
-        }
-        subfile_out += "TE: " + String(codes.te) + "\n";
+        codes.frequency = uint32_t(frequency * 1000000);
+        subfile_out = rf_protocol_serialize(codes);
         filename = "rcs.sub";
-        // subfile_out += "RAW_Data: " + codes.data;
     } else {
         // save as raw
         if (codes.preset == "1") {
@@ -1084,7 +1143,19 @@ String rf_scan(float start_freq, float stop_freq, int max_loops) {
     return out;
 }
 
-String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) {
+void RfReceiveSession::stop() {
+    rx.end();
+    if (radioActive) deinitRfModule();
+    radioActive = false;
+    frequency = 0;
+    preset = "";
+    registers = "";
+}
+
+String rfReceiveSignal(
+    float frequency, int maxSeconds, bool raw, bool headless, const String &rxPreset,
+    bool interruptOnNavigation, RfReceiveSession *session
+) {
     RfCodes received;
 
     if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
@@ -1098,20 +1169,74 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
         tft.println("Waiting for a " + String(frequency) + " MHz " + "signal.");
     }
 
-    // init native RMT receive
-    if (!initRfModule("rx", frequency)) return "";
-    RfRxSession rx;
-    if (!rx.begin()) {
-        deinitRfModule();
+    // Reject unsupported requests before touching the radio; never claim an FSK
+    // capture when an external OOK receiver or unknown preset was selected.
+    const RfPreset *preset = rxPreset.isEmpty() ? nullptr : rf_find_preset(rxPreset);
+    if (!rxPreset.isEmpty() && (!raw || !preset || bruceConfigPins.rfModule != CC1101_SPI_MODULE))
         return "";
+    // Persistent sessions are only used by the native RAW receive loop.
+    if (session && (!raw || !headless)) return "";
+    RfReceiveSession oneShot;
+    RfReceiveSession &state = session ? *session : oneShot;
+    RfRxSession &rx = state.rx;
+    if (!rx.active() || state.frequency != frequency || state.preset != rxPreset) {
+        state.stop();
+        if (!initRfModule("rx", frequency)) return "";
+        state.radioActive = true;
+        String &registers = state.registers;
+        if (preset) {
+            ELECHOUSE_cc1101.setSidle();
+            const auto fskProfile = rf_apply_fsk_receive_profile(
+                preset->name,
+                [](uint8_t address, uint8_t value) { return ELECHOUSE_cc1101.SpiWriteReg(address, value); },
+                [](uint8_t address) { return ELECHOUSE_cc1101.SpiReadReg(address); }
+            );
+            if (fskProfile == RfFskReceiveProfileResult::Failed) {
+                Serial.println("RF RX: FSK profile write/readback failed");
+                state.stop();
+                return "";
+            }
+            if (fskProfile == RfFskReceiveProfileResult::NotFsk) {
+                ELECHOUSE_cc1101.setModulation(preset->modulation);
+                ELECHOUSE_cc1101.setDeviation(preset->deviation ? preset->deviation : 1.58f);
+                ELECHOUSE_cc1101.setRxBW(preset->rxBW ? preset->rxBW : 270.83f);
+                ELECHOUSE_cc1101.setDRate(preset->dataRate ? preset->dataRate : 10.f);
+                ELECHOUSE_cc1101.setPktFormat(3);
+            }
+            ELECHOUSE_cc1101.SetRx();
+            for (uint8_t address = 0; address <= 0x2e; ++address) {
+                char hex[4];
+                snprintf(hex, sizeof(hex), "%02X", ELECHOUSE_cc1101.SpiReadReg(address));
+                if (address) registers += " ";
+                registers += hex;
+            }
+        }
+        // Up to 16384 durations: the former 512-duration RAW buffer truncated long
+        // ProtoPirate preambles before the payload. Failure still ends the session.
+        size_t captureSymbols = raw ? 8192 : 256;
+    #if defined(BOARD_HAS_PSRAM) && !defined(LITE_VERSION)
+        captureSymbols = 8192;
+    #endif
+        if (!rx.begin(true, captureSymbols)) {
+            state.stop();
+            return "";
+        }
+        state.frequency = frequency;
+        state.preset = rxPreset;
     }
+    const String &registers = state.registers;
 
-    while (!check(EscPress)) {
+    String rawCapture;
+    const uint32_t started = millis();
+    // Headless JS owns the Back event; checking it here must not consume it.
+    while (!(headless ? EscPress : check(EscPress))) {
+        // The native capture list owns navigation; leave its events unconsumed.
+        if (interruptOnNavigation && (SelPress || NextPress || PrevPress || UpPress || DownPress)) break;
         std::vector<int> durations;
         if (rx.poll(durations)) {
             // In decode mode try KeeLoq, then the registry; raw mode skips decoding.
             bool decoded =
-                (!raw) && (rf_try_keeloq(durations, received) || rf_decode_ook(durations, received));
+                (!raw) && (rf_try_keeloq(durations, received) || rf_protocol_decode_capture(durations, uint32_t(frequency * 1000000), "Ook270Async", received));
 
             // Build the RAW representation (also the data string when decoded).
             String _data;
@@ -1119,7 +1244,15 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             uint64_t crc = 0;
             std::vector<int> indexed;
             int rawBits = 0, rawTe = 0;
-            int transitions = rf_build_raw(durations, _data, hasCrc, crc, indexed, rawBits, rawTe);
+            int transitions = durations.size();
+            if (raw) {
+                rawCapture = rf_capture::rawLines(durations).c_str();
+                _data = rawCapture;
+                _data.replace("RAW_Data:", "");
+                if (!durations.empty()) rawTe = abs(durations.front());
+            } else {
+                transitions = rf_build_raw(durations, _data, hasCrc, crc, indexed, rawBits, rawTe);
+            }
 
             if (decoded) {
                 received.frequency = long(frequency * 1000000);
@@ -1133,7 +1266,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                 // Raw mode requested: keep undecoded captures as RAW.
                 received.frequency = long(frequency * 1000000);
                 received.protocol = "RAW";
-                received.preset = "Ook270Async";
+                received.preset = preset ? preset->name : "Ook270Async";
                 received.te = rawTe;
                 received.data = _data;
                 received.filepath = "unsaved";
@@ -1149,7 +1282,9 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             bool outRaw = raw || received.protocol == "RAW";
 
             String subfile_out = rf_subghz_header(frequency);
-            if (!outRaw) {
+            if (!outRaw && !received.decodedFile.isEmpty()) {
+                subfile_out = rf_protocol_serialize(received);
+            } else if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
                 subfile_out +=
                     "Protocol: " +
@@ -1170,32 +1305,23 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
                     "Preset: " + String(received.preset == "" ? String("Ook270Async") : received.preset) +
                     "\n";
                 subfile_out += "Protocol: RAW\n";
-                subfile_out += "RAW_Data: " + received.data;
+                if (preset) {
+                    subfile_out += "Bruce_RX_Preset: " + String(preset->name) + "\n";
+                    subfile_out += "Bruce_RX_Registers: " + registers + "\n";
+                }
+                subfile_out += "Bruce_Buffer_Full: " + String(rx.bufferFull() ? 1 : 0) + "\n";
+                subfile_out += raw ? rawCapture : "RAW_Data: " + received.data;
             }
-            rx.end();
-            deinitRfModule();
+            // poll() has already rearmed RX; keep it active during decoding.
+            if (!session) state.stop();
             return subfile_out;
         }
-        if (max_loops > 0) {
-            // headless mode, quit if nothing received after max_loops
-            vTaskDelay(1000 / portTICK_PERIOD_MS); // wait first, THEN check
-            max_loops -= 1;
-            if (max_loops == 0) {
-                // Use sentinel -1: loop runs one more iteration to catch signals
-                // that arrived during vTaskDelay before giving up
-                max_loops = -1;
-            }
-        } else if (max_loops == -1) {
-            // Final check already done in this iteration - truly timed out
-            Serial.println("timeout");
-            rx.end();
-            deinitRfModule();
-            return "";
-        }
+        if (maxSeconds > 0 && millis() - started >= uint32_t(maxSeconds) * 1000U) break;
+        // Keep rearming promptly instead of leaving a one-second receive gap.
+        vTaskDelay(1);
     }
 
-    rx.end();
-    deinitRfModule();
+    if (!session) state.stop();
 
     return "";
 }

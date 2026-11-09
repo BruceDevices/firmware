@@ -7,9 +7,8 @@
 
 #define _MAX_TRIES 5
 
-// Upper bound for the on-screen capture list. Each RAW slot holds a duration
-// string of up to ~3 KB (the RMT session captures 256 symbols), so keep this
-// modest to stay friendly to the boards without PSRAM.
+// Bound both the entry count and retained payload bytes (200 kB total).
+// Full PSRAM builds capture up to 8192 symbols; other boards retain 256.
 #define _MAX_CAPTURED 10
 
 // One entry of the Scan/Copy capture list: the decoded/raw signal plus the
@@ -123,6 +122,42 @@ void display_signal_data(RfCodes received, bool headless = false);
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
-String rfReceiveSignal(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
+// Keeps native ProtoPirate reception armed while the previous capture is decoded.
+// Other callers retain the one-shot lifecycle by omitting this optional session.
+class RfReceiveSession {
+public:
+    ~RfReceiveSession() { stop(); }
+    void stop();
+    RfReceiveSession() = default;
+    RfReceiveSession(const RfReceiveSession &) = delete;
+    RfReceiveSession &operator=(const RfReceiveSession &) = delete;
+private:
+    RfRxSession rx;
+    bool radioActive = false;
+    float frequency = 0;
+    String preset, registers;
+    friend String rfReceiveSignal(float, int, bool, bool, const String &, bool, RfReceiveSession *);
+};
+
+String rfReceiveSignal(
+    float frequency = 0, int maxSeconds = -1, bool raw = false, bool headless = false,
+    const String &rxPreset = "", bool interruptOnNavigation = false, RfReceiveSession *session = nullptr
+);
+
+// Shared native capture-list presentation and navigation reset.
+void rf_clear_nav_state();
+struct RfCaptureListState {
+    bool valid = false;
+    String title, status, footer;
+    std::vector<String> labels;
+    int selected = -1, scrollOffset = 0, width = 0, height = 0;
+    size_t capacity = 0;
+};
+
+void rf_draw_capture_list(
+    const String &title, const String &status, const String &footer,
+    const std::vector<String> &labels, int selected, int &scrollOffset, size_t capacity,
+    RfCaptureListState *previous = nullptr
+);
 
 #endif

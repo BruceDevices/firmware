@@ -1,8 +1,10 @@
 #include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #if !defined(LITE_VERSION) && !defined(CONFIG_IDF_TARGET_ESP32P4)
-#include "esp_connection.h"
 #include "core/display.h"
+#include "esp_connection.h"
 #include <WiFi.h>
+#include <algorithm>
+#include <cstring>
 
 // Initialize the static instance pointer
 EspConnection *EspConnection::instance = nullptr;
@@ -61,12 +63,15 @@ bool EspConnection::beginEspnow() {
 EspConnection::Message EspConnection::createMessage(String text) {
     Message message;
 
-    message.dataSize = text.length();
-    message.totalBytes = text.length();
-    message.bytesSent = text.length();
+    size_t maxLen = ESP_DATA_SIZE - 1;
+    size_t copyLen = std::min<size_t>(text.length(), maxLen);
+    message.dataSize = copyLen;
+    message.totalBytes = copyLen;
+    message.bytesSent = copyLen;
     message.done = true;
 
-    strncpy(message.data, text.c_str(), ESP_DATA_SIZE);
+    memcpy(message.data, text.c_str(), copyLen);
+    message.data[copyLen] = '\0';
 
     return message;
 }
@@ -78,8 +83,10 @@ EspConnection::Message EspConnection::createFileMessage(File file) {
     message.isFile = true;
     message.totalBytes = file.size();
 
-    strncpy(message.filename, file.name(), ESP_FILENAME_SIZE);
-    strncpy(message.filepath, path.substring(0, path.lastIndexOf("/")).c_str(), ESP_FILEPATH_SIZE);
+    strncpy(message.filename, file.name(), ESP_FILENAME_SIZE - 1);
+    message.filename[ESP_FILENAME_SIZE - 1] = '\0';
+    strncpy(message.filepath, path.substring(0, path.lastIndexOf("/")).c_str(), ESP_FILEPATH_SIZE - 1);
+    message.filepath[ESP_FILEPATH_SIZE - 1] = '\0';
 
     return message;
 }
@@ -158,8 +165,9 @@ void EspConnection::printMessage(Message message) {
     Serial.print("Data: ");
 
     // Append data to the result if dataSize is greater than 0
-    if (message.dataSize > 0) {
-        for (size_t i = 0; i < message.dataSize; ++i) {
+    size_t safeSize = std::min<size_t>(message.dataSize, ESP_DATA_SIZE);
+    if (safeSize > 0) {
+        for (size_t i = 0; i < safeSize; ++i) {
             Serial.print((char)message.data[i]); // Assuming data contains valid characters
         }
     } else {
@@ -178,7 +186,16 @@ String EspConnection::macToString(const uint8_t *mac) {
 }
 
 void EspConnection::appendPeerToList(const uint8_t *mac) {
-    peerOptions.push_back({macToString(mac).c_str(), [this, mac]() { setDstAddress(mac); }});
+    if (!mac || peerOptions.size() >= ESP_MAX_PEERS) return;
+
+    String macLabel = macToString(mac);
+    for (const auto &opt : peerOptions) {
+        if (opt.label == macLabel) return;
+    }
+
+    uint8_t peerMac[6];
+    memcpy(peerMac, mac, 6);
+    peerOptions.push_back({macLabel.c_str(), [this, peerMac]() { setDstAddress(peerMac); }});
 }
 
 void EspConnection::onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -192,17 +209,33 @@ void EspConnection::onDataSent(const uint8_t *mac_addr, esp_now_send_status_t st
 }
 
 void EspConnection::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
-    Message recvMessage;
+    if (!mac || !incomingData || len != static_cast<int>(sizeof(Message))) {
+        Serial.printf(
+            "ESPNOW: Dropping malformed frame (len=%d, expected=%u)\n", len, (unsigned)sizeof(Message)
+        );
+        return;
+    }
 
-    // Use reinterpret_cast and copy assignment
-    const Message *incomingMessage = reinterpret_cast<const Message *>(incomingData);
-    recvMessage = *incomingMessage; // Use copy assignment
+    Message recvMessage;
+    memcpy(&recvMessage, incomingData, sizeof(Message));
+
+    if (recvMessage.dataSize >= ESP_DATA_SIZE) { recvMessage.dataSize = ESP_DATA_SIZE - 1; }
+    recvMessage.filename[sizeof(recvMessage.filename) - 1] = '\0';
+    recvMessage.filepath[sizeof(recvMessage.filepath) - 1] = '\0';
+    recvMessage.data[recvMessage.dataSize] = '\0';
+    recvMessage.data[ESP_DATA_SIZE - 1] = '\0';
 
     printMessage(recvMessage);
 
     if (recvMessage.ping) return sendPong(mac);
     if (recvMessage.pong) return appendPeerToList(mac);
 
+    if (hasAuthorizedPeer && !isAuthorizedPeer(mac)) {
+        Serial.printf("ESPNOW: Dropping frame from unauthorized peer %s\n", macToString(mac).c_str());
+        return;
+    }
+
+    memcpy(lastSenderMac, mac, sizeof(lastSenderMac));
     recvQueue.push_back(recvMessage);
 }
 

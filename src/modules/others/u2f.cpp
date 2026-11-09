@@ -24,7 +24,14 @@
 
 namespace {
 
-static constexpr uint8_t kU2fReportId = HID_REPORT_ID_VENDOR;
+// IMPORTANT: CTAPHID requires 64 *data* bytes per report.
+// With a nonzero REPORT_ID the ESP32 TinyUSB transport adds one extra byte,
+// exceeding the typical 64-byte USB HID endpoint/buffer.
+// Bruce registers this device only when the USB U2F feature is started.
+// This HID report therefore deliberately has no REPORT_ID.
+// Do not enable another HID collection on the same TinyUSB HID interface
+// at the same time unless its descriptor/report routing is redesigned.
+static constexpr uint8_t kU2fReportId = 0;
 static constexpr uint32_t kBroadcastCid = 0xFFFFFFFFu;
 static constexpr uint16_t kInitPayloadSize = 57; // 64 - 7
 static constexpr uint16_t kContPayloadSize = 59; // 64 - 5
@@ -79,7 +86,6 @@ static const uint8_t U2F_REPORT_DESCRIPTOR[] = {
     0x06, 0xD0,         0xF1, // USAGE_PAGE (FIDO Alliance)
     0x09, 0x01,               // USAGE (U2F Authenticator Device)
     0xA1, 0x01,               // COLLECTION (Application)
-    0x85, kU2fReportId,       //   REPORT_ID
     0x09, 0x20,               //   USAGE (Input Report Data)
     0x15, 0x00,               //   LOGICAL_MINIMUM (0)
     0x26, 0xFF,         0x00, //   LOGICAL_MAXIMUM (255)
@@ -128,16 +134,23 @@ struct CborCursor {
 
 class U2fHidDevice : public USBHIDDevice {
 public:
-    U2fHidDevice() : _hid(HID_ITF_PROTOCOL_NONE) { USBHID::addDevice(this, sizeof(U2F_REPORT_DESCRIPTOR)); }
+    U2fHidDevice() : _hid(HID_ITF_PROTOCOL_NONE) {
+        _registered = USBHID::addDevice(this, sizeof(U2F_REPORT_DESCRIPTOR));
+        if (!_registered) Serial.println("[FIDO] ERROR: HID device registration failed");
+    }
 
-    void begin() {
-        if (_started) return;
-        USB.begin();
+    bool begin() {
+        if (_started) return true;
+        if (!_registered) return false;
+        // Prepare the HID TX synchronization before USB enumeration.
         _hid.begin();
+        USB.begin();
         uint32_t t0 = millis();
         while (!_hid.ready() && (millis() - t0) < 4000) delay(10);
+        if (!_hid.ready()) Serial.println("[FIDO] USB not ready yet (connect USB host)");
         loadState();
         _started = true;
+        return true;
     }
 
     void end() {
@@ -152,6 +165,10 @@ public:
     }
 
     bool waitingForPresence() const { return _waitingForPresence; }
+    uint32_t rxPackets() const { return _rxPackets; }
+    uint32_t txPackets() const { return _txPackets; }
+    uint32_t txFailures() const { return _txFailures; }
+    bool hidReady() { return _hid.ready(); }
 
     void poll() {
         if (!_pending.ready) return;
@@ -192,7 +209,13 @@ public:
         }
 
         // CTAPHID uses fixed-size 64-byte reports for this interface.
-        if (len != 64) return;
+        // Non-64-byte frames cannot be decoded safely. Record such errors.
+        if (len != 64) {
+            _rxBadLength++;
+            if (_rxBadLength <= 3) Serial.printf("[FIDO] RX unexpected HID len=%u\n", len);
+            return;
+        }
+        ++_rxPackets;
 
         const uint32_t cid = (uint32_t(buffer[0]) << 24) | (uint32_t(buffer[1]) << 16) |
                              (uint32_t(buffer[2]) << 8) | uint32_t(buffer[3]);
@@ -349,7 +372,12 @@ private:
     USBHID _hid;
     Preferences _prefs;
     bool _prefsReady = false;
+    bool _registered = false;
     bool _started = false;
+    volatile uint32_t _rxPackets = 0;
+    volatile uint32_t _txPackets = 0;
+    volatile uint32_t _txFailures = 0;
+    volatile uint32_t _rxBadLength = 0;
     bool _masterLoaded = false;
     uint8_t _masterSecret[32] = {0};
     uint32_t _counter = 0;
@@ -573,6 +601,17 @@ private:
     waitForUserPresence(uint32_t timeoutMs = 20000, bool sendKeepalive = false, uint32_t keepaliveCid = 0) {
         _waitingForPresence = true;
 
+        // poll() blocks in this function, so u2f_setup() cannot repaint the
+        // status screen until the user confirms. Show the prompt right here.
+        tft.fillRect(0, 84, tftWidth, tftHeight - 84, bruceConfig.bgColor);
+        tft.setTextSize(2);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        tft.setCursor(6, 94);
+        tft.print("Confirm now");
+        tft.setTextSize(1);
+        tft.setCursor(6, 118);
+        tft.print("Press center button");
+
         auto isSelectPressedRaw = []() -> bool {
             bool pressed = false;
             if (SelPress) pressed = true; // Don't reset the variable
@@ -597,7 +636,9 @@ private:
             report[5] = 0x00;
             report[6] = 0x01;
             report[7] = status;
-            _hid.SendReport(kU2fReportId, report, 64, 0);
+            // A zero timeout could report failure before the USB transfer
+            // finishes. 25ms is short enough for periodic keepalives.
+            _hid.SendReport(kU2fReportId, report, 64, 25);
         };
 
         // Debounce raw selection pin directly. This avoids timing/latch issues
@@ -637,7 +678,16 @@ private:
         return false;
     }
 
-    bool sendReportRaw(const uint8_t report[64]) { return _hid.SendReport(kU2fReportId, report, 64); }
+    bool sendReportRaw(const uint8_t report[64]) {
+        bool ok = _hid.SendReport(kU2fReportId, report, 64, 250);
+        if (ok) {
+            ++_txPackets;
+        } else {
+            ++_txFailures;
+            if (_txFailures <= 10) Serial.println("[FIDO] HID TX FAILED");
+        }
+        return ok;
+    }
 
     bool sendMessage(uint32_t cid, uint8_t cmd, const uint8_t *payload, uint16_t len) {
         uint8_t report[64] = {0};
@@ -1507,12 +1557,9 @@ private:
             cborAppendText(info, "U2F_V2");
 
             cborAppendUint(info, 0x03);
-            // Derive stable per-device AAGUID from master secret.
+            // Must match the 16 zero AAGUID bytes in makeCredential authData.
+            // This generic AAGUID avoids leaking a fingerprint of this board.
             uint8_t aaguid[16] = {0};
-            if (_masterLoaded) {
-                uint8_t h[32] = {0};
-                if (sha256(_masterSecret, sizeof(_masterSecret), h)) memcpy(aaguid, h, sizeof(aaguid));
-            }
             cborAppendBytes(info, aaguid, sizeof(aaguid));
 
             cborAppendUint(info, 0x04);
@@ -1695,6 +1742,12 @@ void updateU2fRuntimeInfo(const U2fHidDevice &device) {
     tft.setTextSize(FM);
     tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fRuntimeY + BORDER_PAD_X);
     tft.print(device.waitingForPresence() ? "Confirm now" : "Waiting...");
+    tft.setTextSize(1);
+    tft.setCursor(6, 124);
+    tft.print("RX: "); tft.print(device.rxPackets());
+    tft.print(" TX: "); tft.print(device.txPackets());
+    tft.setCursor(6, 138);
+    tft.print("TX errors: "); tft.print(device.txFailures());
     tft.setTextSize(FP);
 }
 
@@ -1702,7 +1755,10 @@ void updateU2fRuntimeInfo(const U2fHidDevice &device) {
 
 void u2f_setup() {
     U2fHidDevice &device = u2fDevice();
-    device.begin();
+    if (!device.begin()) {
+        displayError("FIDO HID registration failed. Restart device.");
+        return;
+    }
     drawU2fStatusScreen();
 
     uint32_t lastDrawMs = 0;

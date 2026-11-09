@@ -11,6 +11,12 @@
 #define TCA8418_SCL_PIN 9
 #define TCA8418_SDA_PIN 8
 
+static const HalBrightCurve brightCurve = {
+    .pwm_min = 75,
+    .pwm_max = 255,
+    .gamma = 2.2f,
+};
+
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
 // TCA8418 keyboard controller for ADV variant
@@ -119,7 +125,8 @@ void _setup_gpio() {
         (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)5, (gpio_num_t)3, (gpio_num_t)4
     }; // sck,miso,mosi,cs,rst,dio0
 #endif
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)12
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)12
     }; // sck,miso,mosi,cs
     // RFID2 (RC522-SPI driver) shares the default SPI port; same cs as CC1101/NRF24
     bruceConfigPins.PN532_bus = {(gpio_num_t)40, (gpio_num_t)39, (gpio_num_t)14, (gpio_num_t)1};
@@ -128,8 +135,12 @@ void _setup_gpio() {
 #ifdef CAP_CC1101_SS_PIN
     bruceConfigPins.CC1101_presets = {
         {"M5 Cap",
-         {bruceConfigPins.outer_bus.sck, bruceConfigPins.outer_bus.miso, bruceConfigPins.outer_bus.mosi,
-          (gpio_num_t)CAP_CC1101_SS_PIN, (gpio_num_t)CAP_CC1101_GDO0_PIN, GPIO_NUM_NC}}
+         {bruceConfigPins.outer_bus.sck,
+          bruceConfigPins.outer_bus.miso,
+          bruceConfigPins.outer_bus.mosi,
+          (gpio_num_t)CAP_CC1101_SS_PIN,
+          (gpio_num_t)CAP_CC1101_GDO0_PIN,
+          GPIO_NUM_NC}}
     };
 #endif
 
@@ -138,9 +149,6 @@ void _setup_gpio() {
     pinMode(5, OUTPUT);
     // Set GPIO5 HIGH for SD card compatibility (thx for the tip @bmorcelli & 7h30th3r0n3)
     digitalWrite(5, HIGH);
-
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
 }
 volatile bool kb_interrupt = false;
 void IRAM_ATTR gpio_isr_handler(void *arg) {
@@ -149,6 +157,8 @@ void IRAM_ATTR gpio_isr_handler(void *arg) {
     // Serial.printf("interrupt %ld\n", i++);
 }
 void _post_setup_gpio() {
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100, brightCurve);
     // Initialize TCA8418 I2C keyboard controller
     Serial.println("DEBUG: Cardputer ADV - Initializing TCA8418 keyboard");
 
@@ -180,34 +190,46 @@ void _post_setup_gpio() {
         Keyboard.begin();
         return;
     }
-    bruceConfigPins.sys_i2c.sda = (gpio_num_t)8;
-    bruceConfigPins.sys_i2c.scl = (gpio_num_t)9;
+    // Cardputer ADV wiring defaults, applied after the TCA8418 probe detects the ADV
+    // hardware. This hook runs after /brucePins.conf was loaded, so every pin goes through
+    // applyBoardDefault(): a value that already differs from the _setup_gpio() default came
+    // from the conf file and the user's wiring wins (issue #2937).
+    applyBoardDefault(bruceConfigPins.sys_i2c.sda, brucePinsSetupDefaults.sys_i2c.sda, (gpio_num_t)8);
+    applyBoardDefault(bruceConfigPins.sys_i2c.scl, brucePinsSetupDefaults.sys_i2c.scl, (gpio_num_t)9);
 
     // Cardputer ADV reads the mic through the ES8311 codec over MSB/left-justified I2S instead
     // of the classic Cardputer's PDM wiring; GPIO43 is the shared LRCLK.
-    bruceConfigPins.mic_bus = {(gpio_num_t)41, (gpio_num_t)46, (gpio_num_t)43, MIC_TYPE_I2S_MSB};
+    applyBoardDefault(bruceConfigPins.mic_bus.clk, brucePinsSetupDefaults.mic_bus.clk, (gpio_num_t)41);
+    applyBoardDefault(bruceConfigPins.mic_bus.ws, brucePinsSetupDefaults.mic_bus.ws, (gpio_num_t)43);
+    applyBoardDefault(bruceConfigPins.mic_bus.data, brucePinsSetupDefaults.mic_bus.data, (gpio_num_t)46);
+    applyBoardDefault(
+        bruceConfigPins.mic_bus.type, brucePinsSetupDefaults.mic_bus.type, (int)MIC_TYPE_I2S_MSB
+    );
 
-    bruceConfigPins.gps_bus.rx = (gpio_num_t)15;
-    bruceConfigPins.gps_bus.tx = (gpio_num_t)13;
-    bruceConfigPins.gpsBaudrate = 115200;
+    applyBoardDefault(bruceConfigPins.gps_bus.rx, brucePinsSetupDefaults.gps_bus.rx, (gpio_num_t)15);
+    applyBoardDefault(bruceConfigPins.gps_bus.tx, brucePinsSetupDefaults.gps_bus.tx, (gpio_num_t)13);
+    applyBoardDefault(bruceConfigPins.gpsBaudrate, brucePinsSetupDefaults.gpsBaudrate, 115200);
 
-    bruceConfigPins.CC1101_bus.sck = (gpio_num_t)40;
-    bruceConfigPins.CC1101_bus.miso = (gpio_num_t)39;
-    bruceConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
-    bruceConfigPins.CC1101_bus.cs = (gpio_num_t)13;
-    bruceConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+    applyBoardDefault(bruceConfigPins.CC1101_bus.sck, brucePinsSetupDefaults.CC1101_bus.sck, (gpio_num_t)40);
+    applyBoardDefault(
+        bruceConfigPins.CC1101_bus.miso, brucePinsSetupDefaults.CC1101_bus.miso, (gpio_num_t)39
+    );
+    applyBoardDefault(
+        bruceConfigPins.CC1101_bus.mosi, brucePinsSetupDefaults.CC1101_bus.mosi, (gpio_num_t)14
+    );
+    // GPIO13 is the Cardputer ADV GPS TX pin; leave CC1101 CS unassigned by default.
+    applyBoardDefault(bruceConfigPins.CC1101_bus.cs, brucePinsSetupDefaults.CC1101_bus.cs, (gpio_num_t)-1);
+    applyBoardDefault(bruceConfigPins.CC1101_bus.io0, brucePinsSetupDefaults.CC1101_bus.io0, (gpio_num_t)5);
 
-    bruceConfigPins.NRF24_bus.sck = (gpio_num_t)40;
-    bruceConfigPins.NRF24_bus.miso = (gpio_num_t)39;
-    bruceConfigPins.NRF24_bus.mosi = (gpio_num_t)14;
-    bruceConfigPins.NRF24_bus.cs = (gpio_num_t)6;
-    bruceConfigPins.NRF24_bus.io0 = (gpio_num_t)4;
+    applyBoardDefault(bruceConfigPins.NRF24_bus.sck, brucePinsSetupDefaults.NRF24_bus.sck, (gpio_num_t)40);
+    applyBoardDefault(bruceConfigPins.NRF24_bus.miso, brucePinsSetupDefaults.NRF24_bus.miso, (gpio_num_t)39);
+    applyBoardDefault(bruceConfigPins.NRF24_bus.mosi, brucePinsSetupDefaults.NRF24_bus.mosi, (gpio_num_t)14);
+    applyBoardDefault(bruceConfigPins.NRF24_bus.cs, brucePinsSetupDefaults.NRF24_bus.cs, (gpio_num_t)6);
+    applyBoardDefault(bruceConfigPins.NRF24_bus.io0, brucePinsSetupDefaults.NRF24_bus.io0, (gpio_num_t)4);
 
     pinMode(bruceConfigPins.NRF24_bus.cs, OUTPUT);
-    pinMode(bruceConfigPins.CC1101_bus.cs, OUTPUT);
     pinMode(bruceConfigPins.LoRa_bus.cs, OUTPUT);
     digitalWrite(bruceConfigPins.NRF24_bus.cs, HIGH);
-    digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
     digitalWrite(bruceConfigPins.LoRa_bus.cs, HIGH);
 
     tca.matrix(7, 8);
@@ -222,7 +244,7 @@ void _post_setup_gpio() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
+void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval, brightCurve); }
 
 /*********************************************************************
 ** Function: InputHandler

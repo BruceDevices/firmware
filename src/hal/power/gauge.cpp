@@ -1,4 +1,5 @@
 #include "gauge.h"
+#include <soc/soc_caps.h>
 
 #if defined(GAUGE_BQ27220)
 #include <bq27220.h>
@@ -28,6 +29,11 @@ static void analogSetup() {
     pinMode(analogPin, INPUT);
     analogReady = true;
 }
+
+static float analogMv() { return (float)analogReadMilliVolts(analogPin) * analogMultiplier; }
+#endif
+#if !defined(GAUGE_BQ27220) && SOC_USB_SERIAL_JTAG_SUPPORTED
+#include <driver/usb_serial_jtag.h>
 #endif
 
 bool hal_gauge_init(const DeviceGauge &cfg) {
@@ -57,7 +63,7 @@ int hal_gauge_get_percent() {
 #elif defined(ANALOG_BAT_PIN)
     analogSetup();
     if (analogPin < 0 || analogMaxMv <= analogMinMv) return -1;
-    float voltage = (float)analogReadMilliVolts(analogPin) * analogMultiplier;
+    float voltage = analogMv();
     int percent = (int)(((voltage - analogMinMv) / (float)(analogMaxMv - analogMinMv)) * 100.0f);
     return (percent < 0) ? 0 : (percent > 100) ? 100 : percent;
 #else
@@ -69,7 +75,46 @@ bool hal_gauge_is_charging() {
 #if defined(GAUGE_BQ27220)
     return gauge.getIsCharging();
 #else
-    return false;
+    bool charging = false;
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    charging = usb_serial_jtag_is_connected();
+#endif
+#ifdef ANALOG_BAT_PIN
+    // No charge-status signal: infer the charger from the divider voltage.
+    const float CHARGER_MV = 4220.0f; // no resting LiPo reads above this
+    const float STEP_MV = 100.0f;     // plug/unplug step vs the running average
+    static bool plugged = false;
+    static float avg = 0;
+    static uint8_t falling = 0;
+    static unsigned long last = 0;
+    analogSetup();
+    const unsigned long now = millis();
+    // Callers poll every few seconds; sampling faster only adds ADC noise.
+    if (analogPin >= 0 && (last == 0 || now - last >= 2000)) {
+        last = now;
+        float mv = 0;
+        for (int i = 0; i < 8; ++i) mv += analogMv();
+        mv /= 8;
+        if (avg == 0) avg = mv;
+        const float d = mv - avg;
+        if (mv > CHARGER_MV || d > STEP_MV) {
+            plugged = true;
+            falling = 0;
+        } else if (d < -STEP_MV) {
+            plugged = false;
+        } else if (plugged) {
+            // A charger never lets the cell sag steadily; ~16s of decline means it is gone.
+            if (d < -8.0f) {
+                if (++falling >= 8) plugged = false;
+            } else if (d > 0) {
+                falling = 0;
+            }
+        }
+        avg += (mv - avg) / 4;
+    }
+    charging = charging || plugged;
+#endif
+    return charging;
 #endif
 }
 

@@ -1,7 +1,7 @@
+#include "core/powerSave.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/powerSave.h"
 #include <interface.h>
 
 #define SEL_BTN 1
@@ -25,9 +25,9 @@ void _setup_gpio() {
     bruceConfigPins.irTx = 5;
     bruceConfigPins.irRx = 4;
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)5, (gpio_num_t)4};    // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)5, (gpio_num_t)4};     // rx, tx
-    bruceConfigPins.badusb_bus = {(gpio_num_t)5, (gpio_num_t)4};  // rx, tx (CH9329)
+    bruceConfigPins.uart_bus = {(gpio_num_t)5, (gpio_num_t)4};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)5, (gpio_num_t)4};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)5, (gpio_num_t)4}; // rx, tx (CH9329)
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)10, (gpio_num_t)8, (gpio_num_t)11, (gpio_num_t)6};
     bruceConfigPins.PN532_bus = {(gpio_num_t)10, (gpio_num_t)8, (gpio_num_t)11, (gpio_num_t)6};
@@ -37,7 +37,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)10, (gpio_num_t)8, (gpio_num_t)11, (gpio_num_t)18, (gpio_num_t)21
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)10, (gpio_num_t)8, (gpio_num_t)11, (gpio_num_t)7
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)10, (gpio_num_t)8, (gpio_num_t)11, (gpio_num_t)7
     }; // sck,miso,mosi,cs
 
     pinMode(TFT_CS, OUTPUT);
@@ -46,8 +47,6 @@ void _setup_gpio() {
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
@@ -64,10 +63,15 @@ void _setup_gpio() {
     digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
     digitalWrite(TFT_CS, HIGH);
 }
-
-bool isCharging() { return false; }
-
-int getBattery() { return 0; }
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 ** Function: setBrightness
 ** location: settings.cpp

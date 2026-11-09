@@ -1,8 +1,8 @@
+#include "core/powerSave.h"
+#include "core/utils.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/powerSave.h"
-#include "core/utils.h"
 
 #include <globals.h>
 #include <interface.h>
@@ -26,7 +26,8 @@ void _setup_gpio() {
     bruceConfigPins.uart_bus = {(gpio_num_t)13, (gpio_num_t)12};   // rx, tx
     bruceConfigPins.gps_bus = {(gpio_num_t)13, (gpio_num_t)12};    // rx, tx
     bruceConfigPins.badusb_bus = {(gpio_num_t)13, (gpio_num_t)12}; // rx, tx
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)25, (gpio_num_t)27, (gpio_num_t)26, (gpio_num_t)33
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)25, (gpio_num_t)27, (gpio_num_t)26, (gpio_num_t)33
     }; // sck,miso,mosi,cs
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)25, (gpio_num_t)27, (gpio_num_t)26, (gpio_num_t)33};
@@ -57,12 +58,17 @@ void _setup_gpio() {
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
-
     Serial.begin(115200);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value

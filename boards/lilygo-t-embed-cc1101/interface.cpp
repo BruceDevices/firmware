@@ -188,11 +188,16 @@ void _setup_gpio() {
 #endif
 
     hal_encoder_init(encoderCfg());
-
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
@@ -381,6 +386,4 @@ void checkReboot() {
 bool isCharging() {
     return hal_gauge_is_charging(); // Return the charging status from BQ27220
 }
-#else
-bool isCharging() { return false; }
 #endif

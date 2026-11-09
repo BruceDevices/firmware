@@ -53,13 +53,6 @@ void _setup_gpio() {
 ***************************************************************************************/
 void _post_setup_gpio() { pinMode(TFT_BL, OUTPUT); }
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
-
 /*********************************************************************
 ** Function: setBrightness
 ** location: settings.cpp

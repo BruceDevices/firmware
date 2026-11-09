@@ -1,3 +1,4 @@
+#include "manchester_helpers.h"
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "rf_decoder_came_twee.h"
 #include "../rf_config.h"
@@ -26,26 +27,7 @@ static uint16_t reverse_key_16(uint16_t data) {
     return rev;
 }
 
-typedef enum { ME_RESET, ME_LOW, ME_HIGH } manchester_state;
 
-static bool manchester_advance(manchester_state& state, bool high_pulse, bool& bit) {
-    switch (state) {
-    case ME_RESET:
-        state = high_pulse ? ME_HIGH : ME_LOW;
-        return false;
-    case ME_LOW:
-        if (high_pulse) { state = ME_HIGH; return false; }
-        bit = 1; state = ME_LOW; return true;
-    case ME_HIGH:
-        if (!high_pulse) { state = ME_LOW; return false; }
-        bit = 0; state = ME_HIGH; return true;
-    }
-    return false;
-}
-
-static void manchester_reset(manchester_state& state) {
-    state = ME_RESET;
-}
 
 bool rf_decode_came_twee(const std::vector<int>& durations, RfCodes& out) {
     if (durations.size() < 4) return false;
@@ -53,7 +35,7 @@ bool rf_decode_came_twee(const std::vector<int>& durations, RfCodes& out) {
     enum { ST_RESET, ST_DATA } step = ST_RESET;
     uint64_t data = 0;
     int bits = 0;
-    manchester_state man_state;
+    ManchesterHalfState man_state;
 
     for (int raw : durations) {
         bool level = raw > 0;
@@ -63,11 +45,11 @@ bool rf_decode_came_twee(const std::vector<int>& durations, RfCodes& out) {
         case ST_RESET:
             if (!level && ct_diff(dur, CT_TE_LONG * 51) < CT_TE_DELTA * 20) {
                 data = 0; bits = 0;
-                manchester_reset(man_state);
+                manchester_half_reset(man_state);
                 bool dummy = false;
-                manchester_advance(man_state, false, dummy);
-                manchester_advance(man_state, true, dummy);
-                manchester_advance(man_state, false, dummy);
+                manchester_half_advance(man_state, false, dummy);
+                manchester_half_advance(man_state, true, dummy);
+                manchester_half_advance(man_state, false, dummy);
                 step = ST_DATA;
             }
             break;
@@ -76,13 +58,13 @@ bool rf_decode_came_twee(const std::vector<int>& durations, RfCodes& out) {
             if (!level) {
                 if (ct_diff(dur, CT_TE_SHORT) < CT_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }
                 } else if (ct_diff(dur, CT_TE_LONG) < CT_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, false, bit_out)) {
+                    if (manchester_half_advance(man_state, false, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }
@@ -109,24 +91,24 @@ bool rf_decode_came_twee(const std::vector<int>& durations, RfCodes& out) {
                         return true;
                     }
                     data = 0; bits = 0;
-                    manchester_reset(man_state);
+                    manchester_half_reset(man_state);
                     bool dummy = false;
-                    manchester_advance(man_state, false, dummy);
-                    manchester_advance(man_state, true, dummy);
-                    manchester_advance(man_state, false, dummy);
+                    manchester_half_advance(man_state, false, dummy);
+                    manchester_half_advance(man_state, true, dummy);
+                    manchester_half_advance(man_state, false, dummy);
                 } else {
                     step = ST_RESET;
                 }
             } else {
                 if (ct_diff(dur, CT_TE_SHORT) < CT_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }
                 } else if (ct_diff(dur, CT_TE_LONG) < CT_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }
@@ -149,8 +131,8 @@ bool rf_encode_came_twee(const RfCodes& in, std::vector<int>& out) {
         uint64_t temp = 0x003FFF7200000000ULL |
                         ((uint64_t)(in.serial ^ ct_magic_xor[parcel]) & 0xFFFFFFFF);
 
-        manchester_state enc_state;
-        manchester_reset(enc_state);
+        ManchesterHalfState enc_state;
+        manchester_half_reset(enc_state);
 
         // Manchester encode
         uint8_t man_bits[200];

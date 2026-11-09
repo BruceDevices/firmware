@@ -1,4 +1,6 @@
 import hashlib
+import os
+import subprocess
 from typing import TYPE_CHECKING, Any
 import requests
 
@@ -18,45 +20,42 @@ board_mcu = env.BoardConfig()
 mcu = board_mcu.get("build.mcu", "")
 patchflag_path = join(FRAMEWORK_DIR,mcu, "lib", ".patched")
 
-# patch file only if we didn't do it befored
-if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
-    original_file = join(FRAMEWORK_DIR,mcu, "lib", "libnet80211.a")
-    patched_file = join(
-        FRAMEWORK_DIR, mcu, "lib", "libnet80211.a.patched"
-    )
-
-    if mcu=="esp32c5" or mcu=="esp32c6" :
-        env.Execute(
-            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (original_file, patched_file)
-        )
-    elif mcu=="esp32p4":
-        """Do nothing"""
+# Resolve the installed toolchain directly; current pioarduino uses unified
+# xtensa-esp-elf binaries rather than the former per-MCU package names.
+if mcu != "esp32p4" and not isfile(patchflag_path):
+    original_file = join(FRAMEWORK_DIR, mcu, "lib", "libnet80211.a")
+    patched_file = original_file + ".patched"
+    if mcu in ("esp32c5", "esp32c6"):
+        candidates = [("toolchain-riscv32-esp", "riscv32-esp-elf-objcopy"),
+                      ("toolchain-riscv32-esp-elf", "riscv32-esp-elf-objcopy")]
     else:
-        env.Execute(
-            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (mcu, mcu, original_file, patched_file)
-        )
-
-    if isfile("%s.old" % (original_file)):
-        remove("%s.old" % (original_file))
-
-    if isfile(original_file):
-        rename(original_file, "%s.old" % (original_file))
-    else:
-        print("Patch: Original file not found")
-
-    if isfile(patched_file):
-        rename(patched_file, original_file)
-    else:
-        print("Patch: Patched file not found")
-
-
-    def _touch(path):
-        with open(path, "w") as fp:
-            fp.write("")
-
-    env.Execute(lambda *args, **kwargs: _touch(patchflag_path))
+        candidates = [("toolchain-xtensa-esp-elf", "xtensa-esp-elf-objcopy"),
+                      ("toolchain-xtensa-" + mcu, "xtensa-" + mcu + "-elf-objcopy")]
+    objcopy = None
+    for package, binary in candidates:
+        try:
+            package_dir = env.PioPlatform().get_package_dir(package)
+        except (KeyError, ValueError):
+            continue
+        if not package_dir:
+            continue
+        candidate = join(package_dir, "bin", binary + (".exe" if os.name == "nt" else ""))
+        if isfile(candidate):
+            objcopy = candidate
+            break
+    if not objcopy:
+        raise RuntimeError("Cannot find the installed ESP32 objcopy tool")
+    subprocess.run([objcopy, "--weaken-symbol=ieee80211_raw_frame_sanity_check",
+                    original_file, patched_file], check=True)
+    # Do not move the original archive until objcopy has succeeded.
+    if not isfile(patched_file):
+        raise RuntimeError("objcopy did not produce the patched WiFi archive")
+    if isfile(original_file + ".old"):
+        remove(original_file + ".old")
+    rename(original_file, original_file + ".old")
+    rename(patched_file, original_file)
+    with open(patchflag_path, "w"):
+        pass
 
 
 def hash_file(file_path):
@@ -92,30 +91,33 @@ def load_checksum_file(input_file):
         return f.readline().strip()
 
 
+def minify_resource(source, kind):
+    raw = source.read()
+    if os.environ.get("BRUCE_OFFLINE_WEB_ASSETS") == "1":
+        return raw
+    try:
+        response = requests.post(
+            "https://www.toptal.com/developers/" + kind + "-minifier/api/raw"
+            if kind != "css" else "https://www.toptal.com/developers/cssminifier/api/raw",
+            {"input": raw.decode("utf-8")}, timeout=(5, 20))
+        response.raise_for_status()
+        return response.content if response.content.strip() else raw
+    except requests.RequestException:
+        # Original assets remain functional; gzip still runs locally.
+        print("[WEB] Minifier unavailable; embedding original " + kind + " asset")
+        return raw
+
+
 def minify_css(c):
-    minify_req = requests.post(
-        "https://www.toptal.com/developers/cssminifier/api/raw",
-        {"input": c.read().decode('utf-8')},
-    )
-    return c if minify_req is False else minify_req.text.encode('utf-8')
+    return minify_resource(c, "css")
 
 
 def minify_js(js):
-    minify_req = requests.post(
-        'https://www.toptal.com/developers/javascript-minifier/api/raw',
-        {'input': js.read().decode('utf-8')},
-        timeout=10
-    )
-    return js if minify_req is False else minify_req.text.encode('utf-8')
+    return minify_resource(js, "javascript")
 
 
 def minify_html(html):
-    minify_req = requests.post(
-        'https://www.toptal.com/developers/html-minifier/api/raw',
-        {'input': html.read().decode('utf-8')},
-        timeout=10
-    )
-    return html if minify_req is False else minify_req.text.encode('utf-8')
+    return minify_resource(html, "html")
 
 
 # gzip web files

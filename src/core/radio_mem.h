@@ -29,24 +29,47 @@ static inline size_t radioLargestDmaBlock() { return heap_caps_get_largest_free_
 constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 
 // Minimum contiguous DMA block required before bringing the BLE stack up.
-constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
+// Measured on Cardputer ADV: with the SDR bank reserved the menu heap only has
+// ~15.8 kB contiguous and the controller still fails ("Malloc failed"), so the
+// threshold must sit comfortably above that; the SDR bank hand-off below gives
+// the heap ~64 kB more when the check fails.
+constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 48 * 1024;
+
+// SDR bank hand-off (implemented in modules/wifi/sdr.cpp): the SDR engine's
+// 64 KiB SRAM bank is kept out of the heap behind a fence allocation so the IQ
+// record/jammer can always start; when a radio bring-up finds the heap too
+// small, releasing the fence returns the bank to the heap. After that the SDR
+// needs a reboot (it refuses cleanly instead of corrupting the heap).
+#if !defined(LITE_VERSION) && !defined(BRUCE_NO_SDR_JAMMER)
+void sdrBankReleaseForRadio();
+void sdrBankHeapInit();
+#else
+static inline void sdrBankReleaseForRadio() {}
+static inline void sdrBankHeapInit() {}
+#endif
 
 static inline bool radioHasMemForWifi() {
-    // return true; // uncomment to disable it
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) return true;
+    // Heap looks tight: hand the SDR bank back to the heap before Wi-Fi init
+    sdrBankHeapInit();
+    sdrBankReleaseForRadio();
     return radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK;
 }
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
-    
-    // First check if we have enough DMA memory
+    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) return true;
+
+    // Not enough DMA memory - first hand the SDR bank back to the heap
+    sdrBankHeapInit();
+    sdrBankReleaseForRadio();
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
         return true;
     }
-    
-    // Not enough DMA memory - try to free WiFi
+
+    // Still not enough - try to free WiFi
     Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
-    
+
     // Disconnect WiFi if active
     if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
         wifiDisconnect();
@@ -56,15 +79,15 @@ static inline bool radioHasMemForBle() {
         #endif
         delay(300);
     }
-    
+
     // Recheck after freeing WiFi
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
         Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
         return true;
     }
-    
+
     // Still not enough - return false, caller shows error
-    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n", 
+    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n",
                   radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
     return false;
 }

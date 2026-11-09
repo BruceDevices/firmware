@@ -1,3 +1,4 @@
+#include "modules/wifi/wifite.h"
 #include "WifiMenu.h"
 #include "core/display.h"
 #include "core/settings.h"
@@ -10,6 +11,7 @@
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
 #include "modules/wifi/evil_portal.h"
+#include "modules/wifi/sdr.h"
 #include "modules/wifi/karma_attack.h"
 #include "modules/wifi/netcut.h"
 #include "modules/wifi/responder.h"
@@ -81,6 +83,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Dual Band Analyzer", dual_band_analyzer_setup});
 #endif
     options.push_back({"Jam Detect", jam_detect_setup});
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BRUCE_NO_SDR_JAMMER)
+    options.push_back({"SDR", sdr_menu});
+#endif
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!WiFi.isConnected()) doScan = wifiConnectMenu();
@@ -98,6 +103,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
     options.push_back({"Brucegotchi", brucegotchi_start});
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    options.push_back({"WiFite", wifite_menu});
+#endif
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 

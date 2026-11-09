@@ -56,6 +56,11 @@ void _setup_gpio() {
         (gpio_num_t)36, (gpio_num_t)35, (gpio_num_t)37, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)7
     }; // sck,miso,mosi,cs,int,rst
 #endif
+    // Head mounted on an M5Stack StackChan body (K151): its ST25R3916 NFC hangs off the
+    // sys I2C bus at 0x50 (G12/G11, no IRQ pin). These are only the defaults for the
+    // "ST25R3916 I2C" module — a plain CoreS3 has no NFC, so rfidModule stays M5_RFID2
+    // until the user picks it. See boards/m5stack-stackchan for the full body support.
+    bruceConfigPins.ST25R_bus = {(gpio_num_t)12, (gpio_num_t)11, GPIO_NUM_NC, GPIO_NUM_NC};
 
     M5.begin();
     M5.Power.setUsbOutput(false);

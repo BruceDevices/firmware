@@ -22,6 +22,8 @@ String getMacAddress() {
     return String(macStr);
 }
 
+BruceConfigPins brucePinsSetupDefaults;
+
 void BruceConfigPins::fromJson(JsonObject obj) {
     int count = 0;
     String mac = getMacAddress();

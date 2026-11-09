@@ -1,8 +1,8 @@
+#include "core/powerSave.h"
+#include "core/utils.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/powerSave.h"
-#include "core/utils.h"
 #include <interface.h>
 
 #define SEL_BTN 28
@@ -39,7 +39,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)8, (gpio_num_t)3, (gpio_num_t)2
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)8, (gpio_num_t)6
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)10, (gpio_num_t)9, (gpio_num_t)8, (gpio_num_t)6
     }; // sck,miso,mosi,cs
 #if !defined(LITE_VERSION)
     bruceConfigPins.W5500_bus = {
@@ -53,8 +54,6 @@ void _setup_gpio() {
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
@@ -79,23 +78,13 @@ void _setup_gpio() {
 }
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
-** Location: main.cpp
-** Description:   second stage gpio setup to make a few functions work
+** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
-void _post_setup_gpio() {}
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
-
-/***************************************************************************************
-** Function name: isCharging()
-** Description:   Default implementation that returns false
-***************************************************************************************/
-bool isCharging() { return false; }
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 
 /*********************************************************************
 ** Function: setBrightness

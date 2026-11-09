@@ -1,8 +1,8 @@
 #include <sdkconfig.h> // CONFIG_IDF_TARGET_ESP32P4 lives here; must precede the P4 guard below
 #if !defined(LITE_VERSION) && !defined(CONFIG_IDF_TARGET_ESP32P4)
-#include "serial_commands.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "serial_commands.h"
 
 EspSerialCmd::EspSerialCmd() {}
 
@@ -65,6 +65,7 @@ void EspSerialCmd::receiveCommands() {
     recvCommand = "";
     recvQueue.clear();
     recvStatus = CONNECTING;
+    hasAuthorizedPeer = false;
     Message recvMessage;
 
     if (!beginEspnow()) return;
@@ -83,7 +84,42 @@ void EspSerialCmd::receiveCommands() {
             recvStatus = WAITING;
         }
         if (recvStatus == SUCCESS) {
-            displayRecvCommand(parseSerialCommand(recvCommand));
+            if (recvCommand.length() == 0 || recvCommand.length() >= ESP_DATA_SIZE) {
+                displayRecvError();
+            } else {
+                bool authorized = isAuthorizedPeer(lastSenderMac);
+                if (!authorized) {
+                    String senderStr = macToString(lastSenderMac);
+                    bool approveCmd = false;
+                    bool trustPeer = false;
+
+                    drawMainBorderWithTitle("CONFIRM COMMAND");
+                    padprintln("From: " + senderStr);
+                    padprintln("Cmd:  " + recvCommand);
+                    padprintln("");
+
+                    std::vector<Option> confirmOpts = {
+                        {"Reject",            [&]() { approveCmd = false; }},
+                        {"Run once",          [&]() { approveCmd = true; } },
+                        {"Always allow peer", [&]() {
+                             approveCmd = true;
+                             trustPeer = true;
+                         }    },
+                    };
+                    loopOptions(confirmOpts);
+
+                    if (trustPeer) { setDstAddress(lastSenderMac); }
+                    authorized = approveCmd;
+                }
+
+                if (authorized) {
+                    displayRecvCommand(parseSerialCommand(recvCommand));
+                } else {
+                    displayBanner();
+                    padprintln("Command rejected");
+                    displayRecvFooter();
+                }
+            }
             recvStatus = WAITING;
         }
 
@@ -91,7 +127,9 @@ void EspSerialCmd::receiveCommands() {
             recvMessage = recvQueue.front();
             recvQueue.erase(recvQueue.begin());
 
-            recvCommand = recvMessage.data;
+            size_t safeLen = std::min<size_t>(recvMessage.dataSize, ESP_DATA_SIZE - 1);
+            recvCommand = String(recvMessage.data).substring(0, safeLen);
+            recvCommand.trim();
             Serial.println(recvCommand);
 
             if (recvMessage.done) {
@@ -170,8 +208,8 @@ void EspSerialCmd::displaySentFooter() {
 #elif !defined(LITE_VERSION)
 // ESP-NOW command sharing is unavailable on ESP32-P4 (no esp_now_* API). Stub the entry
 // points so the menus keep working and just tell the user it is unsupported here.
-#include "serial_commands.h"
 #include "core/display.h"
+#include "serial_commands.h"
 
 EspSerialCmd::EspSerialCmd() {}
 

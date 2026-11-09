@@ -144,7 +144,11 @@ void drawBottomCanvas() {
 void drawMood(const String &face, const String &phrase, bool broken) {
     // prepare canvas
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+#if defined(STACKCHAN)
+    tft.setTextSize(FG + 2); // StackChan: the drawn face is the robot's face — go bigger
+#else
     tft.setTextSize(FG + 1);
+#endif
     tft.setTextDatum(MC_DATUM);
     // draw screen
     tft.drawPixel(0, 0, 0);

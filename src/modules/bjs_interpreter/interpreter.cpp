@@ -1,5 +1,6 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
+#include "core/display.h"
 #include "core/utils.h"
 
 static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
@@ -18,13 +19,33 @@ char *scriptName = NULL;
 
 TaskHandle_t interpreterTaskHandler = NULL;
 
+static int js_interrupt_handler(JSContext *ctx, void *opaque) {
+    (void)ctx;
+    (void)opaque;
+    return interpreter_state < 0 || (interpreter_state == 2 && check(EscPress));
+}
+
+static void stopInterpreterTask() {
+    interpreter_state = -1;
+    interpreterTaskHandler = NULL;
+    vTaskDelete(NULL);
+}
+
 void interpreterHandler(void *pvParameters) {
     printMemoryUsage("init interpreter");
-    if (script == NULL) { return; }
+    if (script == NULL) {
+        stopInterpreterTask();
+        return;
+    }
 
     while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
 
     tft.fillScreen(TFT_BLACK);
+#if defined(HAS_TOUCH)
+    // Script drawing uses tftHeight, which excludes the reserved touch footer.
+    // Restore its navigation labels after clearing the physical display.
+    TouchFooter(TFT_WHITE);
+#endif
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
     bool psramAvailable = psramFound();
@@ -47,21 +68,20 @@ void interpreterHandler(void *pvParameters) {
     );
     if (mem_size < 2000) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
     if (mem_buf == NULL) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
+    JS_SetInterruptHandler(ctx, js_interrupt_handler);
 
     log_d("Script length: %zu\n", scriptSize);
 
@@ -126,8 +146,7 @@ void interpreterHandler(void *pvParameters) {
 
     printMemoryUsage("deinit interpreter");
 
-    interpreter_state = -1;
-    vTaskDelete(NULL);
+    stopInterpreterTask();
     return;
 }
 

@@ -341,3 +341,18 @@ public:
     void validateMicPins(MicPins &value);
     void validateBuzzerPin();
 };
+
+// Generic wiring as applied by _setup_gpio(), captured by setup_gpio() (main.cpp) before
+// /brucePins.conf is loaded. Post-storage board hooks compare against it with
+// applyBoardDefault() to tell their own defaults apart from values the user configured.
+extern BruceConfigPins brucePinsSetupDefaults;
+
+// Boards that re-apply pin defaults in _post_setup_gpio()/_late_setup_gpio() run AFTER
+// /brucePins.conf was loaded, so a blind `bruceConfigPins.X = Y;` would clobber the user's
+// pins on every boot (issue #2937). Use this instead: the board default is only taken when
+// the pin still holds its _setup_gpio() default; any other value came from the conf file
+// and the user's wiring wins. One line per pin.
+template <typename T>
+inline void applyBoardDefault(T &cur, const T &genericDefault, const T &boardDefault) {
+    if (cur == genericDefault) cur = boardDefault;
+}

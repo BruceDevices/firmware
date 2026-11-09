@@ -83,14 +83,17 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 }
 
 JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    String r = "";
-    if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
-        int t;
-        JS_ToInt32(ctx, &t, argv[0]);
-        r = rfReceiveSignal(bruceConfigPins.rfFreq, t, true, true); // raw + headless for JS
-    } else {
-        r = rfReceiveSignal(bruceConfigPins.rfFreq, 10, true, true);
+    // readRaw(timeoutSeconds = 10, rxPreset = ""). Empty preserves the default profile.
+    int timeout = 10;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &timeout, argv[0]);
+    timeout = constrain(timeout, 1, 60);
+    String preset;
+    JSCStringBuf presetBuf;
+    if (argc > 1 && JS_IsString(ctx, argv[1])) {
+        const char *name = JS_ToCString(ctx, argv[1], &presetBuf);
+        if (name) preset = name;
     }
+    String r = rfReceiveSignal(bruceConfigPins.rfFreq, timeout, true, true, preset);
     return JS_NewString(ctx, r.c_str());
 }
 

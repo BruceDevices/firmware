@@ -6,6 +6,7 @@
 #include "protocols/rf_legacy_migrate.h"
 #include "protocols/rf_presets.h"
 #include "protocols/rf_registry.h"
+#include "protocols/rf_protocol_engine.h"
 #include "rf_utils.h"
 
 #define CLOSE_MENU 3
@@ -293,6 +294,19 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
 
     databaseFile.close();
 
+    if (!selected_code.protocol.isEmpty() && selected_code.protocol != "RAW" &&
+        selected_code.protocol != "BinRAW" && selected_code.protocol != "KeeLoq" &&
+        selected_code.protocol != "RcSwitch" && !rf_find_protocol(selected_code.protocol)) {
+        File full = fs->open(filepath, FILE_READ);
+        if (!full || full.size() > 16384) { full.close(); return false; }
+        String text = full.readString(); full.close();
+        RfCodes decoded;
+        if (!rf_protocol_load(text.c_str(), decoded) || decoded.decodedFile.isEmpty()) return false;
+        decoded.filepath = selected_code.filepath;
+        data = decoded;
+        bitList.clear(); bitRawList.clear(); keyList.clear(); rawDataList.clear();
+        return true;
+    }
     data = selected_code;
 
 #if RF_SUB_LEGACY_MIGRATION
@@ -306,7 +320,26 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
     return true;
 }
 
+static bool transmitDecoded(const RfCodes &code, bool hideDefaultUI) {
+    std::vector<int> pulses;
+    if (!code.encoderAvailable || !rf_protocol_encode(code, num_signal_repeat, pulses)) {
+        if (!hideDefaultUI) displayError("Cannot encode this signal", true);
+        return false;
+    }
+    String raw = rf_subghz_header(code.frequency / 1000000.0f);
+    raw += "Preset: " + code.preset + "\nProtocol: RAW\nRAW_Data:";
+    for (int pulse : pulses) raw += " " + String(pulse);
+    bool sent = rf_protocol_transmit_raw(raw.c_str());
+    if (!sent && !hideDefaultUI) displayError("Transmission failed", true);
+    return sent;
+}
+
 bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
+    if (!selected_code.decodedFile.isEmpty()) {
+        if (!transmitDecoded(selected_code, hideDefaultUI)) return false;
+        addToRecentCodes(selected_code);
+        return true;
+    }
     int sent = 0;
 
     int total = keyList.size() + rawDataList.size();
@@ -356,6 +389,10 @@ bool txSubFile(RfCodes &selected_code, bool hideDefaultUI) {
 }
 
 void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
+    if (!rfcode.decodedFile.isEmpty() && rfcode.protocol != "RAW") {
+        transmitDecoded(rfcode, hideDefaultUI);
+        return;
+    }
     uint32_t frequency = rfcode.frequency;
     String protocol = rfcode.protocol;
     String preset = rfcode.preset;
@@ -497,12 +534,13 @@ void sendRfCommand(struct RfCodes rfcode, bool hideDefaultUI) {
 #endif
 
         if (def != nullptr) {
-            rf_tx_protocol(rfcode.key, rfcode.Bit, rfcode.te, def, num_signal_repeat);
+            std::vector<int> pulses;
+            if (rf_protocol_encode(rfcode, num_signal_repeat, pulses)) rf_tx_durations(pulses);
+            else if (!hideDefaultUI) displayError("No compatible encoder", true);
         } else {
             Serial.print("unsupported protocol: ");
             Serial.println(protocol);
-            Serial.println("Falling back to generic RcSwitch_11");
-            rfTransmitCode(rfcode.key, rfcode.Bit, 270, 11, 10);
+            if (!hideDefaultUI) displayError("Unsupported protocol", true);
         }
     }
 

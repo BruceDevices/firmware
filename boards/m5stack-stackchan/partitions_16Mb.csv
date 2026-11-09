@@ -1,0 +1,10 @@
+# Name,     Type, SubType,   Offset,   Size,     Flags
+# HAS_SPEAKER pulls in the full ESP8266Audio/ESP8266SAM stack, which puts the
+# StackChan image (~4.7MB) past the 4.48MB factory slot of the shared
+# custom_16Mb.csv (it builds fine and then boot-loops with
+# "Image length doesn't fit in partition"). This layout gives the app 6.25MB
+# and keeps 16MB addressing intact.
+nvs,        data, nvs,       0x9000,   0x6000,
+factory,    app,  factory,   0x10000,  0x640000,
+spiffs,     data, spiffs,    0x650000, 0x9A0000,
+coredump,   data, coredump,  0xFF0000, 0x10000,

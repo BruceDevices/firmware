@@ -1,8 +1,8 @@
+#include "core/bus_HAL.h"
+#include "core/powerSave.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/bus_HAL.h"
-#include "core/powerSave.h"
 #include <interface.h>
 
 #define SEL_BTN 37
@@ -24,8 +24,8 @@ static DeviceButtons buttonsCfg() {
 void _setup_gpio() {
     bruceConfigPins.mic_bus = {(gpio_num_t)0, (gpio_num_t)34, GPIO_NUM_NC, MIC_TYPE_PDM}; // clk,data,ws,type
     bruceConfigPins.buzzer = 2;
-    bruceConfigPins.i2c_bus = {(gpio_num_t)32, (gpio_num_t)33};  // sda, scl (Grove)
-    bruceConfigPins.sys_i2c = {(gpio_num_t)21, (gpio_num_t)22};  // sda, scl
+    bruceConfigPins.i2c_bus = {(gpio_num_t)32, (gpio_num_t)33}; // sda, scl (Grove)
+    bruceConfigPins.sys_i2c = {(gpio_num_t)21, (gpio_num_t)22}; // sda, scl
     bruceConfigPins.rfTx = 32;
     bruceConfigPins.rfRx = 33;
     bruceConfigPins.irTx = 19;
@@ -45,19 +45,28 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)0, (gpio_num_t)33, (gpio_num_t)32, (gpio_num_t)26, (gpio_num_t)25
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)0, (gpio_num_t)25, (gpio_num_t)26, (gpio_num_t)14
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)0, (gpio_num_t)25, (gpio_num_t)26, (gpio_num_t)14
     }; // sck,miso,mosi,cs
     // Alt wiring: CC1101/NRF24 dongle sharing the SD card's SPI bus instead of the Grove module
     bruceConfigPins.CC1101_presets = {
         {"Shared SPI",
-         {bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso, bruceConfigPins.SDCARD_bus.mosi,
-          GPIO_NUM_33, GPIO_NUM_32, GPIO_NUM_NC},
+         {bruceConfigPins.SDCARD_bus.sck,
+          bruceConfigPins.SDCARD_bus.miso,
+          bruceConfigPins.SDCARD_bus.mosi,
+          GPIO_NUM_33,
+          GPIO_NUM_32,
+          GPIO_NUM_NC},
          "https://github.com/pr3y/Bruce/blob/main/media/connections/cc1101_stick_SDCard.jpg"}
     };
     bruceConfigPins.NRF24_presets = {
         {"Shared SPI",
-         {bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso, bruceConfigPins.SDCARD_bus.mosi,
-          GPIO_NUM_33, GPIO_NUM_32, GPIO_NUM_NC}}
+         {bruceConfigPins.SDCARD_bus.sck,
+          bruceConfigPins.SDCARD_bus.miso,
+          bruceConfigPins.SDCARD_bus.mosi,
+          GPIO_NUM_33,
+          GPIO_NUM_32,
+          GPIO_NUM_NC}}
     };
 #if !defined(LITE_VERSION)
     bruceConfigPins.W5500_bus = {
@@ -98,11 +107,16 @@ void _setup_gpio() {
         delayMicroseconds(10);
     } // send dummy clocks
     digitalWrite(pin_shared_ctrl, HIGH); // Keep the SD card selected.
-
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 ** Function: setBrightness
 ** location: settings.cpp
@@ -161,5 +175,3 @@ void checkReboot() {
         PrevPress = true;
     }
 }
-
-bool isCharging() { return false; }

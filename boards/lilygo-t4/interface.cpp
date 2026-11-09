@@ -1,8 +1,8 @@
+#include "core/powerSave.h"
+#include "core/utils.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/powerSave.h"
-#include "core/utils.h"
 
 #include <globals.h>
 #include <interface.h>
@@ -34,9 +34,9 @@ void _setup_gpio() {
     bruceConfigPins.irTx = 26; // TXLED
     bruceConfigPins.irRx = 25; // RXLED
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)22, (gpio_num_t)21};    // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)22, (gpio_num_t)21};     // rx, tx
-    bruceConfigPins.badusb_bus = {(gpio_num_t)22, (gpio_num_t)21};  // rx, tx (CH9329)
+    bruceConfigPins.uart_bus = {(gpio_num_t)22, (gpio_num_t)21};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)22, (gpio_num_t)21};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)22, (gpio_num_t)21}; // rx, tx (CH9329)
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI).
     // No dedicated PN532 module on this board, so PN532_bus shares the same slot.
     bruceConfigPins.outer_bus = {(gpio_num_t)25, (gpio_num_t)33, (gpio_num_t)26, (gpio_num_t)17};
@@ -49,17 +49,23 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)25, (gpio_num_t)33, (gpio_num_t)26, (gpio_num_t)17, (gpio_num_t)35
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)15, (gpio_num_t)13
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)14, (gpio_num_t)2, (gpio_num_t)15, (gpio_num_t)13
     }; // sck,miso,mosi,cs
 
     hal_buttons_init(buttonsCfg(), 3);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
-
     Serial.begin(115200);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value

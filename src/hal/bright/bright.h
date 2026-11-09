@@ -5,7 +5,7 @@
 
 // Backlight/PWM brightness HAL.
 
-#define HAL_BRIGHT_PWM_FREQ 5000
+#define HAL_BRIGHT_PWM_FREQ 1000
 #define HAL_BRIGHT_PWM_RES_BITS 8
 
 // duty = pwm_min + round(pow(percent/100, gamma) * (pwm_max - pwm_min))
@@ -13,9 +13,13 @@
 // hand-tuned lookup table or formula (surveyed in docs/etapa_8.md); they are
 // unified onto this single curve so brightness behaves the same everywhere.
 struct HalBrightCurve {
-    uint16_t pwm_min = 0;
+    uint16_t pwm_min = 40; // Arbitrary, low light in most of the cases
     uint16_t pwm_max = 255;
     float gamma = 2.2f;
+    // true for a backlight wired active LOW (duty 0 = fully lit), so the duty
+    // is mirrored inside the pwm_min..pwm_max window and the curve keeps the
+    // same feel as on an active-HIGH board.
+    bool invert = false;
 };
 
 uint16_t hal_bright_curve(uint8_t percent, const HalBrightCurve &curve = HalBrightCurve());

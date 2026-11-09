@@ -211,7 +211,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)44, (gpio_num_t)43
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)21
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)21
     }; // sck,miso,mosi,cs
     bruceConfigPins.ST25R_bus = {
         (gpio_num_t)35, (gpio_num_t)33, (gpio_num_t)34, (gpio_num_t)39, (gpio_num_t)5, GPIO_NUM_NC
@@ -436,8 +437,6 @@ void powerOff() { hal_pmic_shutdown(); }
 ***************************************************************************************/
 #ifdef GAUGE_BQ27220
 bool isCharging() { return hal_gauge_is_charging(); }
-#else
-bool isCharging() { return false; }
 #endif
 
 /*********************************************************************

@@ -8,6 +8,7 @@
 // ISO15693 writes are not implemented.
 
 #include "core/bus_HAL.h"
+#include "core/i2c_finder.h"
 #include "core/sd_functions.h"
 #include "modules/rfid/apdu.h"
 #include <esp_random.h>
@@ -248,8 +249,28 @@ bool ST25R3916::_initSPI() {
 }
 
 bool ST25R3916::_initI2C() {
-    TwoWire *Wire = acquireI2CBus();
-    _hw = new RfalRfST25R3916Class(Wire, GPIO_NUM_NC);
+    // Boards with an onboard ST25R3916 on I2C (e.g. the M5Stack StackChan body) store the
+    // bus in ST25R_bus as I2C-style pins: SDA in the sck slot, SCL in the miso slot, no CS.
+    // When those pins match sys_i2c, acquireI2CBus() hands back the shared system bus (with
+    // M5Unified locking) instead of starting a colliding second bus. Everyone else gets the
+    // user-configurable generic I2C bus (Config > I2C Pins).
+    //
+    // The M5Stack NFC Unit (U216) hangs on that generic bus (Grove) and answers at the same
+    // address (0x50) as an onboard reader — so when the board preset exists, probe the
+    // generic bus first (plain Wire: reliable NACKs) and only fall back to the preset when
+    // nothing ACKs there.
+    TwoWire *i2c;
+    bool boardI2cPins = bruceConfigPins.ST25R_bus.sck != GPIO_NUM_NC &&
+                        bruceConfigPins.ST25R_bus.miso != GPIO_NUM_NC &&
+                        bruceConfigPins.ST25R_bus.cs == GPIO_NUM_NC;
+    if (!boardI2cPins) {
+        i2c = acquireI2CBus();
+    } else if (check_i2c_address(ST25R3916::I2C_ADDRESS)) {
+        i2c = acquireI2CBus();
+    } else {
+        i2c = acquireI2CBus((int8_t)bruceConfigPins.ST25R_bus.sck, (int8_t)bruceConfigPins.ST25R_bus.miso);
+    }
+    _hw = new RfalRfST25R3916Class(i2c, GPIO_NUM_NC);
     return _hw != nullptr;
 }
 

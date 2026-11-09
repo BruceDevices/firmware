@@ -1,8 +1,8 @@
+#include "core/powerSave.h"
+#include "core/utils.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/powerSave.h"
-#include "core/utils.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <globals.h>
@@ -35,9 +35,9 @@ void _setup_gpio() {
     bruceConfigPins.irTx = 21;
     bruceConfigPins.irRx = 14;
     bruceConfigPins.rotation = 3;
-    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};     // rx, tx
-    bruceConfigPins.badusb_bus = {(gpio_num_t)44, (gpio_num_t)43};  // rx, tx
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)44, (gpio_num_t)43}; // rx, tx
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)47};
     bruceConfigPins.PN532_bus = {(gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)47};
@@ -48,7 +48,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)12, (gpio_num_t)13, (gpio_num_t)14, (gpio_num_t)47, (gpio_num_t)21
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)18, (gpio_num_t)8, (gpio_num_t)17, (gpio_num_t)16
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)18, (gpio_num_t)8, (gpio_num_t)17, (gpio_num_t)16
     }; // sck,miso,mosi,cs
 #if !defined(LITE_VERSION)
     bruceConfigPins.LoRa_bus = {
@@ -72,17 +73,16 @@ void _setup_gpio() {
 
     // Default I2C bus (extension header)
     Wire.setPins(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
-
-    // TFT_BL = GPIO46 is the display power/SLEEP line, so PWM acts mostly as
-    // on/off rather than smooth dimming.
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
 }
-
 /***************************************************************************************
-** Function: isCharging()  — Lilka uses a bare TP4056, no charge-status GPIO
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
-bool isCharging() { return false; }
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 
 /*********************************************************************
 ** Function: _setBrightness  — display backlight / power (TFT_BL = GPIO46)

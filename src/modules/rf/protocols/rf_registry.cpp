@@ -71,6 +71,22 @@ struct RfProtoAlias {
     const char *canonical;
 };
 static const RfProtoAlias rf_proto_aliases[] = {
+
+    {"StarLine", "Star Line"},
+    {"Kia V3", "Kia V3/V4"},
+    {"Kia V4", "Kia V3/V4"},
+    {"KIA/HYU V3", "Kia V3/V4"},
+    {"KIA/HYU V4", "Kia V3/V4"},
+    {"Suzuki", "Kia V0"},
+    {"Suzuki V0", "Kia V0"},
+    {"Honda V0", "Kia V0"},
+    {"Mitsu V0", "Kia V0"},
+    {"Mitsu v0", "Kia V0"},
+    {"Mitsubishi V0", "Kia V0"},
+    {"Mitsubishi v0", "Kia V0"},
+    {"Land Rover V0", "Honda V2"},
+    {"VW", "VAG"},
+
     {"Nice FLO", "NICE_FLO"},
     {"Nice 12bit", "Nice_12bit"},
     {"Holtek 12bit", "Holtek_12bit"},

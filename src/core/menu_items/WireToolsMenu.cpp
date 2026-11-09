@@ -7,10 +7,15 @@
 
 void WireToolsMenu::optionsMenu() {
     options = {
-        {"UART Terminal", []() { uart_terminal_setup(); }},
-        {"I2C Bus",       []() { i2c_bus_setup(); }      },
-        {"SPI Bus",       []() { spi_bus_setup(); }      },
-        {"JTAG Scanner",  []() { jtag_scan_setup(); }    },
+        {"UART Terminal",   []() { uart_terminal_setup(); }  },
+        {"I2C Bus",         []() { i2c_bus_setup(); }        },
+        {"SPI Bus",         []() { spi_bus_setup(); }        },
+        {"JTAG Scanner",    []() { jtag_scan_setup(); }      },
+        {"Multimeter",      []() { continuity_tester_setup();}},
+        // TODO(logic-analyzer): feature-complete (logic_analyzer.cpp + sump_server.cpp) but held
+        // back from this release; re-enable by restoring this entry and the
+        // createWireLaCommand() registration in wire_commands.cpp:
+        // {"Logic Analyzer", logic_analyzer_setup()},
     };
     addOptionToMainMenu();
 

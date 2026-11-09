@@ -1,4 +1,5 @@
 #include "display.h"
+#include "hal/power/gauge.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -35,7 +36,8 @@ void panelSleep(bool on) {
     tft.setSleepMode(on);
 }
 
-bool __attribute__((weak)) isCharging() { return false; }
+// Boards without their own isCharging() fall back to the HAL (gauge IC or analog divider heuristic)
+bool __attribute__((weak)) isCharging() { return hal_gauge_is_charging(); }
 /***************************************************************************************
 ** Function name: displayScrollingText
 ** Description:   Scroll large texts into screen
@@ -542,7 +544,7 @@ void padprintln(double n, int digits, int16_t padx) {
 **********************************************************************/
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter,
-    bool letterShortcuts, uint16_t pageJumpSize, bool border
+    bool letterShortcuts, uint16_t pageJumpSize, bool border, bool compact
 ) {
     if (options.empty()) return -1;
 
@@ -588,7 +590,7 @@ int loopOptions(
     int devModeCounter = 0;
     static unsigned long _clock_bat_timer = millis();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
-    if (index > 0) {
+    if (index > 0 && !compact) {
         if (border)
             tft.fillRoundRect(
                 tftWidth * 0.10,
@@ -619,7 +621,7 @@ int loopOptions(
     const int escX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW;
     const int escY = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
 #endif
-    drawMainBorder();
+    if (!compact) drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
         if (exit) break;
@@ -656,7 +658,8 @@ int loopOptions(
                         bruceConfig.secColor,
                         bruceConfig.bgColor,
                         firstRender,
-                        border
+                        border,
+                        compact
                     );
             }
             if (firstRender) menuOpenTs = millis();
@@ -931,7 +934,7 @@ void progressHandler(int progress, size_t total, const String &message) {
 ***************************************************************************************/
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
-    bool firstRender, bool border
+    bool firstRender, bool border, bool compact
 ) {
     static int last_index = 0;
     static int last_init = -1;
@@ -941,6 +944,9 @@ Opt_Coord drawOptions(
     int rowHeightPx = FM * LH + 4;
     int32_t margin = 10; // matches Launcher's tftHeight-20 (10px top+bottom) for both border states
     int fitRows = (tftHeight - 2 * margin) / rowHeightPx;
+    // Compact context menus sit over their caller's screen; keep them small
+    // even when there are many actions. The existing paging handles the rest.
+    if (compact && fitRows > 5) fitRows = 5;
     if (fitRows < 1) fitRows = 1;
 
     int arraySize = static_cast<int>(options.size());

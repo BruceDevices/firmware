@@ -16,7 +16,7 @@ const int range_limits[4][2] = {
 const char *subghz_frequency_ranges[] = {"300-348 MHz", "387-464 MHz", "779-928 MHz", "All ranges"};
 
 String rf_subghz_header(float frequencyMHz) {
-    return "Filetype: Bruce SubGhz File\nVersion 1\n" + String("Frequency: ") +
+    return "Filetype: Bruce SubGhz File\nVersion: 1\n" + String("Frequency: ") +
            String(int(frequencyMHz * 1000000)) + "\n";
 }
 const float subghz_frequency_list[] = {
@@ -394,7 +394,10 @@ void setMHZ(float frequency) {
         Serial.println("Frequency out of band");
     }
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
-#if defined(T_EMBED)
+        // T_EMBED_1101 must enable the antenna switch even when the Arduino board
+        // variant no longer supplies T_EMBED. Otherwise SW0/SW1 stay low and the
+        // CC1101 board loses receive sensitivity.
+#if defined(T_EMBED) || defined(T_EMBED_1101)
         static uint8_t antenna =
             200; // 0=(<300), 1=(350-468), 2=(>778), 200=start to settle at the fisrt time
         bool change = true;
@@ -545,9 +548,11 @@ struct RfCodes selectRecentRfMenu() {
 
     return selected_code;
 }
-rmt_channel_handle_t setup_rf_rx() {
-    if (!initRfModule("rx", bruceConfigPins.rfFreq)) return NULL;
-    setMHZ(bruceConfigPins.rfFreq);
+rmt_channel_handle_t setup_rf_rx(bool radioReady) {
+    if (!radioReady) {
+        if (!initRfModule("rx", bruceConfigPins.rfFreq)) return NULL;
+        setMHZ(bruceConfigPins.rfFreq);
+    }
     rmt_rx_channel_config_t rx_channel_cfg = {};
     rx_channel_cfg.gpio_num = bruceConfigPins.rfModule == CC1101_SPI_MODULE
                                   ? gpio_num_t(bruceConfigPins.CC1101_bus.io0)
@@ -562,7 +567,7 @@ rmt_channel_handle_t setup_rf_rx() {
     rx_channel_cfg.flags.io_loop_back = false; // do not loop back output to input
 
     rmt_channel_handle_t rx_channel = NULL;
-    ESP_ERROR_CHECK(rmt_new_rx_channel(&rx_channel_cfg, &rx_channel));
+    if (rmt_new_rx_channel(&rx_channel_cfg, &rx_channel) != ESP_OK) return nullptr;
     return rx_channel;
 }
 
