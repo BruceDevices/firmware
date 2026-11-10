@@ -17,6 +17,24 @@
 #include <time.h>
 
 #define RX_MAX 1600
+#define WIFITE_STACK_BYTES 24576
+
+/* WiFite keeps large buffers (frames, WPS sessions, scan tables) in PSRAM.
+ * The internal heap is small and fragmented once Wi-Fi is up, so forcing
+ * these allocations internal is what used to make the worker task fail. */
+static void *wf_alloc(size_t n) {
+  void *p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  return p ? p : malloc(n);
+}
+static void *wf_calloc(size_t n, size_t s) {
+  void *p = heap_caps_calloc(n, s, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  return p ? p : calloc(n, s);
+}
+static void wf_free(void *p) {
+  if (p)
+    heap_caps_free(p);
+}
+
 typedef struct {
   uint32_t captured_at;
   uint16_t len;
@@ -32,8 +50,8 @@ struct WifiteJob {
   TaskHandle_t thread;
   QueueHandle_t events;
   QueueHandle_t rx;
-  StaticQueue_t rx_control;
-  uint8_t *rx_storage;
+  StaticQueue_t events_control, rx_control;
+  uint8_t *events_storage, *rx_storage;
   Frame *scratch, *eap_scratch, *frame;
   WfSession *session;
   uint32_t cancel, finished, refs, dropped;
@@ -53,6 +71,14 @@ struct WifiteJob {
 };
 static portMUX_TYPE gate = portMUX_INITIALIZER_UNLOCKED;
 static WifiteJob *owner;
+
+/* A single WiFite job exists at a time. Keeping the job and its worker
+ * stack in .bss guarantees task creation never needs a large contiguous
+ * internal-heap block (which no longer exists after Wi-Fi initialises). */
+static WifiteJob job_storage;
+static StaticTask_t wifite_task_control;
+static StackType_t wifite_stack[WIFITE_STACK_BYTES];
+static bool job_in_use;
 static uint32_t now(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 static bool cancelled(WifiteJob *j) {
   return __atomic_load_n(&j->cancel, __ATOMIC_ACQUIRE) != 0;
@@ -327,12 +353,12 @@ static bool send_eap(WifiteJob *j, int kind, uint8_t id, uint8_t op,
   return true;
 }
 static void scan(WifiteJob *j) {
-  WfTarget *table = calloc(WF_TARGET_MAX, sizeof(WfTarget));
+  WfTarget *table = wf_calloc(WF_TARGET_MAX, sizeof(WfTarget));
   if (!table) {
     logline(j, "[ERR] No scan memory");
     return;
   }
-  uint8_t (*clients)[12] = calloc(128, 12);
+  uint8_t (*clients)[12] = wf_calloc(128, 12);
   unsigned client_count = 0;
   unsigned count = 0;
   wifi_country_t country = {0};
@@ -423,8 +449,8 @@ static void scan(WifiteJob *j) {
   }
   logline(j, "[SCAN] %u APs; %u advertise WPS", count, wps_count);
   logline(j, "[SCAN] Clients are observed traffic, not a live AP list");
-  free(table);
-  free(clients);
+  wf_free(table);
+  wf_free(clients);
 }
 static bool fresh_target(WifiteJob *j) {
   /* Restore passive RX only between sessions, including after an offline search. */
@@ -520,15 +546,15 @@ static bool exchange(WifiteJob *j, const char *pin) {
   WfSession *s = j->session;
   memset(s, 0, sizeof(*s));
   xQueueReset(j->rx);
-  uint8_t *reply = malloc(WF_MSG_MAX), *request = malloc(WF_MSG_MAX),
-          *saved = malloc(RX_MAX);
-  WfFragments *fragment = calloc(1, sizeof(*fragment));
+  uint8_t *reply = wf_alloc(WF_MSG_MAX), *request = wf_alloc(WF_MSG_MAX),
+          *saved = wf_alloc(RX_MAX);
+  WfFragments *fragment = wf_calloc(1, sizeof(*fragment));
   if (!reply || !request || !saved || !fragment) {
     logline(j, "[ERR] Exchange allocation failed");
-    free(reply);
-    free(request);
-    free(saved);
-    free(fragment);
+    wf_free(reply);
+    wf_free(request);
+    wf_free(saved);
+    wf_free(fragment);
     return false;
   }
   size_t saved_n = 0, request_n = 0, cached_reply_n = 0;
@@ -831,10 +857,10 @@ done:
   wf_wipe(request, request ? WF_MSG_MAX : 0);
   wf_wipe(saved, saved ? RX_MAX : 0);
   wf_wipe(fragment, sizeof(*fragment));
-  free(reply);
-  free(request);
-  free(saved);
-  free(fragment);
+  wf_free(reply);
+  wf_free(request);
+  wf_free(saved);
+  wf_free(fragment);
   return ok;
 }
 static bool solver_progress(void *ctx, const char *phase, uint64_t done,
@@ -1054,7 +1080,10 @@ finish:
 static void task_main(void *ctx) {
   WifiteJob *j = ctx;
   work(j);
-  vTaskDelete(NULL);
+  /* Park instead of self-deleting: wifite_free() deletes the task
+   * synchronously before the static stack and TCB are reused. */
+  for (;;)
+    vTaskDelay(portMAX_DELAY);
 }
 WifiteJob *wifite_start(WifiteMode mode, const WfTarget *target,
                         const char *pin) {
@@ -1070,10 +1099,11 @@ WifiteJob *wifite_start(WifiteMode mode, const WfTarget *target,
       if (pin[i] < '0' || pin[i] > '9')
         return NULL;
   }
-  WifiteJob *j =
-      heap_caps_calloc(1, sizeof(*j), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (!j)
+  if (job_in_use)
     return NULL;
+  WifiteJob *j = &job_storage;
+  memset(j, 0, sizeof(*j));
+  job_in_use = true;
   j->mode = mode;
   if (target) {
     j->target = *target;
@@ -1081,12 +1111,15 @@ WifiteJob *wifite_start(WifiteMode mode, const WfTarget *target,
   }
   if (mode == WifiteVerifyPin)
     memcpy(j->pin, pin, 9);
-  j->events = xQueueCreate(24, sizeof(WifiteEvent));
-  j->session = calloc(1, sizeof(WfSession));
-  j->scratch = calloc(1, sizeof(Frame));
-  j->eap_scratch = calloc(1, sizeof(Frame));
-  j->frame = calloc(1, sizeof(Frame));
-  j->rx_storage = malloc(4 * sizeof(Frame));
+  j->events_storage = wf_alloc(24 * sizeof(WifiteEvent));
+  if (j->events_storage)
+    j->events = xQueueCreateStatic(24, sizeof(WifiteEvent), j->events_storage,
+                                   &j->events_control);
+  j->session = wf_calloc(1, sizeof(WfSession));
+  j->scratch = wf_calloc(1, sizeof(Frame));
+  j->eap_scratch = wf_calloc(1, sizeof(Frame));
+  j->frame = wf_calloc(1, sizeof(Frame));
+  j->rx_storage = wf_alloc(4 * sizeof(Frame));
   if (j->rx_storage)
     j->rx = xQueueCreateStatic(4, sizeof(Frame), j->rx_storage, &j->rx_control);
   if (!j->events || !j->session || !j->scratch || !j->eap_scratch || !j->frame || !j->rx) {
@@ -1094,7 +1127,9 @@ WifiteJob *wifite_start(WifiteMode mode, const WfTarget *target,
     wifite_free(j);
     return NULL;
   }
-  if (xTaskCreate(task_main, "WIFITE", 24576, j, 1, &j->thread) != pdPASS) {
+  j->thread = xTaskCreateStatic(task_main, "WIFITE", WIFITE_STACK_BYTES, j, 1,
+                                wifite_stack, &wifite_task_control);
+  if (!j->thread) {
     __atomic_store_n(&j->finished, 1, __ATOMIC_RELEASE);
     wifite_free(j);
     return NULL;
@@ -1115,18 +1150,23 @@ void wifite_free(WifiteJob *j) {
   if (!j || !wifite_finished(j))
     return;
 
+  if (j->thread) {
+    vTaskDelete(j->thread);
+    j->thread = NULL;
+  }
   if (j->events)
     vQueueDelete(j->events);
   if (j->rx)
     vQueueDelete(j->rx);
-  free(j->rx_storage);
-  free(j->scratch);
-  free(j->eap_scratch);
-  free(j->frame);
+  wf_free(j->events_storage);
+  wf_free(j->rx_storage);
+  wf_free(j->scratch);
+  wf_free(j->eap_scratch);
+  wf_free(j->frame);
   if (j->session) {
     wf_wipe(j->session, sizeof(*j->session));
-    free(j->session);
+    wf_free(j->session);
   }
   wf_wipe(j, sizeof(*j));
-  heap_caps_free(j);
+  job_in_use = false;
 }
