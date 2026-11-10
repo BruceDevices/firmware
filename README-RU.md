@@ -1,6 +1,5 @@
 # WiFite fix для Bruce (LilyGo T-Embed CC1101 Plus)
 
-Дата сборки: 09.11.2026
 Устройство: LilyGo T-Embed CC1101 Plus (ESP32-S3, 16 MB flash, 8 MB PSRAM)
 Плата PlatformIO: `lilygo-t-embed-cc1101`
 
