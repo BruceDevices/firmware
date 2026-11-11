@@ -48,6 +48,11 @@ jobs:
               partitions: { bootloader_addr: "0x0" },
             }
           - {
+              name: "ESP32-S3 - Freenove FNK0104AB",
+              env: "Freenove-FNK0104AB",
+              partitions: { bootloader_addr: "0x0" },
+            }
+          - {
               name: "CoreS3",
               env: "m5stack-cores3",
               partitions: { bootloader_addr: "0x0" },

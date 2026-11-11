@@ -12,9 +12,9 @@ radios/modules.
 | Display (ILI9341, SPI) | SCLK 12, MOSI 11, MISO 13, CS 10, DC 46, RST board-reset, BL 45 |
 | Touch (FT6336, I2C @0x38) | SDA 16, SCL 15, INT 17, RST 18 |
 | SD card | on-board slot (SDMMC) — just insert a microSD |
-| RGB LED (WS2812) | 40 |
+| RGB LED (WS2812) | 42 |
 | Button (Select) | 0 (BOOT) |
-| Battery ADC | 8 (x2 divider) |
+| Battery ADC | 9 (x2 divider) |
 
 ## Free GPIOs (broken-out headers)
 

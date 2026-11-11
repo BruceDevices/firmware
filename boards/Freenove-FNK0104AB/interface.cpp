@@ -13,6 +13,7 @@
  *   - BOOT button (GPIO0)
  */
 
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include "hal/bright/bright.h"
@@ -33,6 +34,9 @@
 #define PIN_SD_CLK 38
 #define PIN_SD_CMD 40
 #define PIN_SD_D0 39
+#define PIN_SD_D1 41
+#define PIN_SD_D2 48
+#define PIN_SD_D3 47
 #endif
 
 // =============================================
@@ -84,6 +88,11 @@ void _setup_gpio() {
     // ES8311 ADC: clocked off the speaker BCLK, and its LRCLK doubles as the mic WS
     // clk,data,ws,type
     bruceConfigPins.mic_bus = {(gpio_num_t)5, (gpio_num_t)6, (gpio_num_t)7, MIC_TYPE_I2S_MSB};
+    // Touch (FT6336G) and the ES8311 codec share this bus. Marking it as sys_i2c
+    // makes bus_HAL treat it as the shared system bus: releaseI2CBus() then won't
+    // Wire.end() it (which silently killed touch until reboot) and the wedged-bus
+    // watchdog in checkAndRecoverSysI2CBus() becomes active.
+    bruceConfigPins.sys_i2c = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl
     bruceConfigPins.i2c_bus = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl (Grove)
     bruceConfigPins.rfTx = 16;
     bruceConfigPins.rfRx = 15;
@@ -110,9 +119,12 @@ void _setup_gpio() {
 #endif
 
 #ifdef USE_SD_MMC
-    // ---- SD Card (SDIO mode, 1-bit) ----
-    SD.setPins(PIN_SD_CLK, PIN_SD_CMD, PIN_SD_D0);
+    // ---- SD Card (SDIO mode, 4-bit) ----
+    SD.setPins(PIN_SD_CLK, PIN_SD_CMD, PIN_SD_D0, PIN_SD_D1, PIN_SD_D2, PIN_SD_D3);
 #endif
+
+    // Initialize I2C bus (shared with audio codec ES8311)
+    setSysI2CBus(&Wire);
 
     // ---- Touch Screen Init (FT6336G) ----
     if (!hal_touch_init(touchCfg(), FNK0104AB_TOUCH_ADDR)) { Serial.println("Touch IC not Started"); }
@@ -129,13 +141,23 @@ void _setup_gpio() {
 }
 
 /***************************************************************************************
+** Function name: _pre_storage_gpio()
+** Description:   runs right after the first TFT use (tft.init sets TFT_BL as
+**                output) and before begin_tft() calls setBrightness() for the
+**                first time. Attaching the backlight PWM here exactly once
+**                avoids the LEDC "pin already attached"/"no free timers" errors
+**                caused by attaching again in _post_setup_gpio().
+***************************************************************************************/
+void _pre_storage_gpio() { hal_bright_attach(TFT_BL); }
+
+/***************************************************************************************
 ** Function name: _post_setup_gpio()
 ** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
 void _post_setup_gpio() {
-    // Backlight control via PWM (must be after TFT init)
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100); // Full brightness initially
+    // PWM channel is attached in _pre_storage_gpio(), just make sure the panel
+    // does not stay dark until the stored brightness is re-applied by setup().
+    hal_bright_set(TFT_BL, 100);
 }
 
 /*********************************************************************
@@ -177,11 +199,15 @@ void InputHandler(void) {
 ** Turns off the device (deep sleep with BOOT button wakeup)
 **********************************************************************/
 void powerOff() {
-    // Turn off backlight
-    hal_bright_set(TFT_BL, 0);
+    // hal_bright_set(0) only goes down to HalBrightCurve::pwm_min, so drive the
+    // pin statically to the "off" level to actually extinguish the backlight.
+    ledcDetach(TFT_BL);
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON == HIGH ? LOW : HIGH);
     // Turn off amplifier
     digitalWrite(FNK0104AB_AMP_EN, HIGH);
-    // Send display to sleep
+    // Display off, then sleep in
+    tft.writecommand(0x28); // DISPOFF
     tft.writecommand(0x10); // SLPIN
     // Wake on BOOT button press
     esp_sleep_enable_ext0_wakeup((gpio_num_t)FNK0104AB_BTN_PIN, FNK0104AB_BTN_ACT);

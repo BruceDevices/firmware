@@ -242,9 +242,11 @@ bool hal_touch_read(const DeviceTouch &cfg, BruceTouchPoint &out) {
     out.x = x;
     out.y = y;
     out.pressed = true;
-#if !defined(TOUCH_CTRL_XPT2046)
-    touch.reset();
-#endif
+    // Do NOT touch.reset() here: for FT6X36 it toggles the hardware RST pin
+    // (30 ms low + 160 ms release) on every read. That makes dragging ~190 ms
+    // per sample and, under sustained polling, can leave the controller wedged
+    // (touch stops responding while the rest of the firmware keeps running).
+    // Reading FT6X36_REG_STATUS already clears the interrupt/point latch.
     return true;
 #elif defined(TOUCH_CTRL_GT911) || defined(TOUCH_CTRL_CST8XX) || defined(TOUCH_CTRL_GT9895) ||               \
     defined(TOUCH_CTRL_HI8561)
