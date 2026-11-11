@@ -7,6 +7,17 @@ the CC1101. It does not transmit, accept keys, or decrypt protected meter values
 It is a firmware extension, not a JavaScript app that can be copied to an SD card.
 Bruce's current JavaScript interface does not provide the packet reception needed here.
 
+## What Wireless M-Bus is used for
+
+Wireless M-Bus (wM-Bus, EN 13757-4) carries meter readings over radio, for example
+from water, gas, heat and electricity meters or heat-cost allocators to a reader
+or gateway. This enables remote collection of consumption data.
+
+It is particularly widespread in Europe. Regional profiles and frequency bands
+vary; this implementation specifically receives T1/C1 at 868.95 MHz.
+See the [M-Bus overview](https://m-bus.com/) and
+[TI's Wireless M-Bus overview](https://www.ti.com/en-us/technologies/wired-wireless-connectivity/wireless-m-bus).
+
 ## Hardware and validation
 
 - Tested hardware: LilyGO T-Embed CC1101 Plus, using the
@@ -19,13 +30,8 @@ Bruce's current JavaScript interface does not provide the packet reception neede
 
 ## Build and installation
 
-Use this fork's `feature/wireless-mbus` branch. The original upstream base is
+Build the checkout containing this feature. The original development base is
 `a59213f3ec6cd302fa32c2042b2700c9c24d991a`.
-
-```sh
-git clone --branch feature/wireless-mbus https://github.com/E-Mixer/firmware.git
-cd firmware
-```
 
 The tested local build used Python 3.13, PlatformIO 6.2.0 and the
 `lilygo-t-embed-cc1101` environment. The branch also includes the FastLED 3.10.3
@@ -50,7 +56,7 @@ For a normal standalone ESP32-S3 installation, write the merged image at address
 `0x0` using esptool. Never write the app-only image at `0x0`.
 Choose the COM port that belongs to your device.
 
-After checking the installation notes below, a standalone flash example is:
+A standalone flash example is:
 
 ```powershell
 & .\.tools\venv\Scripts\python.exe -m pip install esptool --cache-dir .tools\pip-cache
@@ -60,11 +66,9 @@ $devicePort = 'COM7' # Replace with your device's port.
 
 Wait for the write verification to finish and then open the RF menu on the device.
 
-**Existing dualboot or launcher installations need their own installation method.**
-The merged image contains Bruce's standalone partition table; writing it can
-replace an existing partition layout. The hardware test for this project used a
-full internal-flash erase followed by standalone installation, removing the old
-dualboot and internal settings. A full erase is not a prerequisite of the RF app.
+The full image contains the bootloader, partition table and application for
+standalone Bruce on an ESP32-S3 with 16 MB flash. The documented hardware test
+used an internal-flash erase followed by a fresh Bruce installation.
 
 The build still reports warnings in existing Bruce/display/Bluetooth/audio code.
 Successful compilation is not evidence that every existing firmware function works.

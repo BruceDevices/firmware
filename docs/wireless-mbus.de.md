@@ -9,6 +9,17 @@ Es ist eine native Firmware-Erweiterung, kein JavaScript zum Kopieren auf die
 SD-Karte. Die vorhandene Bruce-JavaScript-API stellt den benötigten Paketempfang
 nicht bereit.
 
+## Wofür Wireless M-Bus verwendet wird
+
+Wireless M-Bus (wM-Bus, EN 13757-4) überträgt Zählerdaten per Funk, zum Beispiel
+von Wasser-, Gas-, Wärme- und Stromzählern oder Heizkostenverteilern zu einem
+Lesegerät oder Gateway. Dadurch lassen sich Verbrauchsdaten aus der Ferne erfassen.
+
+Es ist besonders in Europa verbreitet. Regionale Profile und Frequenzbänder
+unterscheiden sich; diese Implementierung empfängt gezielt T1/C1 auf 868,95 MHz.
+Siehe die [M-Bus-Übersicht](https://m-bus.com/) und
+[TIs Wireless-M-Bus-Übersicht](https://www.ti.com/en-us/technologies/wired-wireless-connectivity/wireless-m-bus).
+
 ## Hardware und Teststand
 
 - Getestet wurde ein **LilyGO T-Embed CC1101 Plus** mit dem Build-Ziel
@@ -22,15 +33,8 @@ nicht bereit.
 
 ## Firmware bauen und installieren
 
-Verwende in diesem Fork den Branch **`feature/wireless-mbus`**. Grundlage ist der
-offizielle Bruce-Commit `a59213f3ec6cd302fa32c2042b2700c9c24d991a`.
-
-Quellcode herunterladen und in das Verzeichnis wechseln:
-
-```sh
-git clone --branch feature/wireless-mbus https://github.com/E-Mixer/firmware.git
-cd firmware
-```
+Baue den Checkout, der diese Erweiterung enthält. Die ursprüngliche Entwicklungsbasis ist
+der offizielle Bruce-Commit `a59213f3ec6cd302fa32c2042b2700c9c24d991a`.
 
 Der lokale Build wurde mit **Python 3.13**, **PlatformIO 6.2.0** und dem Ziel
 `lilygo-t-embed-cc1101` durchgeführt. Der Branch enthält außerdem die für den
@@ -57,8 +61,7 @@ Für eine normale Installation als einzige Firmware auf dem ESP32-S3 wird das
 Komplettimage mit esptool ab Adresse **`0x0`** geschrieben. Das reine App-Image darf
 **nicht** an Adresse `0x0` geschrieben werden. Wähle den COM-Port deines Geräts.
 
-Nach Prüfung der Installationshinweise unten ist dies ein Beispiel zum Flashen
-als einzelne Firmware:
+Beispiel zum Flashen als einzelne Firmware:
 
 ```powershell
 & .\.tools\venv\Scripts\python.exe -m pip install esptool --cache-dir .tools\pip-cache
@@ -69,13 +72,9 @@ $devicePort = 'COM7' # Durch den COM-Port deines Geräts ersetzen.
 Das Ende des Schreibvorgangs und die Datenprüfung abwarten. Anschließend das
 RF-Menü auf dem Gerät öffnen.
 
-**Bei vorhandenem Dualboot oder Launcher muss die Installationsmethode dazu passen.**
-Das Komplettimage enthält die Partitionstabelle für Bruce als einzelne Firmware
-und kann eine vorhandene andere Aufteilung ersetzen. Beim hier dokumentierten
-Hardwaretest wurde der interne Flash ausdrücklich vollständig gelöscht und
-anschließend nur Bruce installiert. Dadurch entfielen das bisherige Dualboot und
-die internen Einstellungen. Ein vollständiges Löschen ist keine grundsätzliche
-Voraussetzung der Empfangs-App.
+Das Komplettimage enthält Bootloader, Partitionstabelle und Anwendung für Bruce
+als einzelne Firmware auf dem ESP32-S3 mit 16 MB Flash. Beim dokumentierten
+Hardwaretest wurde der interne Flash gelöscht und Bruce anschließend neu installiert.
 
 Beim Build bleiben Warnungen aus vorhandenem Bruce-, Display-, Bluetooth- und
 Audiocode bestehen. Ein erfolgreicher Build bestätigt nicht alle Funktionen der
