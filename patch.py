@@ -1,6 +1,7 @@
 import hashlib
 from typing import TYPE_CHECKING, Any
 import requests
+import subprocess
 
 if TYPE_CHECKING:
     Import: Any = None
@@ -33,10 +34,21 @@ if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
     elif mcu=="esp32p4":
         """Do nothing"""
     else:
-        env.Execute(
-            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (mcu, mcu, original_file, patched_file)
-        )
+        # Current pioarduino uses one Xtensa package for all three chips.
+        # Calling the old package name through an external `pio` can fail on
+        # fresh Windows installations; fail before renaming any input archive.
+        toolchain_dir = env.PioPlatform().get_package_dir("toolchain-xtensa-esp-elf")
+        if not toolchain_dir:
+            toolchain_dir = env.PioPlatform().get_package_dir("toolchain-xtensa-%s" % mcu)
+        if not toolchain_dir:
+            raise RuntimeError("Xtensa toolchain not found")
+        objcopy = join(toolchain_dir, "bin", "xtensa-%s-elf-objcopy" % mcu)
+        if isfile(objcopy + ".exe"):
+            objcopy += ".exe"
+        subprocess.run([
+            objcopy, "--weaken-symbol=ieee80211_raw_frame_sanity_check",
+            original_file, patched_file,
+        ], check=True)
 
     if isfile("%s.old" % (original_file)):
         remove("%s.old" % (original_file))

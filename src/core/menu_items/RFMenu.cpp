@@ -11,12 +11,14 @@
 #include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_waterfall.h"
+#include "modules/rf/rf_wmbus.h"
 
 void RFMenu::optionsMenu() {
     options = {
         {"Scan/copy",       [=]() { RFScan(); }       },
 #if !defined(LITE_VERSION)
         {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
+        {"Wireless M-Bus",  rf_wmbus                  },
         {"Custom SubGhz",   sendCustomRF              },
 #endif
         {"Spectrum",        rf_spectrum               },

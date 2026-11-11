@@ -99,6 +99,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   <summary><h2>RF</h2></summary>
 
 - [x] Scan/Copy
+- [x] [Wireless M-Bus: passive T1/C1 reception](docs/wireless-mbus.md)
 - [x] [Custom SubGhz](https://wiki.bruce.computer/features/rf/#replay-payloads-like-flipper)
 - [x] Spectrum
 - [x] Jammer Full (sends a full squared wave into output)
