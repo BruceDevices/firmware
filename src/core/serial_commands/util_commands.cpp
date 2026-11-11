@@ -1,12 +1,27 @@
 #include "util_commands.h"
+#include "core/bus_HAL.h"
 #include "core/main_menu.h"
 #include "core/sd_functions.h"
 #include "core/utils.h" // to return optionsJSON
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
-#include "core/bus_HAL.h"
+#include "hal/power/gauge.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include <globals.h>
+
+uint32_t batteryCallback(cmd *c) {
+    int percent = getBattery();
+    String out = "[BAT] " + String(percent) + "% charging=" + String(hal_gauge_is_charging() ? 1 : 0);
+#ifdef ANALOG_BAT_PIN
+#ifndef ANALOG_BAT_MULTIPLIER
+#define ANALOG_BAT_MULTIPLIER 2.0f
+#endif
+    uint32_t adcMv = analogReadMilliVolts(ANALOG_BAT_PIN);
+    out += " adc=" + String(adcMv) + "mV batt~" + String((uint32_t)(adcMv * ANALOG_BAT_MULTIPLIER)) + "mV";
+#endif
+    serialDevice->println(out);
+    return true;
+}
 
 uint32_t uptimeCallback(cmd *c) {
     // https://github.com/espressif/arduino-esp32/blob/66c9c0b1a6a36b85d27cdac0fb52098368de1a09/libraries/WebServer/examples/AdvancedWebServer/AdvancedWebServer.ino#L64
@@ -199,6 +214,7 @@ uint32_t helpCallback(cmd *c) {
 #endif
 
     serialDevice->println("\nPower Management:");
+    serialDevice->println("  battery, bat              - Show battery percentage and charging state.");
     serialDevice->println("  power <off/reboot/sleep>  - General power management.");
 
     serialDevice->println("\nGPIO Commands:");
@@ -427,6 +443,7 @@ uint32_t loaderCallback(cmd *c) {
 }
 
 void createUtilCommands(SimpleCLI *cli) {
+    cli->addCommand("battery,bat", batteryCallback);
     cli->addCommand("uptime", uptimeCallback);
     cli->addCommand("date", dateCallback);
     cli->addCommand("i2c", i2cCallback);
