@@ -2,6 +2,11 @@
 
 # :shark: Bruce
 
+> **Experimental Wireless M-Bus development fork.** Native receive-only T1/C1
+> support for CC1101; reception tested on a LilyGO T-Embed CC1101 Plus.
+> [English instructions](docs/wireless-mbus.md) |
+> [Deutsche Anleitung](docs/wireless-mbus.de.md).
+
 Bruce is a versatile ESP32 firmware packed with offensive-security tools, built to make Red Team operations fast and portable.
 
 It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) , [RockBase IoT](https://www.rockbaseiot.com) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
@@ -99,6 +104,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   <summary><h2>RF</h2></summary>
 
 - [x] Scan/Copy
+- [x] [Wireless M-Bus: passive T1/C1 reception](docs/wireless-mbus.md)
 - [x] [Custom SubGhz](https://wiki.bruce.computer/features/rf/#replay-payloads-like-flipper)
 - [x] Spectrum
 - [x] Jammer Full (sends a full squared wave into output)
