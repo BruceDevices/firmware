@@ -65,9 +65,22 @@ int getBattery() {
     return 0;
 }
 
+unsigned long lastNtpSyncMs = 0; // millis() of the last successful NTP sync (0 = never)
+
 void updateClockTimezone() {
     timeClient.begin();
-    timeClient.update();
+    // A single update() can silently fail and leave the epoch near 0 (1970).
+    // Retry a few times and keep the current clock if every attempt fails.
+    bool ok = false;
+    for (int i = 0; i < 3 && !ok; i++) {
+        ok = timeClient.forceUpdate();
+        if (!ok) delay(500);
+    }
+    if (!ok || !timeClient.isTimeSet()) {
+        log_w("NTP sync failed, keeping current time");
+        return;
+    }
+    lastNtpSyncMs = millis();
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
@@ -99,6 +112,7 @@ void updateClockTimezone() {
 // the user filesystem) so it survives FS reformats and custom partition layouts.
 #define CLOCK_PERSIST_NS "clock"
 #define CLOCK_PERSIST_KEY "epoch"
+#define CLOCK_NTP_RESYNC_MS 1800000UL // 30 min
 #define CLOCK_PERSIST_INTERVAL_MS 300000 // 5 min: bounds NVS wear, <=5 min drift after power loss
 
 static void time_persist_task(void *param) {
@@ -107,6 +121,11 @@ static void time_persist_task(void *param) {
     bool saved = false;
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(60000)); // wake every minute
+        // Keep the clock accurate: re-sync over NTP every 30 min while WiFi stays connected
+        if (wifiConnected && WiFi.isConnected() && WiFi.getMode() != WIFI_MODE_NULL &&
+            (lastNtpSyncMs == 0 || millis() - lastNtpSyncMs > CLOCK_NTP_RESYNC_MS)) {
+            updateClockTimezone();
+        }
         if (!clock_set) continue;
         // Save promptly the first time the clock is set, then at most every 5 min.
         if (saved && (millis() - last_write_ms) < CLOCK_PERSIST_INTERVAL_MS) continue;
@@ -250,6 +269,18 @@ void showDeviceInfo() {
 void touchHeatMap(struct TouchPoint t) {
     int third_x = tftWidth / 3;
     int third_y = tftHeight / 3;
+
+#if defined(TOUCH_FOOTER_BACK)
+    // Footer strip: BACK | PREV | SEL | NEXT
+    if (t.y > tftHeight) {
+        // same slot edges as TouchFooter(): 30% / 50% / 80%
+        if (t.x < tftWidth * 30 / 100) EscPress = true;
+        else if (t.x < tftWidth * 50 / 100) PrevPress = true;
+        else if (t.x < tftWidth * 80 / 100) SelPress = true;
+        else NextPress = true;
+        return;
+    }
+#endif
 
     if (t.x > third_x * 0 && t.x < third_x * 1 && t.y > third_y) PrevPress = true;
     if (t.x > third_x * 1 && t.x < third_x * 2 && ((t.y > third_y && t.y < third_y * 2) || t.y > tftHeight))

@@ -3,6 +3,14 @@
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
 #include "settings.h" //for timeStr
+
+// Boards can override these in pins_arduino.h
+#ifndef STATUSBAR_REFRESH_MS
+#define STATUSBAR_REFRESH_MS 30000 // how often the main menu redraws clock + battery
+#endif
+#ifndef STATUS_CLOCK_SIZE
+#define STATUS_CLOCK_SIZE 1 // text size of the status bar clock
+#endif
 #include "utils.h"
 #include <JPEGDecoder.h>
 #include <interface.h> //for charging ischarging to print charging indicator
@@ -65,7 +73,37 @@ void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight) 
 ** Description:   Draw touch screen footer
 ***************************************************************************************/
 void TouchFooter(uint16_t color) {
-#if defined(HAS_TOUCH)
+#if defined(HAS_TOUCH) && defined(TOUCH_FOOTER_BACK)
+    // Big 4-button footer: [ BACK ][ < ][ SEL ][ > ]
+    // Slot edges at 0, 30%, 50%, 80%, 100% of the width - must match touchHeatMap().
+    const int edges[5] = {0, tftWidth * 30 / 100, tftWidth * 50 / 100, tftWidth * 80 / 100, tftWidth};
+    const int fh = tft.height() - tftHeight; // footer strip height
+    const int by = tftHeight + 4;
+    const int bh = fh - 8;
+    tft.fillRect(0, tftHeight, tftWidth, fh, bruceConfig.bgColor);
+    tft.setTextColor(color, bruceConfig.bgColor);
+    tft.setTextSize(FM);
+    for (int b = 0; b < 4; b++) {
+        int bx = edges[b] + 3;
+        int bw = edges[b + 1] - edges[b] - 6;
+        int cx = bx + bw / 2;
+        int cy = by + bh / 2;
+        tft.drawRoundRect(bx, by, bw, bh, bh / 2, color);
+        if (b == 0) tft.drawCentreString("BACK", cx, cy - 4 * FM, 1);
+        else if (b == 2) tft.drawCentreString("SEL", cx, cy - 4 * FM, 1);
+        else {
+            // Solid arrow built from 1px columns (works on every panel), plus a
+            // small label so it clearly reads as PREV / NEXT
+            const int a = bh / 2 - 5; // arrow half-height (13 for a 36px button)
+            const int ay = cy;        // arrow centre line
+            const int ax = cx - a / 2;
+            for (int k = 0; k <= a; k++) {
+                int x = (b == 1) ? ax + k : ax + a - k; // tip on the left for PREV, right for NEXT
+                tft.fillRect(x, ay - k, 1, 2 * k + 1, color);
+            }
+        }
+    }
+#elif defined(HAS_TOUCH)
     tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
     tft.setTextColor(color);
     tft.setTextSize(FM);
@@ -571,9 +609,9 @@ int loopOptions(
                 bruceConfig.setDevMode(true);
                 displayInfo("Dev Mode Enabled", true);
             }
-            if (millis() - _clock_bat_timer > 30000) {
+            if (millis() - _clock_bat_timer > STATUSBAR_REFRESH_MS) {
                 _clock_bat_timer = millis();
-                drawStatusBar(); // update clock and battery status each 30s
+                drawStatusBar(); // update clock and battery status
             }
         }
 
@@ -928,8 +966,8 @@ void drawStatusBar() {
     }
 
     if (clock_set) {
-        setTftDisplay(12, 12, bruceConfig.priColor, 1, bruceConfig.bgColor);
-        tft.fillRect(12, 12, 60, LH, bruceConfig.bgColor);
+        setTftDisplay(12, 12, bruceConfig.priColor, STATUS_CLOCK_SIZE, bruceConfig.bgColor);
+        tft.fillRect(12, 12, 60 * STATUS_CLOCK_SIZE, LH * STATUS_CLOCK_SIZE, bruceConfig.bgColor);
 #if defined(HAS_RTC)
         updateTimeStr(_rtc.getTimeStruct());
 #else

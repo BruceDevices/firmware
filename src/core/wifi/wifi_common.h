@@ -34,6 +34,12 @@ bool wifiConnecttoKnownNet(void);
 String checkMAC();
 
 /**
+ * @brief Connect via WPS push-button: press the router's WPS button within ~2 min
+ * @note saves the credentials like a normal connection; returns true if connected
+ */
+bool wifiConnectWPS();
+
+/**
  * @brief Transmits a raw 802.11 frame while respecting TX-buffer backpressure.
  *
  * esp_wifi_80211_tx() returns ESP_ERR_NO_MEM when the static TX buffers are

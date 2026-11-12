@@ -32,6 +32,9 @@ void BruceConfigPins::fromJson(JsonObject obj) {
 
     if (!root["rot"].isNull()) {
         rotation = root["rot"].as<int>();
+#ifdef FIXED_ROTATION
+        rotation = FIXED_ROTATION; // ignore saved value, this panel has one valid orientation
+#endif
     } else {
         count++;
         log_e("Fail");
@@ -485,6 +488,9 @@ void BruceConfigPins::setRotation(int value) {
 
 void BruceConfigPins::validateRotationValue() {
     if (rotation < 0 || rotation > 3) rotation = 1;
+#ifdef FIXED_ROTATION
+    rotation = FIXED_ROTATION;
+#endif
 }
 
 void BruceConfigPins::setBleName(String value) {

@@ -8,6 +8,7 @@
 #include "core/utils.h"
 #include "core/wifi/wifi_mac.h"
 #include "esp_wifi.h"
+#include "esp_wps.h"
 #include "modules/ble/ble_common.h"
 #include <esp_event.h>
 #include <esp_netif.h>
@@ -337,6 +338,107 @@ void wifiConnectTask(void *pvParameters) {
 }
 
 String checkMAC() { return String(WiFi.macAddress()); }
+
+/*********************************************************************
+**  Function: wifiConnectWPS
+**  Connect using WPS push-button (PBC): start it, then press the WPS
+**  button on the router within ~2 minutes. The network is saved like
+**  a normal connection (auto-connect + NTP clock sync afterwards).
+**********************************************************************/
+static volatile int wpsState = 0; // 0 = waiting, 1 = success, 2 = failed, 3 = timeout, 4 = cancelled
+
+static void wpsEventHandler(arduino_event_id_t event, arduino_event_info_t info) {
+    (void)info;
+    switch (event) {
+        case ARDUINO_EVENT_WPS_ER_SUCCESS: wpsState = 1; break;
+        case ARDUINO_EVENT_WPS_ER_FAILED: wpsState = 2; break;
+        case ARDUINO_EVENT_WPS_ER_TIMEOUT: wpsState = 3; break;
+        default: break;
+    }
+}
+
+bool wifiConnectWPS() {
+    if (WiFi.isConnected()) {
+        displayInfo("Already connected", true);
+        return false;
+    }
+    if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
+        stopBLEStack();
+        vTaskDelay(300 / portTICK_PERIOD_MS);
+    }
+
+    drawMainBorderWithTitle("WPS Connect");
+    padprintln("");
+    padprintln("Press the WPS button");
+    padprintln("on your router now.");
+    padprintln("");
+    padprintln("Back = cancel");
+    padprintln("");
+
+    WiFi.mode(WIFI_MODE_STA);
+    WiFi.disconnect();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    wpsState = 0;
+    wifi_event_id_t evId = WiFi.onEvent(wpsEventHandler);
+    esp_wps_config_t cfg = WPS_CONFIG_INIT_DEFAULT(WPS_TYPE_PBC);
+    if (esp_wifi_wps_enable(&cfg) != ESP_OK || esp_wifi_wps_start(0) != ESP_OK) {
+        esp_wifi_wps_disable();
+        WiFi.removeEvent(evId);
+        displayError("WPS start failed", true);
+        wifiDisconnect();
+        return false;
+    }
+
+    unsigned long start = millis();
+    unsigned long dot = millis();
+    while (wpsState == 0 && millis() - start < 125000) {
+        if (check(EscPress)) {
+            wpsState = 4;
+            break;
+        }
+        if (millis() - dot > 1000) {
+            dot = millis();
+            if (tft.getCursorX() >= tftWidth - 12) padprintln("");
+            tft.print(".");
+        }
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+    if (wpsState == 0) wpsState = 3;
+
+    esp_wifi_wps_disable();
+    WiFi.removeEvent(evId);
+
+    if (wpsState != 1) {
+        if (wpsState == 4) displayInfo("WPS cancelled", true);
+        else displayError(wpsState == 3 ? "WPS timed out" : "WPS failed", true);
+        wifiDisconnect();
+        return false;
+    }
+
+    // WPS gave us the network credentials: connect with them
+    padprintln("");
+    padprint("Connecting");
+    WiFi.begin();
+    for (int i = 0; i < 40 && !WiFi.isConnected(); i++) {
+        tft.print(".");
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+    if (!WiFi.isConnected()) {
+        displayError("Connect failed", true);
+        wifiDisconnect();
+        return false;
+    }
+
+    wifiConnected = true;
+    wifiIP = WiFi.localIP().toString();
+    bruceConfig.addWifiCredential(WiFi.SSID(), WiFi.psk()); // remember for auto-connect
+    if (timezoneTaskHandle == NULL) {
+        xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+    }
+    displaySuccess("Connected: " + WiFi.SSID(), true);
+    return true;
+}
 
 bool wifiConnecttoKnownNet(void) {
     if (WiFi.isConnected()) return true; // safeguard

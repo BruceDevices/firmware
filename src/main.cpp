@@ -153,10 +153,13 @@ std::vector<Option> options;
 tft_logger tft = tft_logger(); // Invoke custom library
 tft_sprite sprite = tft_sprite(&tft);
 tft_sprite draw = tft_sprite(&tft);
+#ifndef TOUCH_FOOTER_H
+#define TOUCH_FOOTER_H 20 // height of the touch footer strip (PREV/SEL/NEXT buttons)
+#endif
 volatile int tftWidth = TFT_HEIGHT;
 #ifdef HAS_TOUCH
 volatile int tftHeight =
-    TFT_WIDTH - 20; // 20px to draw the TouchFooter(), were the btns are being read in touch devices.
+    TFT_WIDTH - TOUCH_FOOTER_H; // footer strip to draw the TouchFooter(), were the btns are being read in touch devices.
 #else
 volatile int tftHeight = TFT_WIDTH;
 #endif
@@ -249,7 +252,7 @@ void begin_tft() {
     tft.setRotation(bruceConfigPins.rotation);
     tftWidth = tft.width();
 #ifdef HAS_TOUCH
-    tftHeight = tft.height() - 20;
+    tftHeight = tft.height() - TOUCH_FOOTER_H;
 #else
     tftHeight = tft.height();
 #endif
