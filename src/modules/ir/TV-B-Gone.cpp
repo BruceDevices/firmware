@@ -244,7 +244,7 @@ void StartTvBGone() {
 
     Serial.begin(115200);
 #ifdef USE_BOOST
-    PPM.enableOTG();
+    hal_pmic_enable_otg();
 #endif
     checkIrTxPin();
     IRsend irsend(bruceConfigPins.irTx);
@@ -303,7 +303,7 @@ void StartTvBGone() {
 
 #ifdef USE_BOOST
         /// DISABLE 5V OUTPUT
-        PPM.disableOTG();
+        hal_pmic_disable_otg();
 #endif
     }
 }

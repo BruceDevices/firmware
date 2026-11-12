@@ -17,7 +17,7 @@ TaskHandle_t rf_raw_emit_draw_handle = NULL;
 void rf_raw_emit_draw(void *parameter) {
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorder();
-    tft.setCursor(20, 38);
+    tft.setCursor(2 * BORDER_PAD_X, BORDER_PAD_Y + LH * FP + 2);
     tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.print("Emitting: ");

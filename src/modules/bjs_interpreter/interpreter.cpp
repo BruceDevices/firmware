@@ -1,5 +1,6 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "interpreter.h"
+#include "core/display.h"
 #include "core/utils.h"
 
 static void js_log_func(void *opaque, const void *buf, size_t buf_len) { fwrite(buf, 1, buf_len, stdout); }
@@ -10,20 +11,42 @@ extern "C" {
 
 #include "display_js.h"
 #include "globals_js.h"
+#include "i2c_js.h"
 
 char *script = NULL;
+size_t scriptSize = 0;
 char *scriptDirpath = NULL;
 char *scriptName = NULL;
 
 TaskHandle_t interpreterTaskHandler = NULL;
 
+static int js_interrupt_handler(JSContext *ctx, void *opaque) {
+    (void)ctx;
+    (void)opaque;
+    return interpreter_state < 0 || (interpreter_state == 2 && check(EscPress));
+}
+
+static void stopInterpreterTask() {
+    interpreter_state = -1;
+    interpreterTaskHandler = NULL;
+    vTaskDelete(NULL);
+}
+
 void interpreterHandler(void *pvParameters) {
     printMemoryUsage("init interpreter");
-    if (script == NULL) { return; }
+    if (script == NULL) {
+        stopInterpreterTask();
+        return;
+    }
 
     while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
 
     tft.fillScreen(TFT_BLACK);
+#if defined(HAS_TOUCH)
+    // Script drawing uses tftHeight, which excludes the reserved touch footer.
+    // Restore its navigation labels after clearing the physical display.
+    TouchFooter(TFT_WHITE);
+#endif
     tft.setTextSize(FM);
     tft.setTextColor(TFT_WHITE);
     bool psramAvailable = psramFound();
@@ -46,21 +69,34 @@ void interpreterHandler(void *pvParameters) {
     );
     if (mem_size < 2000) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     uint8_t *mem_buf = psramAvailable ? (uint8_t *)ps_malloc(mem_size) : (uint8_t *)malloc(mem_size);
     if (mem_buf == NULL) {
         print_errorMessage("Failed to allocate memory for JS engine, try restarting the device");
-        interpreter_state = -1;
-        vTaskDelete(NULL);
+        stopInterpreterTask();
         return;
     }
 
     JSContext *ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
+    JS_SetInterruptHandler(ctx, js_interrupt_handler);
+
+    log_d("Script length: %zu\n", scriptSize);
+
+    // JS_LoadBytecode requires no atoms to have been defined in RAM yet, so bytecode
+    // must be loaded before any global variables/functions are registered below.
+    bool isBytecode = JS_IsBytecode((const uint8_t *)script, scriptSize);
+    JSValue val = JS_UNDEFINED;
+    if (isBytecode) {
+        if (JS_RelocateBytecode(ctx, (uint8_t *)script, scriptSize) != 0) {
+            print_errorMessage("Invalid or incompatible bytecode file");
+        } else {
+            val = JS_LoadBytecode(ctx, (const uint8_t *)script);
+        }
+    }
 
     js_timers_init(ctx);
 
@@ -86,10 +122,11 @@ void interpreterHandler(void *pvParameters) {
 
     printMemoryUsage("context created");
 
-    size_t scriptSize = strlen(script);
-    log_d("Script length: %zu\n", scriptSize);
-
-    JSValue val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
+    if (isBytecode) {
+        if (!JS_IsException(val)) { val = JS_Run(ctx, val); }
+    } else {
+        val = JS_Eval(ctx, (const char *)script, scriptSize, scriptName, 0);
+    }
 
     run_timers(ctx);
 
@@ -105,13 +142,13 @@ void interpreterHandler(void *pvParameters) {
     scriptName = NULL;
 
     js_timers_deinit(ctx);
+    i2c_js_release(); // frees the i2c_bus pins (or restores sys_i2c clock) taken by i2c.begin()
     JS_FreeContext(ctx);
     free(mem_buf);
 
     printMemoryUsage("deinit interpreter");
 
-    interpreter_state = -1;
-    vTaskDelete(NULL);
+    stopInterpreterTask();
     return;
 }
 
@@ -144,7 +181,7 @@ void run_bjs_script() {
         };
         loopOptions(options);
     }
-    filename = loopSD(*fs, true, "BJS|JS");
+    filename = loopSD(*fs, true, "BJS|JS|BIN");
     vTaskDelay(pdMS_TO_TICKS(200));
     if (filename == "") { return; }
     run_bjs_script_headless(*fs, filename);
@@ -153,6 +190,7 @@ void run_bjs_script() {
 bool run_bjs_script_headless(char *code) {
     script = code;
     if (script == NULL) { return false; }
+    scriptSize = strlen(code);
     scriptDirpath = strdup("/scripts");
     scriptName = strdup("index.js");
 
@@ -163,7 +201,7 @@ bool run_bjs_script_headless(char *code) {
 }
 
 bool run_bjs_script_headless(FS &fs, const String &filename) {
-    script = readBigFile(&fs, filename);
+    script = readBigFile(&fs, filename, true, &scriptSize);
     if (script == NULL) { return false; }
 
     int slash = filename.lastIndexOf('/');
@@ -249,7 +287,7 @@ getScriptsOptionsList(const String &currentPath, bool saveStartupScript, int rem
             int dotIndex = nameOnly.lastIndexOf(".");
             String ext = dotIndex >= 0 ? nameOnly.substring(dotIndex + 1) : "";
             ext.toUpperCase();
-            if (ext != "JS" && ext != "BJS") continue;
+            if (ext != "JS" && ext != "BJS" && ext != "BIN") continue;
 
             String entry_title = nameOnly.substring(0, nameOnly.lastIndexOf(".")); // remove the extension
             opt.push_back({entry_title.c_str(), [=]() {

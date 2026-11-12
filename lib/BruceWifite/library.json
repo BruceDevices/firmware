@@ -1,0 +1,1 @@
+{"name": "BruceWifite", "version": "0.8.1-bruce", "build": {"extraScript": "build_private.py"}, "dependencies": {"WiFi": "*", "Networking": "*", "FS": "*", "SPI": "*", "BruceHAL": "*"}}

@@ -24,6 +24,10 @@ header pointing back to this document.
   Files: `src/modules/rf/protocols/rf_keeloq.{h,cpp}`,
   `src/modules/rf/protocols/rf_decoder.{h,cpp}`,
   `src/modules/rf/protocols/rf_encoder.{h,cpp}`.
+- The receive-only FSK register profiles in
+  `src/modules/rf/protocols/rf_fsk_receive_profile.h` derive from
+  `lib/subghz/devices/cc1101_configs.c` at commit
+  `3fb1d51727733d2007abc5ec636a89328857803e`. They do not include the PA table.
 
 ### Momentum firmware — GPL-3.0-or-later
 - Upstream: <https://github.com/Next-Flip/Momentum-Firmware>
@@ -52,6 +56,27 @@ header pointing back to this document.
   Files: `src/modules/rf/protocols/rf_registry.{h,cpp}`,
   `src/modules/rf/protocols/rf_decoder.{h,cpp}`,
   `src/modules/rf/protocols/rf_encoder.{h,cpp}`.
+
+## ProtoPirate vehicle protocols and optional JavaScript app
+
+- Upstream: <https://github.com/RocketGod-git/ProtoPirate>, version 4.0,
+  commit `4c9afe58f881a28ddb51015f63b84578e101068d`.
+- Authors: RocketGod / The Pirates' Plunder and upstream contributors.
+- License: GNU General Public License v3.0; see
+  `src/modules/rf/protocols/PROTOPIRATE_LICENSE`.
+- Vehicle codec implementations live in `src/modules/rf/protocols/decoders/`.
+  Their framing and field logic retain upstream attribution; Bruce's existing
+  `rf_registry_ext.cpp` owns discovery and native decode/encode callbacks.
+- Local changes preserve the Kia V1/V2 and Ford V0 reception, full serial range,
+  upload capacity and saved-field fixes, plus the Subaru unsigned-shift fix.
+- Stateful pulse support derives from Flipper Zero firmware commit
+  `3fb1d51727733d2007abc5ec636a89328857803e` (GPL-3.0-or-later),
+  Copyright Flipper Devices Inc. and contributors. Shared cipher and Manchester
+  helpers have one implementation in Bruce's RF module.
+- The standalone Furi header tree, library registry, plugin catalogue and JSON
+  engine are removed. A bounded C lifecycle adapter retains protocol-specific
+  wide records without narrowing them to the legacy 64-bit key structure.
+- No device-encrypted keystores or complete Flipper application parity are claimed.
 
 ## NFC / RFID (ST25R3916)
 

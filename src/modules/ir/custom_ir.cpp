@@ -605,7 +605,7 @@ bool sendDecodedCommand(String protocol, String value, uint8_t bits, bool hideDe
 
 void sendRawCommand(uint16_t frequency, String rawData, bool hideDefaultUI) {
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
-    PPM.enableOTG();
+    hal_pmic_enable_otg();
 #endif
 
     IRsend irsend(bruceConfigPins.irTx); // Set the GPIO to be used to sending the message.
@@ -729,7 +729,7 @@ bool chooseCmdIrFile(FS *fs, const String &filepath) {
     databaseFile.close();
 
 #ifdef USE_BOOST /// DISABLE 5V OUTPUT
-    PPM.disableOTG();
+    hal_pmic_disable_otg();
 #endif
 
     digitalWrite(bruceConfigPins.irTx, LED_OFF);

@@ -17,6 +17,8 @@ BOOT_OFFSETS = {
     "esp32":   0x1000,  # ESP32
     "esp32s3": 0x0000,  # ESP32-S3
     "esp32c5": 0x2000,  # ESP32-C5
+    "esp32c6": 0x0000,  # ESP32-C6
+    "esp32p4": 0x2000,  # ESP32-P4
 }
 boot_offset = BOOT_OFFSETS.get(mcu, 0x0000)  # safe fallback
 

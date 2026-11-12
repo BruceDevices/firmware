@@ -1,0 +1,13 @@
+REM DuckyScript 3.0 DEFINE demo
+REM Constants are declared with DEFINE and substituted before the payload runs.
+REM Undefined names and whole tokens are left untouched (#NAME never matches #NAMES).
+DEFINE #EDITOR notepad.exe
+DEFINE #NAME Bruce
+DEFINE #PAUSE 500
+
+GUI r
+DELAY #PAUSE
+STRINGLN #EDITOR
+DELAY 1000
+STRINGLN Hello, my name is #NAME
+STRINGLN DEFINE keeps payloads readable and easy to retarget

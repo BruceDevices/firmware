@@ -30,28 +30,22 @@ JSValue native_getBattery(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 JSValue native_getBatteryDetailed(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "battery_percent", JS_NewInt32(ctx, getBattery()));
-#ifdef USE_BQ27220_VIA_I2C
-    JS_SetPropertyStr(ctx, obj, "remaining_capacity", JS_NewInt32(ctx, bq.getRemainCap()));
-    JS_SetPropertyStr(ctx, obj, "full_capacity", JS_NewInt32(ctx, bq.getFullChargeCap()));
-    JS_SetPropertyStr(ctx, obj, "design_capacity", JS_NewInt32(ctx, bq.getDesignCap()));
-    JS_SetPropertyStr(ctx, obj, "is_charging", JS_NewBool(bq.getIsCharging()));
-    JS_SetPropertyStr(
-        ctx,
-        obj,
-        "charging_voltage",
-        JS_NewFloat64(ctx, ((double)bq.getVolt(VOLT_MODE::VOLT_CHARGING) / 1000.0))
-    );
-    JS_SetPropertyStr(ctx, obj, "charging_current", JS_NewInt32(ctx, bq.getCurr(CURR_MODE::CURR_CHARGING)));
-    JS_SetPropertyStr(ctx, obj, "time_to_empty", JS_NewInt32(ctx, bq.getTimeToEmpty()));
-    JS_SetPropertyStr(ctx, obj, "average_power_use", JS_NewInt32(ctx, bq.getAvgPower()));
-    JS_SetPropertyStr(
-        ctx, obj, "voltage", JS_NewFloat64(ctx, ((double)bq.getVolt(VOLT_MODE::VOLT) / 1000.0))
-    );
-    JS_SetPropertyStr(ctx, obj, "voltage_raw", JS_NewInt32(ctx, bq.getVolt(VOLT_MODE::VOLT_RWA)));
-    JS_SetPropertyStr(ctx, obj, "current_instant", JS_NewInt32(ctx, bq.getCurr(CURR_INSTANT)));
-    JS_SetPropertyStr(ctx, obj, "current_average", JS_NewInt32(ctx, (bq.getCurr(CURR_MODE::CURR_AVERAGE))));
-    JS_SetPropertyStr(ctx, obj, "current_raw", JS_NewInt32(ctx, bq.getVolt(VOLT_MODE::VOLT_RWA)));
-#endif
+    DeviceGaugeInfo gi;
+    if (hal_gauge_get_info(gi)) {
+        JS_SetPropertyStr(ctx, obj, "remaining_capacity", JS_NewInt32(ctx, gi.remain_cap_mah));
+        JS_SetPropertyStr(ctx, obj, "full_capacity", JS_NewInt32(ctx, gi.full_cap_mah));
+        JS_SetPropertyStr(ctx, obj, "design_capacity", JS_NewInt32(ctx, gi.design_cap_mah));
+        JS_SetPropertyStr(ctx, obj, "is_charging", JS_NewBool(gi.charging));
+        JS_SetPropertyStr(ctx, obj, "charging_voltage", JS_NewFloat64(ctx, ((double)gi.charging_mv / 1000.0)));
+        JS_SetPropertyStr(ctx, obj, "charging_current", JS_NewInt32(ctx, gi.charging_ma));
+        JS_SetPropertyStr(ctx, obj, "time_to_empty", JS_NewInt32(ctx, gi.time_to_empty_min));
+        JS_SetPropertyStr(ctx, obj, "average_power_use", JS_NewInt32(ctx, gi.avg_power_mw));
+        JS_SetPropertyStr(ctx, obj, "voltage", JS_NewFloat64(ctx, ((double)gi.volt_mv / 1000.0)));
+        JS_SetPropertyStr(ctx, obj, "voltage_raw", JS_NewInt32(ctx, gi.volt_raw_mv));
+        JS_SetPropertyStr(ctx, obj, "current_instant", JS_NewInt32(ctx, gi.curr_instant_ma));
+        JS_SetPropertyStr(ctx, obj, "current_average", JS_NewInt32(ctx, gi.curr_average_ma));
+        JS_SetPropertyStr(ctx, obj, "current_raw", JS_NewInt32(ctx, gi.volt_raw_mv));
+    }
     return obj;
 }
 

@@ -16,13 +16,12 @@
 #include <WiFiUdp.h>
 
 #if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-
-#define TXD_PIN (GPIO_NUM_25)
-#define RXD_PIN (GPIO_NUM_26)
-#else
-#define TXD_PIN SERIAL_TX
-#define RXD_PIN SERIAL_RX
+// StickCPlus/CPlus2 wire the PN532Killer UART to fixed pins, independent of the board's
+// general-purpose UART config (bruceConfigPins.uart_bus).
+#define PN532KILLER_TXD_PIN (GPIO_NUM_25)
+#define PN532KILLER_RXD_PIN (GPIO_NUM_26)
 #endif
+
 #define UART_BAUD_RATE 115200
 
 #define UDP_REMOTE_TIMEOUT_MS 60000UL
@@ -42,20 +41,27 @@ PN532KillerTools::~PN532KillerTools() {
 }
 
 void PN532KillerTools::setup() {
+#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
+    int rxdPin = PN532KILLER_RXD_PIN;
+    int txdPin = PN532KILLER_TXD_PIN;
+#else
+    int rxdPin = bruceConfigPins.uart_bus.rx;
+    int txdPin = bruceConfigPins.uart_bus.tx;
+#endif
+
     // Reset Pin states
-    if (bruceConfigPins.SDCARD_bus.checkConflict(RXD_PIN) ||
-        bruceConfigPins.SDCARD_bus.checkConflict(TXD_PIN)) {
+    if (bruceConfigPins.SDCARD_bus.checkConflict(rxdPin) ||
+        bruceConfigPins.SDCARD_bus.checkConflict(txdPin)) {
         sdcardSPI.end();
     }
-    if (bruceConfigPins.CC1101_bus.checkConflict(RXD_PIN) ||
-        bruceConfigPins.CC1101_bus.checkConflict(TXD_PIN) ||
-        bruceConfigPins.NRF24_bus.checkConflict(RXD_PIN) ||
-        bruceConfigPins.NRF24_bus.checkConflict(TXD_PIN)) {
+    if (bruceConfigPins.CC1101_bus.checkConflict(rxdPin) ||
+        bruceConfigPins.CC1101_bus.checkConflict(txdPin) || bruceConfigPins.NRF24_bus.checkConflict(rxdPin) ||
+        bruceConfigPins.NRF24_bus.checkConflict(txdPin)) {
         AUX_SPI.end();
     }
-    pinMode(RXD_PIN, INPUT);
-    pinMode(TXD_PIN, OUTPUT);
-    Serial1.begin(UART_BAUD_RATE, SERIAL_8N1, RXD_PIN, TXD_PIN);
+    pinMode(rxdPin, INPUT);
+    pinMode(txdPin, OUTPUT);
+    Serial1.begin(UART_BAUD_RATE, SERIAL_8N1, rxdPin, txdPin);
 
     // Display initial screen and prompt user to press OK to check device
     displayInitialScreen();
@@ -97,12 +103,7 @@ void PN532KillerTools::playDeviceDetectedSound() {
     if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
 
 #if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN)
-    // Play two beeps to indicate successful device detection
-    _tone(5000, 50);
-    delay(100);
-    _tone(5000, 50);
-#elif defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
     // Try to play a detection sound file, fallback to startup sound if not available
     if (SD.exists("/device_detected.wav")) {
         playAudioFile(&SD, "/device_detected.wav");
@@ -120,6 +121,11 @@ void PN532KillerTools::playDeviceDetectedSound() {
             playAudioFile(&LittleFS, "/boot.wav");
         }
     }
+#else
+    // Two beeps to indicate successful device detection
+    _tone(5000, 50);
+    delay(100);
+    _tone(5000, 50);
 #endif
 #endif
 }
@@ -128,12 +134,7 @@ void PN532KillerTools::playUidFoundSound() {
     if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
 
 #if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN)
-    // Play a single higher tone to indicate UID found
-    _tone(6000, 200);
-    _tone(9000, 200);
-    _tone(12000, 300);
-#elif defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
     // Try to play a UID found sound file, fallback to tone simulation
     if (SD.exists("/uid_found.wav")) {
         playAudioFile(&SD, "/uid_found.wav");
@@ -161,7 +162,11 @@ void PN532KillerTools::resetDevice(bool showInitialScreen) {
     delay(100);
     Serial1.flush();
     delay(100);
-    Serial1.begin(UART_BAUD_RATE, SERIAL_8N1, RXD_PIN, TXD_PIN);
+#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
+    Serial1.begin(UART_BAUD_RATE, SERIAL_8N1, PN532KILLER_RXD_PIN, PN532KILLER_TXD_PIN);
+#else
+    Serial1.begin(UART_BAUD_RATE, SERIAL_8N1, bruceConfigPins.uart_bus.rx, bruceConfigPins.uart_bus.tx);
+#endif
     delay(100);
     if (showInitialScreen) { displayInitialScreen(); }
 }
