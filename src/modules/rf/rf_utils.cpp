@@ -178,6 +178,13 @@ std::vector<RfCodes> recent_rfcodes;
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 static uint8_t cc1101_mode_hint = 0;
+// RAM-only profile; reset to Bruce defaults after restart. Receive-only.
+uint8_t bruceRfRxProfile = 0;
+// Script-specific tuning, RAM-only; 0 means do not override Bruce defaults.
+float bruceScriptRxBW = 0.0f;
+float bruceScriptRxDataRate = 0.0f;
+uint8_t bruceScriptRxModulation = 0;
+uint8_t bruceScriptRxAgc = 0;
 
 bool RfCodes::keeloq_check_decrypt(uint32_t decrypt) {
     uint16_t end_serial = serial & 0xFF;
@@ -277,7 +284,13 @@ bool initRfModule(String mode, float frequency) {
         // ELECHOUSE_cc1101.setRxBW(812.50);  // reset to default
         const bool fixedFreq = bruceConfigPins.rfFxdFreq;
         if (!fixedFreq) {
-            ELECHOUSE_cc1101.setRxBW(256); // generic profile for scan/hopping
+            // Tune receiver bandwidth; not TX power or a software gain multiplier.
+            // Narrower bandwidth can improve SNR for compatible, low-deviation signals,
+            // but may miss wideband or drifting sensors. Default stays upstream-compatible.
+            const float rxBW = bruceRfRxProfile == 1 ? 58.0f
+                             : bruceRfRxProfile == 2 ? 135.0f
+                             : bruceRfRxProfile == 3 ? 406.0f : 256.0f;
+            ELECHOUSE_cc1101.setRxBW(rxBW);
             ELECHOUSE_cc1101.setDRate(50);
         }
         ELECHOUSE_cc1101.setClb(1, 24, 28); // Keep upstream 315 MHz FSCTRL0 range
@@ -314,6 +327,27 @@ bool initRfModule(String mode, float frequency) {
             ioExpander.turnPinOnOff(IO_EXP_CC_RX, HIGH);
             ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
             pinMode(bruceConfigPins.CC1101_bus.io0, INPUT);
+            // Apply optional script RX settings AFTER upstream OOK/fixed-frequency
+            // presets. Only active in RX, never in TX.
+            if (bruceScriptRxBW > 0.0f) ELECHOUSE_cc1101.setRxBW(bruceScriptRxBW);
+            if (bruceScriptRxDataRate > 0.0f) ELECHOUSE_cc1101.setDRate(bruceScriptRxDataRate);
+            if (bruceScriptRxModulation == 1) ELECHOUSE_cc1101.setModulation(2); // ASK/OOK
+            if (bruceScriptRxModulation == 2) ELECHOUSE_cc1101.setModulation(0); // 2-FSK
+            if (bruceScriptRxModulation == 3) ELECHOUSE_cc1101.setModulation(1); // GFSK
+            // Experimental AGCCTRL2 register profiles, not gain in dB. Note:
+            // the baseline preset above (cc1101ApplyFixedFreqOokPreset) already
+            // sets AGCCTRL2=0xC7, so option 1 here is intentionally a no-op
+            // restating the default; only 2 and 3 actually change anything.
+            if (bruceScriptRxAgc == 1) ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0xC7);
+            if (bruceScriptRxAgc == 2) ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0xC3);
+            // Max Sensitivity: MAX_DVGA_GAIN=00 (use the full gain range -- the
+            // baseline/0xC7/0xC3 presets all cut the top 3 DVGA gain steps for
+            // better blocking/selectivity near strong interferers, which is the
+            // CC1101 datasheet's documented tradeoff against reaching its best
+            // spec'd sensitivity), MAX_LNA_GAIN=000 (no LNA reduction, same as
+            // the others), MAGN_TARGET=111 (42 dB, the highest target so AGC
+            // allows more gain before backing off a weak signal).
+            if (bruceScriptRxAgc == 3) ELECHOUSE_cc1101.SpiWriteReg(CC1101_AGCCTRL2, 0x07);
             ELECHOUSE_cc1101.SetRx();
             Serial.println("cc1101 SetRx();");
         }

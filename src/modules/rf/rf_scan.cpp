@@ -35,6 +35,12 @@ RFScan::RFScan() {
     setup();
 }
 
+RFScan::RFScan(bool startInRawMode) {
+    ReadRAW = startInRawMode;
+    if (bruceConfigPins.rfModule == M5_RF_MODULE) ReadRAW = false; // M5 raw mode isn't supported
+    setup();
+}
+
 RFScan::~RFScan() {
     _rx.end();
     deinitRfModule();
@@ -46,6 +52,15 @@ void RFScan::setup() {
     exitRequested = false;
 
     if (!initRfModule("rx", bruceConfigPins.rfFreq)) { return; }
+
+    // Tried forcing Max Sensitivity AGC here to match Repeater/Weather
+    // Station/Frequency Analyzer -- reverted (2026-11-12): for an already-
+    // strong, close-range signal (confirmed working the night before with
+    // the baseline/default AGC profile), maxing out gain overloaded/
+    // distorted the capture instead of helping, turning a clean ~50-edge
+    // Princeton frame into a garbled ~173-edge one that matched nothing.
+    // Max Sensitivity helps a genuinely weak signal; it actively hurts a
+    // strong one. Leave Read/Read RAW on the baseline profile.
 
     enable_receive();
 
@@ -106,11 +121,22 @@ void RFScan::loop() {
             if (fast_scan()) return setup(); // frequency found, reset
         }
 
+        if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+            uint32_t now = millis();
+            if (now - lastRssiDraw > 150) {
+                rssi = ELECHOUSE_cc1101.getRssi();
+                draw_rssi_meter();
+                lastRssiDraw = now;
+            }
+        }
+
         std::vector<int> durations;
         if (_rx.poll(durations)) {
+            Serial.printf("[RFScan] poll() returned %u durations\n", (unsigned)durations.size());
             bool captured = false;
             if (!ReadRAW) {
                 captured = decode_signal(durations);
+                if (!captured) Serial.println("[RFScan] decode_signal: no protocol/KeeLoq match");
                 if (captured && autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
             } else {
                 captured = read_raw(durations);
@@ -133,6 +159,32 @@ void RFScan::loop() {
         }
         vTaskDelay(1 / portTICK_PERIOD_MS);
     }
+}
+
+// Fixed bottom-right corner, well clear of display_info()'s top-down
+// padprintln text -- opaque fillRect + opaque text means this redraws
+// cleanly every call with no separate clear step, and (being outside the
+// area display_info() touches) survives its own full-screen redraws too.
+void RFScan::draw_rssi_meter() {
+    // Previous placement (a 50x10px sliver jammed right against the bottom
+    // screen edge) was confirmed via a user-submitted video to be nearly
+    // invisible -- barely distinguishable from the bezel and too thin to
+    // register as "moving" at a glance. Bigger, labeled, with real
+    // clearance from the edge.
+    int barMax = tftWidth - 90;
+    int x = 10;
+    int y = tftHeight - 26;
+    int barW = max(0, min(barMax, (int)((rssi + 100) * (barMax / 70.0f))));
+    tft.setTextSize(FP);
+    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+    tft.setCursor(x, y - 12);
+    tft.print("RSSI");
+    tft.fillRect(x, y, barMax + 2, 14, getColorVariation(bruceConfig.priColor));
+    tft.fillRect(x + 1, y + 1, barW, 12, bruceConfig.priColor);
+    tft.fillRect(x + barMax + 6, y - 2, 60, 18, bruceConfig.bgColor);
+    tft.setCursor(x + barMax + 8, y + 1);
+    tft.print(rssi);
+    tft.print(" dBm");
 }
 
 void RFScan::enable_receive() {
@@ -807,8 +859,76 @@ String rf_scan(float start_freq, float stop_freq, int max_loops) {
     return out;
 }
 
+// rfReceiveSignal() owns EscPress for the duration of its own blocking loop
+// (check() below both reads AND clears the flag), so a caller that also
+// wants to know "did the user press Back during this call" has no way to
+// see it afterward -- it's already gone. These two let the BJS subghz
+// bridge (subghz_js.cpp) observe the same information without fighting
+// over the one-shot flag: reset at the top of every call, set at the
+// bottom only if Esc is what ended the loop (every other exit above
+// returns directly), and sampled once per poll so a UI layered on top of
+// the blocking read() call still gets a roughly-live RSSI reading.
+bool g_bjsRfEscAborted = false;
+int g_bjsRfLastRssi = -127;
+
+// Fast receive mode for short OOK weather-station frames (experimental).
+// Uses Scan/Copy's RfRxSession and 1ms polling rather than the older JS
+// rfReceiveSignal() path's 1000ms sleeps. Leaves the CC1101 radio settings
+// inherited from the working RF Config (e.g. fixed frequency at 433.92 MHz).
+static bool rf_weather_candidate(const std::vector<int> &pulses) {
+    if (pulses.size() < 40) return false;
+    int good = 0;
+    // AcuRite-606TX/ ThermoPro-like: HIGH ~500us followed by
+    // LOW ~2000/4000us. This checks signal SHAPE, not decoded identity.
+    for (size_t i = 0; i + 1 < pulses.size(); ++i) {
+        const int hi = pulses[i];
+        const int lo = pulses[i + 1];
+        if (hi >= 300 && hi <= 750 &&
+            ((lo <= -1350 && lo >= -2950) || (lo <= -3150 && lo >= -5250))) {
+            ++good;
+        }
+    }
+    return good >= 12;
+}
+
+String rfReceiveWeatherSignal(float frequency, int timeoutSeconds) {
+    if (timeoutSeconds < 1) timeoutSeconds = 1;
+    if (timeoutSeconds > 30) timeoutSeconds = 30;
+    if (!initRfModule("rx", frequency)) return "";
+    RfRxSession rx;
+    if (!rx.begin()) {
+        deinitRfModule();
+        return "";
+    }
+
+    const uint32_t start = millis();
+    String result;
+    while ((uint32_t)(millis() - start) < (uint32_t)timeoutSeconds * 1000UL) {
+        // Do not consume the event: JS needs ESC to exit its app after RX.
+        if (EscPress || SelPress) break;
+        std::vector<int> durations;
+        if (rx.poll(durations) && rf_weather_candidate(durations)) {
+            String rawData;
+            bool hasCrc = false;
+            uint64_t crc = 0;
+            std::vector<int> indexed;
+            int rawBits = 0, rawTe = 0;
+            rf_build_raw(durations, rawData, hasCrc, crc, indexed, rawBits, rawTe);
+            result = rf_subghz_header(frequency);
+            result += "Preset: Ook270Async\nProtocol: RAW\nRAW_Data: " + rawData;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    rx.end();
+    deinitRfModule();
+    return result;
+}
+
 String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) {
     RfCodes received;
+    g_bjsRfEscAborted = false;
+    g_bjsRfLastRssi = -127;
 
     if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
 
@@ -830,6 +950,7 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
     }
 
     while (!check(EscPress)) {
+        if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) g_bjsRfLastRssi = ELECHOUSE_cc1101.getRssi();
         std::vector<int> durations;
         if (rx.poll(durations)) {
             // In decode mode try KeeLoq, then the registry; raw mode skips decoding.
@@ -916,6 +1037,9 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
         }
     }
 
+    // Every other way out of the loop body above returns directly, so
+    // reaching here means the while condition itself went false, i.e. Esc.
+    g_bjsRfEscAborted = true;
     rx.end();
     deinitRfModule();
 

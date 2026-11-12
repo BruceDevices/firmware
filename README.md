@@ -20,6 +20,34 @@ Every major feature works natively, right out of the box. Sub-GHz, NFC/RFID, IR,
 
 More custom devkit boards coming soon! Stay across our communities!
 
+## :satellite: Custom Sub-GHz additions (this fork)
+
+This fork (built for the LilyGO T-Embed CC1101 Plus) adds a set of native,
+Flipper-Zero-style Sub-GHz apps on top of stock Bruce's existing RF engine:
+
+- **SubGHZ app** — a unified Sub-GHz menu:
+  - **Read / Read RAW** — decode-only or raw capture mode, selectable RX
+    modulation (OOK/ASK, 2-FSK, GFSK) and AGC/sensitivity profile, live RSSI
+    meter, custom or preset frequency entry.
+  - **Saved** — browse, rename, delete, and replay saved `.sub` files.
+  - **Add Manually** — generate a fixed-code or KeeLoq rolling-code signal
+    from scratch (protocol/manufacturer + key/serial/button), save and
+    test-transmit it immediately.
+  - **Frequency Analyzer** — scans a curated list of common ISM channels
+    (300-928 MHz), locks onto a real signal (filtering out persistent
+    interference), then attempts to capture and identify it, with
+    replay/save actions.
+  - **Radio Settings** — one shared settings screen (frequency, RX
+    bandwidth, AGC, scan band, repeat count, RX modulation, auto-save) that
+    drives every Sub-GHz screen above.
+- **Repeater** — capture a signal, auto-replay it (clean re-encode for
+  recognized protocols, raw fallback otherwise), with full settings
+  (frequency/BW/AGC/repeat count & delay/auto-repeat) and a live RSSI meter.
+- **Weather Station** — decodes AcuRite-606TX/Nexus/Prologue sensors, tuned
+  for weak/distant signals.
+- Larger RMT capture buffer (2048 symbols, up from 256) so longer frames —
+  e.g. automotive FSK keyless-entry signals — aren't silently truncated.
+
 ## :building_construction: How to install
 
 ### The easiest way to install Bruce is using our official Web Flasher!

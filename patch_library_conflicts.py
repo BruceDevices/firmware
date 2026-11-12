@@ -200,6 +200,18 @@ conflicts = [
         r'#define RFAL_NFCA_N_RETRANS         2U',
         '#define RFAL_NFCA_N_RETRANS         4U'
     ),
+    # Board headers (e.g. boards/lilygo-t-embed-cc1101/pins_arduino.h) define
+    # FP/FM/FG as Bruce's small/medium/large font-size macros (1/2/3). FastLED's
+    # fl/stl/json.h uses "FP" as a template parameter name for its fixed-point
+    # json conversion helpers; the macro expands inside the template and breaks
+    # compilation ("expected nested-name-specifier before numeric constant").
+    # Rename FastLED's unrelated template parameter instead of touching Bruce's
+    # own font macros, which are used throughout the UI code.
+    (
+        ".pio/libdeps/*/FastLED/src/fl/stl/json.h",
+        r'\bFP\b',
+        'FPT'
+    ),
 ]
 
 for file_pattern, search, replace in conflicts:

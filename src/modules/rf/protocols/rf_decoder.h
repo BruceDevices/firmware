@@ -53,10 +53,17 @@ private:
     rmt_channel_handle_t _ch = nullptr;
     QueueHandle_t _queue = nullptr;
     bool _m5Isr = false;
-    // Heap-allocated capture buffer: keeping ~1KB off the (8KB) serialcmds task
+    // Heap-allocated capture buffer: keeping it off the (8KB) serialcmds task
     // stack, where rfReceiveSignal runs, avoids stack overflow / corruption.
+    // Was 256 symbols (512 durations) -- confirmed too small for a real
+    // automotive FSK keyless-entry frame (2026-11-12): every capture of a
+    // Honda fob hit exactly 512 durations every time, consistently, meaning
+    // the real frame was silently truncated at the buffer limit rather than
+    // ending naturally on the protocol's own idle gap. 2048 symbols (4096
+    // durations) costs ~8KB heap, trivial on this chip (327KB RAM + 8MB
+    // PSRAM), with plenty of headroom for a longer rolling-code payload.
     rmt_symbol_word_t *_buf = nullptr;
-    static const size_t _bufSymbols = 256;
+    static const size_t _bufSymbols = 2048;
     void arm();
 };
 

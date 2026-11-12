@@ -82,6 +82,15 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
     return JS_NewString(ctx, r.c_str());
 }
 
+// Weather receiver API. Compatible with subghz.readRaw(seconds), but
+// filters noise in native firmware and polls without second-long sleeps.
+JSValue native_subghzReadWeatherRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    int seconds = 3;
+    if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &seconds, argv[0]);
+    String result = rfReceiveWeatherSignal(bruceConfigPins.rfFreq, seconds);
+    return JS_NewString(ctx, result.c_str());
+}
+
 JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     String r = "";
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) {
@@ -101,6 +110,57 @@ JSValue native_subghzSetFrequency(JSContext *ctx, JSValue *this_val, int argc, J
         JS_ToNumber(ctx, &v, argv[0]);
         bruceConfigPins.rfFreq = v; // float global var
     }
+    return JS_UNDEFINED;
+}
+
+// Optional receive-only tuning. All arguments are scalars, no direct register
+// access is offered to JS. 0 means preserve the upstream default.
+extern float bruceScriptRxBW;
+extern float bruceScriptRxDataRate;
+extern uint8_t bruceScriptRxModulation;
+extern uint8_t bruceScriptRxAgc;
+
+JSValue native_subghzSetRxConfig(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE || argc != 4) return JS_NewBool(false);
+    double bw = 0, dr = 0;
+    int mod = 0, agc = 0;
+    if (JS_ToNumber(ctx, &bw, argv[0]) < 0 || JS_ToNumber(ctx, &dr, argv[1]) < 0 ||
+        JS_ToInt32(ctx, &mod, argv[2]) < 0 || JS_ToInt32(ctx, &agc, argv[3]) < 0) return JS_NewBool(false);
+    if (!(bw == 0 || bw == 58 || bw == 135 || bw == 256 || bw == 406)) return JS_NewBool(false);
+    if (!(dr == 0 || dr == 1.2 || dr == 2.4 || dr == 4.8 || dr == 9.6 || dr == 38.4 || dr == 50)) return JS_NewBool(false);
+    if (mod < 0 || mod > 3 || agc < 0 || agc > 3) return JS_NewBool(false);
+    bruceScriptRxBW = (float)bw;
+    bruceScriptRxDataRate = (float)dr;
+    bruceScriptRxModulation = (uint8_t)mod;
+    bruceScriptRxAgc = (uint8_t)agc;
+    return JS_NewBool(true);
+}
+
+// Set by rfReceiveSignal() (rf_scan.cpp) during subghz.read()/readRaw():
+// g_bjsRfLastRssi is the most recent CC1101 RSSI sample taken during that
+// blocking call (dBm; -127 if none taken yet or module isn't CC1101).
+// g_bjsRfEscAborted tells us whether that call ended because Back/Esc was
+// pressed -- the EscPress flag itself is consumed inside rfReceiveSignal()
+// before control ever returns here, so this is the only way a script can
+// still see that press.
+extern int g_bjsRfLastRssi;
+extern bool g_bjsRfEscAborted;
+
+JSValue native_subghzGetRssi(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewInt32(ctx, g_bjsRfLastRssi);
+}
+
+JSValue native_subghzWasEscAborted(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    bool aborted = g_bjsRfEscAborted;
+    g_bjsRfEscAborted = false;
+    return JS_NewBool(aborted);
+}
+
+JSValue native_subghzResetRxConfig(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    bruceScriptRxBW = 0;
+    bruceScriptRxDataRate = 0;
+    bruceScriptRxModulation = 0;
+    bruceScriptRxAgc = 0;
     return JS_UNDEFINED;
 }
 

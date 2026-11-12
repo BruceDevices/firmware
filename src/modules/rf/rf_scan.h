@@ -25,6 +25,11 @@ public:
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
     RFScan();
+    // Pre-seeds ReadRAW before the blocking setup()/loop() runs, so a caller
+    // (the SubGHZ app's "Read" vs "Read RAW" menu entries) can choose which
+    // mode this launches in instead of always starting in the member
+    // default and relying on the in-app Next-press toggle.
+    explicit RFScan(bool startInRawMode);
     ~RFScan();
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -34,6 +39,15 @@ public:
     void loop();
 
 private:
+    // Small live RSSI bar drawn in a fixed, bottom-right corner that
+    // display_info()'s padprintln-based text never reaches, so it survives
+    // across display_info()'s own full-screen redraws without flicker.
+    // display_info() gave no visual sign of life at all while listening
+    // (just a static "Total signals found: 0" until something decoded),
+    // which is why "Read" looked broken/frozen with nothing recognized yet.
+    void draw_rssi_meter();
+    uint32_t lastRssiDraw = 0;
+
     RfRxSession _rx;
     RfCodes received;
     String title = "RF Scan Copy";
@@ -92,5 +106,6 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
 String rfReceiveSignal(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
+String rfReceiveWeatherSignal(float frequency, int timeoutSeconds);
 
 #endif

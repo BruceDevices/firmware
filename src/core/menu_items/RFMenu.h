@@ -14,6 +14,8 @@ public:
 
 private:
     void configMenu(void);
+    void customRfAppsMenu(void);
+    void cc1101RxProfileMenu(void);
 };
 
 #endif
