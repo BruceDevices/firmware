@@ -2,6 +2,7 @@
 #define __WIRE_TOOLS_H__
 #if !defined(LITE_VERSION)
 
+#include "core/bus_HAL.h"
 #include <Arduino.h>
 #include <vector>
 
@@ -9,7 +10,7 @@
 
 // UART terminal: baudrate presets/custom, remappable pins, live send/receive view
 void uart_terminal_setup();
-// I2C: device scan, register read/write/dump on bruceConfigPins.i2c_bus
+// I2C: device scan on sys_i2c and i2c_bus, register read/write/dump on the bus the device is on
 void i2c_bus_setup();
 // SPI: JEDEC flash detection and raw transaction console on bruceConfigPins.outer_bus
 void spi_bus_setup();
@@ -36,9 +37,16 @@ int wire_uart_send(const String &text);
 int wire_uart_read(String &out, uint32_t timeoutMs);
 String wire_uart_status();
 
-int wire_i2c_scan(std::vector<uint8_t> &found, int8_t sda, int8_t scl);
-String wire_i2c_read_reg(uint8_t addr, uint8_t reg, int8_t sda, int8_t scl);
-bool wire_i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value, int8_t sda, int8_t scl);
+struct WireI2cDevice {
+    I2CBusId bus;
+    uint8_t addr;
+};
+// sda/scl >= 0: scan only the bus on those pins; otherwise every configured bus (sys_i2c, i2c_bus).
+// Returns the device count, or -1 if no bus could be opened.
+int wire_i2c_scan(std::vector<WireI2cDevice> &found, int8_t sda, int8_t scl);
+// sda/scl >= 0 select the bus by pins; otherwise `bus` (I2CBusId::Sys or I2CBusId::User).
+String wire_i2c_read_reg(uint8_t addr, uint8_t reg, I2CBusId bus, int8_t sda, int8_t scl);
+String wire_i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value, I2CBusId bus, int8_t sda, int8_t scl);
 
 bool wire_spi_begin(int8_t sck, int8_t miso, int8_t mosi, int8_t cs, uint32_t freqHz);
 void wire_spi_end();

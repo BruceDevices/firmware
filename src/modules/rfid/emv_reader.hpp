@@ -6,6 +6,7 @@
 class EMVReader {
     PN532 *_rfid = nullptr;
     Adafruit_PN532 *nfc = nullptr;
+    TwoWire *_wire = nullptr; // the PN532's I2C bus (sys_i2c or i2c_bus), I2C modes only
     bool _cancelled = false;
     uint8_t _target = 0;
     bool writeFrame(const emv::Bytes &frame);

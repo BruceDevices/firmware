@@ -53,10 +53,10 @@ bool EMVReader::writeFrame(const emv::Bytes &frame) {
         const uint8_t prefix = PN532_SPI_DATAWRITE;
         return nfc->spi_dev->write(frame.data(), frame.size(), &prefix, 1);
     }
-    if (!nfc->i2c_dev) return false;
-    Wire.beginTransmission(PN532_I2C_ADDRESS);
-    const bool complete = Wire.write(frame.data(), frame.size()) == frame.size();
-    return Wire.endTransmission() == 0 && complete;
+    if (!nfc->i2c_dev || !_wire) return false;
+    _wire->beginTransmission(PN532_I2C_ADDRESS);
+    const bool complete = _wire->write(frame.data(), frame.size()) == frame.size();
+    return _wire->endTransmission() == 0 && complete;
 }
 
 bool EMVReader::readFrame(emv::Bytes &frame, size_t length) {
@@ -65,16 +65,17 @@ bool EMVReader::readFrame(emv::Bytes &frame, size_t length) {
         const uint8_t prefix = PN532_SPI_DATAREAD;
         return nfc->spi_dev->write_then_read(&prefix, 1, frame.data(), frame.size());
     }
+    if (!_wire) return false;
     // ONE transaction: BusIO's chunked reads insert extra PN532 RDY bytes.
-    if (Wire.requestFrom(uint8_t(PN532_I2C_ADDRESS), length + 1, true) != length + 1) {
-        while (Wire.available()) Wire.read();
+    if (_wire->requestFrom(uint8_t(PN532_I2C_ADDRESS), length + 1, true) != length + 1) {
+        while (_wire->available()) _wire->read();
         return false;
     }
-    if (Wire.read() != 0x01) {
-        while (Wire.available()) Wire.read();
+    if (_wire->read() != 0x01) {
+        while (_wire->available()) _wire->read();
         return false;
     }
-    for (auto &b : frame) b = Wire.read();
+    for (auto &b : frame) b = _wire->read();
     return true;
 }
 
@@ -158,7 +159,9 @@ void EMVReader::setup() {
         displayError("PN532 initialization failed", true);
         return;
     }
-    if (nfc->i2c_dev && Wire.setBufferSize(FrameSize + 1) < FrameSize + 1) {
+    _wire = _rfid->i2cWire();
+    // On the M5 sys adapter this only records the size (it reads into its own 288-byte buffer).
+    if (nfc->i2c_dev && (!_wire || _wire->setBufferSize(FrameSize + 1) < FrameSize + 1)) {
         displayError("NFC buffer allocation failed", true);
         return;
     }

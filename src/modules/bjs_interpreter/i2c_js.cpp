@@ -4,16 +4,23 @@
 #include "core/bus_HAL.h"
 #include "helpers_js.h"
 
-// Bus acquired by i2c.begin() and reused by every other native_i2c_* call until the script
-// re-runs i2c.begin() with different pins (or a fresh interpreter run acquires it again).
+// Bus leased by i2c.begin() and used by every other native_i2c_* call. Pins equal to sys_i2c share
+// the system bus (its clock/timeout are restored on release); any other pins open the user bus.
+// Released when the script re-runs i2c.begin() or when the interpreter finishes the script.
+static I2CLease jsI2CLease;
 static TwoWire *jsI2CBus = nullptr;
 
-static void i2c_require_ready(JSContext *ctx) {
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue v = JS_GetPropertyStr(ctx, global, "\xffi2c_ready");
-    bool ready = JS_IsBool(v) ? JS_ToBool(ctx, v) : false;
-    if (!ready) JS_ThrowInternalError(ctx, "i2c not initialized: call i2c.begin(sda,scl,hz) first");
+void i2c_js_release() {
+    jsI2CLease.release();
+    jsI2CBus = nullptr;
 }
+
+// Returns from the native function with a JS exception (instead of dereferencing a null bus).
+#define I2C_REQUIRE_READY(ctx)                                                                     \
+    do {                                                                                           \
+        if (jsI2CBus == nullptr)                                                                   \
+            return JS_ThrowInternalError(ctx, "i2c not initialized: call i2c.begin(sda,scl,hz) first"); \
+    } while (0)
 
 JSValue native_i2c_begin(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (argc < 3 || !JS_IsNumber(ctx, argv[0]) || !JS_IsNumber(ctx, argv[1]) || !JS_IsNumber(ctx, argv[2])) {
@@ -27,17 +34,22 @@ JSValue native_i2c_begin(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
     if (sda < 0 || scl < 0) return JS_ThrowRangeError(ctx, "i2c.begin: pins must be >= 0");
     if (hz < 1000 || hz > 1000000) return JS_ThrowRangeError(ctx, "i2c.begin: hz must be 1k..1MHz");
 
-    jsI2CBus = acquireI2CBus((int8_t)sda, (int8_t)scl);
-    jsI2CBus->setClock(hz);
-    jsI2CBus->setTimeOut(50);
-
-    JSValue global = JS_GetGlobalObject(ctx);
-    JS_SetPropertyStr(ctx, global, "\xffi2c_ready", JS_NewBool(true));
+    // Drop the previous lease first: holding it would make a re-begin on other pins look busy.
+    i2c_js_release();
+    jsI2CLease = i2cLeasePins((int8_t)sda, (int8_t)scl);
+    if (!jsI2CLease) {
+        return JS_ThrowInternalError(
+            ctx, "i2c.begin: bus unavailable (pins in use, partially on sys_i2c, or a line held low)"
+        );
+    }
+    jsI2CLease.setClock(hz);
+    jsI2CLease.setTimeOut(50);
+    jsI2CBus = jsI2CLease.wire();
     return JS_NewBool(true);
 }
 
 JSValue native_i2c_scan(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
+    I2C_REQUIRE_READY(ctx);
     JSValue arr = JS_NewArray(ctx, 127);
     uint32_t idx = 0;
     for (uint8_t a = 1; a < 127; a++) {
@@ -48,7 +60,7 @@ JSValue native_i2c_scan(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 }
 
 JSValue native_i2c_write(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
+    I2C_REQUIRE_READY(ctx);
     int addr = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
     std::vector<uint8_t> tmp;
@@ -79,7 +91,7 @@ JSValue native_i2c_write(JSContext *ctx, JSValue *this_val, int argc, JSValue *a
 }
 
 JSValue native_i2c_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
+    I2C_REQUIRE_READY(ctx);
     int addr = 0;
     int len = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
@@ -94,7 +106,7 @@ JSValue native_i2c_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 }
 
 JSValue native_i2c_write_read(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    i2c_require_ready(ctx);
+    I2C_REQUIRE_READY(ctx);
     int addr = 0;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &addr, argv[0]);
     std::vector<uint8_t> tmp;

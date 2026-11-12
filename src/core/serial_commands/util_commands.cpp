@@ -56,30 +56,22 @@ uint32_t dateCallback(cmd *c) {
 uint32_t i2cCallback(cmd *c) {
     // scan for connected i2c modules
     // derived from https://learn.adafruit.com/scanning-i2c-addresses/arduino
-    TwoWire *Wire = acquireI2CBus();
-    byte error, address;
-    int nDevices;
+    // Scans sys_i2c and i2c_bus (once when they share pins), tagging each hit with its bus.
     serialDevice->println("Scanning...");
-    nDevices = 0;
-    for (address = 1; address < 127; address++) {
-        // The i2c_scanner uses the return value of
-        // the Write.endTransmisstion to see if
-        // a device did acknowledge to the address.
-        Wire->beginTransmission(address);
-        error = Wire->endTransmission();
-        if (error == 0) {
+    int nDevices = i2cScanAll(
+        [](I2CBusId bus, uint8_t address, void *) {
             serialDevice->print("I2C device found at address 0x");
             if (address < 16) serialDevice->print("0");
             serialDevice->print(address, HEX);
-            nDevices++;
-        } else if (error == 4) {
-            serialDevice->print("Unknown error at address 0x");
-            if (address < 16) serialDevice->print("0");
-            serialDevice->println(address, HEX);
-        }
-    }
-    releaseI2CBus();
+            serialDevice->println(" (" + i2cBusLabel(bus) + ")");
+        },
+        nullptr
+    );
 
+    if (nDevices < 0) {
+        serialDevice->println("No I2C bus configured");
+        return false;
+    }
     if (nDevices == 0) {
         serialDevice->println("No I2C devices found");
         return false;
