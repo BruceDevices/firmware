@@ -11,7 +11,6 @@
 #include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_waterfall.h"
-#include "modules/rf/rf_weather_station.h"
 #include "modules/rf/rf_repeater.h"
 #include "modules/rf/rf_subghz.h"
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
@@ -36,7 +35,6 @@ void RFMenu::optionsMenu() {
     options = {
         {"SubGHZ",          rf_subghz                 },
         {"Scan/copy",       [=]() { RFScan(); }       },
-        {"Weather Station", rf_weather_station        },
         {"Repeater",        rf_repeater               },
 #if !defined(LITE_VERSION)
         {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
