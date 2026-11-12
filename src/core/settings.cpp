@@ -1,4 +1,7 @@
 #include "settings.h"
+#ifndef TOUCH_FOOTER_H
+#define TOUCH_FOOTER_H 20 // height of the touch footer strip (PREV/SEL/NEXT buttons)
+#endif
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
 #include "current_year.h"
@@ -81,6 +84,7 @@ int gsetRotation(bool set) {
     }
     if (set) {
         bruceConfigPins.setRotation(result);
+        result = bruceConfigPins.rotation; // may be pinned by FIXED_ROTATION
         tft.setRotation(result);
         tft.setRotation(result); // must repeat, sometimes ESP32S3 miss one SPI command and it just
                                  // jumps this step and don't rotate
@@ -90,14 +94,14 @@ int gsetRotation(bool set) {
     if (result & 0b01) { // if 1 or 3
         tftWidth = TFT_HEIGHT;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_WIDTH - 20;
+        tftHeight = TFT_WIDTH - TOUCH_FOOTER_H;
 #else
         tftHeight = TFT_WIDTH;
 #endif
     } else { // if 2 or 0
         tftWidth = TFT_WIDTH;
 #if defined(HAS_TOUCH)
-        tftHeight = TFT_HEIGHT - 20;
+        tftHeight = TFT_HEIGHT - TOUCH_FOOTER_H;
 #else
         tftHeight = TFT_HEIGHT;
 #endif

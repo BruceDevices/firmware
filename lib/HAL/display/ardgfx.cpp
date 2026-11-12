@@ -13,6 +13,9 @@ static SemaphoreHandle_t tftMutex;
     xSemaphoreGiveRecursive(tftMutex);
 
 tft_display::tft_display(int16_t _W, int16_t _H) : _height(_H), _width(_W) {
+    // The mutex used by RUN_ON_MUTEX was never created, so the first draw call
+    // asserted in xQueueTakeMutexRecursive(). Create it here, before any drawing.
+    if (!tftMutex) tftMutex = xSemaphoreCreateRecursiveMutex();
     // clang-format off
 #if TFT_DATABUS_N == 3
     #if TFT_DISPLAY_DRIVER_N != 49
@@ -154,6 +157,10 @@ void tft_display::drawPixel(int32_t x, int32_t y, uint32_t color) {
 }
 
 void tft_display::drawLine(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t color) {
+#if defined(ROUND_DISPLAY_NO_FRAME)
+    // status-bar divider that belongs to the square frame
+    if (_gfx && x0 == 5 && y0 == 25 && y1 == 25 && x1 == _gfx->width() - 6) return;
+#endif
     if (_gfx) { RUN_ON_MUTEX(_gfx->drawLine(x0, y0, x1, y1, color)); }
 }
 
@@ -165,7 +172,37 @@ void tft_display::drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color)
     if (_gfx) { RUN_ON_MUTEX(_gfx->drawFastVLine(x, y, h, color)); }
 }
 
+#if defined(ROUND_DISPLAY_NO_FRAME)
+// On round panels the rectangular frame Bruce draws around the whole screen
+// (x=5,y=5,w=W-10,h=H-10) and around the touch footer looks like a square box
+// floating in the circle. Skip exactly those outlines; everything else draws.
+static bool isScreenFrame(Arduino_GFX *g, int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (!g || x != 5 || w != g->width() - 10) return false;
+    // full-screen border: its height depends on the touch footer height, so
+    // accept any tall full-width outline anchored at (5,5)
+    if (y == 5 && h >= g->height() / 2) return true;
+    if (y >= g->height() - 22 && h >= 20) return true; // touch footer box
+    return false;
+}
+#define SKIP_FRAME(x, y, w, h)                                                                               \
+    if (isScreenFrame(_gfx, x, y, w, h)) return;
+
+// Soften big boxes so the UI suits a round screen: wide boxes get large corner
+// radii and short wide bars (the menu highlight) become pills.
+static int32_t roundRadius(int32_t w, int32_t h, int32_t r) {
+    if (w < 100) return r;
+    int32_t rr = (h < 40) ? h / 2 : 16;
+    if (rr > h / 2) rr = h / 2;
+    return rr > r ? rr : r;
+}
+#define SOFT_RADIUS(w, h, r) r = roundRadius(w, h, r);
+#else
+#define SKIP_FRAME(x, y, w, h)
+#define SOFT_RADIUS(w, h, r)
+#endif
+
 void tft_display::drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
+    SKIP_FRAME(x, y, w, h)
     if (_gfx) { RUN_ON_MUTEX(_gfx->drawRect(x, y, w, h, color)); }
 }
 
@@ -192,10 +229,13 @@ void tft_display::fillScreen(uint32_t color) {
 }
 
 void tft_display::drawRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint32_t color) {
+    SKIP_FRAME(x, y, w, h)
+    SOFT_RADIUS(w, h, r)
     if (_gfx) { RUN_ON_MUTEX(_gfx->drawRoundRect(x, y, w, h, r, color)); }
 }
 
 void tft_display::fillRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint32_t color) {
+    SOFT_RADIUS(w, h, r)
     if (_gfx) { RUN_ON_MUTEX(_gfx->fillRoundRect(x, y, w, h, r, color)); }
 }
 
@@ -290,7 +330,11 @@ void tft_display::pushImage(
 }
 
 void tft_display::invertDisplay(bool i) {
-    (void)i;
+#if defined(TFT_INVERT_FLIP)
+    // Panels like AMOLEDs show correct colours with inversion OFF, while Bruce
+    // defaults colorInverted=1 (meant for IPS LCDs). Flip the meaning here.
+    i = !i;
+#endif
     if (_gfx) _gfx->invertDisplay(i);
 }
 
@@ -433,7 +477,9 @@ int16_t tft_display::fontHeight(int16_t font) const {
     return static_cast<int16_t>(_textSize * 8);
 }
 
-Arduino_GFX *tft_display::native() { return nullptr; }
+// Was a stub returning nullptr, which silently disabled every board-level use
+// (AMOLED brightness, full-panel clear). Return the real driver.
+Arduino_GFX *tft_display::native() { return _gfx; }
 
 void tft_display::drawWideLineFallback(float ax, float ay, float bx, float by, float wd, uint32_t color) {
     if (!_gfx) return;

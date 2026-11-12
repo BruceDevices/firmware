@@ -262,6 +262,36 @@ class tft_logger;
     #endif
 #endif
 // clang-format on
+
+#if defined(PANEL_MIN_2PX) && TFT_DISPLAY_DRIVER_N == 41
+// Some CO5300 AMOLED panels silently drop RAM writes whose window is only one
+// pixel wide or tall (start == end column/row): every 1px line, outline, arc,
+// triangle edge and lone pixel disappears, while text blocks and fills show.
+// Widen those writes to 2px so every primitive actually reaches the panel.
+class Arduino_CO5300_2px : public Arduino_CO5300 {
+public:
+    using Arduino_CO5300::Arduino_CO5300;
+
+    void writePixelPreclipped(int16_t x, int16_t y, uint16_t color) override {
+        writeFillRectPreclipped(x, y, 1, 1, color);
+    }
+
+    void writeFillRectPreclipped(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) override {
+        if (w < 2) {
+            w = 2;
+            if (x >= _max_x) x = _max_x - 1; // keep the widened write inside the window
+        }
+        if (h < 2) {
+            h = 2;
+            if (y >= _max_y) y = _max_y - 1;
+        }
+        Arduino_CO5300::writeFillRectPreclipped(x, y, w, h, color);
+    }
+};
+#undef TFT_DISPLAY_DRIVER
+#define TFT_DISPLAY_DRIVER Arduino_CO5300_2px
+#endif
+
 class tft_display {
 protected:
     TFT_DATABUS_TYPE *bus = nullptr;

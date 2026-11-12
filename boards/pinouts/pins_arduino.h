@@ -34,6 +34,8 @@
 #include "../xk404/pins_arduino.h"
 #elif REAPER
 #include "../reaper/pins_arduino.h"
+#elif WAVESHARE_AMOLED_175C
+#include "../waveshare-amoled-175c/pins_arduino.h"
 #elif T_WATCH_S3
 #include "../lilygo-t-watch-s3/pins_arduino.h"
 #elif T_DISPLAY_S3_PRO

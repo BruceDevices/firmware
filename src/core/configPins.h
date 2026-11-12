@@ -214,7 +214,11 @@ public:
     UARTPins gps_bus = {(gpio_num_t)GPS_SERIAL_RX, (gpio_num_t)GPS_SERIAL_TX};
 
     // Screen Rotation
+#ifdef FIXED_ROTATION
+    int rotation = FIXED_ROTATION; // panel can't be rotated (e.g. CO5300 AMOLED)
+#else
     int rotation = ROTATION > 1 ? 3 : 1;
+#endif
 
     // BLE
     String bleName = String("Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX));
