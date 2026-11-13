@@ -118,6 +118,7 @@ void sdStop(uint8_t pdrv) {
 void sdDeselectCard(uint8_t pdrv) {
   ardu_sdcard_t *card = s_cards[pdrv];
   digitalWrite(card->ssPin, HIGH);
+  card->spi->transfer(0xFF);
 }
 
 bool sdSelectCard(uint8_t pdrv) {

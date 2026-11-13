@@ -9,7 +9,7 @@ public:
     size_t println(const String &s) override { return out->println(s); }
     size_t print(const String &s) override { return out->print(s); }
     size_t print(const int n, int format) override { return out->print(n, format); }
-    void vprintf(const char *fmt, va_list args) override { out->printf(fmt, args); }
+    void vprintf(const char *fmt, va_list args) override { out->vprintf(fmt, args); }
     size_t println() override { return out->println(); }
     size_t println(size_t n) override { return out->println(n); }
     size_t println(const uint32_t n) override { return out->println(n); }

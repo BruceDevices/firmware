@@ -597,7 +597,10 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
         rootPath = "/";
         if (!fs.exists(rootPath)) {
             Serial.println("loopSD-> 2nd exist test failed");
-            if (&fs == &SD) sdcardMounted = false;
+            if (&fs == &SD) {
+                closeSdCard();
+                displayError("SD Read/Mount Error", true);
+            }
             return "";
         }
     }
