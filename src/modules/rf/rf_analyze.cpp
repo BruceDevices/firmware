@@ -26,7 +26,9 @@ void draw_report(
     int y = report_top();
 
     tft.setTextSize(FP);
-    tft.fillRect(0, y - 2, tftWidth, tftHeight - (y - 2), bg);
+    // Clear only the content area (inside the border), not the full screen,
+    // otherwise the left/right/bottom border gets erased.
+    tft.fillRect(BORDER_PAD_X, y - 2, tftWidth - 2 * BORDER_PAD_X, tftHeight - (y - 2) - 6, bg);
 
     auto line = [&](const String &s, uint16_t c) {
         if (y + lh > tftHeight - 4) return;

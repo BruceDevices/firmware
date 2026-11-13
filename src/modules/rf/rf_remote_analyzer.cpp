@@ -26,7 +26,7 @@ float rssiAt(float mhz) {
 // Redraw only the result region (below the title) when the content changed.
 void drawResult(bool found, float freq, float rssi, bool isAm) {
     const int y0 = row_top() - 2;
-    tft.fillRect(0, y0, tftWidth, tftHeight - y0 - (LH * FP + 10), bruceConfig.bgColor);
+    tft.fillRect(BORDER_PAD_X, y0, tftWidth - 2 * BORDER_PAD_X, tftHeight - y0 - (LH * FP + 10), bruceConfig.bgColor);
     tft.setTextSize(FP);
     int y = row_top();
     const int lh = LH * FP + 6;
