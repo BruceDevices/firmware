@@ -3,9 +3,12 @@
 #include "core/settings.h"
 #include "core/utils.h"
 #include "modules/rf/record.h"
+#include "modules/rf/rf_analyze.h"
 #include "modules/rf/rf_bruteforce.h"
 #include "modules/rf/rf_jammer.h"
 #include "modules/rf/rf_listen.h"
+#include "modules/rf/rf_remote_analyzer.h"
+#include "modules/rf/rf_rolling.h"
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_send.h"
 #include "modules/rf/rf_spectrum.h"
@@ -26,10 +29,13 @@ void RFMenu::optionsMenu() {
         {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
         {"SquareWave Spec", rf_SquareWave             }, // @Pirata
         {"Spectogram",      rf_waterfall              }, // dev_eclipse
+        {"Remote Analyzer", rf_remote_analyzer        }, // ProtoPirate remote analyzer (peak find + AM/FM)
+        {"Analyze",         rf_analyze                }, // auto classify modulation + decode
 #if defined(RF_LISTEN_H)
         {"Listen",          rf_listen                 }, // dev_eclipse
 #endif
         {"Bruteforce",      rf_bruteforce             }, // dev_eclipse
+        {"Rolling Code",    rf_rolling_code           }, // rolling-code analyzer
         {"Jammer",          [=]() { RFJammer(true); } },
 #endif
         {"Config",          [this]() { configMenu(); }},

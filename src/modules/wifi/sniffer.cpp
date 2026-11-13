@@ -29,6 +29,7 @@
 #include "FS.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/radio_mem.h"
 #include "core/sd_functions.h"
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
@@ -781,10 +782,20 @@ static String currentModeString() {
     }
 }
 
+// Static storage so the sniffer's queue never depends on heap fragmentation.
+// The Cardputer has no PSRAM and the heap is easily fragmented after BLE/RF use,
+// which made xQueueCreate() fail with "Sniffer queue error".
+static StaticQueue_t snifferQueueStruct;
+static uint8_t snifferQueueStorage[SNIFFER_QUEUE_DEPTH * sizeof(SnifferQueueItem)];
+
 static bool ensureSnifferBackend() {
     if (!fileMutex) { fileMutex = xSemaphoreCreateMutexStatic(&fileMutexBuffer); }
     if (!handshakeMutex) { handshakeMutex = xSemaphoreCreateMutexStatic(&handshakeMutexBuffer); }
-    if (!snifferQueue) { snifferQueue = xQueueCreate(SNIFFER_QUEUE_DEPTH, sizeof(SnifferQueueItem)); }
+    if (!snifferQueue) {
+        snifferQueue = xQueueCreateStatic(
+            SNIFFER_QUEUE_DEPTH, sizeof(SnifferQueueItem), snifferQueueStorage, &snifferQueueStruct
+        );
+    }
     if (!snifferQueue) { return false; }
     if (!snifferWriterHandle) {
 #if SOC_CPU_CORES_NUM > 1
@@ -1138,6 +1149,14 @@ void sniffer_setup() {
     // Stop WebUI before setting WiFi mode for sniffer
     cleanlyStopWebUiForWiFiFeature();
 
+    // Free any WiFi stack left over from a prior scan/connect so the sniffer's
+    // queue/task allocations have contiguous memory (no PSRAM on the Cardputer).
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        wifiDisconnect();
+        WiFi.mode(WIFI_OFF);
+        delay(150);
+    }
+
     FS *Fs;
     int redraw = true;
     bool clearScreen = true;
@@ -1180,25 +1199,30 @@ void sniffer_setup() {
     beaconRawCache.clear();
 
     /* setup wifi */
+    if (!radioHasMemForWifi()) {
+        displayError("Low RAM: free SD/BLE first", true);
+        return;
+    }
     ensureWifiPlatform();
     nvs_flash_init();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    // The Cardputer has no PSRAM and only ~31 KB of contiguous DMA after boot,
+    // so the ESP-IDF defaults (16 static TX + 10 static RX buffers) don't fit.
+    // Match the Arduino core's reduced config, which does (this is why the
+    // "Connect to Wifi" scan works but the sniffer's default init did not).
+    cfg.static_tx_buf_num = 0;
+    cfg.dynamic_tx_buf_num = 32;
+    cfg.tx_buf_type = 1;
+    cfg.cache_tx_buf_num = 4; // can't be zero!
+    cfg.static_rx_buf_num = 4;
+    cfg.dynamic_rx_buf_num = 32;
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
-    wifi_config_t wifi_config;
-    strlcpy((char *)wifi_config.ap.ssid, "BruceSniffer", sizeof(wifi_config.ap.ssid));
-    strlcpy((char *)wifi_config.ap.password, "brucenet", sizeof(wifi_config.ap.password));
-    wifi_config.ap.ssid_len = strlen("BruceSniffer");
-    wifi_config.ap.channel = 1;                   // Channel
-    wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK; // auth mode
-    wifi_config.ap.ssid_hidden = 1;               // 1 to hidden SSID, 0 to visivle
-    wifi_config.ap.max_connection = 2;            // Max connections
-    wifi_config.ap.beacon_interval = 100;         // beacon interval in ms
-
-    // Configura o modo AP
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    // STA + promiscuous (same as the SDR feature) instead of AP mode: running an
+    // AP allocates the hostapd structures, which OOMs the PSRAM-less Cardputer
+    // (LoadProhibited inside ieee80211_hostap_attach). Capture doesn't need an AP.
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(sniffer);
