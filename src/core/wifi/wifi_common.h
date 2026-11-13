@@ -59,6 +59,10 @@ void wifiConnectTask(void *pvParameters);
  */
 void ensureWifiPlatform();
 
+// Sets the Wi-Fi country (channels 1-14). Needs an initialized driver: call it right after
+// esp_wifi_init() when bringing Wi-Fi up without the Arduino core (WiFi.mode() does it already).
+void applyWifiCountry();
+
 // private
 /**
  * @brief Connects to wifiNetwork

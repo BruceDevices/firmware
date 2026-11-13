@@ -284,24 +284,6 @@ void boot_screen() {
 }
 
 /*********************************************************************
- **  Function: applyWifiCountry
- **  Sets the Wi-Fi country (channels 1-14) once the driver is initialized
- *********************************************************************/
-static void applyWifiCountry(arduino_event_id_t, arduino_event_info_t) {
-    static const wifi_country_t country = {
-        .cc = "US",
-        .schan = 1,
-        .nchan = 14,
-#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
-        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
-#endif
-        .policy = WIFI_COUNTRY_POLICY_MANUAL
-    };
-    esp_err_t err = esp_wifi_set_country(&country);
-    if (err != ESP_OK) log_e("esp_wifi_set_country failed: %s", esp_err_to_name(err));
-}
-
-/*********************************************************************
  **  Function: boot_screen_anim
  **  Draw boot screen
  *********************************************************************/
@@ -527,10 +509,13 @@ void setup() {
 
     RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
-    // Wi-Fi is initialized on demand (WiFi.mode() all over the code), so at this point the driver
-    // doesn't exist yet and esp_wifi_set_country() would fail with ESP_ERR_WIFI_NOT_INIT.
-    // Apply the country every time the driver is (re)initialized instead.
-    WiFi.onEvent(applyWifiCountry, ARDUINO_EVENT_WIFI_READY);
+    // Wi-Fi is initialized on demand, so at this point the driver doesn't exist yet and
+    // esp_wifi_set_country() would fail with ESP_ERR_WIFI_NOT_INIT. Apply the country every time
+    // the Arduino core (re)initializes the driver; modules that call esp_wifi_init() directly
+    // call applyWifiCountry() themselves.
+    WiFi.onEvent(
+        [](arduino_event_id_t, arduino_event_info_t) { applyWifiCountry(); }, ARDUINO_EVENT_WIFI_READY
+    );
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
