@@ -851,8 +851,13 @@ uint32_t freeStorageCallback(cmd *c) {
     if (arg.getValue() == "sd") {
         if (setupSdCard()) {
             uint64_t totalBytes = SD.totalBytes();
+            if (totalBytes == 0) {
+                closeSdCard();
+                serialDevice->println("SD card read error");
+                return false;
+            }
             uint64_t usedBytes = SD.usedBytes();
-            uint64_t freeBytes = totalBytes - usedBytes;
+            uint64_t freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
 
             serialDevice->printf("SD Total space: %llu Bytes\n", totalBytes);
             serialDevice->printf("SD Used space: %llu Bytes\n", usedBytes);
