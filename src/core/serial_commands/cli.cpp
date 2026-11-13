@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "badusb_commands.h"
+#include "ble_commands.h"
 #include "core/sd_functions.h"
 #include "crypto_commands.h"
 #include "gpio_commands.h"
@@ -46,6 +47,7 @@ void SerialCli::setup() {
     createStorageCommands(&_cli);
     createUtilCommands(&_cli);
     createWifiCommands(&_cli);
+    createBleCommands(&_cli);
 
 #ifndef LITE_VERSION
     createWireCommands(&_cli);

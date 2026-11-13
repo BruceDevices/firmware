@@ -13,6 +13,7 @@
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #include "HFP_Exploit.h"
+#include "gatt_explorer.h"
 #include "ble_common.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -48,6 +49,48 @@ static bool g_bleScanActive = false;
 
 // Device selection cache
 static SelectedDevice g_selectedDevice;
+
+int g_lastBleError = 0;
+int g_lastBleDisconnectReason = 0;
+
+String getBleErrorDescription(int reason) {
+    if (reason == 0) return "OK";
+    const char *str = NimBLEUtils::returnCodeToString(reason);
+    if (str && strlen(str) > 0 && strcmp(str, "Unknown") != 0) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "0x%02X: %s", reason, str);
+        return String(buf);
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "0x%02X (%d)", reason, reason);
+    return String(buf);
+}
+
+class SuiteClientCallbacks : public NimBLEClientCallbacks {
+public:
+    void onConnect(NimBLEClient *pClient) override {
+        Serial.printf("[BLE Suite] >>> Connection ESTABLISHED: peer=%s, handle=%d, MTU=%d <<<\n",
+                      pClient->getPeerAddress().toString().c_str(),
+                      pClient->getConnHandle(),
+                      pClient->getMTU());
+    }
+
+    void onConnectFail(NimBLEClient *pClient, int reason) override {
+        g_lastBleError = reason;
+        String desc = getBleErrorDescription(reason);
+        Serial.printf("[BLE Suite] >>> Connection FAILED: 0x%02X (%d) -> %s, peer=%s <<<\n",
+                      reason, reason, desc.c_str(), pClient->getPeerAddress().toString().c_str());
+    }
+
+    void onDisconnect(NimBLEClient *pClient, int reason) override {
+        g_lastBleDisconnectReason = reason;
+        if (g_lastBleError == 0) g_lastBleError = reason;
+        String desc = getBleErrorDescription(reason);
+        Serial.printf("[BLE Suite] >>> Disconnected: 0x%02X (%d) -> %s, peer=%s <<<\n",
+                      reason, reason, desc.c_str(), pClient->getPeerAddress().toString().c_str());
+    }
+};
+static SuiteClientCallbacks g_suiteCallbacks;
 
 //=============================================================================
 // Cleanup Function - Only stops scan, doesn't clear data
@@ -108,7 +151,7 @@ ScannerData::~ScannerData() {
 }
 
 void ScannerData::addDevice(
-    const String &name, const String &address, int rssi, bool fastPair, bool hasHFP, uint8_t type
+    const String &name, const String &address, int rssi, bool fastPair, bool hasHFP, uint8_t type, uint8_t addrType
 ) {
     if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS)) {
         bool isDuplicate = false;
@@ -120,18 +163,48 @@ void ScannerData::addDevice(
             }
         }
         if (!isDuplicate) {
-            deviceNames.push_back(name);
-            deviceAddresses.push_back(address);
-            deviceRssi.push_back(rssi);
-            deviceFastPair.push_back(fastPair);
-            deviceHasHFP.push_back(hasHFP);
-            deviceTypes.push_back(type);
-            foundCount++;
-            dataVersion++;
+            static const size_t MAX_SCANNER_DEVICES = 50;
+            if (deviceAddresses.size() >= MAX_SCANNER_DEVICES) {
+                // Priority Queue (Max RSSI): Find device with lowest RSSI
+                size_t minIdx = 0;
+                int minRssi = deviceRssi[0];
+                for (size_t i = 1; i < deviceRssi.size(); i++) {
+                    if (deviceRssi[i] < minRssi) {
+                        minRssi = deviceRssi[i];
+                        minIdx = i;
+                    }
+                }
+                if (rssi > minRssi) {
+                    deviceNames[minIdx] = name;
+                    deviceAddresses[minIdx] = address;
+                    deviceAddressTypes[minIdx] = addrType;
+                    deviceRssi[minIdx] = rssi;
+                    deviceFastPair[minIdx] = fastPair;
+                    deviceHasHFP[minIdx] = hasHFP;
+                    deviceTypes[minIdx] = type;
+                    foundCount++;
+                    dataVersion++;
 
-            if (snapshotCache) {
-                delete snapshotCache;
-                snapshotCache = nullptr;
+                    if (snapshotCache) {
+                        delete snapshotCache;
+                        snapshotCache = nullptr;
+                    }
+                }
+            } else {
+                deviceNames.push_back(name);
+                deviceAddresses.push_back(address);
+                deviceAddressTypes.push_back(addrType);
+                deviceRssi.push_back(rssi);
+                deviceFastPair.push_back(fastPair);
+                deviceHasHFP.push_back(hasHFP);
+                deviceTypes.push_back(type);
+                foundCount++;
+                dataVersion++;
+
+                if (snapshotCache) {
+                    delete snapshotCache;
+                    snapshotCache = nullptr;
+                }
             }
         }
         xSemaphoreGive(mutex);
@@ -153,6 +226,7 @@ DeviceSnapshot *ScannerData::getSnapshot() {
         snapshotCache->timestamp = millis();
         snapshotCache->names = deviceNames;
         snapshotCache->addresses = deviceAddresses;
+        snapshotCache->addressTypes = deviceAddressTypes;
         snapshotCache->rssi = deviceRssi;
         snapshotCache->fastPair = deviceFastPair;
         snapshotCache->hfp = deviceHasHFP;
@@ -170,6 +244,7 @@ bool ScannerData::getDeviceInfo(int index, DeviceInfo &info) {
     if (xSemaphoreTake(mutex, 10 / portTICK_PERIOD_MS)) {
         if (index >= 0 && index < (int)deviceAddresses.size()) {
             info.address = deviceAddresses[index];
+            info.addressType = (index < (int)deviceAddressTypes.size()) ? deviceAddressTypes[index] : BLE_ADDR_PUBLIC;
             info.name = deviceNames[index];
             info.rssi = deviceRssi[index];
             info.hasFastPair = deviceFastPair[index];
@@ -186,6 +261,7 @@ void ScannerData::clear() {
     if (xSemaphoreTake(mutex, 50 / portTICK_PERIOD_MS)) {
         deviceNames.clear();
         deviceAddresses.clear();
+        deviceAddressTypes.clear();
         deviceRssi.clear();
         deviceFastPair.clear();
         deviceHasHFP.clear();
@@ -305,9 +381,18 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
         return false;
     }
 
+    if (bleInitialized) {
+        NimBLEDevice::setPower((esp_power_level_t)powerLevel);
+        NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
+        NimBLEDevice::setSecurityAuth(false, false, false);
+        return true;
+    }
+
     std::string nameStr = name.c_str();
     NimBLEDevice::init(nameStr);
     NimBLEDevice::setPower((esp_power_level_t)powerLevel);
+    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
+    NimBLEDevice::setSecurityAuth(false, false, false);
 
     currentDeviceName = name;
     bleInitialized = true;
@@ -317,6 +402,7 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
 void BLEStateManager::deinitBLE(bool immediate) {
     if (!bleInitialized) return;
     if (immediate) cleanupAllClients();
+    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
     NimBLEDevice::deinit(true);
     bleInitialized = false;
     currentDeviceName = "";
@@ -356,15 +442,16 @@ size_t BLEStateManager::getActiveClientCount() { return activeClients.size(); }
 // BLE Attack Manager
 //=============================================================================
 
-void BLEAttackManager::prepareForConnection() {
+void BLEAttackManager::prepareForConnection(bool enableAuth) {
     if (BLEStateManager::isBLEActive()) {
         BLEStateManager::deinitBLE();
         delay(300);
     }
 
     BLEStateManager::initBLE("Bruce-Attack", ESP_PWR_LVL_P9);
+    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
     NimBLEDevice::setMTU(250);
-    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityAuth(enableAuth, enableAuth, enableAuth);
     delay(300);
 }
 
@@ -374,26 +461,58 @@ void BLEAttackManager::cleanupAfterAttack() {
 }
 
 bool BLEAttackManager::connectToDevice(
-    NimBLEAddress target, NimBLEClient **outClient, bool useExploitHandshake
+    NimBLEAddress target, NimBLEClient **outClient, bool useExploitHandshake, int *outError
 ) {
-    NimBLEClient *pClient = NimBLEDevice::createClient();
-    if (!pClient) return false;
+    g_lastBleError = 0;
+    g_lastBleDisconnectReason = 0;
 
+    NimBLEClient *pClient = NimBLEDevice::createClient();
+    if (!pClient) {
+        if (outError) *outError = 0x107;
+        return false;
+    }
+
+#if CONFIG_BT_NIMBLE_EXT_ADV
+    pClient->setConnectPhy(BLE_GAP_LE_PHY_1M_MASK);
+#endif
+
+    NimBLEClient::Config cfg = pClient->getConfig();
+    cfg.exchangeMTU = 0; // Decouple immediate ATT MTU exchange
+    pClient->setConfig(cfg);
+
+    pClient->setClientCallbacks(&g_suiteCallbacks, false);
     BLEStateManager::registerClient(pClient);
 
     if (useExploitHandshake) {
-        pClient->setConnectTimeout(12);
+        pClient->setConnectTimeout(12 * 1000);
         pClient->setConnectionParams(6, 6, 0, 100);
     } else {
-        pClient->setConnectTimeout(8);
-        pClient->setConnectionParams(12, 12, 0, 400);
+        pClient->setConnectTimeout(8 * 1000);
     }
 
-    bool connected = pClient->connect(target, false);
+    Serial.printf("[BLE Suite] Connecting to target %s (%s)...\n",
+                  target.toString().c_str(),
+                  (target.getType() == BLE_ADDR_PUBLIC) ? "PUBLIC" : "RANDOM");
+
+    bool connected = pClient->connect(target, true, false, false);
+    if (!connected) {
+        // Fallback with flipped address type
+        uint8_t fallbackType = (target.getType() == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
+        ble_addr_t flipped = *target.getBase();
+        flipped.type = fallbackType;
+        NimBLEAddress fallbackTarget(flipped);
+        connected = pClient->connect(fallbackTarget, true, false, false);
+    }
+
     if (connected) {
         *outClient = pClient;
         return true;
     }
+
+    int err = pClient->getLastError();
+    if (err == 0 && g_lastBleDisconnectReason != 0) err = g_lastBleDisconnectReason;
+    if (err != 0) g_lastBleError = err;
+    if (outError) *outError = g_lastBleError;
 
     BLEStateManager::unregisterClient(pClient);
     NimBLEDevice::deleteClient(pClient);
@@ -405,15 +524,20 @@ DeviceProfile BLEAttackManager::profileDevice(NimBLEAddress target) {
     std::string addressStr = target.toString();
     profile.address = String(addressStr.c_str());
     profile.connected = false;
+    profile.errorCode = 0;
+    profile.errorReason = "";
     profile.hasFastPair = false;
     profile.hasAVRCP = false;
     profile.hasHID = false;
     profile.hasBattery = false;
     profile.hasDeviceInfo = false;
 
-    prepareForConnection();
+    prepareForConnection(false);
     NimBLEClient *pClient = nullptr;
-    if (!connectToDevice(target, &pClient, false)) {
+    int err = 0;
+    if (!connectToDevice(target, &pClient, false, &err)) {
+        profile.errorCode = err;
+        profile.errorReason = getBleErrorDescription(err);
         cleanupAfterAttack();
         return profile;
     }
@@ -443,6 +567,15 @@ DeviceProfile BLEAttackManager::profileDevice(NimBLEAddress target) {
                 profile.characteristics.push_back(charInfo);
             }
         }
+    } else {
+        int dErr = pClient->getLastError();
+        if (dErr != 0) {
+            profile.errorCode = dErr;
+            profile.errorReason = getBleErrorDescription(dErr);
+        } else if (g_lastBleDisconnectReason != 0) {
+            profile.errorCode = g_lastBleDisconnectReason;
+            profile.errorReason = getBleErrorDescription(g_lastBleDisconnectReason);
+        }
     }
 
     pClient->disconnect();
@@ -458,29 +591,37 @@ DeviceProfile BLEAttackManager::profileDevice(NimBLEAddress target) {
 
 NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &connectionMethod) {
     NimBLEClient *pClient = nullptr;
+    g_lastBleError = 0;
+    g_lastBleDisconnectReason = 0;
+
     showAttackProgress("Trying normal connection...", TFT_WHITE);
 
     BLEAttackManager bleManager;
-    bleManager.prepareForConnection();
-    if (bleManager.connectToDevice(target, &pClient, false)) {
+    bleManager.prepareForConnection(false);
+    int err = 0;
+    if (bleManager.connectToDevice(target, &pClient, false, &err)) {
         connectionMethod = "Normal connection";
         return pClient;
     }
+    if (err != 0) g_lastBleError = err;
     bleManager.cleanupAfterAttack();
 
     delay(500);
     showAttackProgress("Trying aggressive connection...", TFT_YELLOW);
-    bleManager.prepareForConnection();
+    bleManager.prepareForConnection(false);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     pClient = NimBLEDevice::createClient();
     if (pClient) {
+        pClient->setClientCallbacks(&g_suiteCallbacks, false);
         BLEStateManager::registerClient(pClient);
-        pClient->setConnectTimeout(12);
+        pClient->setConnectTimeout(12 * 1000);
         pClient->setConnectionParams(6, 6, 0, 100);
         if (pClient->connect(target, false)) {
             connectionMethod = "Aggressive connection";
             return pClient;
         }
+        int e = pClient->getLastError();
+        if (e != 0) g_lastBleError = e;
         BLEStateManager::unregisterClient(pClient);
         NimBLEDevice::deleteClient(pClient);
     }
@@ -498,14 +639,17 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
 
     pClient = NimBLEDevice::createClient();
     if (pClient) {
+        pClient->setClientCallbacks(&g_suiteCallbacks, false);
         BLEStateManager::registerClient(pClient);
-        pClient->setConnectTimeout(15);
+        pClient->setConnectTimeout(15 * 1000);
         pClient->setConnectionParams(12, 12, 0, 400);
         for (int attempt = 0; attempt < 3; attempt++) {
             if (pClient->connect(target, false)) {
                 connectionMethod = "Exploit-based connection";
                 return pClient;
             }
+            int e = pClient->getLastError();
+            if (e != 0) g_lastBleError = e;
             delay(300);
         }
         BLEStateManager::unregisterClient(pClient);
@@ -527,14 +671,17 @@ NimBLEClient *attemptConnectionWithStrategies(NimBLEAddress target, String &conn
         showAttackProgress("Trying HFP exploit connection...", TFT_CYAN);
         HFPExploitEngine hfp;
         if (hfp.establishHFPConnection(target)) {
-            NimBLEClient *pClient = NimBLEDevice::createClient();
+            pClient = NimBLEDevice::createClient();
             if (pClient) {
+                pClient->setClientCallbacks(&g_suiteCallbacks, false);
                 BLEStateManager::registerClient(pClient);
-                pClient->setConnectTimeout(8);
+                pClient->setConnectTimeout(8 * 1000);
                 if (pClient->connect(target, false)) {
                     connectionMethod = "HFP Exploit connection";
                     return pClient;
                 }
+                int e = pClient->getLastError();
+                if (e != 0) g_lastBleError = e;
                 BLEStateManager::unregisterClient(pClient);
                 NimBLEDevice::deleteClient(pClient);
             }
@@ -648,7 +795,7 @@ bool HIDExploitEngine::tryAppleMagicSpoof(NimBLEAddress target, HIDDeviceProfile
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(6);
+    pClient->setConnectTimeout(6 * 1000);
     pClient->setConnectionParams(12, 12, 0, 400);
     bool connected = pClient->connect(target, false);
 
@@ -682,7 +829,7 @@ bool HIDExploitEngine::tryWindowsHIDBypass(NimBLEAddress target, HIDDeviceProfil
         if (pClient) {
             BLEStateManager::registerClient(pClient);
 
-            pClient->setConnectTimeout(4);
+            pClient->setConnectTimeout(8 * 1000);
 
             if (attempt == 0) pClient->setConnectionParams(6, 6, 0, 100);
             else if (attempt == 1) pClient->setConnectionParams(200, 200, 0, 600);
@@ -722,7 +869,7 @@ bool HIDExploitEngine::tryAndroidJustWorks(NimBLEAddress target, HIDDeviceProfil
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(8);
+    pClient->setConnectTimeout(8 * 1000);
     pClient->setConnectionParams(12, 12, 0, 400);
     bool connected = pClient->connect(target, true);
 
@@ -755,7 +902,7 @@ bool HIDExploitEngine::tryBootProtocolInjection(NimBLEAddress target, HIDDeviceP
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(5);
+    pClient->setConnectTimeout(8 * 1000);
     pClient->setConnectionParams(6, 6, 0, 100);
     bool connected = pClient->connect(target, false);
 
@@ -801,7 +948,7 @@ bool HIDExploitEngine::tryRapidStateConfusion(NimBLEAddress target, HIDDevicePro
         if (pClient) {
             BLEStateManager::registerClient(pClient);
 
-            pClient->setConnectTimeout(1);
+            pClient->setConnectTimeout(4 * 1000);
             pClient->setConnectionParams(6, 6, 0, 100);
             bool connected = pClient->connect(target, false);
 
@@ -847,7 +994,7 @@ bool HIDExploitEngine::tryHIDReportPreconnection(NimBLEAddress target, HIDDevice
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(6);
+    pClient->setConnectTimeout(8 * 1000);
     bool connected = pClient->connect(target, false);
 
     if (connected) {
@@ -889,7 +1036,7 @@ bool HIDExploitEngine::tryConnectionParameterAttack(NimBLEAddress target, HIDDev
         if (pClient) {
             BLEStateManager::registerClient(pClient);
 
-            pClient->setConnectTimeout(4);
+            pClient->setConnectTimeout(8 * 1000);
             pClient->setConnectionParams(paramSets[i][0], paramSets[i][1], paramSets[i][2], paramSets[i][3]);
 
             bool connected = pClient->connect(target, false);
@@ -933,7 +1080,7 @@ bool HIDExploitEngine::trySecurityModeBypass(NimBLEAddress target, HIDDeviceProf
         NimBLEClient *pClient = NimBLEDevice::createClient();
         if (pClient) {
             BLEStateManager::registerClient(pClient);
-            pClient->setConnectTimeout(6);
+            pClient->setConnectTimeout(8 * 1000);
             bool connected = pClient->connect(target, true);
             if (connected) {
                 showAttackProgress("Security bypass successful!", TFT_GREEN);
@@ -967,7 +1114,7 @@ bool HIDExploitEngine::tryAddressSpoofingAttack(NimBLEAddress target, HIDDeviceP
         NimBLEClient *pClient = NimBLEDevice::createClient();
         if (pClient) {
             BLEStateManager::registerClient(pClient);
-            pClient->setConnectTimeout(5);
+            pClient->setConnectTimeout(8 * 1000);
             bool connected = pClient->connect(target, false);
             if (connected) {
                 showAttackProgress("Address spoofing worked!", TFT_GREEN);
@@ -999,7 +1146,7 @@ bool HIDExploitEngine::tryServiceDiscoveryHijack(NimBLEAddress target, HIDDevice
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(8);
+    pClient->setConnectTimeout(8 * 1000);
     bool connected = pClient->connect(target, false);
 
     if (connected) {
@@ -2265,7 +2412,7 @@ bool AuthBypassEngine::attemptSpoofConnection(NimBLEAddress target, const String
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(8);
+    pClient->setConnectTimeout(8 * 1000);
     pClient->setConnectionParams(12, 12, 0, 400);
     bool connected = pClient->connect(target, true);
 
@@ -2297,7 +2444,7 @@ bool AuthBypassEngine::forceRepairing(NimBLEAddress target) {
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(10);
+    pClient->setConnectTimeout(10 * 1000);
     bool connected = pClient->connect(target, false);
 
     if (connected) {
@@ -2329,7 +2476,7 @@ bool AuthBypassEngine::exploitAuthBypass(NimBLEAddress target) {
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(8);
+    pClient->setConnectTimeout(8 * 1000);
     bool connected = pClient->connect(target, true);
 
     if (connected) {
@@ -2354,7 +2501,7 @@ bool AuthBypassEngine::exploitAuthBypass(NimBLEAddress target) {
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(10);
+    pClient->setConnectTimeout(10 * 1000);
     connected = pClient->connect(target, true);
 
     if (connected) {
@@ -2389,7 +2536,7 @@ bool MultiConnectionAttack::connectionFloodSingle(NimBLEAddress target, int time
 
     BLEStateManager::registerClient(pClient);
 
-    pClient->setConnectTimeout(timeout);
+    pClient->setConnectTimeout(timeout * 1000);
     bool connected = pClient->connect(target, false);
 
     if (connected) {
@@ -2852,7 +2999,7 @@ bool PairingAttackServiceClass::bruteForcePIN(NimBLEAddress target) {
         NimBLEClient *pClient = NimBLEDevice::createClient();
         if (pClient) {
             BLEStateManager::registerClient(pClient);
-            pClient->setConnectTimeout(5);
+            pClient->setConnectTimeout(8 * 1000);
             if (pClient->connect(target, true)) {
                 showAttackProgress(String("Connected with PIN: " + String(commonPins[i])).c_str(), TFT_GREEN);
                 success = true;
@@ -2908,7 +3055,7 @@ bool DoSAttackServiceClass::connectionFlood(NimBLEAddress target) {
         NimBLEClient *pClient = NimBLEDevice::createClient();
         if (pClient) {
             BLEStateManager::registerClient(pClient);
-            pClient->setConnectTimeout(2);
+            pClient->setConnectTimeout(4 * 1000);
             bool connected = pClient->connect(target, false);
             if (connected) anySuccess = true;
             BLEStateManager::unregisterClient(pClient);
@@ -4161,15 +4308,15 @@ void BLE_Sniffer() {
 // Target Selection Functions
 //=============================================================================
 
-String selectTargetFromScan(const char *title) {
+bool performBleScan(const char *title) {
     // Simple memory check - if heap is low, warn but continue
     if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < 10000) {
         displayError("Low memory, scan may be unstable", true);
         // Don't return - let the user decide
     }
 
-    // DO NOT clear scannerData here - it persists between operations
     g_selectedDevice.address = "";
+    g_selectedDevice.addressType = BLE_ADDR_PUBLIC;
     g_selectedDevice.name = "";
 
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
@@ -4181,14 +4328,14 @@ String selectTargetFromScan(const char *title) {
     // FIX: Always call initBLE - it handles the case where stack was deinit'd
     if (!BLEStateManager::initBLE("Bruce-Scanner", ESP_PWR_LVL_P9)) {
         displayError("Failed to init BLE");
-        return "";
+        return false;
     }
 
     if (g_pBLEScan == nullptr) {
         g_pBLEScan = NimBLEDevice::getScan();
         if (!g_pBLEScan) {
             displayError("Failed to get scanner");
-            return "";
+            return false;
         }
         g_pBLEScan->setActiveScan(true);
         g_pBLEScan->setInterval(SCAN_INT);
@@ -4198,6 +4345,7 @@ String selectTargetFromScan(const char *title) {
 
     // Clear previous results before scanning
     g_pBLEScan->clearResults();
+    scannerData.clear();
 
     BleUiGeom sg = bleUiGeom();
     drawMainBorderWithTitle(title);
@@ -4225,6 +4373,7 @@ String selectTargetFromScan(const char *title) {
             if (!device) continue;
 
             String address = String(device->getAddress().toString().c_str());
+            uint8_t addressType = device->getAddress().getType();
             String name = String(device->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 // name = "Unknown";
@@ -4247,7 +4396,7 @@ String selectTargetFromScan(const char *title) {
                 if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
             }
 
-            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType, addressType);
         }
 
         // === PASSIVE SCAN ===
@@ -4264,6 +4413,7 @@ String selectTargetFromScan(const char *title) {
             if (!device) continue;
 
             String address = String(device->getAddress().toString().c_str());
+            uint8_t addressType = device->getAddress().getType();
             String name = String(device->getName().c_str());
             if (name.isEmpty() || name == "(null)" || name == "null" || name == "NULL") {
                 // name = "Unknown";
@@ -4286,12 +4436,12 @@ String selectTargetFromScan(const char *title) {
                 if (uuidStr.find("1812") != std::string::npos) deviceType |= 0x02;
             }
 
-            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType);
+            scannerData.addDevice(name, address, rssi, fastPair, hasHFP, deviceType, addressType);
         }
     } catch (...) {
         displayError("BLE scan error");
         if (g_pBLEScan) { g_pBLEScan->clearResults(); }
-        return "";
+        return false;
     }
 
     if (g_pBLEScan) {
@@ -4301,11 +4451,9 @@ String selectTargetFromScan(const char *title) {
 
     DeviceSnapshot *snapshot = scannerData.getSnapshot();
     if (!snapshot || snapshot->count == 0) {
-        displayWarning("No BLE devices in range", true);
-        return "";
+        return false;
     }
 
-    // size_t deviceCount = snapshot->count;
     size_t deviceCount = scannerData.deviceAddresses.size();
 
     for (size_t i = 0; i < deviceCount - 1; i++) {
@@ -4318,6 +4466,9 @@ String selectTargetFromScan(const char *title) {
             if (swapNeeded) {
                 std::swap(snapshot->names[i], snapshot->names[j]);
                 std::swap(snapshot->addresses[i], snapshot->addresses[j]);
+                if (i < snapshot->addressTypes.size() && j < snapshot->addressTypes.size()) {
+                    std::swap(snapshot->addressTypes[i], snapshot->addressTypes[j]);
+                }
                 std::swap(snapshot->rssi[i], snapshot->rssi[j]);
 
                 bool tempFast = snapshot->fastPair[i];
@@ -4333,82 +4484,118 @@ String selectTargetFromScan(const char *title) {
         }
     }
 
-    // One row per device: ordinal, name, MAC tail, capability tags and a signal
-    // meter. Tags reserve their width before the name is measured, so a long
-    // name can no longer push the vulnerability markers off screen.
-    BleRowDrawer deviceRow = [snapshot](int idx, int x, int y, int w, bool sel) {
-        uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
-        uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
-        uint16_t dim = sel ? bruceConfig.bgColor : bleDim();
-        const int cw = FP * LW;
-        tft.setTextSize(FP);
+    return (scannerData.size() > 0);
+}
 
-        // the ordinal is the ID the list never had
-        tft.setTextColor(fg, bg);
-        tft.drawString(String(idx + 1), x, y, 1);
-        int cur = x + 3 * cw;
-        int right = x + w;
-
-        bleDrawRssi(right - 11, y, snapshot->rssi[idx], fg);
-        right -= 15;
-
-        String tags;
-        if (snapshot->fastPair[idx]) tags += " FP";
-        if (snapshot->hfp[idx]) tags += " HFP";
-        if (snapshot->types[idx] & 0x01) tags += " AUD";
-        if (snapshot->types[idx] & 0x02) tags += " HID";
-        if (tags.length()) {
-            int tw = tft.textWidth(tags.c_str());
-            tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
-            tft.drawString(tags, right - tw, y, 1);
-            right -= tw + 2;
+String selectTargetFromScan(const char *title) {
+    if (scannerData.size() == 0) {
+        if (!performBleScan(title)) {
+            displayWarning("No BLE devices in range", true);
+            return "";
         }
+    }
 
-        // last two MAC octets tell apart devices advertising the same name
-        String mac = snapshot->addresses[idx];
-        String name = snapshot->names[idx];
-        String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
-        int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
-        if (right - cur < tailW + 8 * cw) tailW = 0; // too narrow, the name wins
-
-        tft.setTextColor(fg, bg);
-        tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
-        if (tailW) {
-            tft.setTextColor(dim, bg);
-            tft.drawRightString(tail, right, y, 1);
-        }
-    };
+    DeviceSnapshot *snapshot = scannerData.getSnapshot();
+    if (!snapshot || snapshot->count == 0) {
+        displayWarning("No BLE devices in range", true);
+        return "";
+    }
 
     int selectedIdx = 0;
-    bool exitLoop = false;
 
-    while (!exitLoop) {
+    while (true) {
+        size_t deviceCount = scannerData.deviceAddresses.size();
+        if (deviceCount == 0) return "";
+        int rowCount = (int)deviceCount + 1;
+
+        // One row per device: ordinal, name, MAC tail, capability tags and a signal
+        // meter. Tags reserve their width before the name is measured, so a long
+        // name can no longer push the vulnerability markers off screen.
+        BleRowDrawer deviceRow = [snapshot, deviceCount](int idx, int x, int y, int w, bool sel) {
+            uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
+            uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
+            uint16_t dim = sel ? bruceConfig.bgColor : bleDim();
+            const int cw = FP * LW;
+            tft.setTextSize(FP);
+
+            if (idx >= (int)deviceCount) {
+                tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
+                tft.drawString("> Rescan Devices", x, y, 1);
+                return;
+            }
+
+            // the ordinal is the ID the list never had
+            tft.setTextColor(fg, bg);
+            tft.drawString(String(idx + 1), x, y, 1);
+            int cur = x + 3 * cw;
+            int right = x + w;
+
+            bleDrawRssi(right - 11, y, snapshot->rssi[idx], fg);
+            right -= 15;
+
+            String tags;
+            if (snapshot->fastPair[idx]) tags += " FP";
+            if (snapshot->hfp[idx]) tags += " HFP";
+            if (snapshot->types[idx] & 0x01) tags += " AUD";
+            if (snapshot->types[idx] & 0x02) tags += " HID";
+            if (tags.length()) {
+                int tw = tft.textWidth(tags.c_str());
+                tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
+                tft.drawString(tags, right - tw, y, 1);
+                right -= tw + 2;
+            }
+
+            // last two MAC octets tell apart devices advertising the same name
+            String mac = snapshot->addresses[idx];
+            String name = snapshot->names[idx];
+            String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
+            int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
+            if (right - cur < tailW + 8 * cw) tailW = 0; // too narrow, the name wins
+
+            tft.setTextColor(fg, bg);
+            tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
+            if (tailW) {
+                tft.setTextColor(dim, bg);
+                tft.drawRightString(tail, right, y, 1);
+            }
+        };
+
         int chosen = bleListLoop(
-            "Select Device", (int)deviceCount, "SEL pick  ESC back", deviceRow, &selectedIdx
+            title, rowCount, "SEL pick  ESC back", deviceRow, &selectedIdx
         );
         if (chosen < 0) {
-            exitLoop = true;
-        } else {
-            selectedIdx = chosen;
-            String selectedMAC = snapshot->addresses[selectedIdx];
-            String selectedName = snapshot->names[selectedIdx];
-
-            selectedMAC.trim();
-            selectedMAC.toUpperCase();
-
-            g_selectedDevice.address = selectedMAC;
-            g_selectedDevice.name = selectedName;
-            g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
-            g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
-            g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
-            g_selectedDevice.deviceType = snapshot->types[selectedIdx];
-
-            String returnMac = selectedMAC;
-            returnMac.trim();
-
-            return returnMac;
+            return "";
         }
-        delay(50);
+        if (chosen >= (int)deviceCount) {
+            if (!performBleScan(title)) {
+                displayWarning("No BLE devices in range", true);
+                return "";
+            }
+            snapshot = scannerData.getSnapshot();
+            selectedIdx = 0;
+            continue;
+        }
+
+        selectedIdx = chosen;
+        String selectedMAC = snapshot->addresses[selectedIdx];
+        uint8_t selectedAddrType = (selectedIdx < (int)snapshot->addressTypes.size()) ? snapshot->addressTypes[selectedIdx] : BLE_ADDR_PUBLIC;
+        String selectedName = snapshot->names[selectedIdx];
+
+        selectedMAC.trim();
+        selectedMAC.toUpperCase();
+
+        g_selectedDevice.address = selectedMAC;
+        g_selectedDevice.addressType = selectedAddrType;
+        g_selectedDevice.name = selectedName;
+        g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
+        g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
+        g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
+        g_selectedDevice.deviceType = snapshot->types[selectedIdx];
+
+        String returnMac = selectedMAC;
+        returnMac.trim();
+
+        return returnMac;
     }
 
     return "";
@@ -4476,8 +4663,9 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
 
         picked[chosen] = !picked[chosen];
         if (picked[chosen]) {
+            uint8_t addrType = (chosen < (int)snapshot->addressTypes.size()) ? snapshot->addressTypes[chosen] : BLE_ADDR_PUBLIC;
             targets.push_back(
-                NimBLEAddress(std::string(snapshot->addresses[chosen].c_str()), BLE_ADDR_PUBLIC)
+                NimBLEAddress(std::string(snapshot->addresses[chosen].c_str()), addrType)
             );
         } else {
             for (auto it = targets.begin(); it != targets.end(); ++it) {
@@ -4497,10 +4685,27 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
 // parseAddress - Fixed MAC extraction
 //=============================================================================
 
-NimBLEAddress parseAddress(const String &addressInfo) {
+NimBLEAddress parseAddress(const String &addressInfo, uint8_t defaultType) {
     String cleanAddr = addressInfo;
     cleanAddr.trim();
     cleanAddr.toUpperCase();
+
+    uint8_t resolvedType = BLE_ADDR_PUBLIC;
+    if (defaultType != 0xFF) {
+        resolvedType = defaultType;
+    } else if (g_selectedDevice.address.length() > 0 && cleanAddr.indexOf(g_selectedDevice.address) != -1) {
+        resolvedType = g_selectedDevice.addressType;
+    } else {
+        DeviceInfo info;
+        for (size_t i = 0; i < scannerData.size(); i++) {
+            if (scannerData.getDeviceInfo(i, info)) {
+                if (cleanAddr.indexOf(info.address) != -1) {
+                    resolvedType = info.addressType;
+                    break;
+                }
+            }
+        }
+    }
 
     if (cleanAddr.endsWith(":0")) { cleanAddr = cleanAddr.substring(0, cleanAddr.length() - 2); }
 
@@ -4527,7 +4732,7 @@ NimBLEAddress parseAddress(const String &addressInfo) {
                         }
                     }
                 }
-                if (valid) { return NimBLEAddress(std::string(possibleMac.c_str()), BLE_ADDR_PUBLIC); }
+                if (valid) { return NimBLEAddress(std::string(possibleMac.c_str()), resolvedType); }
             }
         } else if (c == ':') {
             colonCount++;
@@ -4558,12 +4763,12 @@ NimBLEAddress parseAddress(const String &addressInfo) {
         }
         if (valid) {
             substr.toUpperCase();
-            return NimBLEAddress(std::string(substr.c_str()), BLE_ADDR_PUBLIC);
+            return NimBLEAddress(std::string(substr.c_str()), resolvedType);
         }
     }
 
     Serial.println("[WARN] Invalid MAC address format: " + addressInfo);
-    return NimBLEAddress(std::string(""), BLE_ADDR_PUBLIC);
+    return NimBLEAddress(std::string(""), resolvedType);
 }
 
 //=============================================================================
@@ -4822,7 +5027,7 @@ void BleSuiteMenu() {
 
     showWelcomeScreen();
 
-    const int MENU_ITEMS = 12;
+    const int MENU_ITEMS = 13;
     const char *menuItems[] = {
         "Quick Vulnerability Scan",
         "Deep Device Profiling",
@@ -4835,6 +5040,7 @@ void BleSuiteMenu() {
         "Payload Delivery",
         "Testing Tools",
         "Universal Attack Chain",
+        "GATT Explorer",
         "BLE Sniffer"
     };
 
@@ -4861,6 +5067,7 @@ void BleSuiteMenu() {
         }
 
         if (choice == MENU_ITEMS - 1) BLE_Sniffer();
+        else if (choice == MENU_ITEMS - 2) gattExplorerMenu();
         else executeAttackWithTargetScan(choice);
     }
 }
@@ -4887,40 +5094,135 @@ const char *getScanTitle(int attackIndex) {
 }
 
 void executeAttackWithTargetScan(int attackIndex) {
-    // FIX: Ensure BLE is initialized for the attack
-    BLEStateManager::initBLE("Bruce-Attack", ESP_PWR_LVL_P9);
+    const char *title = getScanTitle(attackIndex);
 
-    String targetInfo = selectTargetFromScan(getScanTitle(attackIndex));
-    if (targetInfo.isEmpty()) return;
-
-    NimBLEAddress target = parseAddress(targetInfo);
-    if (!confirmAttack(target.toString().c_str())) return;
-
-    SelectedDevice deviceInfo = g_selectedDevice;
-
-    switch (attackIndex) {
-        case 0: runQuickTest(target, deviceInfo); break;
-        case 1: runDeviceProfiling(target, deviceInfo); break;
-        case 2: showFastPairSubMenu(target, deviceInfo); break;
-        case 3: showHFPSubMenu(target, deviceInfo); break;
-        case 4: showAudioSubMenu(target, deviceInfo); break;
-        case 5: showHIDSubMenu(target, deviceInfo); break;
-        case 6: showMemorySubMenu(target, deviceInfo); break;
-        case 7: showDoSSubMenu(target, deviceInfo); break;
-        case 8: showPayloadSubMenu(target, deviceInfo); break;
-        case 9: showTestingSubMenu(target, deviceInfo); break;
-        case 10: runUniversalAttack(target, deviceInfo); break;
+    // Initial scan if we don't have devices yet
+    if (scannerData.size() == 0) {
+        if (!performBleScan(title)) {
+            displayWarning("No BLE devices in range", true);
+            return;
+        }
     }
 
-    showAttackProgress("Attack complete. Press any key to continue...", TFT_GREEN);
-    while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) delay(50);
+    DeviceSnapshot *snapshot = scannerData.getSnapshot();
+    if (!snapshot || snapshot->count == 0) {
+        displayWarning("No BLE devices in range", true);
+        return;
+    }
+
+    int selectedIdx = 0;
+
+    while (true) {
+        size_t deviceCount = scannerData.deviceAddresses.size();
+        if (deviceCount == 0) break;
+        int rowCount = (int)deviceCount + 1;
+
+        BleRowDrawer deviceRow = [snapshot, deviceCount](int idx, int x, int y, int w, bool sel) {
+            uint16_t fg = sel ? bruceConfig.bgColor : bruceConfig.priColor;
+            uint16_t bg = sel ? bruceConfig.priColor : bruceConfig.bgColor;
+            uint16_t dim = sel ? bruceConfig.bgColor : bleDim();
+            const int cw = FP * LW;
+            tft.setTextSize(FP);
+
+            if (idx >= (int)deviceCount) {
+                tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
+                tft.drawString("> Rescan Devices", x, y, 1);
+                return;
+            }
+
+            // the ordinal is the ID the list never had
+            tft.setTextColor(fg, bg);
+            tft.drawString(String(idx + 1), x, y, 1);
+            int cur = x + 3 * cw;
+            int right = x + w;
+
+            bleDrawRssi(right - 11, y, snapshot->rssi[idx], fg);
+            right -= 15;
+
+            String tags;
+            if (snapshot->fastPair[idx]) tags += " FP";
+            if (snapshot->hfp[idx]) tags += " HFP";
+            if (snapshot->types[idx] & 0x01) tags += " AUD";
+            if (snapshot->types[idx] & 0x02) tags += " HID";
+            if (tags.length()) {
+                int tw = tft.textWidth(tags.c_str());
+                tft.setTextColor(sel ? bruceConfig.bgColor : bleAccent(), bg);
+                tft.drawString(tags, right - tw, y, 1);
+                right -= tw + 2;
+            }
+
+            // last two MAC octets tell apart devices advertising the same name
+            String mac = snapshot->addresses[idx];
+            String name = snapshot->names[idx];
+            String tail = (mac.length() >= 5) ? mac.substring(mac.length() - 5) : mac;
+            int tailW = name.equalsIgnoreCase(mac) ? 0 : tft.textWidth(tail.c_str()) + 4;
+            if (right - cur < tailW + 8 * cw) tailW = 0; // too narrow, the name wins
+
+            tft.setTextColor(fg, bg);
+            tft.drawString(bleFit(name, right - cur - tailW), cur, y, 1);
+            if (tailW) {
+                tft.setTextColor(dim, bg);
+                tft.drawRightString(tail, right, y, 1);
+            }
+        };
+
+        int chosen = bleListLoop(title, rowCount, "SEL select  ESC back", deviceRow, &selectedIdx);
+        if (chosen < 0) {
+            break;
+        }
+
+        if (chosen >= (int)deviceCount) {
+            if (!performBleScan(title)) {
+                displayWarning("No BLE devices in range", true);
+                break;
+            }
+            snapshot = scannerData.getSnapshot();
+            selectedIdx = 0;
+            continue;
+        }
+
+        selectedIdx = chosen;
+        String selectedMAC = snapshot->addresses[selectedIdx];
+        uint8_t selectedAddrType = (selectedIdx < (int)snapshot->addressTypes.size()) ? snapshot->addressTypes[selectedIdx] : BLE_ADDR_PUBLIC;
+        String selectedName = snapshot->names[selectedIdx];
+
+        selectedMAC.trim();
+        selectedMAC.toUpperCase();
+
+        g_selectedDevice.address = selectedMAC;
+        g_selectedDevice.addressType = selectedAddrType;
+        g_selectedDevice.name = selectedName;
+        g_selectedDevice.rssi = snapshot->rssi[selectedIdx];
+        g_selectedDevice.hasFastPair = snapshot->fastPair[selectedIdx];
+        g_selectedDevice.hasHFP = snapshot->hfp[selectedIdx];
+        g_selectedDevice.deviceType = snapshot->types[selectedIdx];
+
+        NimBLEAddress target(selectedMAC.c_str(), selectedAddrType);
+        SelectedDevice deviceInfo = g_selectedDevice;
+
+        BLEStateManager::initBLE("Bruce-Attack", ESP_PWR_LVL_P9);
+
+        switch (attackIndex) {
+            case 0: runQuickTest(target, deviceInfo); break;
+            case 1: runDeviceProfiling(target, deviceInfo); break;
+            case 2: showFastPairSubMenu(target, deviceInfo); break;
+            case 3: showHFPSubMenu(target, deviceInfo); break;
+            case 4: showAudioSubMenu(target, deviceInfo); break;
+            case 5: showHIDSubMenu(target, deviceInfo); break;
+            case 6: showMemorySubMenu(target, deviceInfo); break;
+            case 7: showDoSSubMenu(target, deviceInfo); break;
+            case 8: showPayloadSubMenu(target, deviceInfo); break;
+            case 9: showTestingSubMenu(target, deviceInfo); break;
+            case 10: runUniversalAttack(target, deviceInfo); break;
+        }
+    }
 
     if (g_pBLEScan) {
         g_pBLEScan->stop();
         g_pBLEScan->clearResults();
         g_bleScanActive = false;
     }
-    delay(100);
+    delay(50);
 }
 
 //=============================================================================
@@ -5352,11 +5654,16 @@ void runDeviceProfiling(NimBLEAddress target, SelectedDevice deviceInfo) {
             if (ch.canWrite) writableCount++;
         lines.push_back("Writable chars: " + String(writableCount));
     } else {
-        lines.push_back("Failed to connect for profiling");
+        lines.push_back("Connect failed!");
+        if (profile.errorReason.length() > 0) {
+            lines.push_back("Reason: " + profile.errorReason);
+        } else if (profile.errorCode != 0) {
+            lines.push_back("Err Code: 0x" + String(profile.errorCode, HEX));
+        }
     }
 
     cleanup.disable();
-    showDeviceInfoScreen("DEVICE PROFILE", lines, TFT_BLUE, TFT_WHITE);
+    showDeviceInfoScreen("DEVICE PROFILE", lines, profile.connected ? TFT_BLUE : TFT_RED, TFT_WHITE);
 }
 
 void runWriteAccessTest(NimBLEAddress target) {
@@ -5758,7 +6065,15 @@ void showAttackProgress(const char *message, uint16_t color) {
 }
 
 void showAttackResult(bool success, const char *message) {
-    String msg = message ? String(message) : String(success ? "Attack successful" : "Attack failed");
+    String msg;
+    if (message) {
+        msg = String(message);
+        if (!success && msg.startsWith("Failed to connect") && g_lastBleError != 0) {
+            msg += ": " + getBleErrorDescription(g_lastBleError);
+        }
+    } else {
+        msg = success ? "Attack successful" : "Attack failed";
+    }
     if (success) displaySuccess(msg, true);
     else displayError(msg, true);
 }
