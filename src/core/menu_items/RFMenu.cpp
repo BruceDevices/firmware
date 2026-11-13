@@ -2,6 +2,7 @@
 #include "core/display.h"
 #include "core/settings.h"
 #include "core/utils.h"
+#include "modules/rf/hc11_modem/hc11_modem.h"
 #include "modules/rf/record.h"
 #include "modules/rf/rf_bruteforce.h"
 #include "modules/rf/rf_jammer.h"
@@ -31,6 +32,7 @@ void RFMenu::optionsMenu() {
 #endif
         {"Bruteforce",      rf_bruteforce             }, // dev_eclipse
         {"Jammer",          [=]() { RFJammer(true); } },
+        {"HC-11 Modem",     hc11_modem_setup          },
 #endif
         {"Config",          [this]() { configMenu(); }},
     };
