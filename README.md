@@ -130,7 +130,8 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   - [x] [RFID Module](https://wiki.bruce.computer/features/rfid/#supported-modules)
     - [x] PN532
     - [x] PN532Killer
-- [ ] Emulate tag
+    - [x] ST25R3916
+- [x] Emulate tag
 </details>
 
 <details>
@@ -158,7 +159,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 
 - [x] [NRF24 Jammer](https://wiki.bruce.computer/features/nrf24/)
 - [x] 2.4G Spectrum
-- [ ] Mousejack
+- [x] Mousejack
 </details>
 
 <details>
@@ -174,7 +175,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 - [x] [QRCodes](https://wiki.bruce.computer/features/others/#qrcodes)
   - [x] Custom
   - [x] PIX (Brazil bank transfer system)
-- [x] [SD Card Mngr](https://github.com/pr3y/Bruce/wiki/Others#sd-card-mngr)
+- [x] [SD Card Mngr](https://wiki.bruce.computer/)
   - [x] View image (jpg)
   - [x] File Info
   - [x] [Wigle Upload](https://wiki.bruce.computer/features/gps/#how-to-use-wigle)
