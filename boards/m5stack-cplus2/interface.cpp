@@ -113,6 +113,9 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
 void _post_setup_gpio() {
+    // Release the backlight pad in case we are waking up from powerOff()'s deep sleep
+    gpio_hold_dis((gpio_num_t)TFT_BL);
+    gpio_deep_sleep_hold_dis();
     // Backlight control via PWM (must be after TFT init)
     hal_bright_attach(TFT_BL);
     hal_bright_set(TFT_BL, 100); // Full brightness initially
@@ -136,7 +139,25 @@ void InputHandler(void) { hal_buttons_poll_3(buttonsCfg()); }
 ** Turns off the device (or try to)
 **********************************************************************/
 void powerOff() {
+    // ext0 wakes on LOW: entering deep sleep while the power button is still held
+    // would wake the device right away, so wait for it to be released first.
+    while (digitalRead(UP_BTN) == LOW) delay(10);
+    delay(100);
+
+    tft.fillScreen(TFT_BLACK);
+    panelSleep(true);
+    hal_bright_set(TFT_BL, 0);
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, LOW);
+
+    // Releasing HOLD (G4) cuts the power when running on battery.
     digitalWrite(4, LOW);
+    delay(200);
+
+    // Still running: USB is powering the board and HOLD can't cut it (hardware limitation).
+    // Fall back to deep sleep with the backlight held off; the power button wakes it up.
+    gpio_hold_en((gpio_num_t)TFT_BL);
+    gpio_deep_sleep_hold_en();
     esp_sleep_enable_ext0_wakeup((gpio_num_t)UP_BTN, LOW);
     esp_deep_sleep_start();
 }
@@ -162,6 +183,10 @@ void checkReboot() {
                 tft.setTextSize(1);
                 tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
                 countDown = (millis() - time_count) / 1000 + 1;
+                if (countDown > 3) {
+                    tft.printf(" POWERING OFF...\n");
+                    powerOff(); // does not return
+                }
                 tft.printf(" PWR OFF IN %d/3\n", countDown);
                 vTaskDelay(10 / portTICK_RATE_MS);
             }
