@@ -42,6 +42,7 @@ static void ca_start_wifi() {
     esp_err_t e = esp_wifi_init(&cfg);
     if (e != ESP_OK && e != ESP_ERR_WIFI_INIT_STATE)
         Serial.printf("[ChAnalyzer] wifi_init: %s\n", esp_err_to_name(e));
+    applyWifiCountry();
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_STA);
     e = esp_wifi_start();

@@ -509,19 +509,13 @@ void setup() {
 
     RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
-    // Set WiFi country to avoid warnings and ensure max power
-    const wifi_country_t country = {
-        .cc = "US",
-        .schan = 1,
-        .nchan = 14,
-#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
-        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
-#endif
-        .policy = WIFI_COUNTRY_POLICY_MANUAL
-    };
-
-    esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
-    esp_wifi_set_country(&country);
+    // Wi-Fi is initialized on demand, so at this point the driver doesn't exist yet and
+    // esp_wifi_set_country() would fail with ESP_ERR_WIFI_NOT_INIT. Apply the country every time
+    // the Arduino core (re)initializes the driver; modules that call esp_wifi_init() directly
+    // call applyWifiCountry() themselves.
+    WiFi.onEvent(
+        [](arduino_event_id_t, arduino_event_info_t) { applyWifiCountry(); }, ARDUINO_EVENT_WIFI_READY
+    );
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
