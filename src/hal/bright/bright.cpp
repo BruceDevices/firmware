@@ -3,6 +3,7 @@
 #include <math.h>
 
 uint16_t hal_bright_curve(uint8_t percent, const HalBrightCurve &curve) {
+    if (percent == 0) return curve.invert ? ((1 << HAL_BRIGHT_PWM_RES_BITS) - 1) : 0;
     if (percent > 100) percent = 100;
     float linear = percent / 100.0f;
     float scaled = curve.gamma == 1.0f ? linear : powf(linear, curve.gamma);
