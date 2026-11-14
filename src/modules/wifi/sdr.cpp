@@ -1,10 +1,9 @@
 /*
- * SDR — raw I/Q takeover of the ESP32-S3 WiFi radio, in the spirit of
+ * IQ Record — raw I/Q capture from the ESP32-S3 WiFi radio to the SD card
+ * (CS16 files), the receive-only half of the esp_sdr port, in the spirit of
  * PBJ3000-ESP32-Jammer (https://github.com/pinchepasta/PBJ3000-ESP32-Jammer,
- * GPL-3.0-or-later), which is based on ESPARGOS/esp-sdr. This file is a port of
- * the esp_sdr core (radio bring-up, LO tuning, front-end switching, the
- * undocumented MAC dump engine used as ADC and DAC) to Bruce's Arduino/IDF5
- * environment, plus a Bruce-style menu on top.
+ * GPL-3.0-or-later), which is based on ESPARGOS/esp-sdr. The TX/jammer half of
+ * the port (the DAC side) was removed.
  *
  * How it works, briefly:
  *  - esp_wifi is brought up normally and parked in promiscuous mode on a
@@ -12,39 +11,31 @@
  *  - A 64 KiB SRAM "dump bank" is taken away from the heap at boot
  *    (SOC_RESERVE_MEMORY_REGION) and handed to the undocumented MAC dump
  *    engine (SENSITIVE_INTERNAL_SRAM_USAGE_3_REG one-hot). The engine streams
- *    the bank through the radio: as ADC (raw I/Q capture) or DAC (raw I/Q
- *    playback = RF transmission) at 16/40/80 MS/s.
+ *    the bank through the radio as ADC (raw I/Q capture) at 16/40/80 MS/s.
  *  - Tuning uses libphy's set_chanfreq() for Wi-Fi channels and
  *    set_rf_freq_offset() for off-grid requests (2210-2650 MHz direct PLL,
  *    ~1817-2209 MHz through the 6/5-divided LO); the analog front end is
- *    switched with ROM pbus functions and the force-TX bit documented in
- *    PBJ3000's doc/undocumented-registers-esp32s3.md. Off-grid requests the
- *    VCO cannot lock are rejected via the RFPLL window flag (their -ERANGE).
+ *    switched with ROM pbus functions. Off-grid requests the VCO cannot lock
+ *    are rejected via the RFPLL window flag (PBJ3000's -ERANGE).
  *
- * ESP32-C5: not supported here, on two counts. (1) The C5/C6 dump engine has
- * no known DAC trigger, so raw I/Q TX is impossible — PBJ3000 ships the C5
- * receive-only. (2) Even the receive path needs a full 128 KiB HP SRAM block
- * (block 1, 0x40820000, the only one that serves), and the Arduino/IDF C5
- * layout puts .noinit/.bss inside it (measured: 0x408246e9-0x40836B60), so
- * donating the block would corrupt static data. PBJ3000 avoids this with a
- * Zephyr linker snippet that moves the statics; Bruce's C5 linker scripts
- * would have to be forked the same way before a C5 port is possible.
+ * ESP32-C5: not supported here — even the receive path needs a full 128 KiB HP
+ * SRAM block (block 1, 0x40820000, the only one that serves), and the
+ * Arduino/IDF C5 layout puts .noinit/.bss inside it (measured:
+ * 0x408246e9-0x40836B60), so donating the block would corrupt static data.
+ * PBJ3000 avoids this with a Zephyr linker snippet that moves the statics;
+ * Bruce's C5 linker scripts would have to be forked the same way before a C5
+ * port is possible.
  *
  * Unlike PBJ3000 we do not ship the vendor librftest.a blob, so there are no
- * forced RX/TX gain ladders: the radio runs on the gain tables the PHY
- * calibrated for the channel; TX power is set with esp_wifi_set_max_tx_power()
- * before the takeover.
- *
- * WARNING: this makes the device emit real RF power. Jamming radio frequencies
- * is illegal in most jurisdictions — use only against your own equipment in a
- * shielded environment.
+ * forced RX gain ladders: the radio runs on the gain tables the PHY calibrated
+ * for the channel; the only manual knob is the documented AGC force register.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_SDR_JAMMER)
-// Everything below needs the ESP32-S3: the undocumented MAC dump engine with
-// its DAC side only exists there. CONFIG_IDF_TARGET_ESP32S3 comes from
+#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
+// Everything below needs the ESP32-S3: the undocumented MAC dump engine only
+// exists there. CONFIG_IDF_TARGET_ESP32S3 comes from
 // sdkconfig.h, pulled in by the Arduino headers above — it is not visible to a
 // bare file-top guard, so the target check happens right after the includes.
 
@@ -57,7 +48,6 @@
 #include <esp_private/regi2c_ctrl.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
-#include <fft.h>
 #include <globals.h>
 #include <heap_memory_layout.h>
 #include <nvs_flash.h>
@@ -84,7 +74,6 @@ void rom_chip_i2c_writeReg(int block, int host, int reg_add, int data);
 void rom_pbus_workmode(void);
 void rom_pbus_xpd_rx_on(unsigned int en);
 void rom_pbus_xpd_tx_off(void);
-void rom_pbus_xpd_tx_on(unsigned int en);
 void rom_set_rxclk_en(unsigned int en);
 // libphy.a
 void set_chanfreq(unsigned int mhz, unsigned int cbw);
@@ -104,8 +93,6 @@ void stop_tx_tone(unsigned int en);
 #define J_DUMP_CTRL_COUNT 0x3fffU // 13:0
 #define J_DUMP_CFG_REG 0x60033d90U
 #define J_DUMP_CFG_IQ 0x000c2040U  // four 6-bit lane selectors: receive I/Q
-#define J_DAC_TRIG_REG 0x60033d64U // DAC-side mirror, 8 bytes above the ADC control
-#define J_DAC_CTRL_80M BIT(15)
 #define J_DUMP_TIMEOUT_US 20000U
 
 #define J_FE_TX_CTRL_REG 0x60006000U // front end: bit 1 = force TX on, 17:10 TX gain index, 25:18 base index
@@ -166,9 +153,9 @@ void stop_tx_tone(unsigned int en);
 // from the DRAM heap regions. Cost: exactly 64 KiB less internal RAM on every
 // S3 build, PSRAM or not (the dump engine only reaches internal SRAM).
 // Measured on Cardputer: ~90 kB free heap at the main menu without, ~24 kB with.
-// Boards that cannot spare it set -DBRUCE_NO_SDR_JAMMER in their env
+// Boards that cannot spare it set -DBRUCE_NO_IQ_RECORD in their env
 // build_flags, which also removes the menu entry.
-#if !defined(BRUCE_NO_SDR_JAMMER)
+#if !defined(BRUCE_NO_IQ_RECORD)
 #define J_RESERVE_BANK 1
 #else
 #define J_RESERVE_BANK 0
@@ -225,9 +212,8 @@ static uint32_t s_usage_bank = 0;           // one-hot bit handing the bank to t
 static bool s_ready = false;
 static uint32_t s_freq_mhz = J_CAL_CHANNEL_MHZ;
 
-enum JamRate : uint8_t { RATE_16M = 0, RATE_40M = 1, RATE_80M = 2 };
-static enum JamRate s_rate = RATE_40M;
-static int s_tx_power_qdbm = 78;   // 0.25 dBm units, applied before each takeover
+enum CaptureRate : uint8_t { RATE_16M = 0, RATE_40M = 1, RATE_80M = 2 };
+static enum CaptureRate s_rate = RATE_40M;
 static uint8_t s_ch = 1;           // Wi-Fi channel when !s_custom
 static bool s_custom = false;      // off-grid frequency instead of a Wi-Fi channel
 static uint32_t s_pending_mhz = 0; // custom frequency chosen in the menu, applied at takeover
@@ -236,7 +222,7 @@ static const uint32_t J_CH_FREQ[14] = {
     2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472, 2484
 };
 
-static uint32_t rate_hz(enum JamRate r) {
+static uint32_t rate_hz(enum CaptureRate r) {
     switch (r) {
         case RATE_16M: return 16000000U;
         case RATE_40M: return 40000000U;
@@ -245,7 +231,7 @@ static uint32_t rate_hz(enum JamRate r) {
     return 0;
 }
 
-static const char *rate_name(enum JamRate r) {
+static const char *rate_name(enum CaptureRate r) {
     switch (r) {
         case RATE_16M: return "16 MS/s";
         case RATE_40M: return "40 MS/s";
@@ -254,7 +240,7 @@ static const char *rate_name(enum JamRate r) {
     return "?";
 }
 
-static uint32_t rate_ctrl_bits(enum JamRate r) {
+static uint32_t rate_ctrl_bits(enum CaptureRate r) {
     switch (r) {
         case RATE_16M: return J_DUMP_CTRL_16M;
         case RATE_40M: return J_DUMP_CTRL_40M;
@@ -340,15 +326,14 @@ static bool pll_in_window(void) {
 // tables and the AGC stays free-running)
 // ---------------------------------------------------------------------------
 
-// force_txon_mode(en, 0, 0): bit 1 forces the front end to stay in TX mode —
-// without it the MAC never enables the transmitter outside a real frame.
-static void fe_force_txon(bool en) {
+// force_txon_mode(false, 0, 0): bit 1 forces the front end to stay in TX mode;
+// the RX path clears it so the front end can receive outside a real frame.
+static void fe_force_txoff(void) {
     uint32_t v = REG_READ(J_FE_TX_CTRL_REG);
     uint32_t base = (v >> 18) & 0xffU; // keep the front end on its current base gain index
     v &= ~J_FE_GAIN_IDX_MSK;
     v |= base << 10;
-    if (en) v |= J_FE_FORCE_TXON;
-    else v &= ~J_FE_FORCE_TXON;
+    v &= ~J_FE_FORCE_TXON;
     REG_WRITE(J_FE_TX_CTRL_REG, v);
 }
 
@@ -375,7 +360,7 @@ static void sdr_tune(void) {
 static void rx_front_end(bool retune, uint32_t settle_us) {
     if (retune) sdr_tune();
     stop_tx_tone(1);
-    fe_force_txon(false);
+    fe_force_txoff();
     rom_pbus_workmode();
     rom_pbus_xpd_tx_off();
     rom_pbus_xpd_rx_on(1);
@@ -387,28 +372,11 @@ static void rx_front_end(bool retune, uint32_t settle_us) {
     delayMicroseconds(settle_us);
 }
 
-// Front end to TX; caller supplies the settle delay (PLL/front-end turnaround).
-static void tx_front_end(void) {
-    sdr_tune();
-    rom_pbus_workmode();
-    rom_pbus_xpd_rx_on(0);
-    rom_pbus_xpd_tx_on(1);
-    regi2c_enter_critical();
-    rx_lo_select(lo_divided());
-    regi2c_exit_critical();
-    fe_force_txon(true); // must come last: without it the DAC burst stays silent
-}
-
-static void tx_prepare(void) {
-    tx_front_end();
-    delayMicroseconds(J_RETUNE_SETTLE_US);
-}
-
 static bool sdr_init_radio(void) {
     // If a radio session released the bank fence, heap allocations may live in
     // the bank now; capturing would corrupt the heap. Refuse cleanly instead.
     if (s_region_in_heap && s_fence == nullptr) {
-        displayError("SDR needs reboot (bank busy)", true);
+        displayError("IQ Record needs reboot", true);
         return false;
     }
     // esp_wifi must be running: the PHY brings the radio up and calibrates it.
@@ -429,10 +397,9 @@ static bool sdr_init_radio(void) {
 
 static void sdr_deinit_radio(void) {
     if (!s_ready) return;
-    REG_WRITE(J_DAC_TRIG_REG, 0);
     REG_WRITE(J_DUMP_CTRL_REG, 0);
     REG_WRITE(SENSITIVE_INTERNAL_SRAM_USAGE_3_REG, s_usage_saved);
-    fe_force_txon(false);
+    fe_force_txoff();
     rx_gain_release();                      // hand the AGC back before resting
     rx_front_end(true, J_RETUNE_SETTLE_US); // rest in the RX-ready state, like upstream
     esp_wifi_set_promiscuous(false);
@@ -450,29 +417,11 @@ static inline void bank_to_engine(void) {
 static inline void bank_to_cpu(void) { REG_WRITE(SENSITIVE_INTERNAL_SRAM_USAGE_3_REG, s_usage_saved); }
 
 // ---------------------------------------------------------------------------
-// Dump engine: DAC playback (TX) and ADC capture (RX)
+// Dump engine: ADC capture (RX)
 // ---------------------------------------------------------------------------
 
-// One DAC burst over the first count words of the bank. Caller has already
-// handed the bank to the engine.
-static void dac_trigger(bool rate80, uint32_t count) {
-    uint32_t ctrl = J_DUMP_CTRL_RUN | (rate80 ? J_DAC_CTRL_80M : 0U) | (count & J_DUMP_CTRL_COUNT);
-    REG_WRITE(J_DAC_TRIG_REG, 0);
-    REG_WRITE(J_DAC_TRIG_REG, ctrl);
-    REG_WRITE(J_DAC_TRIG_REG, ctrl | J_DUMP_CTRL_TRIG);
-    REG_WRITE(J_DAC_TRIG_REG, ctrl);
-}
-
-static bool dac_wait_done(void) {
-    int64_t t0 = esp_timer_get_time();
-    while (!(REG_READ(J_DAC_TRIG_REG) & J_DUMP_CTRL_DONE)) {
-        if (esp_timer_get_time() - t0 > J_DUMP_TIMEOUT_US) return false;
-    }
-    return true;
-}
-
 // Capture count raw I/Q words into the bank. Returns false on timeout.
-static bool adc_capture(enum JamRate rate, uint32_t count) {
+static bool adc_capture(enum CaptureRate rate, uint32_t count) {
     if (count < J_SAMPLES_MIN || count > J_SAMPLES_MAX) return false;
 
     // A forced gain is occasionally lost (PBJ3000: after some thousand
@@ -513,59 +462,10 @@ static bool adc_capture(enum JamRate rate, uint32_t count) {
 static inline int16_t rx_word_i(uint32_t w) { return (int16_t)((int32_t)(w << 12) >> 22); }
 static inline int16_t rx_word_q(uint32_t w) { return (int16_t)((int32_t)(w << 22) >> 22); }
 
-// TX word layout: I in bits 9:0, Q in bits 19:10.
-static inline uint32_t tx_word(int16_t i, int16_t q) {
-    return ((uint32_t)i & 0x3ffU) | (((uint32_t)q & 0x3ffU) << 10);
-}
-
-// ---------------------------------------------------------------------------
-// Waveforms
-// ---------------------------------------------------------------------------
-
-// xorshift32: fast white noise, one update per complex sample.
-struct NoiseGen {
-    uint32_t st = 0x1234abcd;
-    uint16_t amp = 400;
-    uint32_t next() {
-        st ^= st << 13;
-        st ^= st >> 17;
-        st ^= st << 5;
-        return st;
-    }
-    uint32_t word() {
-        uint32_t r = next();
-        int16_t i = (int16_t)((r & 0x3ffU) - 512);
-        int16_t q = (int16_t)(((r >> 10) & 0x3ffU) - 512);
-        return tx_word((int16_t)((i * amp) >> 9), (int16_t)((q * amp) >> 9));
-    }
-};
-
-struct ToneGen {
-    uint32_t fs = 40000000U;
-    int32_t f_off_hz = 0; // tone offset from the LO
-    uint16_t amp = 400;
-    double phase = 0.0;
-    uint32_t word() {
-        phase += 2.0 * M_PI * (double)f_off_hz / (double)fs;
-        if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
-        return tx_word((int16_t)(sinf((float)phase) * amp), (int16_t)(cosf((float)phase) * amp));
-    }
-};
-
-static void fill_bank(NoiseGen &g) {
-    bank_to_cpu();
-    for (uint32_t j = 0; j < J_SAMPLES_MAX; j++) s_bank[j] = g.word();
-}
-
-static void fill_bank(ToneGen &g) {
-    bank_to_cpu();
-    for (uint32_t j = 0; j < J_SAMPLES_MAX; j++) s_bank[j] = g.word();
-}
-
 // ---------------------------------------------------------------------------
 // WiFi bring-up/down (pattern from jam_detect.cpp)
 // ---------------------------------------------------------------------------
-static bool jammer_wifi_start(void) {
+static bool sdr_wifi_start(void) {
     ensureWifiPlatform();
     nvs_flash_init();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -582,33 +482,32 @@ static bool jammer_wifi_start(void) {
         return false;
     }
     esp_wifi_disconnect();
-    // Only knob we have without the vendor librftest blob: the PHY applies its
-    // power setting to the gain tables it loaded for the channel.
-    esp_wifi_set_max_tx_power(s_tx_power_qdbm);
     return true;
 }
 
-static void jammer_wifi_stop(void) {
+static void sdr_wifi_stop(void) {
     esp_wifi_stop();
     wifiDisconnect();
     drawStatusBar();
 }
 
-static bool jammer_start(void) {
+// Take the radio over for one RX session: stop the WebUI, bring esp_wifi up
+// (the PHY calibrates the radio), then hand the radio to the dump engine.
+static bool sdr_start(void) {
     // stopWebUi() itself would crash if the WebUI never started (it
     // dereferences the server pointer unconditionally); use the guarded one.
     cleanlyStopWebUiForWiFiFeature();
     Serial.println("[SDR] webui stopped, starting wifi");
-    if (!jammer_wifi_start()) return false;
+    if (!sdr_wifi_start()) return false;
     Serial.println("[SDR] wifi up, taking over the radio");
     if (!sdr_init_radio()) return false;
     Serial.println("[SDR] radio takeover complete");
     return true;
 }
 
-static void jammer_stop(void) {
+static void sdr_stop(void) {
     sdr_deinit_radio();
-    jammer_wifi_stop();
+    sdr_wifi_stop();
 }
 
 // ---------------------------------------------------------------------------
@@ -616,15 +515,15 @@ static void jammer_stop(void) {
 // ---------------------------------------------------------------------------
 
 // Shared live screen frame: title, one status line, hint line.
-static void jammer_frame(const char *subtitle) {
-    drawMainBorderWithTitle("SDR");
+static void sdr_frame(const char *subtitle) {
+    drawMainBorderWithTitle("IQ Record");
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawCentreString(subtitle, tft.width() / 2, 32, 1);
     tft.drawCentreString("ESC: stop   < >: tune freq", tft.width() / 2, tft.height() - 18, 1);
 }
 
-static void jammer_status(const String &l1, const String &l2 = "") {
+static void sdr_status(const String &l1, const String &l2 = "") {
     tft.fillRect(6, 50, tft.width() - 12, 40, bruceConfig.bgColor);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
@@ -644,20 +543,10 @@ static String freq_short() { return s_custom ? String(s_pending_mhz) + "M" : "CH
 
 static uint32_t run_start_freq(void) { return s_custom ? s_pending_mhz : J_CH_FREQ[s_ch - 1]; }
 
-// Switch the LO after a custom-frequency step failed the PLL window check.
-static void retune_front_end(bool tx) {
-    if (tx) {
-        rx_front_end(false, 0);
-        tx_prepare();
-        return;
-    }
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-}
-
 // Live tuning during a run: < > steps Wi-Fi channels, or +-1 MHz off-grid.
 // Custom requests the VCO cannot lock are rejected by the PLL window check and
 // stepped back. Returns true if the LO moved.
-static bool live_retune(bool tx) {
+static bool live_retune(void) {
     uint32_t old = s_freq_mhz;
     bool changed = false;
     if (s_custom) {
@@ -683,10 +572,10 @@ static bool live_retune(bool tx) {
     }
     if (!changed) return false;
 
-    retune_front_end(tx);
+    rx_front_end(true, J_RETUNE_SETTLE_US);
     if (s_custom && !pll_in_window()) {
         s_freq_mhz = old;
-        retune_front_end(tx);
+        rx_front_end(true, J_RETUNE_SETTLE_US);
     }
     return true;
 }
@@ -705,269 +594,10 @@ static uint8_t pick_channel(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Run screens
-// ---------------------------------------------------------------------------
-static void run_noise_jam(void) {
-    NoiseGen gen;
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-    tx_prepare();
-    fill_bank(gen);
-
-    jammer_frame("NOISE");
-    int64_t t0 = esp_timer_get_time();
-    uint32_t bursts = 0;
-    int64_t last_draw = 0;
-    bool dirty = true; // refill the bank only when amp/freq changed: bursts must stay back-to-back
-    bool timeout = false;
-    while (!returnToMenu && !check(EscPress)) {
-        bool changed = live_retune(true);
-        if (check(UpPress)) {
-            gen.amp = gen.amp < 500 ? gen.amp + 100 : 100;
-            changed = true;
-        }
-        if (check(DownPress)) {
-            gen.amp = gen.amp > 100 ? gen.amp - 100 : 500;
-            changed = true;
-        }
-        dirty |= changed;
-
-        if (dirty) {
-            fill_bank(gen);
-            dirty = false;
-        }
-        bank_to_engine();
-        dac_trigger(s_rate == RATE_80M, J_SAMPLES_MAX);
-        if (!dac_wait_done()) {
-            timeout = true;
-            bank_to_cpu();
-            break;
-        }
-        bursts++;
-
-        if (esp_timer_get_time() - last_draw > 250000) {
-            last_draw = esp_timer_get_time();
-            jammer_status(
-                freq_label() + "  " + rate_name(s_rate),
-                "amp " + String(gen.amp) + "  " + String((int)((esp_timer_get_time() - t0) / 1000000)) +
-                    "s  " + String(bursts) + " bursts"
-            );
-        }
-    }
-    bank_to_cpu();
-    REG_WRITE(J_DAC_TRIG_REG, 0);
-    if (timeout) jammer_status("DAC timeout");
-    rx_front_end(false, J_RETUNE_SETTLE_US); // resting RX state
-}
-
-static void run_tone_jam(void) {
-    ToneGen gen;
-    gen.fs = rate_hz(s_rate);
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-    tx_prepare();
-    fill_bank(gen);
-
-    jammer_frame("CW TONE");
-    int64_t t0 = esp_timer_get_time();
-    uint32_t bursts = 0;
-    int64_t last_draw = 0;
-    bool dirty = true; // refill the bank only when offset/freq changed
-    bool timeout = false;
-    while (!returnToMenu && !check(EscPress)) {
-        bool changed = live_retune(true);
-        if (check(UpPress) && gen.f_off_hz < 5000000) {
-            gen.f_off_hz += 100000;
-            changed = true;
-        }
-        if (check(DownPress) && gen.f_off_hz > -5000000) {
-            gen.f_off_hz -= 100000;
-            changed = true;
-        }
-        dirty |= changed;
-
-        if (dirty) {
-            fill_bank(gen);
-            dirty = false;
-        }
-        bank_to_engine();
-        dac_trigger(s_rate == RATE_80M, J_SAMPLES_MAX);
-        if (!dac_wait_done()) {
-            timeout = true;
-            bank_to_cpu();
-            break;
-        }
-        bursts++;
-
-        if (esp_timer_get_time() - last_draw > 250000) {
-            last_draw = esp_timer_get_time();
-            jammer_status(
-                freq_label() + String(gen.f_off_hz >= 0 ? " +" : " ") + String(gen.f_off_hz / 1000) + " kHz",
-                String((int)((esp_timer_get_time() - t0) / 1000000)) + "s  " + String(bursts) + " bursts"
-            );
-        }
-    }
-    bank_to_cpu();
-    REG_WRITE(J_DAC_TRIG_REG, 0);
-    if (timeout) jammer_status("DAC timeout");
-    rx_front_end(false, J_RETUNE_SETTLE_US);
-}
-
-// Hop channels 1..14, broadcasting noise bursts on each — broadband interference
-// across the whole 2.4 GHz band, the classic "jammer sweep".
-static void run_sweep_jam(void) {
-    // Hops Wi-Fi channels 1..14 regardless of the custom-frequency setting;
-    // the next run re-applies the chosen frequency.
-    NoiseGen gen;
-    const uint32_t DWELL_BURSTS = 320; // ~130 ms of TX per channel at 40 MS/s
-
-    jammer_frame("SWEEP");
-    fill_bank(gen);
-    int64_t t0 = esp_timer_get_time();
-    bool timeout = false;
-    while (!returnToMenu && !check(EscPress)) {
-        for (uint8_t ch = 1; ch <= 14 && !returnToMenu && !check(EscPress); ch++) {
-            s_freq_mhz = J_CH_FREQ[ch - 1];
-            rx_front_end(true, 0); // retune + RX-ready turnaround
-            tx_prepare();
-            jammer_status(
-                "CH" + String(ch) + "  " + String(s_freq_mhz) + " MHz  " +
-                String((int)((esp_timer_get_time() - t0) / 1000000)) + "s"
-            );
-            for (uint32_t b = 0; b < DWELL_BURSTS && !returnToMenu && !check(EscPress); b++) {
-                bank_to_engine();
-                dac_trigger(s_rate == RATE_80M, J_SAMPLES_MAX);
-                if (!dac_wait_done()) {
-                    timeout = true;
-                    break;
-                }
-            }
-            bank_to_cpu();
-            if (timeout) break;
-        }
-        if (timeout) break;
-    }
-    REG_WRITE(J_DAC_TRIG_REG, 0);
-    if (timeout) jammer_status("DAC timeout");
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-}
-
-// Raw I/Q spectrum analyzer: ADC captures at the current rate, FFT, live plot.
-static void run_iq_spectrum(void) {
-    // 256-point complex FFT: the plan is three 2 KiB arrays (~6 KiB total), which
-    // fits the fragmented heap left once WiFi is up. 256 is also adc_capture's
-    // minimum and gives one bin per plot pixel, so a bigger N buys no resolution.
-    const uint32_t N = 256;
-
-    // Responsive layout: derive every Y from the screen size so nothing overlaps
-    // on short panels (e.g. Cardputer 240x135) or wastes space on tall ones.
-    // jammer_frame() owns the title + "IQ SPECTRUM" subtitle at the top and the
-    // "ESC: stop" line at height-18; the plot and its freq/rate readout live in
-    // the gap between the two.
-    const int PLOT_X = 8;
-    const int PLOT_Y = 42;                       // just under the subtitle
-    const int PLOT_W = tft.width() - 2 * PLOT_X;
-    const int INFO_Y = tft.height() - 18 - 10;   // freq/rate line, above the footer
-    const int PLOT_H = (INFO_Y - 4) - PLOT_Y;    // plot fills everything in between
-
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-
-    jammer_frame("IQ SPECTRUM");
-
-    // The FFT library mallocs its twiddle/input/output buffers and never checks
-    // the result, so a failed alloc stores straight through a NULL pointer and
-    // panics (StoreProhibited in fft_init). Build the plan ONCE, up front, where
-    // the heap is least fragmented -- never per frame -- and bail cleanly if we
-    // can't. The three arrays are 2*N floats each; require one contiguous block
-    // big enough for the whole plan so none of the mallocs can fail mid-init.
-    const size_t PLAN_BYTES = 3 * (2 * N * sizeof(float)) + 256; // +config & malloc headers
-    if (ESP.getMaxAllocHeap() < PLAN_BYTES) {
-        jammer_status("FFT out of memory", "close other radios");
-        Serial.printf(
-            "[SDR] FFT init skipped: max alloc heap %u < %u needed\n",
-            ESP.getMaxAllocHeap(),
-            (unsigned)PLAN_BYTES
-        );
-        delay(1500);
-        rx_front_end(true, J_RETUNE_SETTLE_US);
-        return;
-    }
-    fft_config_t *plan = fft_init(N, FFT_COMPLEX, FFT_FORWARD, NULL, NULL);
-    if (!plan) {
-        jammer_status("FFT init failed", "");
-        Serial.println("[SDR] FFT init failed: fft_init returned NULL");
-        delay(1500);
-        rx_front_end(true, J_RETUNE_SETTLE_US);
-        return;
-    }
-
-    tft.drawRect(PLOT_X - 2, PLOT_Y - 2, PLOT_W + 4, PLOT_H + 4, bruceConfig.priColor);
-
-    int64_t last_draw = 0;
-    uint32_t captures = 0, timeouts = 0, failStreak = 0;
-    String lastInfo; // redraw the freq/rate line only when it changes (no flicker)
-    while (!returnToMenu && !check(EscPress)) {
-        live_retune(false);
-
-        if (!adc_capture(s_rate, N)) {
-            timeouts++;
-            // Never spin silently: give up if the engine stops delivering.
-            if (++failStreak > 20) {
-                jammer_status("capture failing", "check radio state");
-                delay(1200);
-                break;
-            }
-            continue;
-        }
-        failStreak = 0;
-        captures++;
-
-        if (esp_timer_get_time() - last_draw < 40000) continue; // ~25 fps cap
-        last_draw = esp_timer_get_time();
-
-        for (uint32_t j = 0; j < N; j++) {
-            plan->input[2 * j] = (float)rx_word_i(s_bank[j]);
-            plan->input[2 * j + 1] = (float)rx_word_q(s_bank[j]);
-        }
-        fft_execute(plan);
-
-        // FFT shift: bins wrap around DC; plot the full span with DC centered.
-        // Repaint each column in place -- bar in priColor, the space above it in
-        // bgColor -- instead of clearing the whole rect first, which flickers.
-        uint32_t half = N / 2;
-        for (uint16_t x = 0; x < PLOT_W; x++) {
-            uint32_t bin = ((uint32_t)x * N / PLOT_W + half) % N; // wrap so DC sits in the middle
-            float re = plan->output[2 * bin];
-            float im = plan->output[2 * bin + 1];
-            float mag = sqrtf(re * re + im * im) / (float)N;
-            float db = 20.0f * log10f(mag + 1e-6f);
-            int h = (int)((db + 60.0f) * PLOT_H / 60.0f); // -60..0 dB window
-            if (h < 0) h = 0;
-            if (h > PLOT_H - 1) h = PLOT_H - 1;
-            if (h < PLOT_H) tft.drawFastVLine(PLOT_X + x, PLOT_Y, PLOT_H - h, bruceConfig.bgColor);
-            if (h > 0) tft.drawFastVLine(PLOT_X + x, PLOT_Y + PLOT_H - h, h, bruceConfig.priColor);
-        }
-
-        String info = freq_label() + "  " + rate_name(s_rate);
-        if (info != lastInfo) {
-            tft.fillRect(PLOT_X, INFO_Y, PLOT_W, 10, bruceConfig.bgColor);
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.setTextSize(FP);
-            tft.drawCentreString(info, tft.width() / 2, INFO_Y, 1);
-            lastInfo = info;
-        }
-    }
-
-    fft_destroy(plan);
-
-    jammer_status(String(captures) + " captures", String(timeouts) + " timeouts");
-    delay(600);
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-}
-
-// ---------------------------------------------------------------------------
-// SDR file modes: raw I/Q to/from SD as CS16 (interleaved int16 I/Q, the
-// SDR#/URH standard; our 10-bit samples go in the top bits). Record keeps the
-// CPU side of the radio: SD runs on its own SPI bus, the dump engine only
-// owns the SRAM bank between capture and hand-back.
+// File mode: raw I/Q to SD as CS16 (interleaved int16 I/Q, the SDR#/URH
+// standard; our 10-bit samples go in the top bits). Record keeps the CPU side
+// of the radio: SD runs on its own SPI bus, the dump engine only owns the
+// SRAM bank between capture and hand-back.
 // ---------------------------------------------------------------------------
 static const char *IQ_DIR = "/BruceIQ";
 
@@ -1040,13 +670,13 @@ static void run_iq_record(void) {
     }
 
     rx_front_end(true, J_RETUNE_SETTLE_US);
-    jammer_frame("IQ RECORD");
+    sdr_frame("IQ RECORD");
     int64_t t0 = esp_timer_get_time();
     uint32_t snaps = 0;
     size_t total = 0;
     int64_t last_draw = 0;
     while (!returnToMenu && !check(EscPress)) {
-        live_retune(false);
+        live_retune();
 
         if (!adc_capture(s_rate, J_SAMPLES_MAX)) continue;
         snaps++;
@@ -1054,7 +684,7 @@ static void run_iq_record(void) {
 
         if (esp_timer_get_time() - last_draw > 500000) {
             last_draw = esp_timer_get_time();
-            jammer_status(
+            sdr_status(
                 freq_label() + "  " + rate_name(s_rate),
                 String(total / 1024) + " KiB  " + String(snaps) + " snaps"
             );
@@ -1063,87 +693,15 @@ static void run_iq_record(void) {
     f.close();
     free(buf);
 
-    jammer_status(path, String(total / 1024) + " KiB, " + String(snaps) + " snapshots");
+    sdr_status(path, String(total / 1024) + " KiB, " + String(snaps) + " snapshots");
     Serial.println("[SDR] recorded " + path + " (" + String(total) + " bytes)");
     delay(1200);
     rx_front_end(true, J_RETUNE_SETTLE_US);
 }
 
-// Replay a CS16 file through the DAC: PBJ3000's arbitrary I/Q transmission,
-// fed from SD instead of the Android app's USB stream. Loops until ESC.
-static void run_iq_play(File &f) {
-    size_t bufBytes = 0;
-    uint8_t *buf = alloc_convert_buf(bufBytes);
-    if (!buf) {
-        Serial.printf(
-            "[SDR] play OOM: free=%u largest=%u\n",
-            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)
-        );
-        displayError("Out of memory", true);
-        return;
-    }
-
-    rx_front_end(true, J_RETUNE_SETTLE_US);
-    tx_prepare();
-    jammer_frame("IQ PLAY");
-    int64_t t0 = esp_timer_get_time();
-    uint32_t bursts = 0;
-    int64_t last_draw = 0;
-    bool timeout = false;
-    while (!returnToMenu && !check(EscPress)) {
-        size_t got = f.read(buf, bufBytes);
-        if (got < 4) { // EOF: loop the file
-            f.seek(0);
-            continue;
-        }
-        size_t samples = got / 4;
-
-        // Tile the chunk across the whole bank: fewer retrigger holes.
-        bank_to_cpu();
-        for (uint32_t j = 0; j < J_SAMPLES_MAX; j++) {
-            const uint8_t *s = buf + (j % samples) * 4;
-            int16_t i = (int16_t)(s[0] | (s[1] << 8)) >> 6;
-            int16_t q = (int16_t)(s[2] | (s[3] << 8)) >> 6;
-            s_bank[j] = tx_word(i, q);
-        }
-        bank_to_engine();
-        dac_trigger(s_rate == RATE_80M, J_SAMPLES_MAX);
-        if (!dac_wait_done()) {
-            timeout = true;
-            bank_to_cpu();
-            break;
-        }
-        bursts++;
-
-        if (esp_timer_get_time() - last_draw > 500000) {
-            last_draw = esp_timer_get_time();
-            jammer_status(
-                freq_label() + "  " + rate_name(s_rate),
-                String((int)((esp_timer_get_time() - t0) / 1000000)) + "s  " + String(bursts) + " bursts"
-            );
-        }
-    }
-    free(buf);
-    REG_WRITE(J_DAC_TRIG_REG, 0);
-    if (timeout) jammer_status("DAC timeout");
-    rx_front_end(false, J_RETUNE_SETTLE_US);
-}
-
 // ---------------------------------------------------------------------------
 // Menu
 // ---------------------------------------------------------------------------
-static void pick_tx_power(void) {
-    std::vector<Option> opts;
-    opts.push_back({"+19.5 dBm", [&]() { s_tx_power_qdbm = 78; }});
-    opts.push_back({"+17 dBm", [&]() { s_tx_power_qdbm = 68; }});
-    opts.push_back({"+13 dBm", [&]() { s_tx_power_qdbm = 52; }});
-    opts.push_back({"+10 dBm", [&]() { s_tx_power_qdbm = 40; }});
-    opts.push_back({"+4 dBm", [&]() { s_tx_power_qdbm = 16; }});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "TX Power");
-    opts.clear();
-}
-
 static void pick_rate(void) {
     std::vector<Option> opts;
     opts.push_back({"80 MS/s", [&]() { s_rate = RATE_80M; }});
@@ -1170,8 +728,8 @@ static void pick_rx_gain(void) {
 }
 
 // Wi-Fi channel or an off-grid frequency. Off-grid requests outside the VCO's
-// reach are still accepted here and rejected with the PLL window check when a
-// jam starts (like PBJ3000's -ERANGE), because the window can only be read
+// reach are still accepted here and rejected with the PLL window check when the
+// capture starts (like PBJ3000's -ERANGE), because the window can only be read
 // from the radio after the takeover.
 static void pick_frequency(void) {
     std::vector<Option> opts;
@@ -1198,77 +756,47 @@ static void pick_frequency(void) {
     opts.clear();
 }
 
-static void run_jammer(std::function<void()> run) {
+// Bring the radio up, run one capture session, take it down.
+static void run_capture(std::function<void()> run) {
     s_freq_mhz = run_start_freq();
-    if (!jammer_start()) {
+    if (!sdr_start()) {
         displayError("WiFi init failed", true);
         return;
     }
     if (s_custom && !pll_in_window()) {
         // Like PBJ3000's -ERANGE: the S3 VCO only locks about 1.82-2.65 GHz.
-        jammer_stop();
+        sdr_stop();
         displayError("PLL won't lock! Range ~1.82-2.65 GHz", true);
         return;
     }
     run();
-    jammer_stop();
+    sdr_stop();
 }
 
 void sdr_menu() {
     returnToMenu = false;
 
-    displayError("EMITS REAL RF POWER! Jamming may be ILLEGAL", true);
-
     std::vector<Option> opts;
     for (;;) {
         opts.clear();
-        opts.push_back({"Noise Jam", [&]() {
-                            if (!s_custom) s_ch = pick_channel();
-                            run_jammer(run_noise_jam);
-                        }});
-        opts.push_back({"Tone Jam", [&]() {
-                            if (!s_custom) s_ch = pick_channel();
-                            run_jammer(run_tone_jam);
-                        }});
-        opts.push_back({"Sweep Jam", [&]() { run_jammer(run_sweep_jam); }});
-        opts.push_back({"Spectrum", [&]() {
-                            if (!s_custom) s_ch = pick_channel();
-                            run_jammer(run_iq_spectrum);
-                        }});
         opts.push_back({"Record IQ", [&]() {
                             if (!setupSdCard()) {
                                 displayError("No SD card", true);
                                 return;
                             }
                             if (!s_custom) s_ch = pick_channel();
-                            run_jammer(run_iq_record);
-                        }});
-        opts.push_back({"Play IQ", [&]() {
-                            if (!setupSdCard()) {
-                                displayError("No SD card", true);
-                                return;
-                            }
-                            String path = loopSD(SD, true, "cs16", "/");
-                            if (!path.length()) return;
-                            File f = SD.open(path, FILE_READ);
-                            if (!f) {
-                                displayError("SD open failed", true);
-                                return;
-                            }
-                            run_jammer([&f]() { run_iq_play(f); });
-                            f.close();
+                            run_capture(run_iq_record);
                         }});
         opts.push_back({"Freq: " + freq_short(), pick_frequency});
-        opts.push_back({"TX Power", pick_tx_power});
         opts.push_back({"Gain: " + String(s_rx_gain < 0 ? "Auto" : String(s_rx_gain)), pick_rx_gain});
         opts.push_back({"Rate: " + String(rate_hz(s_rate) / 1000000U) + "M", pick_rate});
         opts.push_back({"Back", [&]() { returnToMenu = true; }});
 
-        loopOptions(opts, MENU_TYPE_SUBMENU, "SDR");
+        loopOptions(opts, MENU_TYPE_SUBMENU, "IQ Record");
         if (returnToMenu) break;
     }
     opts.clear();
 }
 
 #endif // CONFIG_IDF_TARGET_ESP32S3
-#endif // !LITE_VERSION && !BRUCE_NO_SDR_JAMMER
+#endif // !LITE_VERSION && !BRUCE_NO_IQ_RECORD

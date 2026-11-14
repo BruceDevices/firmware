@@ -83,8 +83,8 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Dual Band Analyzer", dual_band_analyzer_setup});
 #endif
     options.push_back({"Jam Detect", jam_detect_setup});
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BRUCE_NO_SDR_JAMMER)
-    options.push_back({"SDR", sdr_menu});
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BRUCE_NO_IQ_RECORD)
+    options.push_back({"IQ Record", sdr_menu});
 #endif
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
