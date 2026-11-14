@@ -8,6 +8,7 @@
 #include "protocols/rf_decode_limits.h"
 #include "protocols/rf_protocol_engine.h"
 #include "protocols/rf_keeloq.h" // keeloq_engine_keystore_load/free
+#include "protocols/rf_models.h" // car-model database + custom radio profiles
 #include "rf_scan.h"
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -160,6 +161,7 @@ class ProtoPirate {
     const char *labels[4] = {"AM650", "FM476", "AM270", "FM238"};
     int frequencyIndex = 1, presetIndex = -1;
     bool hopping = false, receiveRequested = false;
+    bool customActive = false; // a custom (raw-register) model preset is applied
     size_t historyBytes = 0;
     size_t historyMemoryBytes() const {
         size_t bytes = 0;
@@ -575,10 +577,13 @@ class ProtoPirate {
                 "Unmatched: " + String(misses) + (history.empty() ? "  SEL: settings" : "  SEL: signal"),
                 rows, selected, scrollOffset, 12, &displayState
             );
-            String raw = rfReceiveSignal(frequencies[fi], timeout, true, true, presets[pi], true, &receiveSession);
+            String raw = rfReceiveSignal(
+                frequencies[fi], timeout, true, true,
+                customActive ? String("") : String(presets[pi]), true, &receiveSession
+            );
             if (EscPress) continue; // preserve Back for the list's exit handler
             if (!raw.isEmpty()) {
-                if (field(raw, "Bruce_RX_Preset") != presets[pi]) {
+                if (!customActive && field(raw, "Bruce_RX_Preset") != presets[pi]) {
                     displayError("Receive profile mismatch", true);
                     return;
                 }
@@ -648,6 +653,30 @@ class ProtoPirate {
             if (receiveRequested) return;
         }
     }
+    void chooseModel() {
+        std::vector<String> names;
+        for (int i = 0; i < car_model_count(); i++) names.push_back(car_model_at(i)->name);
+        drawCaptureBackground();
+        int n = choose("Car model", names, 0, MENU_TYPE_REGULAR);
+        if (n < 0) return;
+        const CarModel *m = car_model_at(n);
+        if (!m) return;
+
+        // Set the frequency (and, for custom models, apply the raw registers now).
+        frequencies.clear();
+        frequencies.push_back(m->freqHz / 1000000.0f);
+        frequencyIndex = 0;
+        hopping = false;
+
+        customActive = (m->registers && m->registerCount);
+        if (customActive) {
+            presetIndex = 0;
+            if (initRfModule("rx", m->freqHz / 1000000.0f)) car_model_apply(m);
+        } else {
+            presetIndex = !strcmp(m->preset, "2FSKDev476Async") ? 1 : 0;
+        }
+    }
+
     void settings() {
         for (;;) {
             drawCaptureBackground();
@@ -656,10 +685,11 @@ class ProtoPirate {
                 {"Frequency: " + String(frequencies[frequencyIndex]) + " MHz",
                  "Preset: " + String(presetIndex < 0 ? "Auto" : labels[presetIndex]),
                  "Frequency hopping: " + String(hopping ? "ON" : "OFF"),
+                 "Car model...",
                  "Back"},
                 0, MENU_TYPE_REGULAR
             );
-            if (action < 0 || action == 3) return;
+            if (action < 0 || action == 4) return;
             if (action == 0) {
                 std::vector<String> list;
                 for (float f : frequencies) list.push_back(String(f) + " MHz");
@@ -673,7 +703,11 @@ class ProtoPirate {
                     MENU_TYPE_REGULAR
                 );
                 if (n >= 0) presetIndex = n - 1;
-            } else hopping = !hopping;
+            } else if (action == 2) {
+                hopping = !hopping;
+            } else {
+                chooseModel();
+            }
         }
     }
 
@@ -720,8 +754,8 @@ public:
                     "Native Bruce UI and one shared RF engine.\nRocketGod ProtoPirate 4.0 / 4c9afe58\n\n"
                     "Same codecs are used by RF Scan, file handling and the JS app.\n"
                     "Sending always requires confirmation. Encoding does not prove receiver acceptance.\n"
-                    "Custom radio profiles, encrypted ProtoPirate keystores, model database, remote analyzer "
-                    "and brute-force recovery are not ported."
+                    "Car-model database + custom radio profiles: ported.\n"
+                    "Encrypted ProtoPirate keystores, remote analyzer and brute-force recovery are not ported."
                 );
         }
         deinitRfModule();

@@ -113,6 +113,11 @@ private:
     String capture_label(int index) const;
 };
 
+// Try to decode a KeeLoq frame and resolve its manufacturer/serial/button/counter
+// (fills key/fix/encrypted/serial/btn + mf_name/cnt via the keystore). Shared by
+// the scan path and the rolling-code analyzer.
+bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received);
+
 void display_info(
     RfCodes received, int signals, bool ReadRAW = false, bool codesOnly = false, bool autoSave = false,
     const String &title = "", bool headless = false
