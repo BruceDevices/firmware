@@ -5,6 +5,7 @@
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/clicker.h"
+#include "modules/others/hidden_devices.h"
 #include "modules/others/ibutton.h"
 #include "modules/others/mic.h"
 #include "modules/others/qrcode_menu.h"
@@ -23,6 +24,7 @@ void OthersMenu::optionsMenu() {
 
 // New consolidated BadUSB & HID submenu
 #if !defined(LITE_VERSION)
+        {"Hidden Devices", hidden_devices},
         {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
 #endif
 
