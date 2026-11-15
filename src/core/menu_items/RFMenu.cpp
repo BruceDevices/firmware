@@ -11,6 +11,7 @@
 #include "modules/rf/rf_spectrum.h"
 #include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_waterfall.h"
+#include "modules/rf/rf_wmbus.h"
 #include "modules/rf/rf_protopirate.h"
 
 void RFMenu::optionsMenu() {
@@ -19,6 +20,7 @@ void RFMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
         {"ProtoPirate",     rf_protopirate            },
         {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
+        {"Wireless M-Bus",  rf_wmbus                  },
         {"Custom SubGhz",   sendCustomRF              },
 #endif
         {"Spectrum",        rf_spectrum               },
