@@ -62,6 +62,11 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
     - [x] Target Deauth
     - [x] EvilPortal + Deauth
   - [x] Deauth Flood (More than one target)
+  - [x] Enhanced Deauth
+    - [x] Station Deauth (Single)
+    - [x] Deauth All Clients
+    - [x] Deauth Target List
+    - [x] Deauth With Whitelist
 - [x] [Wardriving](https://wiki.bruce.computer/features/gps/#wardriving)
 - [x] [TelNet](https://wiki.bruce.computer/features/wifi/#telnet)
 - [x] [SSH](https://wiki.bruce.computer/features/wifi/#ssh)

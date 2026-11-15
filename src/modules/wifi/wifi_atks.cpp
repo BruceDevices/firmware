@@ -930,6 +930,7 @@ void enhancedDeauthMenu() {
         {"Station Deauth (Single)", [=]() { showTargetSelection(); } },
         {"Deauth All Clients",      [=]() { deauthAllMenu(); }       },
         {"Deauth Target List",      [=]() { deauthTargetListMenu(); }},
+        {"Deauth With Whitelist",   [=]() { deauthWhitelistMenu(); } },
         {"Back",                    [=]() { returnToMenu = true; }   },
     };
     addOptionToMainMenu();
