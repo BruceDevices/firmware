@@ -14,6 +14,16 @@
 #include <functional>
 #include <string>
 #include <vector>
+#if !defined(LITE_VERSION) && defined(T_EMBED_1101) && defined(HAS_ENCODER)
+#include "modules/badusb_ble/ducky_typer.h"
+#include "modules/badusb_ble/MangaBoot.h"
+#include <esp_system.h>
+RTC_NOINIT_ATTR static volatile uint32_t mangaBootIntent;
+void requestMangaBoot() {
+    mangaBootIntent = MangaBoot::requested;
+    ESP.restart();
+}
+#endif
 // Native RF decoding runs beneath the menu callbacks on loopTask. The default
 // 8 KiB stack overflows on the full protocol path (including RAW fallback).
 // Keep the smaller framework default on Lite builds without stream codecs.
@@ -456,6 +466,15 @@ void startup_sound() {
  **  Where the devices are started and variables set
  *********************************************************************/
 void setup() {
+#if !defined(LITE_VERSION) && defined(T_EMBED_1101) && defined(HAS_ENCODER)
+    const auto resetReason = esp_reset_reason();
+    uint32_t intent = mangaBootIntent;
+    const auto mangaBoot = MangaBoot::consume(intent, resetReason == ESP_RST_SW, resetReason == ESP_RST_POWERON);
+    mangaBootIntent = intent;
+    const bool mangaTransition = mangaBoot != MangaBoot::Mode::Normal;
+#else
+    const bool mangaTransition = false;
+#endif
     Serial.setRxBufferSize(
         SAFE_STACK_BUFFER_SIZE / 4
     ); // Must be invoked before Serial.begin(). Default is 256 chars
@@ -547,11 +566,15 @@ void setup() {
     _late_setup_gpio();
 #if !defined(USE_DUMMY_TFT)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
-    if (!bruceConfig.instantBoot) {
+    if (!bruceConfig.instantBoot && !mangaTransition) {
         boot_screen_anim();
         startup_sound();
     }
-    if (bruceConfig.wifiAtStartup) {
+    if (bruceConfig.wifiAtStartup
+#if !defined(LITE_VERSION) && defined(T_EMBED_1101) && defined(HAS_ENCODER)
+        && mangaBoot != MangaBoot::Mode::Manga
+#endif
+    ) {
         log_i("Loading Wifi at Startup");
         xTaskCreate(
             wifiConnectTask,   // Task function
@@ -567,7 +590,14 @@ void setup() {
     startSerialCommandsHandlerTask(true);
 
     wakeUpScreen();
-    if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
+#if !defined(LITE_VERSION) && defined(T_EMBED_1101) && defined(HAS_ENCODER)
+    if (mangaBoot == MangaBoot::Mode::Manga) {
+        RAM_LOG("manga-boot pre-init");
+        MangaRemote(hid_ble, true);
+        ESP.restart();
+    }
+#endif
+    if (!mangaTransition && bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }
 

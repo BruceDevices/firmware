@@ -1,5 +1,6 @@
 #if !defined(LITE_VERSION)
 #include "ducky_typer.h"
+#include "MangaRemoteLogic.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/radio_mem.h"
@@ -97,7 +98,7 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
         }
 
         // Delete the wrapper object
-        delete hid;
+        delete bleKb; // hid may alias hid_ble, which was cleared above.
         hid = nullptr;
         Serial.println("[cleanupDuckyBLE] hid deleted");
     }
@@ -635,8 +636,17 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 return;
             }
 
-            // Set function-specific MAC address (Logitech OUIs)
-            if (functionId >= 0 && functionId < 4) {
+            // Every board gets a stable, locally administered BLE address for Manga Remote.
+            if (functionId == 4) {
+                const uint64_t chip = ESP.getEfuseMac();
+                const uint8_t mangaMac[6] = {
+                    0xDA, 0x53, static_cast<uint8_t>(chip),
+                    static_cast<uint8_t>(chip >> 8), static_cast<uint8_t>(chip >> 16),
+                    static_cast<uint8_t>(chip >> 24)
+                };
+                setBleMac(mangaMac);
+                delay(50);
+            } else if (functionId >= 0 && functionId < 4) {
                 Serial.printf("[ducky_startKb] Setting MAC for function %d: ", functionId);
                 for (int i = 0; i < 6; i++) {
                     Serial.printf("%02X%s", FUNC_MACS[functionId][i], i < 5 ? ":" : "");
@@ -648,6 +658,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
 
             // Build device name with suffix for unique identification
             String deviceName = bruceConfigPins.bleName;
+            if (functionId == 4) deviceName = "Bruce Scroller";
             if (deviceName.isEmpty()) { deviceName = "keyboard_99"; }
 
             Serial.printf("[ducky_startKb] Device name: %s\n", deviceName.c_str());
@@ -683,6 +694,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 (const uint8_t *)pgm_read_ptr(&keyboardLayouts[bruceConfig.badUSBBLEKeyboardLayout]);
 
             // Start the HID service
+            static_cast<BleKeyboard *>(hid)->setMouseEnabled(functionId == 4);
             hid->begin(layout);
             hid->setDelay(bruceConfig.badUSBBLEKeyDelay);
 
@@ -1235,6 +1247,125 @@ EXIT:
 }
 
 // ============================================================================
+// MANGA REMOTE - BLE HID mouse wheel + media volume keys for Android MangaLib
+// Board: LILYGO T-Embed CC1101 (GPIO 0 encoder switch, GPIO 6 back button)
+// ============================================================================
+#if defined(T_EMBED_1101) && defined(HAS_ENCODER)
+void MangaRemote(HIDInterface *&hid, bool ble) {
+    if (!ble) return;
+
+    safeCleanupDuckyBLE(hid);
+    ducky_startKb(hid, true, 4); // Unique BLE identity and mouse report.
+    if (!hid) {
+        returnToMenu = true;
+        return;
+    }
+
+    // Discard steps and menu button events collected before entering the mode.
+    inputLock();
+    (void)drainRotarySteps();
+    NextPress = false;
+    PrevPress = false;
+    SelPress = false;
+    inputUnlock();
+
+    MangaRemoteLogic clickLogic;
+    uint8_t sensitivity = 3; // Hold encoder to cycle: 1 -> 2 -> 3 -> 4 -> 5.
+    bool lastConnected = false;
+    bool firstPaint = true;
+    bool speedDirty = true;
+    uint32_t lastWheelTxMs = 0;
+    int32_t pendingWheel = 0;
+    uint8_t parkRemaining = 0;
+    returnToMenu = false;
+
+    while (!returnToMenu) {
+        if (check(EscPress)) break; // Dedicated side Back button (GPIO 6).
+
+        uint32_t now = millis();
+        bool connected = hid->isConnected();
+        if (connected != lastConnected) {
+            BLEConnected = connected;
+            parkRemaining = connected ? 24 : 0;
+        }
+
+        int32_t steps = 0;
+        inputLock();
+        steps = drainRotarySteps();
+        NextPress = false;
+        PrevPress = false;
+        SelPress = false;
+        inputUnlock();
+
+        // Bruce encodes UI Next as a negative step. HID wheel negative is down.
+        if (!connected) {
+            pendingWheel = 0;
+        } else {
+            MangaWheel::add(pendingWheel, steps, sensitivity);
+            const int8_t wheel = MangaWheel::ready(pendingWheel, now, lastWheelTxMs);
+            if (wheel && static_cast<BleKeyboard *>(hid)->scrollWheel(wheel)) {
+                MangaWheel::sent(pendingWheel, lastWheelTxMs, wheel, now);
+            } else if (!wheel && !pendingWheel && parkRemaining && now - lastWheelTxMs >= MangaWheel::IntervalMs &&
+                       static_cast<BleKeyboard *>(hid)->parkPointer()) {
+                --parkRemaining;
+                lastWheelTxMs = now;
+            }
+        }
+
+        // Read physical button independently of Bruce's menu-specific click debounce.
+        MangaRemoteLogic::Action action = clickLogic.update(digitalRead(0) == LOW, now);
+        if (action == MangaRemoteLogic::Action::LongHold) {
+            sensitivity = sensitivity == 5 ? 1 : sensitivity + 1;
+            speedDirty = true;
+        } else if (connected && action != MangaRemoteLogic::Action::None) {
+            if (action == MangaRemoteLogic::Action::NextPage) {
+                hid->press(KEY_MEDIA_VOLUME_DOWN); // MangaLib: - = forward.
+                delay(40);
+                hid->releaseAll();
+            } else if (action == MangaRemoteLogic::Action::PreviousPage) {
+                hid->press(KEY_MEDIA_VOLUME_UP); // MangaLib: + = backward.
+                delay(40);
+                hid->releaseAll();
+            }
+        }
+
+        if (firstPaint) {
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setTextSize(FM);
+            tft.drawCentreString("BRUCE SCROLLER", tftWidth / 2, 12, 1);
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+            tft.drawCentreString("Wheel: Scroll up/down", tftWidth / 2, 56, 1);
+            tft.drawCentreString("1 click: Next page", tftWidth / 2, 76, 1);
+            tft.drawCentreString("2 clicks: Previous page", tftWidth / 2, 96, 1);
+            tft.drawCentreString("Back: Exit", tftWidth / 2, 136, 1);
+        }
+        if (firstPaint || connected != lastConnected) {
+            tft.fillRect(0, 34, tftWidth, 20, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            tft.setTextColor(connected ? TFT_GREEN : TFT_YELLOW, bruceConfig.bgColor);
+            tft.drawCentreString(connected ? "Android connected" : "Pair: Bruce Scroller", tftWidth / 2, 34, 1);
+        }
+        if (firstPaint || speedDirty) {
+            tft.fillRect(0, 116, tftWidth, 20, bruceConfig.bgColor);
+            tft.setTextSize(FP);
+            tft.setTextColor(bruceConfig.secColor, bruceConfig.bgColor);
+            tft.drawCentreString("Hold: Speed " + String(sensitivity) + "/5", tftWidth / 2, 116, 1);
+            speedDirty = false;
+        }
+        lastConnected = connected;
+        firstPaint = false;
+        delay(8);
+    }
+
+    hid->releaseAll();
+    safeCleanupDuckyBLE(hid);
+    returnToMenu = true;
+}
+#endif
+
+// ============================================================================
 // MEDIA COMMANDS - BLE Media Controller
 // ============================================================================
 
@@ -1242,6 +1373,7 @@ void MediaCommands(HIDInterface *hid, bool ble) {
     // Double cleanup before starting
     safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, true, 1); // functionId 1 = Media
+    if (!hid) return;
 
     displayTextLine("Pairing...");
 

@@ -33,6 +33,9 @@ private:
     BLECharacteristic *inputKeyboard;
     BLECharacteristic *outputKeyboard;
     BLECharacteristic *inputMediaKeys;
+    BLECharacteristic *inputMouse = nullptr;
+    bool mouseEnabled = false;
+    bool mouseSubscribed = false;
     BLEAdvertising *advertising;
     NimBLEConnInfo *activeConnection = nullptr;
     NimBLEServer *pServer;
@@ -65,6 +68,9 @@ public:
     void end(void) override;
     void sendReport(KeyReport *keys);
     void sendReport(MediaKeyReport *keys);
+    void setMouseEnabled(bool enabled) { mouseEnabled = enabled; }
+    bool scrollWheel(int8_t wheel);
+    bool parkPointer();
     size_t press(uint8_t k) override;
     size_t press(const MediaKeyReport k);
     size_t release(uint8_t k) override;
@@ -114,6 +120,7 @@ protected:
 
 private:
     uint8_t m_subCount{0};
+    CharacteristicCallbacks characteristicCallbacks{this};
 };
 
 #endif // CONFIG_BT_ENABLED

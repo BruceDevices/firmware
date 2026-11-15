@@ -7,6 +7,7 @@
 #include <NimBLEHIDDevice.h>
 #include <NimBLEServer.h>
 #include <NimBLEUtils.h>
+#include <string.h>
 
 #if defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
@@ -19,6 +20,7 @@ static const char *LOG_TAG = "BLEDevice";
 // Report IDs:
 #define KEYBOARD_ID 0x01
 #define MEDIA_KEYS_ID 0x02
+#define MOUSE_ID 0x03
 
 static const uint8_t _hidReportDescriptor[] = {
     USAGE_PAGE(1),
@@ -152,6 +154,37 @@ static const uint8_t _hidReportDescriptor[] = {
     END_COLLECTION(0) // END_COLLECTION
 };
 
+// Only advertised by Manga Remote, so other Bruce HID modes keep the same report map.
+static const uint8_t _mouseHidReportDescriptor[] = {
+    0x05, 0x01, // Usage Page: Generic Desktop
+    0x09, 0x02, // Usage: Mouse
+    0xA1, 0x01, // Collection: Application
+    0x85, MOUSE_ID, // Report ID 3
+    0x09, 0x01, // Usage: Pointer
+    0xA1, 0x00, // Collection: Physical
+    0x05, 0x09, // Usage Page: Button
+    0x19, 0x01, // Usage Minimum: Button 1
+    0x29, 0x03, // Usage Maximum: Button 3
+    0x15, 0x00, // Logical Minimum: 0
+    0x25, 0x01, // Logical Maximum: 1
+    0x95, 0x03, // Report Count: 3
+    0x75, 0x01, // Report Size: 1
+    0x81, 0x02, // Input: Data, Variable, Absolute
+    0x95, 0x01, // Report Count: 1
+    0x75, 0x05, // Report Size: 5 (padding)
+    0x81, 0x03, // Input: Constant, Variable, Absolute
+    0x05, 0x01, // Usage Page: Generic Desktop
+    0x09, 0x30, // X
+    0x09, 0x31, // Y
+    0x09, 0x38, // Wheel
+    0x15, 0x81, // Logical Minimum: -127
+    0x25, 0x7F, // Logical Maximum: +127
+    0x75, 0x08, // Report Size: 8
+    0x95, 0x03, // Report Count: 3
+    0x81, 0x06, // Input: Data, Variable, Relative
+    0xC0, 0xC0 // End both collections
+};
+
 BleKeyboard::BleKeyboard(String deviceName, String deviceManufacturer, uint8_t batteryLevel)
     : hid(0), deviceName(String(deviceName).substring(0, 15)),
       deviceManufacturer(String(deviceManufacturer).substring(0, 15)), batteryLevel(batteryLevel) {}
@@ -162,14 +195,18 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
     BLEDevice::init(deviceName.c_str());
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks(this));
+    if (mouseEnabled) pServer->advertiseOnDisconnect(true);
     hid = new BLEHIDDevice(pServer);
     inputKeyboard = hid->getInputReport(KEYBOARD_ID); // <-- input REPORTID from report map
     outputKeyboard = hid->getOutputReport(KEYBOARD_ID);
     inputMediaKeys = hid->getInputReport(MEDIA_KEYS_ID);
+    if (mouseEnabled) inputMouse = hid->getInputReport(MOUSE_ID);
 
-    inputKeyboard->setCallbacks(new CharacteristicCallbacks(this));
-    outputKeyboard->setCallbacks(new CharacteristicCallbacks(this));
-    inputMediaKeys->setCallbacks(new CharacteristicCallbacks(this));
+    // NimBLE characteristics do not own their callback object.
+    inputKeyboard->setCallbacks(&characteristicCallbacks);
+    outputKeyboard->setCallbacks(&characteristicCallbacks);
+    inputMediaKeys->setCallbacks(&characteristicCallbacks);
+    if (mouseEnabled) inputMouse->setCallbacks(&characteristicCallbacks);
 
     hid->setManufacturer("Espressif");
     hid->setPnp(0x02, vid, pid, version);
@@ -177,7 +214,15 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
 
     BLEDevice::setSecurityAuth(true, true, true);
 
-    hid->setReportMap((uint8_t *)_hidReportDescriptor, sizeof(_hidReportDescriptor));
+    if (mouseEnabled) {
+        static uint8_t comboDescriptor[sizeof(_hidReportDescriptor) + sizeof(_mouseHidReportDescriptor)];
+        memcpy(comboDescriptor, _hidReportDescriptor, sizeof(_hidReportDescriptor));
+        memcpy(comboDescriptor + sizeof(_hidReportDescriptor), _mouseHidReportDescriptor,
+               sizeof(_mouseHidReportDescriptor));
+        hid->setReportMap(comboDescriptor, sizeof(comboDescriptor));
+    } else {
+        hid->setReportMap((uint8_t *)_hidReportDescriptor, sizeof(_hidReportDescriptor));
+    }
     hid->startServices();
     advertising = pServer->getAdvertising();
     advertising->setAppearance(appearance);
@@ -204,12 +249,8 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
 }
 
 void BleKeyboard::end(void) {
-    int i = 0;
-    i = pServer->getConnectedCount();
-    if (i > 0) {
-        int j;
-        for (j = 0; j < i; j++) pServer->disconnect(pServer->getPeerInfo(i).getConnHandle());
-    }
+    const auto peerHandles = pServer->getPeerDevices();
+    for (const uint16_t handle : peerHandles) pServer->disconnect(handle);
     delete hid;
     hid = nullptr;
 
@@ -254,6 +295,21 @@ static bool bleKbNotifyRetry(BLECharacteristic *chr, const uint8_t *value, size_
         if (chr->notify(value, len)) return true;
     }
     return false;
+}
+
+bool BleKeyboard::scrollWheel(int8_t wheel) {
+    if (!mouseEnabled || inputMouse == nullptr || wheel == 0 ||
+        !isConnected() || !mouseSubscribed) return false;
+    const uint8_t report[4] = {0, 0, 0, static_cast<uint8_t>(wheel)};
+    // The caller rate-limits wheel reports; avoid the keyboard delay_ms busy-wait.
+    if (!bleKbNotifyRetry(inputMouse, report, sizeof(report))) return false;
+    return true;
+}
+
+bool BleKeyboard::parkPointer() {
+    if (!mouseEnabled || inputMouse == nullptr || !isConnected() || !mouseSubscribed) return false;
+    const uint8_t report[4] = {0, 127, 0, 0};
+    return bleKbNotifyRetry(inputMouse, report, sizeof(report));
 }
 
 void BleKeyboard::sendReport(KeyReport *keys) {
@@ -426,6 +482,7 @@ void BleKeyboard::ServerCallbacks::onConnect(NimBLEServer *pServer, NimBLEConnIn
 }
 void BleKeyboard::ServerCallbacks::onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
     parent->connected = false;
+    parent->mouseSubscribed = false;
     Serial.println("BRUCE KEYBOARD: lib disconnected");
 }
 void BleKeyboard::ServerCallbacks::onAuthenticationComplete(NimBLEConnInfo &connInfo) {
@@ -448,6 +505,7 @@ void BleKeyboard::CharacteristicCallbacks::onWrite(
 void BleKeyboard::CharacteristicCallbacks::onSubscribe(
     NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue
 ) {
+    if (pCharacteristic == parent->inputMouse) parent->mouseSubscribed = (subValue & 1) != 0;
     if (subValue == 0) {
         Serial.println("BRUCE KEYBOARD: Client unsubscribed from notifications/indications.");
         if (parent->m_subCount) parent->m_subCount--;

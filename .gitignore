@@ -24,3 +24,9 @@ lib/mquickjs_headers/mqjs_stdlib_generator.exe
 .github/agents/Bruce-AI.agent.md
 .idea
 .ai
+/__pycache__/
+/manga-final-build.log
+/manga-*-device.log
+/flash-backup*.bin
+/*.elf
+/*.map

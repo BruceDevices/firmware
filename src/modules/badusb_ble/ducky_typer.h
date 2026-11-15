@@ -57,6 +57,10 @@ bool handlePauseResume();
 
 // Presenter mode - press button to advance slides
 void PresenterMode(HIDInterface *&hid, bool ble = true);
+#if defined(T_EMBED_1101) && defined(HAS_ENCODER)
+void MangaRemote(HIDInterface *&hid, bool ble = true);
+void requestMangaBoot();
+#endif
 
 // Shared cleanup for ducky_typer BLE functions - cleans a specific instance
 void cleanupDuckyBLE(HIDInterface *&hid);
