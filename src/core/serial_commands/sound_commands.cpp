@@ -89,7 +89,7 @@ void createSoundCommands(SimpleCLI *cli) {
     toneCmd.addPosArg("frequency", "500UL");
     toneCmd.addPosArg("duration", "500UL");
 
-#ifdef HAS_NS4168_SPKR
+#ifdef HAS_SPEAKER
     Command playCmd = cli->addCommand("play,music_player", playCallback);
     playCmd.addPosArg("song");
 

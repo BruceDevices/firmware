@@ -3,11 +3,13 @@
 
 // ST25R3916 via RFAL fork (lewisxhe/ST25R3916-fork + NFC-RFAL-fork).
 // Supported: SPI mode on boards with ST25R wiring such as lilygo-t-lora-pager and reaper.
-// I2C mode uses the fork constructor RfalRfST25R3916Class(&Wire, irqPin).
+// I2C mode uses the fork constructor RfalRfST25R3916Class(TwoWire*, irqPin) on the bus leased
+// in _initI2C() (i2c_bus, sys_i2c or the board preset).
 // Card emulation/listen mode is not wired in this driver yet.
 // ISO15693 writes are not implemented.
 
 #include "core/bus_HAL.h"
+#include "core/i2c_finder.h"
 #include "core/sd_functions.h"
 #include "modules/rfid/apdu.h"
 #include <esp_random.h>
@@ -61,6 +63,16 @@ static void _setNfcPower(bool enabled) {
 #if defined(IO_EXP_NFC) && IO_EXP_NFC >= 0
     ioExpander.setPinDirection(IO_EXP_NFC, OUTPUT);
     ioExpander.turnPinOnOff(IO_EXP_NFC, enabled ? HIGH : LOW);
+#endif
+#ifdef CAP_CC1101_POWER_EN
+    // M5Stack Cap CC1101: POWER_EN gates the whole cap, and the cap's CC1101 hangs off
+    // this same SPI bus, so park its CS high before we talk to the NFC chip.
+    if (bruceConfigPins.ST25R_bus.cs == (gpio_num_t)CAP_NFC_SS_PIN) {
+        pinMode(CAP_CC1101_SS_PIN, OUTPUT);
+        digitalWrite(CAP_CC1101_SS_PIN, HIGH);
+        pinMode(CAP_CC1101_POWER_EN, OUTPUT);
+        digitalWrite(CAP_CC1101_POWER_EN, enabled ? HIGH : LOW);
+    }
 #endif
 }
 
@@ -237,9 +249,50 @@ bool ST25R3916::_initSPI() {
     return _hw != nullptr;
 }
 
+// 0x50 is a common address (EEPROMs, other NFC front-ends): only accept a bus where the IC
+// Identity register (0x3F, read mode bit 0x40) reports an ST25R3916 or ST25R3916B.
+static bool verifySt25r3916(TwoWire &wire, uint8_t addr) {
+    wire.beginTransmission(addr);
+    wire.write(0x3F | 0x40);
+    if (wire.endTransmission(false) != 0) return false;
+    if (wire.requestFrom(addr, (size_t)1) != 1) return false;
+    uint8_t icType = wire.read() & 0xF8;
+    return icType == (5U << 3) || icType == (6U << 3);
+}
+
 bool ST25R3916::_initI2C() {
-    TwoWire *Wire = acquireI2CBus();
-    _hw = new RfalRfST25R3916Class(Wire, GPIO_NUM_NC);
+    // The M5Stack NFC Unit (U216) hangs on the Grove bus (i2c_bus) at the same address as an
+    // onboard reader on sys_i2c (CoreS3, StackChan), so i2c_bus is searched first: a plugged-in
+    // unit wins over the onboard chip, which is still found on sys_i2c when nothing is plugged.
+    // A repeated begin() (Tag-O-Matic re-inits after operations) keeps the bus already found.
+    if (_i2cLease) {
+        _hw = new RfalRfST25R3916Class(_i2cLease.wire(), GPIO_NUM_NC);
+        return _hw != nullptr;
+    }
+    I2CDeviceQuery query{ST25R3916::I2C_ADDRESS};
+    query.prefer = I2CPrefer::UserFirst;
+    query.verify = verifySt25r3916;
+    _i2cLease = i2cLeaseDevice(query);
+
+    // Boards with an onboard ST25R3916 on I2C store it in ST25R_bus as I2C-style pins: SDA in the
+    // sck slot, SCL in the miso slot, no CS. Usually those are the sys_i2c pins (already covered
+    // above); a preset on a third bus is tried here, then the user bus as a last resort so a chip
+    // that didn't pass the identity check (still powering up) gets a chance at rfalNfcInitialize.
+    bool boardI2cPins = bruceConfigPins.ST25R_bus.sck != GPIO_NUM_NC &&
+                        bruceConfigPins.ST25R_bus.miso != GPIO_NUM_NC &&
+                        bruceConfigPins.ST25R_bus.cs == GPIO_NUM_NC;
+    if (!_i2cLease && boardI2cPins) {
+        _i2cLease =
+            i2cLeasePins((int8_t)bruceConfigPins.ST25R_bus.sck, (int8_t)bruceConfigPins.ST25R_bus.miso);
+    }
+    if (!_i2cLease) _i2cLease = i2cLeaseBus(I2CBusId::User);
+    if (!_i2cLease) {
+        ST25R_LOG("_initI2C: no I2C bus available");
+        return false;
+    }
+    ST25R_LOG("_initI2C: bus=%s found=%d", i2cBusLabel(_i2cLease.bus()).c_str(), (int)_i2cLease.found());
+
+    _hw = new RfalRfST25R3916Class(_i2cLease.wire(), GPIO_NUM_NC);
     return _hw != nullptr;
 }
 

@@ -37,7 +37,7 @@ void sinewave_animation() {
 }
 
 void rf_raw_record_draw(RawRecordingStatus status) {
-    tft.setCursor(20, 38);
+    tft.setCursor(2 * BORDER_PAD_X, BORDER_PAD_Y + LH * FP + 2);
     tft.setTextSize(FP);
     if (status.frequency <= 0) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);

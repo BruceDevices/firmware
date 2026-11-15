@@ -306,8 +306,10 @@ bool initializeDeauthMode(int channel, WiFiState &savedState) {
     if (!apStarted) {
         WiFi.disconnect(true);
         delay(100);
+#ifndef CONFIG_IDF_TARGET_ESP32P4
         WiFi.mode(WIFI_OFF);
         delay(100);
+#endif
         WiFi.mode(WIFI_AP);
         delay(100);
         apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 0, 1, false);
