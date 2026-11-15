@@ -480,6 +480,8 @@ int16_t tft_display::fontHeight(int16_t font) const {
 // Was a stub returning nullptr, which silently disabled every board-level use
 // (AMOLED brightness, full-panel clear). Return the real driver.
 Arduino_GFX *tft_display::native() { return _gfx; }
+void tft_display::lock() { xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY); }
+void tft_display::unlock() { xSemaphoreGiveRecursive(tftMutex); }
 
 void tft_display::drawWideLineFallback(float ax, float ay, float bx, float by, float wd, uint32_t color) {
     if (!_gfx) return;

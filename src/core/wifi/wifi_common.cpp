@@ -88,7 +88,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
 
         // Start timezone update in background if not already running
         if (timezoneTaskHandle == NULL) {
-            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 8192, NULL, 1, &timezoneTaskHandle);
         }
     }
 
@@ -323,7 +323,7 @@ void wifiConnectTask(void *pvParameters) {
 
                 // Start timezone update in background if not already running
                 if (timezoneTaskHandle == NULL) {
-                    xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+                    xTaskCreate(updateTimezoneTask, "updateTimezone", 8192, NULL, 1, &timezoneTaskHandle);
                 }
                 drawStatusBar();
                 break;
@@ -338,6 +338,42 @@ void wifiConnectTask(void *pvParameters) {
 }
 
 String checkMAC() { return String(WiFi.macAddress()); }
+
+#ifdef CLOCK_SYNC_AT_BOOT
+/*********************************************************************
+**  Function: clockSyncAtBootTask
+**  WiFi is normally off at startup. For a correct clock, quietly join a
+**  saved network once, sync time (NTP + timezone), then switch WiFi off
+**  again - unless the user started using WiFi in the meantime.
+**********************************************************************/
+void clockSyncAtBootTask(void *pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    if (bruceConfig.wifi.empty() || WiFi.getMode() != WIFI_MODE_NULL || wifiConnected || !radioHasMemForWifi()) {
+        vTaskDelete(NULL);
+        return;
+    }
+    ensureWifiPlatform();
+    WiFi.mode(WIFI_MODE_STA);
+    int nets = WiFi.scanNetworks();
+    bool joined = false;
+    for (int i = 0; i < nets && !joined && !wifiConnected; i++) {
+        String ssid = WiFi.SSID(i);
+        String pwd = bruceConfig.getWifiPassword(ssid);
+        if (pwd == "") continue;
+        WiFi.begin(ssid, pwd);
+        for (int k = 0; k < 80 && !WiFi.isConnected(); k++) vTaskDelay(pdMS_TO_TICKS(100));
+        joined = WiFi.isConnected();
+    }
+    WiFi.scanDelete();
+    if (joined) updateClockTimezone();
+    // leave WiFi alone if the user connected / opened an AP while we worked
+    if (!wifiConnected && !WiFi.AP.started()) {
+        WiFi.disconnect(true, false);
+        WiFi.mode(WIFI_MODE_NULL);
+    }
+    vTaskDelete(NULL);
+}
+#endif
 
 /*********************************************************************
 **  Function: wifiConnectWPS
@@ -434,7 +470,7 @@ bool wifiConnectWPS() {
     wifiIP = WiFi.localIP().toString();
     bruceConfig.addWifiCredential(WiFi.SSID(), WiFi.psk()); // remember for auto-connect
     if (timezoneTaskHandle == NULL) {
-        xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+        xTaskCreate(updateTimezoneTask, "updateTimezone", 8192, NULL, 1, &timezoneTaskHandle);
     }
     displaySuccess("Connected: " + WiFi.SSID(), true);
     return true;
@@ -489,7 +525,7 @@ bool wifiConnecttoKnownNet(void) {
 
         // Start timezone update in background if not already running
         if (timezoneTaskHandle == NULL) {
-            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
+            xTaskCreate(updateTimezoneTask, "updateTimezone", 8192, NULL, 1, &timezoneTaskHandle);
         }
     }
     return result;

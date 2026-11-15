@@ -75,7 +75,7 @@ void _setup_gpio() {
     // ---------------- Touch ----------------
     pinMode(TOUCH_INT_PIN, INPUT_PULLUP);
     touch.setPins(TOUCH_RST_PIN, TOUCH_INT_PIN);
-    touchOk = touch.begin(Wire, TOUCH_I2C_ADDR, SYS_I2C_SDA, SYS_I2C_SCL);
+    touchOk = touch.begin(Wire, TOUCH_I2C_ADDR); // bus is already up, don't re-set its pins
     if (touchOk) {
         touch.setMaxCoordinates(AMOLED_PHYS_SIZE, AMOLED_PHYS_SIZE);
         touch.setMirrorXY(true, true);
@@ -107,39 +107,6 @@ void _post_setup_gpio() {
     panel->writeFillRectPreclipped(-AMOLED_WIN_OFS, -AMOLED_WIN_OFS, AMOLED_PHYS_SIZE, AMOLED_PHYS_SIZE, 0x0000);
     panel->endWrite();
     panel->setBrightness(255);
-
-#ifdef PANEL_TEST_CARD
-    // One-time diagnostic: which primitives does this panel actually show?
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setTextSize(2);
-    const int lx = 20, sx = 150;
-    tft.drawString("1 HLINE", lx, 30, 1);
-    tft.drawFastHLine(sx, 37, 150, TFT_WHITE);
-    tft.drawString("2 VLINE", lx, 60, 1);
-    tft.drawFastVLine(sx, 55, 25, TFT_WHITE);
-    tft.drawFastVLine(sx + 21, 55, 25, TFT_WHITE);
-    tft.drawString("3 HLINE2", lx, 90, 1);
-    tft.fillRect(sx, 96, 150, 2, TFT_WHITE);
-    tft.drawString("4 VLINE2", lx, 120, 1);
-    tft.fillRect(sx, 115, 2, 25, TFT_WHITE);
-    tft.fillRect(sx + 21, 115, 2, 25, TFT_WHITE);
-    tft.drawString("5 PIXELS", lx, 150, 1);
-    for (int i = 0; i < 150; i += 4) tft.drawPixel(sx + i, 157, TFT_WHITE);
-    tft.drawString("6 RRECT", lx, 180, 1);
-    tft.drawRoundRect(sx, 172, 150, 30, 15, TFT_WHITE);
-    tft.drawString("7 TRI", lx, 215, 1);
-    tft.fillTriangle(sx, 222, sx + 30, 208, sx + 30, 236, TFT_WHITE);
-    tft.drawString("8 LINE", lx, 250, 1);
-    tft.drawLine(sx, 245, sx + 150, 265, TFT_WHITE);
-    tft.drawString("9 BLOCK", lx, 285, 1);
-    tft.fillRect(sx, 280, 40, 20, TFT_WHITE);
-    for (int s = 25; s > 0; s--) {
-        tft.fillRect(260, 280, 60, 20, TFT_BLACK);
-        tft.drawString(String(s), 270, 285, 1);
-        delay(1000);
-    }
-#endif
 }
 
 /***************************************************************************************
@@ -170,7 +137,9 @@ void _setBrightness(uint8_t brightval) {
     uint8_t v;
     if (brightval == 0) v = 0;
     else v = MINBRIGHT + (uint8_t)(((255 - MINBRIGHT) * (uint32_t)brightval) / 100);
+    tft.lock(); // called from the input task while the main task may be drawing
     static_cast<Arduino_CO5300 *>(g)->setBrightness(v);
+    tft.unlock();
 }
 
 /*********************************************************************
@@ -224,21 +193,38 @@ static uint8_t pwrKeyEvent() {
 **********************************************************************/
 void InputHandler(void) {
     static unsigned long tm = 0;
-    // Touch "tap" tracking: the CST9217 keeps reporting while the finger is
-    // down. Only the first report of a touch counts as a press; the next press
-    // needs the finger lifted (no report for RELEASE_MS) unless Bruce asks for
-    // repeats via LongPress.
-    static unsigned long lastTouchSeen = 0;
-    static bool fingerDown = false;
-    const unsigned long RELEASE_MS = 120;
+    // Touch "tap" tracking. The CST9217 keeps reporting while a finger is down,
+    // and on an ungrounded charger it can report electrical noise continuously.
+    // A press is accepted when two reports in a row agree on the position
+    // (noise jumps around, a finger doesn't) AND it is a new touch: the finger
+    // was lifted, or it landed somewhere else, or it has been held for a while.
+    // The last two rules mean taps keep working even if the panel never
+    // reports "released".
+    static unsigned long lastTouchSeen = 0, lastAccepted = 0;
+    static bool fingerDown = false, pendingNew = false;
+    static int16_t prevX = -1000, prevY = -1000, accX = -1000, accY = -1000;
+    const unsigned long RELEASE_MS = 120, HOLD_REPEAT_MS = 700;
 
     int16_t x, y;
     bool touched = readTouch(x, y); // cheap when INT is idle (no I2C traffic)
     if (touched) {
-        bool newTap = !fingerDown || (millis() - lastTouchSeen > RELEASE_MS);
-        lastTouchSeen = millis();
+        unsigned long now = millis();
+        bool lifted = !fingerDown || (now - lastTouchSeen > RELEASE_MS);
+        bool stable = abs(x - prevX) < 28 && abs(y - prevY) < 28 && (now - lastTouchSeen < 150);
+        bool moved = abs(x - accX) > 60 || abs(y - accY) > 60;
+        bool held = now - lastAccepted > HOLD_REPEAT_MS;
+        bool repeat = LongPress && now - tm > 200;
+        if (lifted) pendingNew = true; // first report of a fresh touch: confirm it with the next one
+        prevX = x;
+        prevY = y;
+        lastTouchSeen = now;
         fingerDown = true;
-        if (!newTap && !(LongPress && millis() - tm > 200)) touched = false;
+        if (stable && (pendingNew || moved || held || repeat) && now - lastAccepted > 120) {
+            pendingNew = false;
+            lastAccepted = now;
+            accX = x;
+            accY = y;
+        } else touched = false;
     } else if (fingerDown && millis() - lastTouchSeen > RELEASE_MS) {
         fingerDown = false;
     }

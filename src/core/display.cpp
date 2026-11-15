@@ -604,6 +604,11 @@ int loopOptions(
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
         if (exit) break;
         if (menuType == MENU_TYPE_MAIN) {
+#ifdef HAS_CAT_CLOCK
+            // Idle on the main menu: instead of a dark screen show the always-on
+            // clock; waking it shows the animated clock first, then the menu again.
+            if (isScreenOff && catClockRun() >= 0) break;
+#endif
             checkReboot();
             if (devModeCounter >= 5 && !bruceConfig.devMode) {
                 bruceConfig.setDevMode(true);

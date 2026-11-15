@@ -218,6 +218,11 @@ void drawMfkey32Icon(int x, int y);
 void drawMfkey64Icon(int x, int y);
 
 void TouchFooter(uint16_t color = bruceConfig.priColor);
+#ifdef HAS_CAT_CLOCK
+// Animated clock face + always-on display (board provided).
+// Returns 1 = Select, 2 = Back, -1 = could not start.
+int catClockRun();
+#endif
 
 void MegaFooter(uint16_t color = bruceConfig.priColor);
 

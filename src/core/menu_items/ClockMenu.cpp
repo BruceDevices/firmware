@@ -21,6 +21,9 @@ void ClockMenu::optionsMenu() {
 void ClockMenu::showSubMenu() {
     options = {
         {"Timer",         [=]() { Timer(); }            },
+        {bruceConfig.clock24hr ? "Use 12-Hour" : "Use 24-Hour",
+         [=]() { bruceConfig.setClock24Hr(!bruceConfig.clock24hr); }},
+        {"Set Time/Zone", [=]() { setClock(); }         },
         {"Back to Clock", [=]() {}                      },
         {"Exit",          [=]() { returnToMenu = true; }}
         // Add more options here

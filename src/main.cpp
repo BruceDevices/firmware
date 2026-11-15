@@ -555,6 +555,12 @@ void setup() {
         boot_screen_anim();
         startup_sound();
     }
+#ifdef CLOCK_SYNC_AT_BOOT
+    if (!bruceConfig.wifiAtStartup) {
+        extern void clockSyncAtBootTask(void *);
+        xTaskCreate(clockSyncAtBootTask, "clockSync", 8192, NULL, 1, NULL);
+    }
+#endif
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
         xTaskCreate(
@@ -597,6 +603,13 @@ void loop() {
         }
         if (interpreter_state == -1) { interpreterTaskHandler = NULL; }
         previousMillis = millis(); // ensure that will not dim screen when get back to menu
+    }
+#endif
+#ifdef HAS_CAT_CLOCK
+    static bool clockShownAtBoot = false;
+    if (!clockShownAtBoot) { // the clock is the first thing you see; a press continues to the menu
+        clockShownAtBoot = true;
+        catClockRun();
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);

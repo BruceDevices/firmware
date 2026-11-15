@@ -67,6 +67,28 @@ int getBattery() {
 
 unsigned long lastNtpSyncMs = 0; // millis() of the last successful NTP sync (0 = never)
 
+#ifdef AUTO_TIMEZONE
+#include <HTTPClient.h>
+// When no timezone was ever chosen (tmz == 0) ask an IP geolocation service
+// for the local UTC offset, so the clock is right without any setup.
+static void autoDetectTimezone() {
+    if (bruceConfig.tmz != 0) return;
+    HTTPClient http;
+    http.setConnectTimeout(4000);
+    http.setTimeout(4000);
+    if (!http.begin("http://ip-api.com/json/?fields=offset")) return;
+    if (http.GET() == 200) {
+        String body = http.getString(); // {"offset":19800}
+        int i = body.indexOf("\"offset\":");
+        if (i >= 0) {
+            long off = body.substring(i + 9).toInt();
+            if (off != 0 && off >= -12 * 3600 && off <= 14 * 3600) bruceConfig.setTmz(off / 3600.0f);
+        }
+    }
+    http.end();
+}
+#endif
+
 void updateClockTimezone() {
     timeClient.begin();
     // A single update() can silently fail and leave the epoch near 0 (1970).
@@ -81,6 +103,9 @@ void updateClockTimezone() {
         return;
     }
     lastNtpSyncMs = millis();
+#ifdef AUTO_TIMEZONE
+    autoDetectTimezone();
+#endif
 
     timeClient.setTimeOffset(bruceConfig.tmz * 3600);
 
@@ -152,7 +177,7 @@ void restorePersistedClock() {
             settimeofday(&tv, nullptr);
         }
     }
-    xTaskCreate(time_persist_task, "clockSave", 4096, NULL, 1, NULL);
+    xTaskCreate(time_persist_task, "clockSave", 8192, NULL, 1, NULL);
 }
 #endif
 

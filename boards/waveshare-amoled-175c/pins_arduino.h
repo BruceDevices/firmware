@@ -114,6 +114,12 @@ static const uint8_t SCK = -1;
 #define TFT_BACKLIGHT_ON 1
 
 #define HAS_SCREEN 1
+// Animated cat clock face + always-on display (boards/.../catclock.cpp)
+#define HAS_CAT_CLOCK 1
+// Keep the clock right with no setup: sync once at boot over a saved WiFi
+// network (then WiFi goes off again) and detect the timezone automatically.
+#define CLOCK_SYNC_AT_BOOT 1
+#define AUTO_TIMEZONE 1
 // Round panel: hide Bruce's rectangular screen frame / footer box / divider
 #define ROUND_DISPLAY_NO_FRAME 1
 // Status bar: bigger clock, refreshed every second on the main menu

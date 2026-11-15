@@ -971,6 +971,16 @@ void setClock() {
 }
 
 void runClockLoop(bool showMenuHint) {
+#ifdef HAS_CAT_CLOCK
+    {
+        int r = catClockRun();
+        if (r >= 0) {
+            tft.fillScreen(bruceConfig.bgColor);
+            if (r == 2 || !showMenuHint) returnToMenu = true;
+            return;
+        }
+    }
+#endif
     int tmp = 0;
     unsigned long hintStartTime = millis();
     bool hintVisible = showMenuHint;

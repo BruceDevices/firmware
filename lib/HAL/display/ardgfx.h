@@ -382,6 +382,9 @@ public:
     uint8_t getRotation() const;
     int16_t fontHeight(int16_t font = 1) const;
     Arduino_GFX *native();
+    // Take/release the display bus mutex (for board code that talks to native() directly)
+    void lock();
+    void unlock();
 
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {
