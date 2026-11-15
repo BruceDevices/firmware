@@ -29,28 +29,32 @@ static inline size_t radioLargestDmaBlock() { return heap_caps_get_largest_free_
 constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 
 // Minimum contiguous DMA block required before bringing the BLE stack up.
-// On boards where the SDR bank is reserved out of the heap (see
-// modules/wifi/sdr.cpp) the menu heap only has ~15.8 kB contiguous (measured on
-// Cardputer ADV) and the controller still fails ("Malloc failed"), so the
-// threshold must sit comfortably above that; the SDR bank hand-off below gives
-// the heap ~64 kB more when the check fails, which is what makes this higher
-// gate reachable there.
-// On every other board the bank is NOT reserved (BRUCE_NO_SDR_JAMMER), so there
+// The raised value applies ONLY while the IQ-record bank is still fenced out
+// of the heap (see modules/wifi/sdr.cpp): with the bank reserved the menu heap
+// only has ~15.8 kB contiguous (measured on Cardputer ADV) and the controller
+// still fails ("Malloc failed"), so the threshold must sit comfortably above
+// that; the bank hand-off in radioHasMemForBle() gives the heap ~64 kB more,
+// which is what makes this higher gate reachable there.
+// Once the bank has been handed back, the heap is the pre-1.17 layout, where
+// BLE ran with the Wi-Fi-sized gate — radioHasMemForBle() falls back to it, so
+// BLE menus don't show "Low RAM" red lines in states pre-1.17 handled fine
+// (WiFi up, SD mounted, hand-off already consumed).
+// On every other board the bank is NOT reserved (BRUCE_NO_IQ_RECORD), so there
 // is no hand-off that could ever satisfy a bigger gate: those builds keep the
 // pre-1.17 gate (same as Wi-Fi), otherwise BLE fails right after boot on
 // T-Embed/T-Deck/etc. even with WiFi off.
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_SDR_JAMMER)
+#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 48 * 1024;
 #else
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = RADIO_WIFI_MIN_DMA_BLOCK;
 #endif
 
-// SDR bank hand-off (implemented in modules/wifi/sdr.cpp): the SDR engine's
-// 64 KiB SRAM bank is kept out of the heap behind a fence allocation so the IQ
-// record/jammer can always start; when a radio bring-up finds the heap too
+// SDR bank hand-off (implemented in modules/wifi/sdr.cpp): the IQ record's
+// 64 KiB SRAM bank is kept out of the heap behind a fence allocation so the
+// capture can always start; when a radio bring-up finds the heap too
 // small, releasing the fence returns the bank to the heap. After that the SDR
 // needs a reboot (it refuses cleanly instead of corrupting the heap).
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_SDR_JAMMER)
+#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
 void sdrBankReleaseForRadio();
 void sdrBankHeapInit();
 #else
@@ -77,6 +81,14 @@ static inline bool radioHasMemForBle() {
         return true;
     }
 
+    // The bank is back in the heap now (or was never reserved): the heap is
+    // the pre-1.17 layout, where BLE ran with the Wi-Fi-sized gate. Holding
+    // the raised gate here would refuse BLE in states pre-1.17 handled fine
+    // (WiFi up, SD mounted) even though the controller has what it had then.
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
+        return true;
+    }
+
     // Still not enough - try to free WiFi
     Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
 
@@ -90,8 +102,8 @@ static inline bool radioHasMemForBle() {
         delay(300);
     }
 
-    // Recheck after freeing WiFi
-    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
+    // Recheck after freeing WiFi (pre-1.17 gate, same reasoning as above)
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
         Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
         return true;
     }
