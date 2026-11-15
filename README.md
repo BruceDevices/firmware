@@ -15,7 +15,7 @@ Bruce Scroller is a small, board-specific modification of [Bruce Firmware](https
 - Draws the screen once and updates changing status rows, avoiding the old periodic full-screen redraw.
 - Leaves Bruce's existing `Media Cmds` and other Bruce modes in place.
 
-The maintainer reports testing the remote with MangaLib on an Android phone. Phone model, Android version, and app version were not recorded as a compatibility matrix. TikTok, Instagram Reels, YouTube Shorts, and other apps have **not** been verified; they may handle wheel and volume events differently.
+In the maintainer's tests, vertical scrolling was comfortable in scrollable Android screens, including the standard TikTok feed, and the remote was used with MangaLib. TikTok photo posts/carousels did not advance with the wheel. The wheel sends vertical scroll events, not touchscreen swipe gestures. Phone model and software versions were not recorded; Instagram Reels, YouTube Shorts, and other apps have not been verified.
 
 ## Compatibility
 
@@ -39,7 +39,7 @@ This project is based on Bruce Firmware commit [`2b6ba4d490bfcf94ce2574c6154537d
 | Hold encoder | Cycle scroll sensitivity from 1 to 5 |
 | Side Back button | Exit Bruce Scroller to Bruce |
 
-Wheel events are sent in small steps at a 16 ms interval. A bounded queue smooths short encoder bursts; very fast turns can exceed the queue and some steps can be dropped. On connection the device sends a short relative mouse movement to try to park the pointer near the edge; it does not guarantee a hidden pointer.
+Wheel events are sent in small steps at a 16 ms interval. A bounded queue smooths short encoder bursts; very fast turns can exceed the queue and some steps can be dropped. The remote sends wheel events rather than touch swipes, so it cannot advance TikTok photo carousels in the maintainer's test. On connection the device sends a short relative mouse movement to try to park the pointer near the edge; it does not guarantee a hidden pointer.
 
 ## Build
 

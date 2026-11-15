@@ -15,7 +15,7 @@ Bruce Scroller 是基于 [Bruce Firmware](https://github.com/BruceDevices/firmwa
 - 进入模式时绘制一次界面，随后只更新变化的状态行，避免原先周期性重绘整个屏幕。
 - 保留 Bruce 中原有的 `Media Cmds` 等模式。
 
-维护者报告已在一部 Android 手机上使用 MangaLib 测试。手机型号、Android 版本和应用版本没有记录为兼容性列表。TikTok、Instagram Reels、YouTube Shorts 和其他应用**尚未验证**；它们对滚轮和音量事件的处理可能不同。
+维护者测试反馈：在可滚动的 Android 页面中，垂直滚动体验顺畅，包括 TikTok 普通视频信息流；也使用 MangaLib 进行了测试。TikTok 图片帖/轮播无法通过滚轮翻页。滚轮发送的是垂直滚动事件，而不是触屏滑动手势。手机型号和软件版本未记录；Instagram Reels、YouTube Shorts 等应用尚未验证。
 
 ## 兼容性
 
@@ -38,8 +38,7 @@ Bruce Scroller 是基于 [Bruce Firmware](https://github.com/BruceDevices/firmwa
 | 双击旋钮 | Volume Up；应用支持时翻到上一页 |
 | 长按旋钮 | 在 1 到 5 档之间切换灵敏度 |
 | 侧面 Back 按键 | 退出 Bruce Scroller 并返回 Bruce |
-
-滚轮事件以 16 毫秒间隔逐步发送。有限队列可平滑短时间内的编码器输入；旋转过快时队列可能溢出，部分步进会丢失。连接后设备会发送少量相对鼠标移动，尝试将指针停靠在屏幕边缘；不保证指针隐藏。
+滚轮以 16 毫秒间隔逐步发送。有限队列可平滑短时间内的编码器输入；旋转过快时队列可能溢出，部分步进会丢失。遥控器发送滚轮事件而非触屏滑动，因此维护者测试中的 TikTok 图片轮播无法翻页。连接后设备会发送少量相对鼠标移动，尝试将指针停靠在屏幕边缘；不保证指针隐藏。
 
 ## 构建
 
