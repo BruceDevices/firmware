@@ -99,7 +99,10 @@ static bool exioBegin() {
     delay(20);
     ok = ok && exioSet(EXIO_TP_RST, true);
     delay(300); // FT6336 boot
-    ok = ok && exioWrite(EXIO_PWM_REG, 0xFF);
+    // The backlight stays off here. Lighting it before the first frame shows the
+    // panel's own memory: static after power-on, the previous picture after reset.
+    // The core lights it from begin_tft(), after the boot screen has been drawn
+    // and storage has mounted, which is long enough for the glass to catch up.
 
     exioReady = ok;
     Serial.printf("[WS-C5] I/O expander 0x24 %s\n", ok ? "ready" : "NOT FOUND");
