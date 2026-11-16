@@ -98,17 +98,19 @@ const char *fferr2str[] = {
  * */
 
 bool sdWait(uint8_t pdrv, int timeout) {
-  char resp;
+  uint8_t resp;
+  int ff_count = 0;
   uint32_t start = millis();
 
   do {
     resp = s_cards[pdrv]->spi->transfer(0xFF);
-  } while (resp == 0x00 && (millis() - start) < (unsigned int)timeout);
+    if (resp == 0xFF && ++ff_count == 2) {
+      return true;
+    }
+  } while ((millis() - start) < (unsigned int)timeout);
 
-  if (!resp) {
-    log_w("Wait Failed");
-  }
-  return (resp > 0x00);
+  log_w("Wait Failed");
+  return false;
 }
 
 void sdStop(uint8_t pdrv) {
@@ -127,7 +129,7 @@ bool sdSelectCard(uint8_t pdrv) {
   bool s = sdWait(pdrv, 500);
   if (!s) {
     log_e("Select Failed");
-    digitalWrite(card->ssPin, HIGH);
+    sdDeselectCard(pdrv);
     return false;
   }
   return true;
@@ -309,16 +311,21 @@ bool sdWriteSector(uint8_t pdrv, const char *buffer, unsigned long long sector) 
       return false;
     }
     if (!sdCommand(pdrv, WRITE_BLOCK_SINGLE, (s_cards[pdrv]->type == CARD_SDHC) ? sector : sector << 9, NULL)) {
-      char token = sdWriteBytes(pdrv, buffer, 0xFE);
-      sdDeselectCard(pdrv);
-
-      if (token == 0x0A) {
-        continue;
-      } else if (token == 0x0C) {
+      uint8_t token = (uint8_t)sdWriteBytes(pdrv, buffer, 0xFE);
+      if (token != 0x05) {
+        sdDeselectCard(pdrv);
+        if (token == 0x0A || token == 0x0B) {
+          continue;
+        }
         return false;
       }
+      if (!sdWait(pdrv, 500)) {
+        sdDeselectCard(pdrv);
+        return false;
+      }
+      sdDeselectCard(pdrv);
 
-      unsigned int resp;
+      unsigned int resp = 0;
       if (sdTransaction(pdrv, SEND_STATUS, 0, &resp) || resp) {
         return false;
       }
