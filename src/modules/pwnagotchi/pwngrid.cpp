@@ -11,6 +11,7 @@ Thanks to @bmorcelli (Pirata) for his help doing a better code.
 #if !defined(LITE_VERSION)
 #include "pwngrid.h"
 #include "../wifi/sniffer.h"
+#include "core/radio_mem.h"
 #include "core/wifi/wifi_common.h"
 #include <algorithm>
 
@@ -307,18 +308,50 @@ const wifi_promiscuous_filter_t filter = {
     .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA
 };
 
-void initPwngrid() {
+// Brings the pwngrid AP up on a PSRAM-less board. Shared by Brucegotchi and
+// "Pwngrid spam". Returns false when there isn't enough contiguous DMA memory;
+// the caller reports it.
+//
+// Don't go back to esp_wifi_init(WIFI_INIT_CONFIG_DEFAULT()) + esp_wifi_start() here:
+// the AP start then ran out of DMA memory inside ieee80211_hostap_attach and crashed
+// (LoadProhibited on a NULL beacon pointer). Do what the evil portal does: drop stale
+// radio state, hand the SDR bank back, check the headroom, and keep the station table
+// at one client.
+bool pwngridStartAp() {
+    // Already running (e.g. "Pwngrid spam" opened from inside Brucegotchi): reuse it.
+    if (WiFi.getMode() & WIFI_MODE_AP) return true;
+
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(150);
+    }
+
+    // AP mode needs more contiguous DMA than the ~31 KB left while the 64 KB SDR bank
+    // is fenced off. Release the bank first (the SDR feature then needs a reboot).
+    sdrBankReleaseForRadio();
+    if (!radioHasMemForWifi()) return false;
+
     ensureWifiPlatform();
-    wifi_init_config_t WIFI_INIT_CONFIG = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&WIFI_INIT_CONFIG);
+    if (!WiFi.mode(WIFI_MODE_AP)) return false;
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_start();
+    // Hidden, one client: pwngrid frames are raw 802.11, so the AP only has to exist.
+    if (!WiFi.softAP("pwngrid", nullptr, 1, 1, 1)) return false;
+    return true;
+}
+
+bool initPwngrid() {
+    // Brucegotchi always starts from a clean radio, not a stale stack from another menu.
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(150);
+    }
+    if (!pwngridStartAp()) return false;
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(pwnSnifferCallback);
     // esp_wifi_set_ps(WIFI_PS_NONE);
     esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
     vTaskDelay(1 / portTICK_RATE_MS);
+    return true;
 }
 #endif

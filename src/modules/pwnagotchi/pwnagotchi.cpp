@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION)
 #include "../wifi/sniffer.h"
 #include "../wifi/wifi_atks.h"
+#include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/wifi/wifi_common.h"
 #include "esp_err.h"
@@ -113,10 +114,11 @@ void toggle_all_channels() {
 // ---------------------------------------------------------------------------
 // brucegotchi_setup — init pwngrid + UI
 // ---------------------------------------------------------------------------
-void brucegotchi_setup() {
-    initPwngrid();
+bool brucegotchi_setup() {
+    if (!initPwngrid()) return false;
     initUi();
     state = 0; // STATE_INIT
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +347,13 @@ void brucegotchi_start() {
         sniffer_reset_handshake_cache();
     }
 
-    brucegotchi_setup();
+    if (!brucegotchi_setup()) {
+        // Not enough DMA memory for the AP: leave Wi-Fi down and say so, instead of crashing.
+        wifiDisconnect();
+        sniffer_reset_handshake_cache();
+        displayError("Low RAM for AP: reboot and retry", true);
+        return;
+    }
     drawTopCanvas();
     drawBottomCanvas();
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));

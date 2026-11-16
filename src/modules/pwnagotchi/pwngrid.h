@@ -6,6 +6,9 @@ Thanks to thoses developers for their projects:
 
 Thanks to @bmorcelli for his help doing a better code.
 */
+#ifndef PWNGRID_H
+#define PWNGRID_H
+
 #if !defined(LITE_VERSION)
 #include "ArduinoJson.h"
 #include "esp_wifi.h"
@@ -30,7 +33,8 @@ typedef struct {
     bool gone;
 } pwngrid_peer;
 
-void initPwngrid();
+bool initPwngrid();
+bool pwngridStartAp();
 esp_err_t pwngridAdvertise(uint8_t channel, const String &face);
 std::vector<pwngrid_peer> getPwngridPeers();
 uint8_t getPwngridRunTotalPeers();
@@ -40,3 +44,5 @@ signed int getPwngridClosestRssi();
 void checkPwngridGoneFriends();
 void clearPwngridPeers();
 #endif
+
+#endif // PWNGRID_H

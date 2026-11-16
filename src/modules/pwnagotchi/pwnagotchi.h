@@ -8,6 +8,6 @@ Thanks to @bmorcelli for his help doing a better code.
 */
 #if !defined(LITE_VERSION)
 void brucegotchi_start();
-void brucegotchi_setup();
+bool brucegotchi_setup();
 void brucegotchi_update();
 #endif

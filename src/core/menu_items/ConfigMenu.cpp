@@ -63,16 +63,16 @@ void ConfigMenu::optionsMenu() {
 void ConfigMenu::displayUIMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-            {"Brightness",  [this]() { setBrightnessMenu(); }               },
-            {"Dim Time",    [this]() { setDimmerTimeMenu(); }               },
-            {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
-            {"Menu Layout", [this]() { setMainMenuStyleMenu(); }            },
-            {"UI Color",    [this]() { setUIColor(); }                      },
-            {"UI Theme",    [this]() { setTheme(); }                        },
+            {"Brightness",      [this]() { setBrightnessMenu(); }               },
+            {"Dim Time",        [this]() { setDimmerTimeMenu(); }               },
+            {"Orientation",     [this]() { lambdaHelper(gsetRotation, true)(); }},
+            {"Menu Layout",     [this]() { setMainMenuStyleMenu(); }            },
+            {"UI Color",        [this]() { setUIColor(); }                      },
+            {"UI Theme",        [this]() { setTheme(); }                        },
 #if defined(HAS_RESISTIVE_TOUCH)
-            {"Calibrate Touch", []() { calibrateTouch(); }                  },
+            {"Calibrate Touch", []() { calibrateTouch(); }                      },
 #endif
-            {"Back",        []() {}                                         },
+            {"Back",            []() {}                                         },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Display & UI");
@@ -132,11 +132,11 @@ void ConfigMenu::audioMenu() {
         std::vector<Option> localOptions = {
 #if !defined(LITE_VERSION)
             {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
-                                                                [this]() {
+                                      [this]() {
                  // Toggle sound setting
                  bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
                  bruceConfig.saveFile();
-             }                                                                            },
+             }                                                                                                                     },
 #if defined(HAS_SPEAKER)
             {"Sound Volume",                                                [this]() { setSoundVolume(); }},
 #endif  //  HAS_SPEAKER
@@ -174,7 +174,9 @@ void ConfigMenu::systemMenu() {
             {"Startup App",                                                         [this]() { setStartupApp(); }        },
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {"Clock",                                                               [this]() { setClock(); }             },
-            {String("Keyboard Language: ") + bruceConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
+            {String("Keyboard Layout:") + bruceConfig.keyboardLang,                 [this]() { setKeyboardLanguage(); }  },
+            //  {String("Keyboard Language:") + bruceConfig.keyboardLang,              [this]() {
+            //  setKeyboardLanguage(); }  },
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
             {"Back",                                                                []() {}                              },
         };
@@ -313,7 +315,7 @@ void ConfigMenu::pinsMenu() {
 #if defined(HAS_SPEAKER)
             {"Speaker Pins",   []() { setSpeakerPinsMenu(bruceConfigPins.speaker_bus); }},
 #else
-            {"Buzzer Pin",     []() { setBuzzerPinMenu(); }                             },
+            {"Buzzer Pin", []() { setBuzzerPinMenu(); }},
 #endif
 #if defined(HAS_MICROPHONE)
             {"Mic Pins",       []() { setMicPinsMenu(bruceConfigPins.mic_bus); }        },

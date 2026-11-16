@@ -114,7 +114,12 @@ void BruceConfig::fromFile(bool checkFS) {
     // Deserialize the JSON document
     JsonDocument jsonDoc;
     if (deserializeJson(jsonDoc, file)) {
-        Serial.println("Failed to read config file, using default configuration");
+        Serial.printf(
+            "Failed to read config file %s on %s (invalid JSON or read error), using default configuration\n",
+            filepath,
+            fs == &LittleFS ? "LittleFS" : "SD"
+        );
+        file.close();
         return;
     }
     file.close();

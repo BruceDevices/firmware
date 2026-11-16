@@ -15,6 +15,7 @@ Thanks to @bmorcelli for his help doing a better code.
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
+#include "pwngrid.h"
 #include "spam.h"
 #include "ui.h"
 
@@ -375,12 +376,13 @@ void send_pwnagotchi_beacon_main() {
     }
     ESP_ERROR_CHECK(ret);
 
-    // Initialiser la configuration Wi-Fi
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    // Bring the AP up through the shared helper. This used to call esp_wifi_init() under
+    // ESP_ERROR_CHECK, which aborts when Brucegotchi has already started Wi-Fi, and it
+    // started the AP the same OOM-prone way (see pwngridStartAp).
+    if (!pwngridStartAp()) {
+        displayError("Low RAM for AP: reboot and retry", true);
+        return;
+    }
 
     // Load faces and names from the file
     loadFacesAndNames();
