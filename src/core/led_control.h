@@ -38,9 +38,14 @@ void ledEffects(bool enable);
 void ledPreviewMode(bool enable);
 void setLedBrightness(int value);
 void setLedBrightnessConfig();
+void applyBackLed(bool on);
 
 #else
 inline void blinkLed(int blinkTime = 50) {};
+inline void vibrate(int ms = 300) {};
 #endif
+
+// Quick vibration test (vibro lives on an expander pin; no-op if unmapped)
+void vibrate(int ms = 300);
 
 #endif

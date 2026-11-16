@@ -421,6 +421,9 @@ void init_clock() {
 void init_led() {
 #ifdef HAS_RGB_LED
     beginLed();
+    // The rear red LED rail follows its own toggle (independent of the WS2812
+    // chain); this runs after ioExpander.init() lit it.
+    applyBackLed(bruceConfig.backLedEnabled);
 #endif
 }
 

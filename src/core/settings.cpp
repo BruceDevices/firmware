@@ -1838,6 +1838,7 @@ void setTheme() {
 #ifdef HAS_RGB_LED
              bruceConfig.ledBright = 50;
              bruceConfig.ledColor = 0x960064;
+             bruceConfig.ledEnabled = 1;
              bruceConfig.ledEffect = 0;
              bruceConfig.ledEffectSpeed = 5;
              bruceConfig.ledEffectDirection = 1;

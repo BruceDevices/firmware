@@ -62,6 +62,8 @@ public:
     // Led
     int ledBright = 50;
     uint32_t ledColor = 0x960064;
+    int ledEnabled = 1;
+    int backLedEnabled = 1; // REAPER: rear red LED rail (AW9523 IO_EXP_LOGO pin)
     int ledBlinkEnabled = 1;
     int ledEffect = 0;
     int ledEffectSpeed = 5;
@@ -158,6 +160,8 @@ public:
     void validateLedBrightValue();
     void setLedColor(uint32_t value);
     void validateLedColorValue();
+    void setLedEnabled(int value);
+    void validateLedEnabledValue();
     void setLedBlinkEnabled(int value);
     void validateLedBlinkEnabledValue();
     void setLedEffect(int value);

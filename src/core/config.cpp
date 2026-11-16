@@ -28,6 +28,8 @@ JsonDocument BruceConfig::toJson() const {
 #ifdef HAS_RGB_LED
     setting["ledBright"] = ledBright;
     setting["ledColor"] = String(ledColor, HEX);
+    setting["ledEnabled"] = ledEnabled;
+    setting["backLedEnabled"] = backLedEnabled;
     setting["ledBlinkEnabled"] = ledBlinkEnabled;
     setting["ledEffect"] = ledEffect;
     setting["ledEffectSpeed"] = ledEffectSpeed;
@@ -232,6 +234,16 @@ void BruceConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+    if (!setting["ledEnabled"].isNull()) {
+        ledEnabled = setting["ledEnabled"].as<int>();
+    } else {
+        ledEnabled = 1; // configs saved before this field existed default to on
+    }
+    if (!setting["backLedEnabled"].isNull()) {
+        backLedEnabled = setting["backLedEnabled"].as<int>();
+    } else {
+        backLedEnabled = 1;
     }
     if (!setting["ledBlinkEnabled"].isNull()) {
         ledBlinkEnabled = setting["ledBlinkEnabled"].as<int>();
@@ -596,6 +608,17 @@ void BruceConfig::setLedColor(uint32_t value) {
 
 void BruceConfig::validateLedColorValue() {
     ledColor = max<uint32_t>(0, min<uint32_t>(0xFFFFFFFF, ledColor));
+}
+
+void BruceConfig::setLedEnabled(int value) {
+    ledEnabled = value;
+    validateLedEnabledValue();
+    saveFile();
+}
+
+void BruceConfig::validateLedEnabledValue() {
+    if (ledEnabled > 1) ledEnabled = 1;
+    if (ledEnabled < 0) ledEnabled = 0;
 }
 
 void BruceConfig::setLedBlinkEnabled(int value) {
