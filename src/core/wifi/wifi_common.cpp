@@ -52,6 +52,20 @@ void ensureWifiPlatform() {
     }
 }
 
+void applyWifiCountry() {
+    static const wifi_country_t country = {
+        .cc = "US",
+        .schan = 1,
+        .nchan = 14,
+#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
+        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
+#endif
+        .policy = WIFI_COUNTRY_POLICY_MANUAL
+    };
+    esp_err_t err = esp_wifi_set_country(&country);
+    if (err != ESP_OK) log_e("esp_wifi_set_country failed: %s", esp_err_to_name(err));
+}
+
 bool _wifiConnect(const String &ssid, int encryption, int32_t channel, const uint8_t *bssid) {
     String password = bruceConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }

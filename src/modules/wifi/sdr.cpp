@@ -474,6 +474,7 @@ static bool sdr_wifi_start(void) {
         Serial.printf("[SDR] wifi_init: %s\n", esp_err_to_name(e));
         return false;
     }
+    applyWifiCountry();
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_STA);
     e = esp_wifi_start();

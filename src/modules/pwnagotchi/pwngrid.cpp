@@ -311,6 +311,7 @@ void initPwngrid() {
     ensureWifiPlatform();
     wifi_init_config_t WIFI_INIT_CONFIG = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&WIFI_INIT_CONFIG);
+    applyWifiCountry();
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_wifi_set_mode(WIFI_MODE_AP);
     esp_wifi_start();
