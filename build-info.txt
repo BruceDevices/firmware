@@ -1,0 +1,13 @@
+Board env: lilygo-t-embed-cc1101
+Platform: pioarduino espressif32 55.03.39
+Arduino core: 3.3.9
+Framework libs: bmorcelli main_esp32-arduino-libs-20260826-181233
+Toolchain: xtensa-esp-elf 14.2.0+20260121
+Source: BruceDevices/firmware dev @ 22e72a1ba812ab19c9e1fc63dd1cbf467780d576
+Build date: 2026-11-09
+Build result: SUCCESS
+DRAM: 250656 / 341760 B (73.34%)
+RAM: 156704 / 327680 B (47.8%)
+Flash: 4578606 / 16777216 B (27.3%)
+Modified file: lib/BruceWifite/src/radio.c
+Diffstat: 75 insertions(+), 35 deletions(-)
