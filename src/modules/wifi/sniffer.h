@@ -60,6 +60,7 @@ bool sniffer_full_mode_available();
 bool sniffer_prepare_storage(FS *fs, bool sdDetected);
 void sniffer_wait_for_flush(uint32_t timeoutMs = 2000);
 void sniffer_reset_handshake_cache();
+void sniffer_prune_stale_beacons(); // periodic cleanup, call from custom loops
 void markHandshakeReady(uint64_t key);
 bool sniffer_is_handshake_ready(uint64_t bssidKey);
 

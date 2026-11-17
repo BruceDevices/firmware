@@ -17,6 +17,7 @@
 */
 #include <esp_heap_caps.h>
 #include <stddef.h>
+#include "core/iq_record_gate.h"
 #include "core/wifi/wifi_common.h"
 #include <WiFi.h>
 
@@ -43,7 +44,7 @@ constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 // is no hand-off that could ever satisfy a bigger gate: those builds keep the
 // pre-1.17 gate (same as Wi-Fi), otherwise BLE fails right after boot on
 // T-Embed/T-Deck/etc. even with WiFi off.
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
+#if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 48 * 1024;
 #else
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = RADIO_WIFI_MIN_DMA_BLOCK;
@@ -54,7 +55,7 @@ constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = RADIO_WIFI_MIN_DMA_BLOCK;
 // capture can always start; when a radio bring-up finds the heap too
 // small, releasing the fence returns the bank to the heap. After that the SDR
 // needs a reboot (it refuses cleanly instead of corrupting the heap).
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
+#if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
 void sdrBankReleaseForRadio();
 void sdrBankHeapInit();
 #else

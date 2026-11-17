@@ -7,6 +7,7 @@
 #include "core/wifi/wg.h"
 #include "core/wifi/wifi_common.h"
 #include "core/wifi/wifi_mac.h"
+#include "core/iq_record_gate.h"
 #include "modules/ethernet/ARPScanner.h"
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
@@ -83,7 +84,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Dual Band Analyzer", dual_band_analyzer_setup});
 #endif
     options.push_back({"Jam Detect", jam_detect_setup});
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(BRUCE_NO_IQ_RECORD)
+#if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
     options.push_back({"IQ Record", sdr_menu});
 #endif
     options.push_back({"Scan Hosts", [=]() {

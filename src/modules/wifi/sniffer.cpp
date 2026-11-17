@@ -193,7 +193,7 @@ static bool handshakeCaptureEnabled();
 static bool deauthCaptureEnabled();
 static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt);
 static String resolveSsidForFrame(FrameInfo &info, const wifi_promiscuous_pkt_t *packet);
-static void registerBeacon(const uint8_t *apAddr);
+static void registerBeacon(const uint8_t *apAddr, uint8_t channel);
 
 // --- New helper prototypes ---
 static void cleanupStaleBeacons();
@@ -297,6 +297,122 @@ typedef struct pcaprec_hdr_s {
     uint32_t orig_len; /* longueur réelle du paquet */
 } pcaprec_hdr_t;
 
+static bool hasCompleteHandshake(uint64_t apKey);
+
+// Serialize handshake-state access between the sniffer writer task and the
+// main-task prune (cleanupStaleBeacons): std::map is not thread-safe and both
+// mutate these maps. Inner register/exists helpers use timed takes with
+// unlocked fallbacks, so holding this lock degrades them instead of deadlocking.
+static bool lockHandshakeState(TickType_t ticks = pdMS_TO_TICKS(150)) {
+    if (handshakeMutex == nullptr) return true;
+    return xSemaphoreTake(handshakeMutex, ticks) == pdTRUE;
+}
+static void unlockHandshakeState() {
+    if (handshakeMutex != nullptr) xSemaphoreGive(handshakeMutex);
+}
+struct HandshakeStateGuard {
+    bool held;
+    explicit HandshakeStateGuard(TickType_t ticks = pdMS_TO_TICKS(150)) : held(lockHandshakeState(ticks)) {}
+    ~HandshakeStateGuard() {
+        if (held) { unlockHandshakeState(); }
+    }
+};
+
+// True when an EAPOL M1 carries a PMKID in its key-data RSN IE. A PMKID alone
+// is crackable (hashcat 22000, clientless), so such an M1 is saved immediately.
+static bool m1HasPmkid(const wifi_promiscuous_pkt_t *pkt) {
+    const uint8_t *payload = pkt->payload;
+    int qosOffset = ((payload[0] & 0x0F) == 0x08) ? 2 : 0;
+    int base = 24 + qosOffset;
+    // MAC hdr + LLC/SNAP(8) + EAPOL hdr(4) + type(1) + keyinfo(2) + keylen(2)
+    // + replay(8) + nonce(32) + iv(8) + rsc(8) + id(8) + mic(16) = key-data len
+    int dataLenOff = base + 8 + 4 + 1 + 2 + 2 + 8 + 32 + 8 + 8 + 8 + 16;
+    int dataOff = dataLenOff + 2;
+    if ((int)pkt->rx_ctrl.sig_len < dataOff) return false;
+    int dataLen = (payload[dataLenOff] << 8) | payload[dataLenOff + 1];
+    int end = dataOff + dataLen;
+    if (end > (int)pkt->rx_ctrl.sig_len) end = pkt->rx_ctrl.sig_len;
+
+    int i = dataOff;
+    while (i + 2 <= end) {
+        int id = payload[i];
+        int len = payload[i + 1];
+        if (i + 2 + len > end) break;
+        if (id == 48 && len >= 22) { // RSN IE with room for a PMKID list
+            int pc = (payload[i + 10] << 8) | payload[i + 11];
+            int off = i + 12 + 2 * pc; // skip pairwise suite list
+            if (off + 2 > i + 2 + len) break;
+            int akc = (payload[off] << 8) | payload[off + 1];
+            off += 2 + 4 * akc; // skip AKM suite list
+            if (off + 2 > i + 2 + len) break;
+            int count = (payload[off] << 8) | payload[off + 1];
+            if (count >= 1) return true;
+        }
+        i += 2 + len;
+    }
+    return false;
+}
+
+// Write one capture state (a beacon from cache when available + the given
+// buffered frames + optionally the live M4) as a minimal per-AP pcap. Only the
+// first state per AP is written; later frames of the same AP are ignored.
+static void commitHandshakeCapture(
+    FS &Fs, uint64_t apKey, const String &filePath, const EapolFrame **frames, size_t count,
+    const wifi_promiscuous_pkt_t *liveFrame
+) {
+    if (hasCompleteHandshake(apKey)) { return; }
+    if (!Fs.exists("/BrucePCAP")) { Fs.mkdir("/BrucePCAP"); }
+    if (!Fs.exists("/BrucePCAP/handshakes")) { Fs.mkdir("/BrucePCAP/handshakes"); }
+
+    registerHandshakeRecord(filePath);
+
+    File f = Fs.open(filePath, FILE_APPEND);
+    if (!f) { return; }
+
+    if (f.size() == 0) {
+        writeHeader(f);
+        // Write the last-seen beacon for this AP first, so the SSID is
+        // available to the cracker before it stops reading at M2+M3.
+        auto beaconIt = beaconRawCache.find(apKey);
+        if (beaconIt != beaconRawCache.end() && beaconIt->second.len > 0) {
+            pcaprec_hdr_t bhdr;
+            bhdr.ts_sec = beaconIt->second.timestamp_sec;
+            bhdr.ts_usec = beaconIt->second.timestamp_usec;
+            bhdr.incl_len = beaconIt->second.len;
+            bhdr.orig_len = beaconIt->second.len;
+            f.write((const byte *)&bhdr, sizeof(pcaprec_hdr_t));
+            f.write(beaconIt->second.data, beaconIt->second.len);
+            registerHandshakeBeacon(apKey);
+        }
+    }
+
+    pcaprec_hdr_t hdr;
+    for (size_t i = 0; i < count; i++) {
+        const EapolFrame *frame = frames[i];
+        if (!frame || frame->len == 0) continue;
+        hdr.ts_sec = frame->timestamp_sec;
+        hdr.ts_usec = frame->timestamp_usec;
+        hdr.incl_len = frame->len;
+        hdr.orig_len = frame->len;
+        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
+        f.write(frame->data, frame->len);
+    }
+    if (liveFrame) {
+        hdr.ts_sec = liveFrame->rx_ctrl.timestamp / 1000000;
+        hdr.ts_usec = liveFrame->rx_ctrl.timestamp % 1000000;
+        hdr.incl_len = liveFrame->rx_ctrl.sig_len;
+        hdr.orig_len = liveFrame->rx_ctrl.sig_len;
+        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
+        f.write(liveFrame->payload, liveFrame->rx_ctrl.sig_len);
+    }
+
+    f.close();
+    eapol4WayBuffer.erase(apKey);
+
+    if (handshakeReadyBssids.find(apKey) == handshakeReadyBssids.end()) { num_HS++; }
+    markHandshakeReady(apKey);
+}
+
 void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, const char *ssidLabel) {
     const uint8_t *addr1 = packet->payload + 4;
     const uint8_t *addr2 = packet->payload + 10;
@@ -334,15 +450,23 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         return;
     }
 
-    // --- EAPOL frame handling (require M1+M2+M3+M4) ---
+    // --- EAPOL frame handling ---
+    // A capture is committed at the first crackable state (technique from
+    // pwnagotchi-esp32 / hcxtools): PMKID in M1, M1+M2, M2+M3 or M3+M4 — not
+    // only on a full M1-M4 run, since clients commonly vanish after M2.
     int eapolMsg = classifyEapolMessage(packet);
     if (eapolMsg < 1 || eapolMsg > 4) { return; }
 
     auto &tracker = perApHandshakeTracker[apKey];
     auto &buf = eapol4WayBuffer[apKey];
     uint16_t dataLen = std::min<uint16_t>(packet->rx_ctrl.sig_len, EAPOL_BUF_SIZE);
+    bool alreadySaved = hasCompleteHandshake(apKey);
+    HandshakeStateGuard hsGuard; // keep prune from erasing under us
+    if (!hsGuard.held) { return; } // prune busy: drop the frame, EAPOLs retransmit
 
-    // M1: buffer — don't write to file yet
+    // M1: buffer; a PMKID in the key data is crackable on its own. A late M1
+    // (sniffer joined mid-handshake and missed the first one) completes a
+    // buffered M2 — commit the pair instead of letting it die at prune time.
     if (eapolMsg == 1) {
         if (tracker.msg1) { return; }
         tracker.msg1 = true;
@@ -350,91 +474,60 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         buf.m1.len = dataLen;
         buf.m1.timestamp_sec = packet->rx_ctrl.timestamp / 1000000;
         buf.m1.timestamp_usec = packet->rx_ctrl.timestamp % 1000000;
+        if (!alreadySaved) {
+            const EapolFrame *frames[] = {&buf.m1, &buf.m2};
+            if (m1HasPmkid(packet)) {
+                commitHandshakeCapture(Fs, apKey, filePath, frames, 1, nullptr);
+            } else if (tracker.msg2 && buf.m2.len > 0) {
+                commitHandshakeCapture(Fs, apKey, filePath, frames, 2, nullptr);
+            }
+        }
         return;
     }
 
-    // M2: buffer — don't write to file yet
+    // M2: buffer; with M1 this pair is already crackable
     if (eapolMsg == 2) {
-        if (!tracker.msg1 || tracker.msg2) { return; }
+        if (tracker.msg2) { return; }
         tracker.msg2 = true;
         memcpy(buf.m2.data, packet->payload, dataLen);
         buf.m2.len = dataLen;
         buf.m2.timestamp_sec = packet->rx_ctrl.timestamp / 1000000;
         buf.m2.timestamp_usec = packet->rx_ctrl.timestamp % 1000000;
+        if (!alreadySaved && tracker.msg1) {
+            const EapolFrame *frames[] = {&buf.m1, &buf.m2};
+            commitHandshakeCapture(Fs, apKey, filePath, frames, 2, nullptr);
+        }
         return;
     }
 
-    // M3: buffer — don't write to file yet
+    // M3: buffer; M2+M3 without M1 is still crackable (both nonce pairs known)
     if (eapolMsg == 3) {
-        if (!tracker.msg2 || tracker.msg3) { return; }
+        if (tracker.msg3) { return; }
         tracker.msg3 = true;
         memcpy(buf.m3.data, packet->payload, dataLen);
         buf.m3.len = dataLen;
         buf.m3.timestamp_sec = packet->rx_ctrl.timestamp / 1000000;
         buf.m3.timestamp_usec = packet->rx_ctrl.timestamp % 1000000;
+        if (!alreadySaved && tracker.msg2 && !tracker.msg1) {
+            const EapolFrame *frames[] = {&buf.m2, &buf.m3};
+            commitHandshakeCapture(Fs, apKey, filePath, frames, 2, nullptr);
+        }
         return;
     }
 
-    // M4: flush all 4 frames to file, mark handshake valid
+    // M4: upgrade a M2+M3-only capture, or complete a full M1-M4 run
     if (eapolMsg == 4) {
-        if (!tracker.msg3 || tracker.msg4) { return; }
-        tracker.msg4 = true;
-
-        if (!Fs.exists("/BrucePCAP")) { Fs.mkdir("/BrucePCAP"); }
-        if (!Fs.exists("/BrucePCAP/handshakes")) { Fs.mkdir("/BrucePCAP/handshakes"); }
-
-        registerHandshakeRecord(filePath);
-
-        File f = Fs.open(filePath, FILE_APPEND);
-        if (!f) {
-            eapol4WayBuffer.erase(apKey);
-            return;
+        if (tracker.msg4 || alreadySaved) { return; }
+        if (tracker.msg1 && tracker.msg2 && tracker.msg3) {
+            const EapolFrame *frames[] = {&buf.m1, &buf.m2, &buf.m3};
+            commitHandshakeCapture(Fs, apKey, filePath, frames, 3, packet);
+        } else if (tracker.msg2 && tracker.msg3) {
+            const EapolFrame *frames[] = {&buf.m2, &buf.m3};
+            commitHandshakeCapture(Fs, apKey, filePath, frames, 2, packet);
+        } else if (tracker.msg3) {
+            const EapolFrame *frames[] = {&buf.m3};
+            commitHandshakeCapture(Fs, apKey, filePath, frames, 1, packet);
         }
-
-        if (f.size() == 0) {
-            writeHeader(f);
-            // Write the last-seen beacon for this AP first, so the SSID is
-            // available to the cracker before it stops reading at M2+M3.
-            auto beaconIt = beaconRawCache.find(apKey);
-            if (beaconIt != beaconRawCache.end() && beaconIt->second.len > 0) {
-                pcaprec_hdr_t bhdr;
-                bhdr.ts_sec = beaconIt->second.timestamp_sec;
-                bhdr.ts_usec = beaconIt->second.timestamp_usec;
-                bhdr.incl_len = beaconIt->second.len;
-                bhdr.orig_len = beaconIt->second.len;
-                f.write((const byte *)&bhdr, sizeof(pcaprec_hdr_t));
-                f.write(beaconIt->second.data, beaconIt->second.len);
-                registerHandshakeBeacon(apKey);
-            }
-        }
-
-        pcaprec_hdr_t hdr;
-        auto writeFrame = [&](const EapolFrame &frame) {
-            hdr.ts_sec = frame.timestamp_sec;
-            hdr.ts_usec = frame.timestamp_usec;
-            hdr.incl_len = frame.len;
-            hdr.orig_len = frame.len;
-            f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
-            f.write(frame.data, frame.len);
-        };
-
-        writeFrame(buf.m1);
-        writeFrame(buf.m2);
-        writeFrame(buf.m3);
-
-        uint16_t m4Len = dataLen;
-        hdr.ts_sec = packet->rx_ctrl.timestamp / 1000000;
-        hdr.ts_usec = packet->rx_ctrl.timestamp % 1000000;
-        hdr.incl_len = m4Len;
-        hdr.orig_len = m4Len;
-        f.write((const byte *)&hdr, sizeof(pcaprec_hdr_t));
-        f.write(packet->payload, m4Len);
-
-        f.close();
-        eapol4WayBuffer.erase(apKey);
-
-        if (handshakeReadyBssids.find(apKey) == handshakeReadyBssids.end()) { num_HS++; }
-        markHandshakeReady(apKey);
         return;
     }
 }
@@ -503,6 +596,11 @@ void markHandshakeReady(uint64_t key) {
     handshakeReadyBssids.insert(key);
     portEXIT_CRITICAL(&handshakeReadyMux);
 }
+
+// Periodic stale-beacon/handshake-state pruning for callers with their own
+// loop (Brucegotchi): without it the per-AP maps grow unbounded in dense
+// environments and bleed the heap until the device crashes.
+void sniffer_prune_stale_beacons() { cleanupStaleBeacons(); }
 
 bool sniffer_is_handshake_ready(uint64_t key) {
     bool ready = false;
@@ -577,11 +675,15 @@ static void resetHandshakeBeaconCache() {
     }
 }
 
-static void registerBeacon(const uint8_t *apAddr) {
+static void registerBeacon(const uint8_t *apAddr, uint8_t channel) {
     if (!apAddr) return;
     BeaconList beacon;
     memcpy(beacon.MAC, apAddr, sizeof(beacon.MAC));
-    beacon.channel = all_wifi_channels[ch];
+    // Store the channel the frame was ACTUALLY received on. The old
+    // `all_wifi_channels[ch]` indexed `ch` as an array slot, but callers like
+    // Brucegotchi set `ch` to the real channel number — that mismatch made
+    // Brucegotchi deauth on the wrong channel and never catch handshakes.
+    beacon.channel = channel;
     registeredBeacons.insert(beacon);
 }
 
@@ -649,7 +751,7 @@ static FrameInfo analyzeFrame(wifi_promiscuous_pkt_t *pkt) {
 
     info.ssid = resolveSsidForFrame(info, pkt);
     if (info.isBeacon) {
-        registerBeacon(info.apAddr);
+        registerBeacon(info.apAddr, pkt->rx_ctrl.channel);
         // UPDATE last-seen timestamp for this beacon
         beaconLastSeen[info.apKey] = (uint32_t)millis();
     }
@@ -1046,6 +1148,9 @@ void openFile(FS &Fs) {
 // --- New helper implementations ---
 
 static void cleanupStaleBeacons() {
+    // Runs in the caller's task (writer loop or Brucegotchi main task); take
+    // the state lock so we never erase buffers mid-save. Busy writer: skip.
+    if (!lockHandshakeState(pdMS_TO_TICKS(200))) return;
     unsigned long now = millis();
     std::vector<BeaconList> toRemove;
     for (auto it = registeredBeacons.begin(); it != registeredBeacons.end(); ++it) {
@@ -1068,7 +1173,17 @@ static void cleanupStaleBeacons() {
         beaconSsidCache.erase(key);
         beaconLastSeen.erase(key);
         beaconRawCache.erase(key);
+        // Drop handshake state for APs that went stale: the buffers and
+        // trackers otherwise grow unbounded in dense environments and bleed
+        // the heap until the device crashes.
+        perApHandshakeTracker.erase(key);
+        eapol4WayBuffer.erase(key);
     }
+
+    // Hard cap as a second guard (dense sites with hundreds of APs)
+    if (eapol4WayBuffer.size() > 96) { eapol4WayBuffer.clear(); }
+    if (perApHandshakeTracker.size() > 96) { perApHandshakeTracker.clear(); }
+    unlockHandshakeState();
 }
 
 static size_t countActiveBeaconsOnChannel(uint8_t channel) {

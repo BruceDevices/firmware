@@ -8,6 +8,7 @@
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/idf_additions.h> /* xTaskCreateWithCaps: stack in PSRAM */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -1094,7 +1095,20 @@ WifiteJob *wifite_start(WifiteMode mode, const WfTarget *target,
     wifite_free(j);
     return NULL;
   }
-  if (xTaskCreate(task_main, "WIFITE", 24576, j, 1, &j->thread) != pdPASS) {
+  /* Task stack (and TCB) in PSRAM: boards with SPIRAM never spend internal
+   * RAM on it. Boards without PSRAM (cardputer-class, which also carries the
+   * IQ-record 64 KiB bank reservation) fall back to internal RAM, where the
+   * post-WiFi largest block may be too small for the full 24 kB stack — retry
+   * progressively smaller so those boards still run the worker. The floor
+   * keeps the WPS/crypto call depth safe. */
+  BaseType_t created = xTaskCreateWithCaps(task_main, "WIFITE", 24576, j, 1,
+                                           &j->thread, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  static const uint32_t internal_stacks[] = {24576, 16384};
+  for (unsigned si = 0; created != pdPASS && si < sizeof(internal_stacks) / sizeof(internal_stacks[0]);
+       si++) {
+    created = xTaskCreate(task_main, "WIFITE", internal_stacks[si], j, 1, &j->thread);
+  }
+  if (created != pdPASS) {
     __atomic_store_n(&j->finished, 1, __ATOMIC_RELEASE);
     wifite_free(j);
     return NULL;

@@ -13,13 +13,28 @@ wifi_ps_type_t previousPs=WIFI_PS_NONE;
 const char *sdpath(const char *path) { return strncmp(path,"/ext/",5)==0?path+4:path; }
 }
 extern "C" bool wf_platform_prepare() {
-    if(prepared || leased) return false;
+    if(prepared) return true; // already in the STA state wifite needs
+    if(leased) { leased=false; Serial.println("[WIFITE] cleared stale survey lease"); }
     previousMode=WiFi.getMode(); wasConnected=WiFi.isConnected();
     autoReconnect=WiFi.getAutoReconnect();
     haveConfig=(previousMode & WIFI_MODE_STA) && esp_wifi_get_config(WIFI_IF_STA,&previousConfig)==ESP_OK;
     esp_wifi_get_ps(&previousPs);
     WiFi.setAutoReconnect(false);
-    if(!WiFi.mode(WIFI_STA)) { WiFi.setAutoReconnect(autoReconnect); return false; }
+    if(!WiFi.mode(WIFI_STA)) {
+        // Other features (Brucegotchi/sniffer) drive esp_wifi directly and can
+        // leave the Arduino WiFi layer in a state mode(STA) refuses; a full
+        // radio restart clears it. Restarting here is safe: prepare runs
+        // before anything of ours touches the radio.
+        Serial.println("[WIFITE] WiFi.mode(STA) failed, restarting radio");
+        WiFi.mode(WIFI_OFF);
+        delay(100);
+        if(!WiFi.mode(WIFI_STA)) {
+            Serial.printf("[WIFITE] radio restart failed, free=%u largest=%u\n",
+                          (unsigned)ESP.getFreeHeap(),(unsigned)ESP.getMaxAllocHeap());
+            WiFi.setAutoReconnect(autoReconnect);
+            return false;
+        }
+    }
     WiFi.disconnect(false,false);
     delay(100);
     prepared=true;

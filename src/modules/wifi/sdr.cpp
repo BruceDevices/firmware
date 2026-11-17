@@ -33,15 +33,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#if !defined(LITE_VERSION) && !defined(BRUCE_NO_IQ_RECORD)
-// Everything below needs the ESP32-S3: the undocumented MAC dump engine only
-// exists there. CONFIG_IDF_TARGET_ESP32S3 comes from
-// sdkconfig.h, pulled in by the Arduino headers above — it is not visible to a
-// bare file-top guard, so the target check happens right after the includes.
+#include <Arduino.h> // pulls sdkconfig.h (CONFIG_SPIRAM / CONFIG_IDF_TARGET_ESP32S3)
+#include "core/iq_record_gate.h"
+
+#if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
+// IQ Record — the capture engine reserves a 64 KiB internal-SRAM bank out of
+// the heap at boot; see core/iq_record_gate.h for the availability rules.
+// Everything below also needs the ESP32-S3: the undocumented MAC dump engine
+// only exists there.
 
 #include "sdr.h"
-
-#include <Arduino.h> // pulls sdkconfig.h
 
 #include <esp_heap_caps.h>
 #include <esp_heap_caps_init.h> // heap_caps_add_region: SDR bank <-> heap hand-off
@@ -150,20 +151,15 @@ void stop_tx_tone(unsigned int en);
 
 // Take the dump bank away from the heap at boot (before heap_caps_init runs):
 // .reserved_memory_address is collected by the IDF linker script and subtracted
-// from the DRAM heap regions. Cost: exactly 64 KiB less internal RAM on every
-// S3 build, PSRAM or not (the dump engine only reaches internal SRAM).
-// Measured on Cardputer: ~90 kB free heap at the main menu without, ~24 kB with.
-// Boards that cannot spare it set -DBRUCE_NO_IQ_RECORD in their env
-// build_flags, which also removes the menu entry.
-#if !defined(BRUCE_NO_IQ_RECORD)
+// from the DRAM heap regions. Cost: exactly 64 KiB less internal RAM. Only
+// compiled on PSRAM boards (core/iq_record_gate.h gates the whole file), which
+// can afford it — PSRAM-less boards keep the heap intact for WiFi features.
+// Measured on Cardputer-class boards: the reservation pushed the post-WiFi
+// largest heap block below the Wifite worker stack, which is why this feature
+// requires SPIRAM builds.
 #define J_RESERVE_BANK 1
-#else
-#define J_RESERVE_BANK 0
-#endif
 
-#if J_RESERVE_BANK
 SOC_RESERVE_MEMORY_REGION(J_BANK_ADDR, J_BANK_ADDR + J_BANK_LEN, bruce_sdr_bank);
-#endif
 
 // ---------------------------------------------------------------------------
 // Bank <-> heap hand-off
@@ -799,4 +795,4 @@ void sdr_menu() {
 }
 
 #endif // CONFIG_IDF_TARGET_ESP32S3
-#endif // !LITE_VERSION && !BRUCE_NO_IQ_RECORD
+#endif // !BRUCE_IQ_RECORD_UNAVAILABLE
