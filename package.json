@@ -47,7 +47,7 @@
 	"dependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@types/w3c-web-serial": "^1.0.8",
-		"bruce-esp-web-tools": "https://github.com/BruceDevices/esp-web-tools/releases/download/1.1.0a/bruce-esp-web-tools.tgz",
+		"bruce-esp-web-tools": "https://github.com/BruceDevices/esp-web-tools/releases/download/10.4.0-bruce/bruce-esp-web-tools.tgz",
 		"jszip": "^3.10.1"
 	},
 	"overrides": {
