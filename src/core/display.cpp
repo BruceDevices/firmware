@@ -1032,6 +1032,9 @@ Opt_Coord drawOptions(
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
     tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, contentTopY);
+    // The headless dummy backend does not advance its cursor in print()/println(),
+    // so derive every row position explicitly instead of relying on getCursorY().
+    int16_t rowY = contentTopY;
 
     int i = 0;
     int cont = 1;
@@ -1050,7 +1053,7 @@ Opt_Coord drawOptions(
 
 #if defined(HAS_TOUCH)
     if (showPageUp) {
-        int16_t cursorY = tft.getCursorY();
+        int16_t cursorY = rowY;
         tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
         tft.setTextColor(getColorVariation(fgcolor), bgcolor);
         tft.drawCentreString("-- Page Up --", boxX + boxW / 2, cursorY + 4, 1);
@@ -1059,7 +1062,8 @@ Opt_Coord drawOptions(
         s_pageUpY = cursorY;
         s_pageUpW = boxW;
         s_pageUpH = FM * LH + 4;
-        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + FM * LH + 4);
+        rowY = cursorY + (FM * LH + 4);
+        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, rowY);
         tft.setTextColor(fgcolor, bgcolor);
     }
 #endif
@@ -1067,7 +1071,7 @@ Opt_Coord drawOptions(
     cont = 1;
     for (i = 0; i < options.size(); i++) {
         if (i >= init) {
-            int16_t cursorY = tft.getCursorY();
+            int16_t cursorY = rowY;
             options[i].x = boxX;
             options[i].y = cursorY;
             options[i].w = boxW;
@@ -1090,13 +1094,13 @@ Opt_Coord drawOptions(
             if (i == index) {
                 text += ">";
                 coord.x = boxX + BORDER_OFFSET_FROM_SCREEN_EDGE + FM * LW;
-                coord.y = tft.getCursorY() + 4;
+                coord.y = cursorY + 4;
                 coord.size = (boxW - 10) / (LW * FM) - 1;
                 coord.fgcolor = options[i].hasColor ? options[i].color : fgcolor;
                 coord.bgcolor = bgcolor;
             } else text += " ";
             text += String(options[i].label) + "                                                      ";
-            tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, tft.getCursorY() + 4);
+            tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + 4);
 
             // Draw text with appropriate colors for selection
             if (i == index) {
@@ -1104,6 +1108,7 @@ Opt_Coord drawOptions(
                 tft.setTextColor(bgcolor, highlightColor);
             }
             tft.println(text.substring(0, (boxW - 10) / (LW * FM) - 1));
+            rowY += rowHeightPx;
 
             // Reset text color for next item
             tft.setTextColor(fgcolor, bgcolor);
@@ -1114,7 +1119,7 @@ Opt_Coord drawOptions(
     }
 #if defined(HAS_TOUCH)
     if (showPageDown) {
-        int16_t cursorY = tft.getCursorY();
+        int16_t cursorY = rowY;
         tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
         tft.setTextColor(getColorVariation(fgcolor), bgcolor);
         tft.drawCentreString("-- Page Down --", boxX + boxW / 2, cursorY + 4, 1);
@@ -1123,14 +1128,16 @@ Opt_Coord drawOptions(
         s_pageDownY = cursorY;
         s_pageDownW = boxW;
         s_pageDownH = FM * LH + 4;
+        rowY = cursorY + (FM * LH + 4);
         tft.setTextColor(fgcolor, bgcolor);
     }
 #endif
     int rowsDrawnThisPage = menuSize + (showPageUp ? 1 : 0) + (showPageDown ? 1 : 0);
     for (int r = rowsDrawnThisPage; r < totalRows; r++) {
-        int16_t cursorY = tft.getCursorY();
+        int16_t cursorY = rowY;
         tft.fillRect(boxX + 2, cursorY, boxW - 4, rowHeightPx, bgcolor);
-        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + rowHeightPx);
+        rowY += rowHeightPx;
+        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, rowY);
     }
     // update history
     last_index = index;
