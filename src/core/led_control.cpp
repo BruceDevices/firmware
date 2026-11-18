@@ -92,6 +92,7 @@ void ledEffectTask(void *pvParameters) {
         int ledEffectSpeed = isPreviewLed ? previewLedEffectSpeed : bruceConfig.ledEffectSpeed;
         int ledEffectDirection = isPreviewLed ? previewLedEffectDirection : bruceConfig.ledEffectDirection;
 
+#if defined(BRUCE_LED_MASTER_TOGGLE)
         if (!bruceConfig.ledEnabled && !isPreviewLed) {
             // Master off: keep everything dark no matter what other code wrote
             fill_solid(leds, LED_COUNT, CRGB::Black);
@@ -99,6 +100,7 @@ void ledEffectTask(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
+#endif
 
         if (ledEffect == LED_EFFECT_COLOR_CYCLE || ledEffect == LED_EFFECT_COLOR_WHEEL) {
             short delayMs = 50;
@@ -300,11 +302,23 @@ void ledEffectTask(void *pvParameters) {
 }
 
 void beginLed() {
+    // Register the FastLED controller only ONCE. FastLED.addLeds appends a new
+    // controller to its global list every call with no dedup; beginLed() runs
+    // on every LED menu entry, so re-adding stacked duplicate controllers on
+    // the same pin and each FastLED.show() drove the strip several times back
+    // to back — visible as flicker/blinking and corrupted colour on a single
+    // WS2812/SK6812 (e.g. Cardputer). The RMT channel is re-acquired by
+    // FastLED on each show(), so registering once is enough even after RF
+    // features borrow the RMT peripheral.
+    static bool ledsRegistered = false;
+    if (!ledsRegistered) {
 #ifdef RGB_LED_CLK
-    FastLED.addLeds<LED_TYPE, RGB_LED, RGB_LED_CLK, LED_ORDER>(leds, LED_COUNT);
+        FastLED.addLeds<LED_TYPE, RGB_LED, RGB_LED_CLK, LED_ORDER>(leds, LED_COUNT);
 #else
-    FastLED.addLeds<LED_TYPE, RGB_LED, LED_ORDER>(leds, LED_COUNT);
+        FastLED.addLeds<LED_TYPE, RGB_LED, LED_ORDER>(leds, LED_COUNT);
 #endif
+        ledsRegistered = true;
+    }
 
     /* The default FastLED driver takes over control of the RMT interrupt
      * handler, making it hard to use the RMT device for other
@@ -354,10 +368,12 @@ void blinkLed(int blinkTime) {
 
     int ledBrightFrom = bruceConfig.ledBright;
     int ledBrightTo = ledBrightFrom > 0 ? 0 : 50;
+#if defined(BRUCE_LED_MASTER_TOGGLE)
     if (!bruceConfig.ledEnabled) {
         ledBrightFrom = 0;
         ledBrightTo = 0;
     }
+#endif
 
     beginLed();
     setLedBrightness(ledBrightTo);
@@ -374,7 +390,9 @@ void setLedColor(CRGB color) {
         EncoderLedChange = 1;
 #endif
     } else {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
         if (!bruceConfig.ledEnabled) color = CRGB::Black;
+#endif
         for (int i = 0; i < LED_COUNT; i++) leds[i] = color;
         FastLED.show();
     }
@@ -389,14 +407,15 @@ void setLedEffect(int effect) {
 
 void setLedBrightness(int value) {
     value = max(0, min(100, value));
+#if defined(BRUCE_LED_MASTER_TOGGLE)
     if (!bruceConfig.ledEnabled && !isPreviewLed) value = 0;
+#endif
     int bright = 255 * value / 100;
     FastLED.setBrightness(bright);
     FastLED.show();
 }
 
-#define BrucePurple 9830500 // Custom purple color for Bruce
-// TODO: 3852441 -> 3849837
+#define BrucePurple 0xAD007B // Bruce theme purple (DEFAULT_PRICOLOR 0xA80F in RGB888)
 void setLedColorConfig() {
     ledPreviewMode(true);
 
@@ -740,6 +759,7 @@ void setLedEffectDirectionConfig() {
 }
 
 void ledSetup() {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
     if (!bruceConfig.ledEnabled) {
         // Master off: kill any running effect task and blank the whole chain
         ledEffects(false);
@@ -747,6 +767,7 @@ void ledSetup() {
         FastLED.show();
         return;
     }
+#endif
 
     if (bruceConfig.ledEffect == LED_EFFECT_SOLID) { ledEffects(false); }
 

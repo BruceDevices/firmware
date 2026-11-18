@@ -92,6 +92,7 @@ void ConfigMenu::displayUIMenu() {
 void ConfigMenu::ledMenu() {
     while (true) {
         std::vector<Option> localOptions = {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
             {String("RGB LEDs: ") + (bruceConfig.ledEnabled ? "ON" : "OFF"),
              [this]() {
                  // WS2812 chain only (color/effects live below)
@@ -106,6 +107,7 @@ void ConfigMenu::ledMenu() {
                  bruceConfig.saveFile();
                  applyBackLed(bruceConfig.backLedEnabled);
              }                                                                            },
+#endif
 #endif
             {"LED Color",
              [this]() {
