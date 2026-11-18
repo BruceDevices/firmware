@@ -5,8 +5,8 @@
 #include "protocols/rf_encoder.h"
 #include "protocols/rf_legacy_migrate.h"
 #include "protocols/rf_presets.h"
-#include "protocols/rf_registry.h"
 #include "protocols/rf_protocol_engine.h"
+#include "protocols/rf_registry.h"
 #include "rf_utils.h"
 
 #define CLOSE_MENU 3
@@ -276,7 +276,7 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
         // KeeLoq rolling-code fields. Flipper writes "Manufacture" (no trailing
         // r); accept both spellings. "Seed" is the secure-learning seed.
         if (line.startsWith("Manufacturer:") || line.startsWith("Manufacture:")) selected_code.mf_name = txt;
-        if (line.startsWith("Serial:")) selected_code.serial = hexStringToDecimal(txt.c_str());
+        if (line.startsWith("Serial:")) selected_code.serial = (uint32_t)hexStringToU64(txt.c_str());
         if (line.startsWith("Button:")) selected_code.btn = txt.toInt();
         if (line.startsWith("Counter:")) selected_code.cnt = txt.toInt();
         if (line.startsWith("Seed:")) selected_code.seed = (uint32_t)hexStringToU64(txt.c_str());
@@ -298,13 +298,20 @@ bool readSubFile(FS *fs, const String &filepath, RfCodes &data) {
         selected_code.protocol != "BinRAW" && selected_code.protocol != "KeeLoq" &&
         selected_code.protocol != "RcSwitch" && !rf_find_protocol(selected_code.protocol)) {
         File full = fs->open(filepath, FILE_READ);
-        if (!full || full.size() > 16384) { full.close(); return false; }
-        String text = full.readString(); full.close();
+        if (!full || full.size() > 16384) {
+            full.close();
+            return false;
+        }
+        String text = full.readString();
+        full.close();
         RfCodes decoded;
         if (!rf_protocol_load(text.c_str(), decoded) || decoded.decodedFile.isEmpty()) return false;
         decoded.filepath = selected_code.filepath;
         data = decoded;
-        bitList.clear(); bitRawList.clear(); keyList.clear(); rawDataList.clear();
+        bitList.clear();
+        bitRawList.clear();
+        keyList.clear();
+        rawDataList.clear();
         return true;
     }
     data = selected_code;
