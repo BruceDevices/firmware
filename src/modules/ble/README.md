@@ -1,10 +1,10 @@
-# BLE Security Suite Module v4.0
+# BLE Security Suite Module v4.1
 
 ⚠️ **DISCLAIMER**: For authorized testing and educational purposes only. Success varies by target device, firmware, and patch level. Modern/patched devices will resist most attacks.
 
 ## About
 
-BLE Suite is a comprehensive Bluetooth Low Energy security testing framework for ESP32 devices running Bruce firmware. Provides reconnaissance, protocol exploitation, and post-exploitation capabilities.
+BLE Suite is a comprehensive Bluetooth Low Energy security testing framework for ESP32 devices running Bruce firmware. Provides reconnaissance, protocol exploitation, and post-exploitation capabilities. Guarded by `#if !defined(LITE_VERSION)` for targets with sufficient memory resources.
 
 ## Hardware Integration
 
@@ -43,7 +43,11 @@ This suite runs on **NimBLE 2.5.0+** which has specific limitations:
 ## Core Components
 
 ### BLEStateManager
-Handles BLE stack lifecycle, client tracking, and cleanup with automatic initialization recovery.
+Handles BLE stack lifecycle, client tracking, and cleanup with session-scoped initialization and automatic recovery:
+- Initialized once per suite session instead of per-attempt `init`/`deinit` cycles (prevents DMA leaks, heap clutter, and false low-RAM errors)
+- Attacks and modes create/delete clients or clean up handles without tearing down the NimBLE stack per attempt
+- `initBLE()` suspends Wi-Fi via `wifiSuspend()` (`esp_wifi_stop()`) when needed so driver DMA buffers are actually released rather than only disconnecting, and resumes cleanly via `wifiResume()`
+- Contiguous `MALLOC_CAP_DMA` block checks (`radioHasMemForBle()`) guard BLE bring-up before touching the radio
 
 ### ScannerData
 Stores discovered devices with service detection:
@@ -140,6 +144,10 @@ Stores discovered devices with service detection:
 - NRF24 jamming coordination
 - Jam & connect attacks
 
+### GATT Explorer & GATT Server
+- Integrated from PR #2865 and adapted to the v4 architecture (all credit to original author Martin @mknblch)
+- GATT service/characteristic exploration and server capabilities aligned with session-scoped BLE lifecycle
+
 ### Attack Orchestrator
 - Chain attacks with priority ordering
 - Rollback capability for failed attacks
@@ -206,7 +214,7 @@ Stores discovered devices with service detection:
 - Device model identification for FastPair
 - RSSI-based device sorting with scoring
 - Connection parameter optimization per device type
-- Automatic BLE stack recovery
+- Session-scoped BLE initialization with contiguous DMA checks and `wifiSuspend()`/`wifiResume()`
 - NimBLE limitation awareness in HFP engine
 
 ## Dependencies
@@ -228,6 +236,12 @@ The HFP engine automatically detects NimBLE limitations and:
 - Falls back to GATT-based operations where possible
 
 ## Changelog
+
+### v4.1 (Memory & Radio Lifecycle Fixes)
+- Removed per-attempt `deinit`/`init` cycles across BLE attacks to prevent DMA leaks, stale client buildup, and false low-RAM toasts
+- Added `wifiSuspend()` and `wifiResume()` in `wifi_common` to free Wi-Fi DMA buffers (`esp_wifi_stop()`) before BLE bring-up
+- Guarded BLE initialization with contiguous `MALLOC_CAP_DMA` block checks (`radioHasMemForBle()`)
+- Integrated GATT Explorer and GATT Server from PR #2865 adapted for v4 (credit to Martin @mknblch)
 
 ### v4.0 (24/08/2026)
 - Added Device Scoring system with attack potential calculation
