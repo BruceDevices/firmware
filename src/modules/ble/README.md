@@ -174,31 +174,32 @@ Stores discovered devices with service detection:
 - Detects notification/indication support
 - Service characteristic ordering analysis
 
-## Attack Menu (16 Main Items)
+## Attack Menu (17 Main Items)
 
-### Reconnaissance
+### Reconnaissance & GATT
 1. **Quick Vulnerability Scan** - HFP + FastPair testing
 2. **Deep Device Profiling** - Full service enumeration with characteristic analysis
-3. **Smart Recon** - Scoring-based target prioritization
-4. **Device Fingerprinting** - Builds device personality profiles
+3. **GATT Explorer** - Inspect services, characteristics, and GATT server capabilities
+4. **Smart Recon** - Scoring-based target prioritization
+5. **Device Fingerprinting** - Builds device personality profiles
 
 ### Protocol Suites
-5. **FastPair Suite** - 9 options (vulnerability test, memory corruption, state confusion, crypto overflow, popup spam, all exploits, smart exploit)
-6. **HFP Suite** - 6 options (vulnerability test, connection, full chain, command injection, info disclosure, stack crash)
-7. **Audio Suite** - 5 options (AVRCP, audio stack crash, telephony, all tests, media control)
-8. **HID Suite** - 6 options (vulnerability test, force connection, keystrokes, DuckyScript, OS exploits, all)
+6. **FastPair Suite** - 9 options (vulnerability test, memory corruption, state confusion, crypto overflow, popup spam, all exploits, smart exploit)
+7. **HFP Suite** - 6 options (vulnerability test, connection, full chain, command injection, info disclosure, stack crash)
+8. **Audio Suite** - 5 options (AVRCP, audio stack crash, telephony, all tests, media control)
+9. **HID Suite** - 6 options (vulnerability test, force connection, keystrokes, DuckyScript, OS exploits, all)
 
 ### Advanced Attacks
-9. **Memory Corruption Suite** - 6 options (FastPair memory corruption, state confusion, crypto overflow, handshake fault, rapid connection, all)
-10. **DoS Attacks** - 4 options (connection flood, advertising spam, jam & connect, protocol fuzzer)
-11. **Orchestrated Attack** - Chain attacks with rollback
-12. **Mirage Attack** - Device cloning and spoofing
-13. **Attack Scheduler** - Optimal timing analysis
-14. **Payload Delivery** - 3 options (DuckyScript, PIN brute force, auth bypass)
-15. **Testing Tools** - 4 options (write access, audio control, fuzzer, HID test)
+10. **Memory Corruption Suite** - 6 options (FastPair memory corruption, state confusion, crypto overflow, handshake fault, rapid connection, all)
+11. **DoS Attacks** - 4 options (connection flood, advertising spam, jam & connect, protocol fuzzer)
+12. **Orchestrated Attack** - Chain attacks with rollback
+13. **Mirage Attack** - Device cloning and spoofing
+14. **Attack Scheduler** - Optimal timing analysis
+15. **Payload Delivery** - 3 options (DuckyScript, PIN brute force, auth bypass)
+16. **Testing Tools** - 4 options (write access, audio control, fuzzer, HID test)
 
 ### Chain Attacks
-16. **Universal Attack Chain** - Attempts HFP → HID → FastPair sequentially based on detected services
+17. **Universal Attack Chain** - Attempts HFP → HID → FastPair sequentially based on detected services
 
 ## Attack Logging
 - JSON export of all attack attempts
@@ -241,12 +242,12 @@ The HFP engine automatically detects NimBLE limitations and:
 - Removed per-attempt `deinit`/`init` cycles across BLE attacks to prevent DMA leaks, stale client buildup, and false low-RAM toasts
 - Added `wifiSuspend()` and `wifiResume()` in `wifi_common` to free Wi-Fi DMA buffers (`esp_wifi_stop()`) before BLE bring-up
 - Guarded BLE initialization with contiguous `MALLOC_CAP_DMA` block checks (`radioHasMemForBle()`)
-- Integrated GATT Explorer and GATT Server from PR #2865 adapted for v4 (credit to Martin @mknblch)
 
 ### v4.0 (24/08/2026)
 - Added Device Scoring system with attack potential calculation
 - Added Connection Caching for 60-80% faster reconnections
 - Added Graduated Connection Strategy (5-phase connection)
+- Integrated GATT Explorer and GATT Server from PR #2865 adapted for v4 (credit to Martin @mknblch)
 - Added Robust GATT Client with retry logic
 - Added Attack Orchestrator with rollback capability
 - Added BLE Mirage for device cloning
