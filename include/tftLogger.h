@@ -32,7 +32,7 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
     SCREEN_INFO = 99 // 99
 };
 #if defined(BOARD_HAS_PSRAM)
-#define MAX_LOG_ENTRIES 64
+#define MAX_LOG_ENTRIES 256
 #define MAX_LOG_SIZE 128
 #define MAX_LOG_IMAGES 1
 #define MAX_LOG_IMG_PATH 512
@@ -51,8 +51,8 @@ class tft_logger : public BRUCE_TFT_DRIVER {
 private:
     tftLog *log = nullptr;
     char (*images)[MAX_LOG_IMG_PATH] = nullptr;
-    uint8_t logWriteIndex = 0;
-    uint8_t logCount = 0;
+    uint16_t logWriteIndex = 0;
+    uint16_t logCount = 0;
     bool isSleeping = false;
     bool logging = false;
     bool _logging = false;
@@ -69,6 +69,12 @@ public:
     tft_logger(int16_t w = TFT_WIDTH, int16_t h = TFT_HEIGHT);
     virtual ~tft_logger();
     void setLogging(bool _log = true);
+#ifdef USE_DUMMY_TFT
+    void setTextColor(uint16_t c) { BRUCE_TFT_DRIVER::setTextColor(c, c); }
+    void setTextColor(uint16_t c, uint16_t b, bool bgfill = false) {
+        BRUCE_TFT_DRIVER::setTextColor(c, b, bgfill);
+    }
+#endif
     bool inline getLogging(void) { return logging; };
 
     // Disables tft writings on the display,
