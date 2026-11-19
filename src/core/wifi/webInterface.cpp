@@ -772,7 +772,7 @@ void startWebUi(bool mode_ap) {
     }
     tft.setLogging();
     drawWebUiScreen(mode_ap);
-#ifdef HAS_SCREEN // Headless always run in the background!
+
     while (!check(EscPress)) {
         // nothing here, just to hold the screen until the server is on.
         vTaskDelay(pdMS_TO_TICKS(70));
@@ -791,5 +791,4 @@ void startWebUi(bool mode_ap) {
         vTaskDelay(pdMS_TO_TICKS(100));
         if (!keepWifiConnected) { wifiDisconnect(); }
     }
-#endif
 }

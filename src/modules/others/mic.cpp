@@ -1,5 +1,5 @@
 #include "mic.h"
-#if defined(MIC_SPM1423) || defined(MIC_INMP441)
+#if defined(HAS_MICROPHONE)
 #include "core/mykeyboard.h"
 #include "core/powerSave.h"
 #include "core/settings.h"
@@ -26,19 +26,6 @@ static int16_t *i2s_buffer = nullptr;
 static uint8_t *fftHistory = nullptr; // Linear buffer [WIDTH + 1][HEIGHT]
 static uint16_t posData = 0;
 #define MIC_SAMPLE_RATE 48000
-
-#ifndef PIN_CLK
-#define PIN_CLK I2S_PIN_NO_CHANGE
-#endif
-#ifndef PIN_DATA
-#define PIN_DATA I2S_PIN_NO_CHANGE
-#endif
-
-#ifdef PIN_BCLK
-gpio_num_t mic_bclk_pin = (gpio_num_t)PIN_BCLK;
-#else
-gpio_num_t mic_bclk_pin = (gpio_num_t)I2S_PIN_NO_CHANGE;
-#endif
 
 static MicConfig mic_config = {
     .record_time_ms = 10000, // default 10 sec
@@ -131,34 +118,33 @@ bool deinitMicroPhone() {
     return err;
 }
 
-bool InitI2SMicroPhone() {
-    // Enable codec, if exists
-    _setup_codec_mic(true);
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    chan_cfg.dma_desc_num = 8;
-    chan_cfg.dma_frame_num = SPECTRUM_HEIGHT;
-    esp_err_t err = i2s_new_channel(&chan_cfg, NULL, &i2s_chan);
-#if defined(MIC_INMP441) // #ifdef PIN_WS // INMP441
-    i2s_std_slot_config_t slot_cfg =
-        I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
-    slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
-    const i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(MIC_SAMPLE_RATE),
-        .slot_cfg = slot_cfg,
-        .gpio_cfg = {
-                     .mclk = I2S_GPIO_UNUSED,
-                     .bclk = (gpio_num_t)PIN_CLK,
-                     .ws = (gpio_num_t)PIN_WS,
-                     .dout = I2S_GPIO_UNUSED,
-                     .din = (gpio_num_t)PIN_DATA,
-                     .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
-                     },
-    };
-    if (err == ESP_OK) err = i2s_channel_init_std_mode(i2s_chan, &std_cfg);
-#else
+// Applies the wiring in bruceConfigPins.mic_bus to an already-created RX channel. Replaces the
+// old MIC_INMP441 / PIN_BCLK compile-time branching: all three wirings are compiled in and the
+// one to use is picked at runtime, so a board only sets mic_bus in _setup_gpio() and the user can
+// change it from pinsMenu() without a rebuild.
+static esp_err_t micInitChannel(i2s_chan_handle_t chan, uint32_t sampleRate) {
+    const BruceConfigPins::MicPins &mic = bruceConfigPins.mic_bus;
 
-    if (mic_bclk_pin != I2S_PIN_NO_CHANGE) {
-        gpio_num_t mic_ws_pin = (gpio_num_t)PIN_CLK;
+    if (mic.type == MIC_TYPE_I2S_PHILIPS) {
+        i2s_std_slot_config_t slot_cfg =
+            I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+        slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+        const i2s_std_config_t std_cfg = {
+            .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sampleRate),
+            .slot_cfg = slot_cfg,
+            .gpio_cfg = {
+                         .mclk = I2S_GPIO_UNUSED,
+                         .bclk = mic.clk,
+                         .ws = mic.ws,
+                         .dout = I2S_GPIO_UNUSED,
+                         .din = mic.data,
+                         .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
+                         },
+        };
+        return i2s_channel_init_std_mode(chan, &std_cfg);
+    }
+
+    if (mic.type == MIC_TYPE_I2S_MSB) {
         i2s_std_config_t i2s_config;
         memset(&i2s_config, 0, sizeof(i2s_std_config_t));
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
@@ -166,8 +152,8 @@ bool InitI2SMicroPhone() {
 #else
         i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
 #endif
-        i2s_config.clk_cfg.sample_rate_hz = MIC_SAMPLE_RATE;                           // dummy setting
-        i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256; // dummy setting
+        i2s_config.clk_cfg.sample_rate_hz = sampleRate;
+        i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
         i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
         i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
         i2s_config.slot_cfg.slot_mode = i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
@@ -181,30 +167,39 @@ bool InitI2SMicroPhone() {
         i2s_config.slot_cfg.big_endian = false;
         i2s_config.slot_cfg.bit_order_lsb = false;
 #endif
-        i2s_config.gpio_cfg.bclk = (gpio_num_t)mic_bclk_pin;
-        i2s_config.gpio_cfg.ws = (gpio_num_t)mic_ws_pin;
+        i2s_config.gpio_cfg.bclk = mic.clk;
+        i2s_config.gpio_cfg.ws = mic.ws;
         i2s_config.gpio_cfg.dout = (gpio_num_t)I2S_PIN_NO_CHANGE;
         i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
-        i2s_config.gpio_cfg.din = (gpio_num_t)PIN_DATA;
-        err = i2s_channel_init_std_mode(i2s_chan, &i2s_config);
-    } else {
-
-        i2s_pdm_rx_clk_config_t clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(MIC_SAMPLE_RATE);
-        i2s_pdm_rx_slot_config_t slot_cfg =
-            I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
-        slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
-        const i2s_pdm_rx_config_t pdm_cfg = {
-            .clk_cfg = clk_cfg,
-            .slot_cfg = slot_cfg,
-            .gpio_cfg = {
-                         .clk = (gpio_num_t)PIN_CLK,
-                         .din = (gpio_num_t)PIN_DATA,
-                         .invert_flags = {.clk_inv = false},
-                         },
-        };
-        if (err == ESP_OK) err = i2s_channel_init_pdm_rx_mode(i2s_chan, &pdm_cfg);
+        i2s_config.gpio_cfg.din = mic.data;
+        return i2s_channel_init_std_mode(chan, &i2s_config);
     }
-#endif
+
+    // MIC_TYPE_PDM
+    i2s_pdm_rx_clk_config_t clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(sampleRate);
+    i2s_pdm_rx_slot_config_t slot_cfg =
+        I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+    slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
+    const i2s_pdm_rx_config_t pdm_cfg = {
+        .clk_cfg = clk_cfg,
+        .slot_cfg = slot_cfg,
+        .gpio_cfg = {
+                     .clk = mic.clk,
+                     .din = mic.data,
+                     .invert_flags = {.clk_inv = false},
+                     },
+    };
+    return i2s_channel_init_pdm_rx_mode(chan, &pdm_cfg);
+}
+
+bool InitI2SMicroPhone() {
+    // Enable codec, if exists
+    _setup_codec_mic(true);
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    chan_cfg.dma_desc_num = 8;
+    chan_cfg.dma_frame_num = SPECTRUM_HEIGHT;
+    esp_err_t err = i2s_new_channel(&chan_cfg, NULL, &i2s_chan);
+    if (err == ESP_OK) err = micInitChannel(i2s_chan, MIC_SAMPLE_RATE);
     if (err == ESP_OK) err = i2s_channel_enable(i2s_chan);
     return (err == ESP_OK);
 }
@@ -999,75 +994,7 @@ bool mic_capture_samples(
         if (err != ESP_OK) break;
 
         // Configure I2S with custom sample rate
-#if defined(MIC_INMP441)
-        i2s_std_slot_config_t slot_cfg =
-            I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
-        slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
-
-        const i2s_std_config_t std_cfg = {
-            .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sampleRate), // Custom sample rate
-            .slot_cfg = slot_cfg,
-            .gpio_cfg = {
-                         .mclk = I2S_GPIO_UNUSED,
-                         .bclk = (gpio_num_t)PIN_CLK,
-                         .ws = (gpio_num_t)PIN_WS,
-                         .dout = I2S_GPIO_UNUSED,
-                         .din = (gpio_num_t)PIN_DATA,
-                         .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
-                         },
-        };
-        err = i2s_channel_init_std_mode(temp_i2s_chan, &std_cfg);
-#else
-        if (mic_bclk_pin != I2S_PIN_NO_CHANGE) {
-            // Standard I2S mode
-            gpio_num_t mic_ws_pin = (gpio_num_t)PIN_CLK;
-            i2s_std_config_t i2s_config;
-            memset(&i2s_config, 0, sizeof(i2s_std_config_t));
-#if defined(CONFIG_IDF_TARGET_ESP32P4)
-            i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_DEFAULT;
-#else
-            i2s_config.clk_cfg.clk_src = i2s_clock_src_t::I2S_CLK_SRC_PLL_160M;
-#endif
-            i2s_config.clk_cfg.sample_rate_hz = sampleRate; // Custom sample rate
-            i2s_config.clk_cfg.mclk_multiple = i2s_mclk_multiple_t::I2S_MCLK_MULTIPLE_256;
-            i2s_config.slot_cfg.data_bit_width = i2s_data_bit_width_t::I2S_DATA_BIT_WIDTH_16BIT;
-            i2s_config.slot_cfg.slot_bit_width = i2s_slot_bit_width_t::I2S_SLOT_BIT_WIDTH_16BIT;
-            i2s_config.slot_cfg.slot_mode = i2s_slot_mode_t::I2S_SLOT_MODE_MONO;
-            i2s_config.slot_cfg.slot_mask = i2s_std_slot_mask_t::I2S_STD_SLOT_LEFT;
-            i2s_config.slot_cfg.ws_width = 16;
-            i2s_config.slot_cfg.bit_shift = true;
-#if SOC_I2S_HW_VERSION_1
-            i2s_config.slot_cfg.msb_right = false;
-#else
-            i2s_config.slot_cfg.left_align = true;
-            i2s_config.slot_cfg.big_endian = false;
-            i2s_config.slot_cfg.bit_order_lsb = false;
-#endif
-            i2s_config.gpio_cfg.bclk = (gpio_num_t)mic_bclk_pin;
-            i2s_config.gpio_cfg.ws = (gpio_num_t)mic_ws_pin;
-            i2s_config.gpio_cfg.dout = (gpio_num_t)I2S_PIN_NO_CHANGE;
-            i2s_config.gpio_cfg.mclk = (gpio_num_t)I2S_PIN_NO_CHANGE;
-            i2s_config.gpio_cfg.din = (gpio_num_t)PIN_DATA;
-            err = i2s_channel_init_std_mode(temp_i2s_chan, &i2s_config);
-        } else {
-            // PDM mode
-            i2s_pdm_rx_clk_config_t clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(sampleRate); // Custom sample rate
-            i2s_pdm_rx_slot_config_t slot_cfg =
-                I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
-            slot_cfg.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
-
-            const i2s_pdm_rx_config_t pdm_cfg = {
-                .clk_cfg = clk_cfg,
-                .slot_cfg = slot_cfg,
-                .gpio_cfg = {
-                             .clk = (gpio_num_t)PIN_CLK,
-                             .din = (gpio_num_t)PIN_DATA,
-                             .invert_flags = {.clk_inv = false},
-                             },
-            };
-            err = i2s_channel_init_pdm_rx_mode(temp_i2s_chan, &pdm_cfg);
-        }
-#endif
+        err = micInitChannel(temp_i2s_chan, sampleRate);
 
         if (err != ESP_OK) break;
 

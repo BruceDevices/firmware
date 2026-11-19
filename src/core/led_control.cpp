@@ -92,6 +92,16 @@ void ledEffectTask(void *pvParameters) {
         int ledEffectSpeed = isPreviewLed ? previewLedEffectSpeed : bruceConfig.ledEffectSpeed;
         int ledEffectDirection = isPreviewLed ? previewLedEffectDirection : bruceConfig.ledEffectDirection;
 
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+        if (!bruceConfig.ledEnabled && !isPreviewLed) {
+            // Master off: keep everything dark no matter what other code wrote
+            fill_solid(leds, LED_COUNT, CRGB::Black);
+            FastLED.show();
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+#endif
+
         if (ledEffect == LED_EFFECT_COLOR_CYCLE || ledEffect == LED_EFFECT_COLOR_WHEEL) {
             short delayMs = 50;
 
@@ -292,11 +302,23 @@ void ledEffectTask(void *pvParameters) {
 }
 
 void beginLed() {
+    // Register the FastLED controller only ONCE. FastLED.addLeds appends a new
+    // controller to its global list every call with no dedup; beginLed() runs
+    // on every LED menu entry, so re-adding stacked duplicate controllers on
+    // the same pin and each FastLED.show() drove the strip several times back
+    // to back — visible as flicker/blinking and corrupted colour on a single
+    // WS2812/SK6812 (e.g. Cardputer). The RMT channel is re-acquired by
+    // FastLED on each show(), so registering once is enough even after RF
+    // features borrow the RMT peripheral.
+    static bool ledsRegistered = false;
+    if (!ledsRegistered) {
 #ifdef RGB_LED_CLK
-    FastLED.addLeds<LED_TYPE, RGB_LED, RGB_LED_CLK, LED_ORDER>(leds, LED_COUNT);
+        FastLED.addLeds<LED_TYPE, RGB_LED, RGB_LED_CLK, LED_ORDER>(leds, LED_COUNT);
 #else
-    FastLED.addLeds<LED_TYPE, RGB_LED, LED_ORDER>(leds, LED_COUNT);
+        FastLED.addLeds<LED_TYPE, RGB_LED, LED_ORDER>(leds, LED_COUNT);
 #endif
+        ledsRegistered = true;
+    }
 
     /* The default FastLED driver takes over control of the RMT interrupt
      * handler, making it hard to use the RMT device for other
@@ -346,6 +368,12 @@ void blinkLed(int blinkTime) {
 
     int ledBrightFrom = bruceConfig.ledBright;
     int ledBrightTo = ledBrightFrom > 0 ? 0 : 50;
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+    if (!bruceConfig.ledEnabled) {
+        ledBrightFrom = 0;
+        ledBrightTo = 0;
+    }
+#endif
 
     beginLed();
     setLedBrightness(ledBrightTo);
@@ -362,6 +390,9 @@ void setLedColor(CRGB color) {
         EncoderLedChange = 1;
 #endif
     } else {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+        if (!bruceConfig.ledEnabled) color = CRGB::Black;
+#endif
         for (int i = 0; i < LED_COUNT; i++) leds[i] = color;
         FastLED.show();
     }
@@ -376,13 +407,15 @@ void setLedEffect(int effect) {
 
 void setLedBrightness(int value) {
     value = max(0, min(100, value));
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+    if (!bruceConfig.ledEnabled && !isPreviewLed) value = 0;
+#endif
     int bright = 255 * value / 100;
     FastLED.setBrightness(bright);
     FastLED.show();
 }
 
-#define BrucePurple 9830500 // Custom purple color for Bruce
-// TODO: 3852441 -> 3849837
+#define BrucePurple 0xAD007B // Bruce theme purple (DEFAULT_PRICOLOR 0xA80F in RGB888)
 void setLedColorConfig() {
     ledPreviewMode(true);
 
@@ -726,6 +759,16 @@ void setLedEffectDirectionConfig() {
 }
 
 void ledSetup() {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+    if (!bruceConfig.ledEnabled) {
+        // Master off: kill any running effect task and blank the whole chain
+        ledEffects(false);
+        fill_solid(leds, LED_COUNT, CRGB::Black);
+        FastLED.show();
+        return;
+    }
+#endif
+
     if (bruceConfig.ledEffect == LED_EFFECT_SOLID) { ledEffects(false); }
 
     if (bruceConfig.ledEffect > LED_EFFECT_SOLID) {
@@ -758,61 +801,50 @@ void ledPreviewMode(bool enable) {
 }
 
 void setLedBrightnessConfig() {
-    int idx = 0;
-    if (bruceConfig.ledBright == 0) idx = 0;
-    else if (bruceConfig.ledBright == 10) idx = 1;
-    else if (bruceConfig.ledBright == 25) idx = 2;
-    else if (bruceConfig.ledBright == 50) idx = 3;
-    else if (bruceConfig.ledBright == 75) idx = 4;
-    else if (bruceConfig.ledBright == 100) idx = 5;
+    static const int levels[] = {0, 3, 5, 10, 25, 50, 75, 100};
+    const int n = sizeof(levels) / sizeof(levels[0]);
 
-    options = {
-        {"OFF",
-         [=]() { bruceConfig.setLedBright(0); },
-         bruceConfig.ledBright == 0,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(0);
-             return false;
-         }},
-        {"10 %",
-         [=]() { bruceConfig.setLedBright(10); },
-         bruceConfig.ledBright == 10,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(10);
-             return false;
-         }},
-        {"25 %",
-         [=]() { bruceConfig.setLedBright(25); },
-         bruceConfig.ledBright == 25,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(25);
-             return false;
-         }},
-        {"50 %",
-         [=]() { bruceConfig.setLedBright(50); },
-         bruceConfig.ledBright == 50,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(50);
-             return false;
-         }},
-        {"75 %",
-         [=]() { bruceConfig.setLedBright(75); },
-         bruceConfig.ledBright == 75,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(75);
-             return false;
-         }},
-        {"100%",
-         [=]() { bruceConfig.setLedBright(100); },
-         bruceConfig.ledBright == 100,
-         [](void *pointer, bool shouldRender) {
-             setLedBrightness(100);
-             return false;
-         }},
-    };
+    int idx = 0;
+    for (int i = 0; i < n; i++) {
+        if (bruceConfig.ledBright == levels[i]) idx = i;
+    }
+
+    options.clear();
+    for (int i = 0; i < n; i++) {
+        int level = levels[i];
+        options.emplace_back(
+            level == 0 ? "OFF" : String(level) + " %",
+            [level]() { bruceConfig.setLedBright(level); },
+            bruceConfig.ledBright == level,
+            [](void *pointer, bool shouldRender) {
+                setLedBrightness(*static_cast<const int *>(pointer));
+                return false;
+            },
+            (void *)&levels[i]
+        );
+    }
     addOptionToMainMenu();
 
     loopOptions(options, idx);
     setLedBrightness(bruceConfig.ledBright);
 }
+
+// Drive the REAPER rear red LED rail (AW9523 IO_EXP_LOGO, pin 0, active-high)
+// to the given state. Independent of the WS2812 chain: this LED has no effects.
+void applyBackLed(bool on) {
+#if defined(IO_EXPANDER_AW9523) || defined(IO_EXPANDER_PCA9555)
+    ioExpander.turnPinOnOff(IO_EXP_LOGO, on ? HIGH : LOW);
 #endif
+}
+#endif
+
+// Quick vibration test (reaper/smoochiee: vibro on an expander pin). Outside
+// the HAS_RGB_LED block so vibro boards without the LED chain still get it.
+void vibrate(int ms) {
+#if defined(IO_EXPANDER_AW9523) || defined(IO_EXPANDER_PCA9555)
+    if (IO_EXP_VIBRO < 0) return;
+    ioExpander.turnPinOnOff(IO_EXP_VIBRO, HIGH);
+    delay(ms);
+    ioExpander.turnPinOnOff(IO_EXP_VIBRO, LOW);
+#endif
+}

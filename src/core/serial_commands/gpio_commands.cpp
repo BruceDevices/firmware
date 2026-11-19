@@ -3,7 +3,7 @@
 
 bool is_free_gpio_pin(int pin_no) {
     // check if pin_no is usable for general GPIO
-    std::vector<int> usable_pins = {GROVE_SDA, GROVE_SCL};
+    std::vector<int> usable_pins = {bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl};
 
 #if defined(ARDUINO_M5STICK_C_PLUS2) || defined(ARDUINO_M5STICK_C_PLUS)
     usable_pins.insert(usable_pins.end(), {25, 26, 32, 33, 0});

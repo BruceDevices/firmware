@@ -30,7 +30,7 @@ typedef struct {
     bool gone;
 } pwngrid_peer;
 
-void initPwngrid();
+bool initPwngrid();
 esp_err_t pwngridAdvertise(uint8_t channel, const String &face);
 std::vector<pwngrid_peer> getPwngridPeers();
 uint8_t getPwngridRunTotalPeers();

@@ -2,6 +2,7 @@
 #include "core/configPins.h"
 #include "globals.h"
 #include "soc/soc_caps.h"
+#include <esp32-hal-periman.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -96,8 +97,11 @@ public:
     }
 
     uint8_t endTransmission(bool stopBit) override {
-        if (stopBit) {
-            if (_open && !_i2c.stop()) _error = 4;
+        // A failed write phase ends the transaction even without a stop request: callers abandon
+        // it on error (no requestFrom follows), which would otherwise leave the sys lock held and
+        // deadlock the next sys_i2c transaction.
+        if (stopBit || _error != 0) {
+            if (_open && !_i2c.stop() && _error == 0) _error = 4;
             _open = false;
             unlockSysI2CBus();
         }
@@ -140,13 +144,17 @@ public:
     void onReceive(const std::function<void(int)> &) override {}
     void onRequest(const std::function<void()> &) override {}
 
+    uint32_t clock() const { return _freq; }
+
 private:
     m5::I2C_Class &_i2c;
     uint32_t _freq = 400000;
     uint8_t _addr = 0;
     bool _open = false;
     uint8_t _error = 0;
-    uint8_t _rxbuf[64];
+    // Must hold a whole read in one transaction: Adafruit BusIO chunks reads up to 250 bytes and
+    // treats a short requestFrom() as failure; the EMV reader needs an extended PN532 frame (281).
+    uint8_t _rxbuf[288];
     size_t _rxLen = 0;
     size_t _rxPos = 0;
 };
@@ -172,11 +180,6 @@ bool __attribute__((weak)) releaseBoardI2CBus(TwoWire *wire) {
     return false;
 }
 
-static TwoWire *userWire = nullptr;
-static bool userBusShared = false;
-static int8_t activeSda = -1;
-static int8_t activeScl = -1;
-
 void setSysI2CBus(TwoWire *wire) { sysWire = wire; }
 
 TwoWire *getSysI2CBus() {
@@ -187,75 +190,285 @@ TwoWire *getSysI2CBus() {
 #endif
 }
 
-TwoWire *acquireI2CBus(int8_t sda, int8_t scl) {
-    bool sharesSysBus =
-        (gpio_num_t)sda == bruceConfigPins.sys_i2c.sda && (gpio_num_t)scl == bruceConfigPins.sys_i2c.scl;
-    BUSHAL_DBG(
-        "[busHAL] acquire(%d/%d): sharesSysBus=%d userWire=%p userBusShared=%d active=%d/%d\n",
-        (int)sda,
-        (int)scl,
-        (int)sharesSysBus,
-        (void *)userWire,
-        (int)userBusShared,
-        (int)activeSda,
-        (int)activeScl
-    );
+// ---------------- I2C pin helpers ----------------
 
-    if (sharesSysBus) {
-        userWire = nullptr;
-        userBusShared = true;
-#ifdef BRUCE_HAS_M5UNIFIED
-        return sysWireAdapter();
-#else
-        return sysWire;
-#endif
+static bool sysConfigured() { return bruceConfigPins.sys_i2c.sda >= 0 && bruceConfigPins.sys_i2c.scl >= 0; }
+
+static bool pinsAreSys(int8_t sda, int8_t scl) {
+    return sysConfigured() && sda == (int8_t)bruceConfigPins.sys_i2c.sda &&
+           scl == (int8_t)bruceConfigPins.sys_i2c.scl;
+}
+
+static bool pinsOverlapSys(int8_t sda, int8_t scl) {
+    if (!sysConfigured()) return false;
+    int8_t s = (int8_t)bruceConfigPins.sys_i2c.sda;
+    int8_t c = (int8_t)bruceConfigPins.sys_i2c.scl;
+    return sda == s || sda == c || scl == s || scl == c;
+}
+
+// Both lines must idle high before a controller is started on them: a line held low means
+// something else is driving that pin (or a wedged slave), and starting I2C there would only
+// produce driver errors or disturb that other function.
+static bool linesIdle(int8_t sda, int8_t scl) {
+    pinMode(sda, INPUT_PULLUP);
+    pinMode(scl, INPUT_PULLUP);
+    delayMicroseconds(50);
+    return digitalRead(sda) == HIGH && digitalRead(scl) == HIGH;
+}
+
+// ---------------- User bus (reference counted) ----------------
+
+static TwoWire *userWire = nullptr;
+static int8_t userSda = -1;
+static int8_t userScl = -1;
+static uint16_t userRefs = 0;
+static bool userIsBoard = false; // opened through acquireBoardI2CBus()
+
+// Opens the user bus on the given pins, or joins it if it is already open on those same pins.
+// Returns nullptr when it is open on other pins, when the SoC's only general-purpose controller
+// already serves sys_i2c, when a line isn't idle, or when the controller fails to start.
+static TwoWire *userBusOpen(int8_t sda, int8_t scl) {
+    if (sda < 0 || scl < 0) return nullptr;
+    if (userRefs > 0) {
+        if (sda == userSda && scl == userScl) {
+            userRefs++;
+            return userWire;
+        }
+        BUSHAL_DBG("[busHAL] user bus busy on %d/%d, refused %d/%d\n", userSda, userScl, sda, scl);
+        return nullptr;
     }
 
-    TwoWire *boardWire = acquireBoardI2CBus(sda, scl);
-    if (boardWire != nullptr) {
-        userWire = boardWire;
-        userBusShared = false;
-        activeSda = sda;
-        activeScl = scl;
-        return boardWire;
-    }
-
+    TwoWire *wire = acquireBoardI2CBus(sda, scl);
+    bool board = wire != nullptr;
+    if (!board) {
 #ifdef BRUCE_HAS_DUAL_I2C
-    TwoWire *wire = (sysWire == &Wire) ? &Wire1 : &Wire;
+        wire = (sysWire == &Wire) ? &Wire1 : &Wire;
 #else
-    // Only one general-purpose I2C controller exists: i2c_bus has no choice but to time-share
-    // the same Wire used by sys_i2c, reconfiguring its pins on demand (like AUX_SPI below).
-    TwoWire *wire = &Wire;
+        // The only general-purpose controller already serves sys_i2c: begin() can't re-pin a
+        // started bus (it keeps the sys pins), and ending it would take the system peripherals
+        // down with it. Boards that can time-share it provide acquireBoardI2CBus().
+        if (sysConfigured()) return nullptr;
+        wire = &Wire;
 #endif
-    if (userWire != wire || activeSda != sda || activeScl != scl) { wire->begin(sda, scl); }
+        if (!linesIdle(sda, scl)) {
+            BUSHAL_DBG("[busHAL] %d/%d not idle (line held low), not starting I2C\n", sda, scl);
+            return nullptr;
+        }
+        if (!wire->begin(sda, scl)) {
+            BUSHAL_DBG("[busHAL] begin(%d/%d) failed\n", sda, scl);
+            wire->end();
+            return nullptr;
+        }
+    }
     userWire = wire;
-    userBusShared = false;
-    activeSda = sda;
-    activeScl = scl;
+    userSda = sda;
+    userScl = scl;
+    userRefs = 1;
+    userIsBoard = board;
+    BUSHAL_DBG("[busHAL] user bus opened on %d/%d (%s)\n", sda, scl, board ? "board" : "hw");
     return wire;
 }
 
-TwoWire *acquireI2CBus() {
-    return acquireI2CBus((int8_t)bruceConfigPins.i2c_bus.sda, (int8_t)bruceConfigPins.i2c_bus.scl);
+static void userBusUnref() {
+    if (userRefs == 0) return;
+    if (--userRefs > 0) return;
+    if (!(userIsBoard && releaseBoardI2CBus(userWire))) userWire->end();
+    BUSHAL_DBG("[busHAL] user bus closed (%d/%d)\n", userSda, userScl);
+    userWire = nullptr;
+    userSda = -1;
+    userScl = -1;
+    userIsBoard = false;
 }
 
-void releaseI2CBus() {
-    BUSHAL_DBG("[busHAL] release(): userBusShared=%d userWire=%p\n", (int)userBusShared, (void *)userWire);
-    if (userBusShared) return;
-    if (userWire == nullptr) return;
-    if (!releaseBoardI2CBus(userWire)) {
-        BUSHAL_DBG("[busHAL] release(): calling userWire->end()\n");
-        userWire->end();
+// ---------------- I2C leases ----------------
+
+struct I2CLeaseAccess {
+    static I2CLease make(I2CBusId bus, TwoWire *wire, int8_t sda, int8_t scl) {
+        I2CLease lease;
+        lease._bus = bus;
+        lease._wire = wire;
+        lease._sda = sda;
+        lease._scl = scl;
+        return lease;
     }
-    userWire = nullptr;
-    activeSda = -1;
-    activeScl = -1;
+    static void setFound(I2CLease &lease, bool found) { lease._found = found; }
+};
+
+I2CLease::I2CLease(I2CLease &&other) noexcept { *this = std::move(other); }
+
+I2CLease &I2CLease::operator=(I2CLease &&other) noexcept {
+    if (this == &other) return *this;
+    release();
+    _wire = other._wire;
+    _bus = other._bus;
+    _found = other._found;
+    _sda = other._sda;
+    _scl = other._scl;
+    _clockSaved = other._clockSaved;
+    _savedClock = other._savedClock;
+    _timeoutSaved = other._timeoutSaved;
+    _savedTimeout = other._savedTimeout;
+    other._wire = nullptr;
+    other._bus = I2CBusId::None;
+    other._found = false;
+    other._clockSaved = false;
+    other._timeoutSaved = false;
+    return *this;
+}
+
+static uint32_t readSysClock(TwoWire *wire) {
+#ifdef BRUCE_HAS_M5UNIFIED
+    // The adapter isn't a real controller: TwoWire::getClock() would query port 255.
+    if (wire == sysWireAdapter()) return static_cast<M5SysWireAdapter *>(wire)->clock();
+#endif
+    return wire->getClock();
+}
+
+void I2CLease::setClock(uint32_t hz) {
+    if (_wire == nullptr) return;
+    if (_bus == I2CBusId::Sys && !_clockSaved) {
+        _savedClock = readSysClock(_wire);
+        _clockSaved = _savedClock != 0;
+    }
+    _wire->setClock(hz);
+}
+
+void I2CLease::setTimeOut(uint16_t ms) {
+    if (_wire == nullptr) return;
+    if (_bus == I2CBusId::Sys && !_timeoutSaved) {
+        _savedTimeout = _wire->getTimeOut();
+        _timeoutSaved = true;
+    }
+    _wire->setTimeOut(ms);
+}
+
+void I2CLease::release() {
+    if (_wire == nullptr) return;
+    if (_bus == I2CBusId::Sys) {
+        if (_clockSaved) _wire->setClock(_savedClock);
+        if (_timeoutSaved) _wire->setTimeOut(_savedTimeout);
+    } else if (_bus == I2CBusId::User) {
+        userBusUnref();
+    }
+    _wire = nullptr;
+    _bus = I2CBusId::None;
+    _found = false;
+    _sda = -1;
+    _scl = -1;
+    _clockSaved = false;
+    _timeoutSaved = false;
+}
+
+static I2CLease leaseSys() {
+    if (!sysConfigured()) return I2CLease();
+    // A board hook (e.g. Nesso N1) lent the sys controller to the user bus: sys_i2c is unusable
+    // until that lease ends, and its adapter would deadlock on the lock the hook holds.
+    if (userIsBoard && userRefs > 0) return I2CLease();
+    return I2CLeaseAccess::make(
+        I2CBusId::Sys,
+        getSysI2CBus(),
+        (int8_t)bruceConfigPins.sys_i2c.sda,
+        (int8_t)bruceConfigPins.sys_i2c.scl
+    );
+}
+
+I2CLease i2cLeasePins(int8_t sda, int8_t scl) {
+    if (sda < 0 || scl < 0) return I2CLease();
+    if (pinsAreSys(sda, scl)) return leaseSys();
+    if (pinsOverlapSys(sda, scl)) {
+        BUSHAL_DBG("[busHAL] %d/%d partially overlaps sys_i2c, refused\n", sda, scl);
+        return I2CLease();
+    }
+    TwoWire *wire = userBusOpen(sda, scl);
+    if (wire == nullptr) return I2CLease();
+    return I2CLeaseAccess::make(I2CBusId::User, wire, sda, scl);
+}
+
+I2CLease i2cLeaseBus(I2CBusId id) {
+    if (id == I2CBusId::Sys) return leaseSys();
+    if (id == I2CBusId::User)
+        return i2cLeasePins((int8_t)bruceConfigPins.i2c_bus.sda, (int8_t)bruceConfigPins.i2c_bus.scl);
+    return I2CLease();
+}
+
+bool i2cProbe(const I2CLease &lease, uint8_t addr) {
+    TwoWire *wire = lease.wire();
+    if (wire == nullptr) return false;
+    // On M5Unified boards the sys wire is M5SysWireAdapter, which takes the sys_i2c lock itself.
+    wire->beginTransmission(addr);
+    return wire->endTransmission() == 0;
+}
+
+I2CLease i2cLeaseDevice(const I2CDeviceQuery &q) {
+    const I2CBusId order[2] = {
+        q.prefer == I2CPrefer::SysFirst ? I2CBusId::Sys : I2CBusId::User,
+        q.prefer == I2CPrefer::SysFirst ? I2CBusId::User : I2CBusId::Sys,
+    };
+    const uint8_t tries = q.retries ? q.retries : 1;
+    bool sysTried = false;
+
+    for (I2CBusId id : order) {
+        I2CLease lease = i2cLeaseBus(id);
+        if (!lease) continue;
+        // i2c_bus configured on the sys_i2c pins resolves to the sys bus: probe it only once.
+        if (lease.bus() == I2CBusId::Sys) {
+            if (sysTried) continue;
+            sysTried = true;
+        }
+        for (uint8_t t = 0; t < tries; t++) {
+            if (i2cProbe(lease, q.addr) && (q.verify == nullptr || q.verify(*lease.wire(), q.addr))) {
+                BUSHAL_DBG("[busHAL] 0x%02X found on %s\n", q.addr, i2cBusLabel(lease.bus()).c_str());
+                I2CLeaseAccess::setFound(lease, true);
+                return lease;
+            }
+            if (t + 1 < tries) delay(10);
+        }
+        // Not here: the lease goes out of scope and the bus is released before the next candidate.
+    }
+
+    BUSHAL_DBG("[busHAL] 0x%02X not found on any bus\n", q.addr);
+    if (q.fallbackToUser) return i2cLeaseBus(I2CBusId::User);
+    return I2CLease();
+}
+
+int i2cScanAll(void (*cb)(I2CBusId bus, uint8_t addr, void *ctx), void *ctx) {
+    const I2CBusId order[2] = {I2CBusId::Sys, I2CBusId::User};
+    bool anyBus = false;
+    bool sysScanned = false;
+    int count = 0;
+    for (I2CBusId id : order) {
+        I2CLease lease = i2cLeaseBus(id);
+        if (!lease) continue;
+        if (lease.bus() == I2CBusId::Sys) {
+            if (sysScanned) continue;
+            sysScanned = true;
+        }
+        anyBus = true;
+        for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+            if (!i2cProbe(lease, addr)) continue;
+            count++;
+            if (cb) cb(lease.bus(), addr, ctx);
+        }
+    }
+    return anyBus ? count : -1;
+}
+
+String i2cBusLabel(I2CBusId id) {
+    if (id == I2CBusId::Sys) {
+        return "SYS " + String((int)bruceConfigPins.sys_i2c.sda) + "/" + String((int)bruceConfigPins.sys_i2c.scl);
+    }
+    if (id == I2CBusId::User) {
+        return "EXT " + String((int)bruceConfigPins.i2c_bus.sda) + "/" + String((int)bruceConfigPins.i2c_bus.scl);
+    }
+    return "NONE";
 }
 
 bool checkAndRecoverSysI2CBus() {
     int8_t sda = (int8_t)bruceConfigPins.sys_i2c.sda;
     int8_t scl = (int8_t)bruceConfigPins.sys_i2c.scl;
     if (sda < 0 || scl < 0) return false; // board has no sys_i2c
+    // A board hook lent the sys controller to the user bus (sys pins are idle by design then).
+    if (userIsBoard && userRefs > 0) return false;
 
     static unsigned long sdaLowSinceMs = 0;
     static unsigned long sclLowSinceMs = 0;
@@ -269,6 +482,19 @@ bool checkAndRecoverSysI2CBus() {
     unsigned long now = millis();
     if (now - lastCheckMs < kCheckIntervalMs) return false;
     lastCheckMs = now;
+
+#ifndef BRUCE_HAS_M5UNIFIED
+    // On boards whose sys_i2c pins double as Grove (Mako, Pebble...), another function (e.g. RF
+    // TX on rfTx) may have taken them over: a long low level there is that function working, not
+    // a wedged bus, and "recovering" would break it. Only watch pins still muxed to I2C. (M5
+    // boards drive the sys port through M5Unified, which doesn't register pins with periman.)
+    if (perimanGetPinBusType(sda) != ESP32_BUS_TYPE_I2C_MASTER_SDA ||
+        perimanGetPinBusType(scl) != ESP32_BUS_TYPE_I2C_MASTER_SCL) {
+        sdaLowSinceMs = 0;
+        sclLowSinceMs = 0;
+        return false;
+    }
+#endif
 
     // digitalRead() only samples the GPIO input register - it doesn't touch pin
     // mode or issue any I2C transaction, so this can't contend with a transfer
@@ -299,8 +525,19 @@ bool checkAndRecoverSysI2CBus() {
         sclLowSinceMs ? (now - sclLowSinceMs) : 0
     );
 
+#ifdef BRUCE_HAS_M5UNIFIED
+    // The sys port is owned by M5.In_I2C, not by a TwoWire: the adapter's end() is a no-op and
+    // TwoWire::begin() on it fails (fake port 255), which would leave the pins detached from the
+    // controller after the bit-bang below. Release/re-begin M5.In_I2C itself instead, without
+    // racing an RFID transaction in progress through the adapter (skip and retry next round).
+    if (!trylockSysI2CBus()) return false;
+    i2c_port_t m5Port = M5.In_I2C.getPort();
+    M5.In_I2C.release();
+#else
     TwoWire *wire = getSysI2CBus();
+    uint32_t sysClock = wire ? wire->getClock() : 0;
     if (wire) wire->end();
+#endif
 
     // Standard I2C bus recovery (per NXP UM10204 3.1.16): toggle SCL as a plain
     // GPIO up to 9 times to walk any slave stuck mid-byte/clock-stretch out of
@@ -326,7 +563,12 @@ bool checkAndRecoverSysI2CBus() {
     digitalWrite(sda, HIGH);
     delayMicroseconds(5);
 
-    if (wire) wire->begin(sda, scl);
+#ifdef BRUCE_HAS_M5UNIFIED
+    M5.In_I2C.begin(m5Port, sda, scl);
+    unlockSysI2CBus();
+#else
+    if (wire) wire->begin(sda, scl, sysClock);
+#endif
 
     sdaLowSinceMs = 0;
     sclLowSinceMs = 0;

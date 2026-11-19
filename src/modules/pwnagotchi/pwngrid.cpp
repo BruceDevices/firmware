@@ -307,18 +307,33 @@ const wifi_promiscuous_filter_t filter = {
     .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA
 };
 
-void initPwngrid() {
+bool initPwngrid() {
     ensureWifiPlatform();
-    wifi_init_config_t WIFI_INIT_CONFIG = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&WIFI_INIT_CONFIG);
+    wifiDisconnect(); // drop any live connection before switching to AP mode
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    cfg.ampdu_rx_enable = 0; // AP + promiscuous: trim the internal-RAM footprint
+    esp_err_t err = esp_wifi_init(&cfg);
+    if (err == ESP_ERR_WIFI_INIT_STATE) {
+        // A previous feature left the stack initialized: reuse it as-is.
+    } else if (err != ESP_OK) {
+        Serial.printf("[PWN] esp_wifi_init failed: %s\n", esp_err_to_name(err));
+        return false;
+    }
+
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_start();
+    if (esp_wifi_set_mode(WIFI_MODE_AP) != ESP_OK) { return false; }
+    err = esp_wifi_start();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_INIT_STATE) {
+        Serial.printf("[PWN] esp_wifi_start failed: %s\n", esp_err_to_name(err));
+        return false;
+    }
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(pwnSnifferCallback);
-    // esp_wifi_set_ps(WIFI_PS_NONE);
-    esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
+    // random(0, 14) could yield channel 0, which esp_wifi rejects
+    esp_wifi_set_channel(random(1, 15), WIFI_SECOND_CHAN_NONE);
     vTaskDelay(1 / portTICK_RATE_MS);
+    return true;
 }
 #endif

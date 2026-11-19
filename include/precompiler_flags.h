@@ -38,27 +38,27 @@
 #ifndef SAFE_STACK_BUFFER_SIZE
   #define SAFE_STACK_BUFFER_SIZE 1024
 #endif
-
 #endif
 
+#ifdef HAS_6_BUTTONS
+  #define HAS_5_BUTTONS 1 // Uses the same 5 buttons logic on Keyboard
+#endif
+
+#ifdef HAS_2_BUTTONS
+  #define HAS_1_BUTTON 1 // Uses the same 1 button logic on keyboard
+  #define HAS_3_BUTTONS 1
+  #warning "Remove HAS_3_BUTTONS after implement keyboard logic for 1 button"
+#endif
+
+#ifdef HAS_4_BUTTONS
+  #define HAS_3_BUTTONS // Uses the same 3 button logic on keyboard
+#endif
 
 #ifndef GROVE_SDA           // Pin to be used in I2C communications
   #define GROVE_SDA -1
 #endif
 #ifndef GROVE_SCL           // Pin to be used in I2C communications
   #define GROVE_SCL -1
-#endif
-#ifndef SYS_I2C_SDA         // Pin to be used in I2C communications
-  #define SYS_I2C_SDA -1
-#endif
-#ifndef SYS_I2C_SCL         // Pin to be used in I2C communications
-  #define SYS_I2C_SCL -1
-#endif
-#ifndef RXLED               // Default RX Infrared LED
-  #define RXLED GROVE_SCL
-#endif
-#ifndef TXLED                 // Default TX Infrared Led
-  #define TXLED GROVE_SDA
 #endif
 #ifndef LED_ON              // Infrared TXLED On state
   #define LED_ON 1
@@ -86,25 +86,6 @@
 #endif
 #ifndef TFT_HEIGHT
   #define TFT_HEIGHT 135
-#endif
-
-#ifndef LORA_SCK
-  #define LORA_SCK -1
-#endif
-#ifndef LORA_MISO
-  #define LORA_MISO -1
-#endif
-#ifndef LORA_MOSI
-  #define LORA_MOSI -1
-#endif
-#ifndef LORA_CS
-  #define LORA_CS -1
-#endif
-#ifndef LORA_RST
-  #define LORA_RST -1
-#endif
-#ifndef LORA_DIO0
-  #define LORA_DIO0 -1
 #endif
 
 // Default initializers
@@ -137,22 +118,6 @@
 #endif
 #ifndef SDCARD_SCK
   #define SDCARD_SCK -1
-#endif
-
-#ifndef SERIAL_TX         // Serial TX used for GPS communications -> To use in other boards
-  #define SERIAL_TX GROVE_SDA
-#endif
-
-#ifndef SERIAL_RX         // Serial RX used for GPS communications -> To use in other boards
-  #define SERIAL_RX GROVE_SCL
-#endif
-
-#ifndef GPS_SERIAL_TX // Serial TX used just for GPS communications
-  #define GPS_SERIAL_TX GROVE_SDA
-#endif
-
-#ifndef GPS_SERIAL_RX // Serial RX used just for GPS communications
-  #define GPS_SERIAL_RX GROVE_SCL
 #endif
 
 //This one sets an array to set create the options to devices that have all GPIO available to use (except tft and SD Card)
@@ -193,94 +158,6 @@
     #define IR_RX_PINS GPIO_PIN_LIST
     #define RF_TX_PINS GPIO_PIN_LIST
     #define RF_RX_PINS GPIO_PIN_LIST
-#endif
-
-#ifndef NRF24_SCK_PIN
-#define NRF24_SCK_PIN -1
-#endif
-
-#ifndef NRF24_MISO_PIN
-#define NRF24_MISO_PIN -1
-#endif
-
-#ifndef NRF24_MOSI_PIN
-#define NRF24_MOSI_PIN -1
-#endif
-
-#ifndef BAD_TX
-#define BAD_TX GROVE_SDA
-#endif
-
-#ifndef BAD_RX
-#define BAD_RX GROVE_SCL
-#endif
-
-#ifndef SPI_SS_PIN
-#define SPI_SS_PIN -1
-#endif
-
-#ifndef SPI_SCK_PIN
-#define SPI_SCK_PIN -1
-#endif
-
-#ifndef SPI_MOSI_PIN
-#define SPI_MOSI_PIN -1
-#endif
-
-#ifndef SPI_MISO_PIN
-#define SPI_MISO_PIN -1
-#endif
-
-#ifndef NRF24_SS_PIN
-#define NRF24_SS_PIN -1
-#endif
-
-#ifndef NRF24_CE_PIN
-#define NRF24_CE_PIN -1
-#endif
-
-#ifndef CC1101_SCK_PIN
-#define CC1101_SCK_PIN -1
-#endif
-
-#ifndef CC1101_MISO_PIN
-#define CC1101_MISO_PIN -1
-#endif
-
-#ifndef CC1101_MOSI_PIN
-#define CC1101_MOSI_PIN -1
-#endif
-
-#ifndef CC1101_SS_PIN
-#define CC1101_SS_PIN -1
-#endif
-
-#ifndef CC1101_GDO0_PIN
-#define CC1101_GDO0_PIN -1
-#endif
-
-#ifndef W5500_SCK_PIN
-#define W5500_SCK_PIN -1
-#endif
-
-#ifndef W5500_MISO_PIN
-#define W5500_MISO_PIN -1
-#endif
-
-#ifndef W5500_MOSI_PIN
-#define W5500_MOSI_PIN -1
-#endif
-
-#ifndef W5500_SS_PIN
-#define W5500_SS_PIN -1
-#endif
-
-#ifndef W5500_INT_PIN
-#define W5500_INT_PIN -1
-#endif
-
-#ifndef W5500_RST_PIN
-#define W5500_RST_PIN -1
 #endif
 
 // Temporary, delete after finish Interfaces

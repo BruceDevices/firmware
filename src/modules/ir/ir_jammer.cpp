@@ -679,7 +679,7 @@ void performEmptyJamming(JammerState &state, IRsend &irsend) {
 void cleanupJammer(IRsend &irsend) {
 
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
-    PPM.disableOTG();
+    hal_pmic_disable_otg();
 #endif
     // Ensure IR LED is turned off
     digitalWrite(bruceConfigPins.irTx, LOW);
@@ -697,7 +697,7 @@ void cleanupJammer(IRsend &irsend) {
  */
 void startIrJammer() {
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
-    PPM.enableOTG();
+    hal_pmic_enable_otg();
 #endif
     // Initialize IR transmitter with configured pin
     IRsend irsend(bruceConfigPins.irTx);

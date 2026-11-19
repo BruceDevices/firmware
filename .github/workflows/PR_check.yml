@@ -74,7 +74,8 @@ jobs:
             }
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          submodules: recursive
       - id: build
         name: setup Python
         uses: actions/setup-python@v5

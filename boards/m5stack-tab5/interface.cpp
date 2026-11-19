@@ -8,6 +8,14 @@
 #include <Wire.h>
 #include <interface.h>
 
+#define SDIO2_CLK GPIO_NUM_12
+#define SDIO2_CMD GPIO_NUM_13
+#define SDIO2_D0 GPIO_NUM_11
+#define SDIO2_D1 GPIO_NUM_10
+#define SDIO2_D2 GPIO_NUM_9
+#define SDIO2_D3 GPIO_NUM_8
+#define SDIO2_RST GPIO_NUM_15
+
 /***************************************************************************************
 ** Tab5 built-in keyboard (M5Unit-KEYBOARD) integration
 **
@@ -174,6 +182,10 @@ static void tab5KbPoll() {
 }
 
 void _setup_gpio() {
+    bruceConfigPins.rotation = 3;
+    bruceConfigPins.SDCARD_bus = {(gpio_num_t)43, (gpio_num_t)39, (gpio_num_t)44, (gpio_num_t)42
+    }; // sck,miso,mosi,cs
+
     M5.begin();
     M5.Power.setExtOutput(true);
     WiFi.setPins(SDIO2_CLK, SDIO2_CMD, SDIO2_D0, SDIO2_D1, SDIO2_D2, SDIO2_D3, SDIO2_RST);

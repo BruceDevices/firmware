@@ -162,50 +162,141 @@ void rf_SquareWave() {
         deinitRfModule();
         return;
     }
+
     const int top = rf_plot_top();
     const int bot = rf_plot_bot();
-    const int traceH = 6; // height of one logic level
-    int line_w = rf_plot_left();
-    int line_h = top;
-    std::vector<int> durations;
+    // Left gutter for the Y (logic level) labels and a bottom strip for the
+    // X (time) labels, so the trace never paints over the numbering.
+    const int gutter = FP * LW + 4;
+    const int xLabelH = 8 * FP + 2;
+    const int drawLeft = rf_plot_left() + gutter;
+    const int drawRight = rf_plot_left() + rf_plot_width();
+    const int drawW = drawRight - drawLeft;
+    const int plotBot = bot - xLabelH;
+    const int sbY = top + 1;     // scrollbar rail
+    const int yHi = top + 8;     // logic HIGH rail (below the scrollbar)
+    const int yLo = plotBot - 4; // logic LOW rail
+    const int nDiv = 10;
+    const uint16_t grid = rf_grid_color();
+    const uint16_t label = rf_label_color();
+    const int scrollStep = (drawW / 4 < 8) ? 8 : drawW / 4;
+
+    // The full latest capture is kept so the whole signal can be panned through,
+    // not just the slice that happened to fit on screen while it arrived.
+    std::vector<int> capture;
+    int scrollPx = 0, totalPx = 0, maxScroll = 0;
+
+    // Pixel width of one duration (microseconds -> px), clamped like the trace.
+    auto durPx = [&](int us) {
+        if (us < 0) us = -us;
+        if (us > 20000) us = 20000;
+        return us / TIME_DIVIDER;
+    };
+
+    // Clears the plot band, paints the grid, the X/Y numbers for the currently
+    // visible time window and, when the capture is wider than the screen, a
+    // scrollbar showing where the window sits within the whole capture.
+    auto draw_axes = [&]() {
+        tft.fillRect(rf_plot_left(), top, rf_plot_width(), bot - top, bruceConfig.bgColor);
+        tft.setTextSize(FP);
+
+        for (int k = 0; k <= nDiv; k++) { // vertical time divisions
+            int x = drawLeft + k * drawW / nDiv;
+            tft.drawFastVLine(x, yHi - 2, plotBot - (yHi - 2), grid);
+        }
+        tft.drawFastHLine(drawLeft, yHi, drawW, grid); // logic rails
+        tft.drawFastHLine(drawLeft, yLo, drawW, grid);
+
+        tft.setTextColor(label, bruceConfig.bgColor);
+        tft.drawString("1", rf_plot_left(), yHi - (8 * FP) / 2, 1); // Y: logic level
+        tft.drawString("0", rf_plot_left(), yLo - (8 * FP) / 2, 1);
+
+        // X: absolute time of the visible window (each pixel = TIME_DIVIDER us)
+        int startUs = scrollPx * TIME_DIVIDER;
+        int endUs = (scrollPx + drawW) * TIME_DIVIDER;
+        int ly = plotBot + 1;
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.1f", startUs / 1000.0f);
+        tft.drawString(buf, drawLeft, ly, 1);
+        snprintf(buf, sizeof(buf), "%.1f", ((startUs + endUs) / 2) / 1000.0f);
+        tft.drawCentreString(buf, drawLeft + drawW / 2, ly, 1);
+        snprintf(buf, sizeof(buf), "%.1fms", endUs / 1000.0f);
+        tft.drawRightString(buf, drawRight, ly, 1);
+
+        // Scrollbar, only when there is more capture than fits on screen.
+        if (totalPx > drawW) {
+            tft.drawFastHLine(drawLeft, sbY, drawW, grid);
+            int thumbX = drawLeft + (int)((int64_t)scrollPx * drawW / totalPx);
+            int thumbW = (int)((int64_t)drawW * drawW / totalPx);
+            if (thumbW < 4) thumbW = 4;
+            if (thumbX + thumbW > drawRight) thumbX = drawRight - thumbW;
+            tft.drawFastHLine(thumbX, sbY, thumbW, bruceConfig.priColor);
+            tft.drawFastHLine(thumbX, sbY + 1, thumbW, bruceConfig.priColor);
+        }
+    };
+
+    // Draws the visible slice [scrollPx, scrollPx+drawW] of the stored capture.
+    auto render = [&]() {
+        draw_axes();
+        int visL = scrollPx, visR = scrollPx + drawW;
+        auto sx = [&](int t) { return drawLeft + (t - scrollPx); };
+        auto hrun = [&](int a, int b, int y) { // horizontal run [a,b) at level y
+            if (b <= visL || a >= visR) return;
+            int ca = a < visL ? visL : a;
+            int cb = b > visR ? visR : b;
+            if (cb > ca) tft.drawFastHLine(sx(ca), y, cb - ca, bruceConfig.priColor);
+        };
+        auto vedge = [&](int t) { // vertical transition between the two rails
+            if (t < visL || t > visR) return;
+            tft.drawFastVLine(sx(t), yHi, yLo - yHi + 1, bruceConfig.priColor);
+        };
+        int px = 0;
+        for (size_t i = 0; i + 1 < capture.size(); i += 2) {
+            if (capture[i] == 0 || px > visR) break;
+            int hpx = durPx(capture[i]);
+            int lpx = durPx(capture[i + 1]);
+            vedge(px);
+            hrun(px, px + hpx, yHi);
+            px += hpx;
+            vedge(px);
+            hrun(px, px + lpx, yLo);
+            px += lpx;
+        }
+    };
+
 PRINT:
     tft.drawPixel(0, 0, 0);
-    line_w = rf_plot_left();
-    line_h = top;
-    draw_rf_header("RF SquareWave", String(bruceConfigPins.rfFreq, 2) + " MHz");
-    tft.fillRect(rf_plot_left(), top, rf_plot_width(), bot - top, bruceConfig.bgColor);
+    draw_rf_header("RF SquareWave", String(bruceConfigPins.rfFreq, 2) + " MHz  < > scroll");
+    capture.clear(); // drop any stale capture (e.g. after a frequency change)
+    scrollPx = totalPx = maxScroll = 0;
+    render();
 
     while (1) {
-        if (rx.poll(durations)) {
-            // Draw the captured square wave (HIGH width then LOW width per pair).
-            for (size_t i = 0; i + 1 < durations.size(); i += 2) {
-                int high = abs(durations[i]);
-                int low = abs(durations[i + 1]);
-                if (high == 0) break;
-
-                if (high > 20000) high = 20000;
-                if (low > 20000) low = 20000;
-                if (line_w + (high + low) / TIME_DIVIDER > rf_plot_left() + rf_plot_width()) {
-                    line_w = rf_plot_left();
-                    line_h += traceH + 4;
-                }
-                if (line_h + traceH > bot) {
-                    line_h = top;
-                    tft.fillRect(rf_plot_left(), top, rf_plot_width(), bot - top, bruceConfig.bgColor);
-                }
-                tft.drawFastVLine(line_w, line_h, traceH, bruceConfig.priColor);
-                tft.drawFastHLine(line_w, line_h, high / TIME_DIVIDER, bruceConfig.priColor);
-
-                tft.drawFastVLine(line_w + high / TIME_DIVIDER, line_h, traceH, bruceConfig.priColor);
-                tft.drawFastHLine(
-                    line_w + high / TIME_DIVIDER,
-                    line_h + traceH,
-                    low / TIME_DIVIDER,
-                    bruceConfig.priColor
-                );
-                line_w += (high + low) / TIME_DIVIDER;
+        // Each new capture replaces the buffer and shows its start; the arrows
+        // then pan across the whole thing.
+        if (rx.poll(capture)) {
+            totalPx = 0;
+            for (size_t i = 0; i + 1 < capture.size(); i += 2) {
+                if (capture[i] == 0) break;
+                totalPx += durPx(capture[i]) + durPx(capture[i + 1]);
             }
+            maxScroll = totalPx > drawW ? totalPx - drawW : 0;
+            scrollPx = 0;
+            render();
         }
+
+        // NextPress / PrevPress are the portable navigation keys: the Cardputer
+        // arrows, the two-button pads and the rotary encoder all map onto them.
+        if (check(NextPress)) { // scroll right / forward in time
+            int ns = scrollPx + scrollStep;
+            scrollPx = ns > maxScroll ? maxScroll : ns;
+            render();
+        } else if (check(PrevPress)) { // scroll left / back in time
+            int ns = scrollPx - scrollStep;
+            scrollPx = ns < 0 ? 0 : ns;
+            render();
+        }
+
         // Checks to leave while
         if (check(EscPress)) { break; }
         if (setMHZMenu()) goto PRINT;

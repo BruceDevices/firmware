@@ -5,8 +5,7 @@
 
 void FMMenu::optionsMenu() {
     options = {
-#if !defined(LITE_VERSION) and defined(FM_SI4713)
-        // #if defined(FM_SI4713)
+#if !defined(LITE_VERSION)
         {"Brdcast std", lambdaHelper(fm_live_run, false)},
         {"Brdcast rsvd", lambdaHelper(fm_live_run, true)},
         {"Brdcast stop", fm_stop},

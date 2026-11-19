@@ -9,10 +9,10 @@
 #include "core/wifi/wifi_mac.h"
 #include "esp_wifi.h"
 #include "modules/ble/ble_common.h"
+#include <array>
 #include <esp_event.h>
 #include <esp_netif.h>
 #include <globals.h>
-#include <array>
 
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
@@ -150,7 +150,7 @@ bool _wifiConnect(const String &ssid, int encryption, int32_t channel, const uin
     return connected;
 }
 
-bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channel, const uint8_t* bssid) {
+bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channel, const uint8_t *bssid) {
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         if (BLEConnected) {
             displayWarning("Board with no PSRAM, closing BLE Stack");
@@ -175,11 +175,8 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd, int32_t channe
             padprintln("");
             padprint("");
         }
-#ifdef HAS_SCREEN
         tft.print(".");
-#else
         Serial.print(".");
-#endif
 
         if (i > 20) {
             displayError("Wifi Offline");
@@ -282,7 +279,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                         int encryptionType = WiFi.encryptionType(i);
                         int32_t rssi = WiFi.RSSI(i);
                         int32_t ch = WiFi.channel(i);
-                        uint8_t* bssidPtr = WiFi.BSSID(i);
+                        uint8_t *bssidPtr = WiFi.BSSID(i);
                         std::array<uint8_t, 6> bssidArr;
                         if (bssidPtr) memcpy(bssidArr.data(), bssidPtr, 6);
 
@@ -304,12 +301,15 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                         String optionText = encryptionPrefix + ssid + "(" + String(rssi) + "|" +
                                             encryptionTypeStr + "|ch." + String(ch) + ")";
 
-                        options.push_back({optionText.c_str(), [&selSsid, &selEnc, &selCh, &selBssid, ssid, encryptionType, ch, bssidArr]() {
-                                               selSsid = ssid;
-                                               selEnc = encryptionType;
-                                               selCh = ch;
-                                               memcpy(selBssid, bssidArr.data(), 6);
-                                           }});
+                        options.push_back(
+                            {optionText.c_str(),
+                             [&selSsid, &selEnc, &selCh, &selBssid, ssid, encryptionType, ch, bssidArr]() {
+                                 selSsid = ssid;
+                                 selEnc = encryptionType;
+                                 selCh = ch;
+                                 memcpy(selBssid, bssidArr.data(), 6);
+                             }}
+                        );
                     }
                 }
                 WiFi.scanDelete();
@@ -385,10 +385,13 @@ void wifiConnectTask(void *pvParameters) {
     for (int i = 0; i < nets; i++) {
         ssid = WiFi.SSID(i);
         pwd = bruceConfig.getWifiPassword(ssid);
-        if (pwd == "") continue;
+        // An empty password only means "unknown network" for secured APs: known open
+        // networks are stored with an empty password and must be joined without one.
+        bool knownOpenNet = WiFi.encryptionType(i) == WIFI_AUTH_OPEN && bruceConfig.hasWifiCredential(ssid);
+        if (pwd == "" && !knownOpenNet) continue;
 
         int32_t ch = WiFi.channel(i);
-        uint8_t* bssid = WiFi.BSSID(i);
+        uint8_t *bssid = WiFi.BSSID(i);
         WiFi.begin(ssid.c_str(), pwd.length() > 0 ? pwd.c_str() : NULL, ch, bssid);
         for (int i = 0; i < 50; i++) {
             if (WiFi.isConnected()) {

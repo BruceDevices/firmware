@@ -30,7 +30,7 @@ String calculate_crc(String input) {
 }
 
 void qrcode_display(const String &qrcodeUrl) {
-#ifdef HAS_SCREEN
+#ifndef USE_DUMMY_TFT
     QRcode qrcode(&tft);
     qrcode.init();
     qrcode.create(qrcodeUrl);

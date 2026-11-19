@@ -24,7 +24,11 @@
 //     plot.end();
 class SpectrumPlot {
 public:
-    bool begin(const String &title);
+    // `sdrWaterfall` swaps the waterfall's theme heat ramp for a classic SDR
+    // colourmap (noise floor -> blue -> cyan -> green -> yellow -> red -> white),
+    // for screens that want the look of GQRX/SDR#. The trace on top stays
+    // theme-coloured either way. Defaults off so existing callers are unchanged.
+    bool begin(const String &title, bool sdrWaterfall = false);
     void end();
     bool ready() const { return _ok; }
 
@@ -58,6 +62,7 @@ private:
     void drawWaterfall();
 
     bool _ok = false;
+    bool _sdr = false; // waterfall uses the SDR colourmap instead of the theme ramp
 
     int _plotL = 0, _plotW = 0;
     int _specTop = 0, _specBot = 0, _specH = 0;

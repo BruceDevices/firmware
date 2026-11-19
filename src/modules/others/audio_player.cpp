@@ -1,7 +1,7 @@
 // Senape3000 (Really Ugly) Audio Player UI
 
 #include "audio_player.h"
-#if defined(HAS_NS4168_SPKR)
+#if defined(HAS_SPEAKER)
 #include "core/mykeyboard.h"
 #include "core/settings.h"
 #include "modules/others/audio.h"

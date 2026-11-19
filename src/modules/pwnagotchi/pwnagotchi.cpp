@@ -2,6 +2,7 @@
 #include "../wifi/sniffer.h"
 #include "../wifi/wifi_atks.h"
 #include "core/mykeyboard.h"
+#include "core/display.h"
 #include "core/wifi/wifi_common.h"
 #include "esp_err.h"
 #include "spam.h"
@@ -113,10 +114,11 @@ void toggle_all_channels() {
 // ---------------------------------------------------------------------------
 // brucegotchi_setup — init pwngrid + UI
 // ---------------------------------------------------------------------------
-void brucegotchi_setup() {
-    initPwngrid();
+bool brucegotchi_setup() {
+    if (!initPwngrid()) return false;
     initUi();
     state = 0; // STATE_INIT
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +347,13 @@ void brucegotchi_start() {
         sniffer_reset_handshake_cache();
     }
 
-    brucegotchi_setup();
+    if (!brucegotchi_setup()) {
+        // esp_wifi init/start failed (typically low contiguous RAM for AP mode):
+        // bail out cleanly instead of crashing inside the wifi blob
+        wifiDisconnect();
+        displayError("Low RAM for Brucegotchi", true);
+        return;
+    }
     drawTopCanvas();
     drawBottomCanvas();
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
@@ -415,6 +423,16 @@ void brucegotchi_start() {
         if (millis() - lastUiUpdate > 2000) {
             updateUi(true);
             lastUiUpdate = millis();
+        }
+
+        // --- Periodic stale-beacon/handshake-state pruning ---
+        // Brucegotchi runs its own loop, so the sniffer's 5 s cleanup never
+        // fires here; without pruning the per-AP maps grow unbounded in dense
+        // environments and bleed the heap until the device crashes.
+        static unsigned long lastPrune = 0;
+        if (millis() - lastPrune > 5000) {
+            sniffer_prune_stale_beacons();
+            lastPrune = millis();
         }
 
         vTaskDelay(20 / portTICK_RATE_MS);
