@@ -117,10 +117,21 @@ int gsetRotation(bool set) {
 void setBrightnessMenu() {
     returnToMenu = false;
 
+    // The slider sits in the middle of the screen, i.e. inside the touch zone
+    // that touchHeatMap() maps to SelPress. Without this, grabbing the knob
+    // would set SelPress and the loop would immediately apply + exit. Disable
+    // body-zone reading while this menu is open (footer zones still work), same
+    // as loopOptions() does for tap-to-select menus.
+    bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
+    touchZoneOutsideFooterEnabled = false;
+
     int original = bruceConfig.bright;
     int val = (bruceConfig.bright / 5) * 5;
     if (val > 100) val = 100;
-    if (val < 0) val = 0;
+    // Never let the slider reach 0: a saved 0 leaves the screen (almost) dark
+    // with no visible UI to raise it again, which looks like a freeze. The
+    // serial CLI already clamps the same way.
+    if (val < 1) val = 1;
 
     const int lineHeight = FM * LH;
     const int hintHeight = FP * LH;
@@ -195,7 +206,7 @@ void setBrightnessMenu() {
                 int newVal = ((clampedX - trackX) * 100 + trackW / 2) / trackW;
                 newVal = (newVal / 5) * 5;
                 if (newVal > 100) newVal = 100;
-                if (newVal < 0) newVal = 0;
+                if (newVal < 1) newVal = 1;
                 if (newVal != val) {
                     val = newVal;
                     redraw = true;
@@ -211,7 +222,7 @@ void setBrightnessMenu() {
         }
         if (check(PrevPress)) {
             val -= 5;
-            if (val < 0) val = 0;
+            if (val < 1) val = 1;
             redraw = true;
         }
         if (check(SelPress)) {
@@ -224,6 +235,7 @@ void setBrightnessMenu() {
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
+    touchZoneOutsideFooterEnabled = prevTouchZoneOutsideFooterEnabled;
     tft.fillScreen(bruceConfig.bgColor);
 }
 
