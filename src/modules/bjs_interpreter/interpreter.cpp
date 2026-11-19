@@ -39,7 +39,14 @@ void interpreterHandler(void *pvParameters) {
         return;
     }
 
+#if defined(USE_DUMMY_TFT)
+    // Headless build: the display loop() (which promotes the interpreter to the
+    // running state 2) is compiled out, so nothing would ever release this task.
+    // There is no foreground/background UI here, so mark it running ourselves.
+    interpreter_state = 2;
+#else
     while (interpreter_state != 2) { vTaskDelay(pdMS_TO_TICKS(500)); }
+#endif
 
     tft.fillScreen(TFT_BLACK);
 #if defined(HAS_TOUCH)
