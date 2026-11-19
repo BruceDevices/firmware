@@ -38,34 +38,27 @@ static inline bool radioHasMemForWifi() {
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
-    
-    // First check if we have enough DMA memory
+
+    // Already enough DMA memory — nothing to do.
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
         return true;
     }
-    
-    // Not enough DMA memory - try to free WiFi
-    Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
-    
-    // Disconnect WiFi if active
-    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
-        wifiDisconnect();
-        delay(200);
-        #ifdef WIFI_DEINIT_ON_DISCONNECT
-        WiFi.mode(WIFI_OFF);
-        #endif
-        delay(300);
-    }
-    
-    // Recheck after freeing WiFi
+
+    // Not enough DMA memory. Suspend WiFi through its owner (wifi_common),
+    // which calls esp_wifi_stop() and actually frees the driver's DMA buffers
+    // (unlike wifiDisconnect(), which only disconnects and leaves the driver
+    // holding its DMA allocations).
+    Serial.println("[RAM] Low contiguous DMA memory for BLE, suspending WiFi...");
+    wifiSuspend();
+    delay(200);
+
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
-        Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
+        Serial.printf("[RAM] WiFi suspended, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
         return true;
     }
-    
-    // Still not enough - return false, caller shows error
-    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n", 
-                  radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
+
+    Serial.printf("[RAM] Still only %u bytes DMA block, minimum %u needed\n",
+                  (unsigned)radioLargestDmaBlock(), (unsigned)RADIO_BLE_MIN_DMA_BLOCK);
     return false;
 }
 
