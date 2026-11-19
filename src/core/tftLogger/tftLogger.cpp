@@ -119,7 +119,7 @@ void tft_logger::startAsyncSerial() {
     if (async_serial) return;
     async_serial = true;
     setLogging(true);
-    asyncSerialQueue = xQueueCreate(MAX_LOG_ENTRIES, sizeof(tftLog));
+    asyncSerialQueue = xQueueCreate(MAX_LOG_ENTRIES > 64 ? 64 : MAX_LOG_ENTRIES, sizeof(tftLog));
     getTftInfo();
     // Can it work with 2048 bytes of heap??
     xTaskCreate(asyncSerialTaskFunc, "async_serial", 4096, this, 1, &asyncSerialTask);
@@ -162,7 +162,9 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     outSize += pos;
 
     if (!log) return;
-    for (int i = 0; i < logCount; i++) {
+    int startIdx = (logCount < MAX_LOG_ENTRIES) ? 0 : logWriteIndex;
+    for (int n = 0; n < logCount; n++) {
+        int i = (startIdx + n) % MAX_LOG_ENTRIES;
         if (log[i].data[0] != LOG_PACKET_HEADER) continue;
         uint8_t *entry = log[i].data;
         uint8_t fn = entry[2];
@@ -204,10 +206,15 @@ bool tft_logger::isLogEqual(const tftLog &a, const tftLog &b) {
 
 void tft_logger::pushLogIfUnique(const tftLog &l) {
     if (!log) return;
+    int startIdx = (logCount < MAX_LOG_ENTRIES) ? 0 : logWriteIndex;
+    int lastValidIdx = -1;
+    for (int n = 0; n < logCount; n++) {
+        int i = (startIdx + n) % MAX_LOG_ENTRIES;
+        if (log[i].data[0] == LOG_PACKET_HEADER) lastValidIdx = i;
+    }
+    if (lastValidIdx >= 0 && isLogEqual(log[lastValidIdx], l)) { return; }
     for (int i = 0; i < logCount; i++) {
-        if (isLogEqual(log[i], l)) {
-            return; // Entry already exists
-        }
+        if (log[i].data[0] == LOG_PACKET_HEADER && isLogEqual(log[i], l)) { log[i].data[0] = 0; }
     }
     memcpy(log[logWriteIndex].data, l.data, l.data[1]);
     logWriteIndex = (logWriteIndex + 1) % MAX_LOG_ENTRIES;
@@ -441,12 +448,20 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
     if (!log) return;
-    if (removeLogEntriesInsideRect(
-            x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize()
-        )) {
-        // debug purpose
-        // Serial.printf("Something was removed while processing: %s\n", s.c_str());
+    int rw = s.length() * LW * currentTextSize();
+    int rh = LH * currentTextSize();
+    if (fn == DRAWSTRING) {
+        uint8_t datum = getTextDatum();
+        if (datum == TC_DATUM || datum == MC_DATUM || datum == BC_DATUM) fn = DRAWCENTRESTRING;
+        else if (datum == TR_DATUM || datum == MR_DATUM || datum == BR_DATUM) fn = DRAWRIGHTSTRING;
+        if (datum == ML_DATUM || datum == MC_DATUM || datum == MR_DATUM) y -= rh / 2;
+        else if (datum == BL_DATUM || datum == BC_DATUM || datum == BR_DATUM) y -= rh;
+        if (y < 0) y = 0;
     }
+    int rx = x;
+    if (fn == DRAWCENTRESTRING) rx -= rw / 2;
+    else if (fn == DRAWRIGHTSTRING) rx -= rw;
+    removeLogEntriesInsideRect(rx, y, rw, rh);
 
     uint8_t buffer[MAX_LOG_SIZE];
     uint8_t pos = 0;
@@ -507,7 +522,7 @@ void tft_logger::log_print(String s) {
         getCursorX() - 1,
         getCursorY() - 1,
         s.length() * LW * currentTextSize() + 2,
-        s.length() * LH * currentTextSize() + 2
+        LH * currentTextSize() + 2
     );
 
     uint8_t buffer[MAX_LOG_SIZE];
@@ -535,24 +550,42 @@ void tft_logger::log_print(String s) {
 
 size_t tft_logger::print(const String &s) {
     size_t totalPrinted = 0;
-    int remaining = s.length();
-    int offset = 0;
-
-    const int maxChunkSize = MAX_LOG_SIZE - 13; // 13 bytes reserved to header + metadata
-
+#ifdef USE_DUMMY_TFT
+    int len = s.length(), start = 0;
+    const int maxChunkSize = MAX_LOG_SIZE - 13;
+    while (start < len) {
+        int nl = s.indexOf('\n', start);
+        int end = (nl != -1) ? nl : len;
+        int offset = start;
+        while (offset < end) {
+            int chunkSize = (end - offset > maxChunkSize) ? maxChunkSize : (end - offset);
+            String chunk = s.substring(offset, offset + chunkSize);
+            log_print(chunk);
+            setCursor(getCursorX() + textWidth(chunk), getCursorY());
+            totalPrinted += chunk.length();
+            offset += chunkSize;
+        }
+        if (nl != -1) {
+            setCursor(0, getCursorY() + fontHeight());
+            totalPrinted += 1;
+            start = nl + 1;
+        } else break;
+    }
+    return totalPrinted;
+#else
+    int remaining = s.length(), offset = 0;
+    const int maxChunkSize = MAX_LOG_SIZE - 13;
     while (remaining > 0) {
         int chunkSize = (remaining > maxChunkSize) ? maxChunkSize : remaining;
         String chunk = s.substring(offset, offset + chunkSize);
-
         log_print(chunk);
         if (isSleeping) totalPrinted += chunk.length();
         else totalPrinted += BRUCE_TFT_DRIVER::print(chunk);
-
         offset += chunkSize;
         remaining -= chunkSize;
     }
-
     return totalPrinted;
+#endif
 }
 
 size_t tft_logger::println(void) { return print("\n"); }

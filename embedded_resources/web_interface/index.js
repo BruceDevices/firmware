@@ -608,9 +608,9 @@ async function renderTFT(data) {
   };
 
   const color565toCSS = (color565) => {
-    const r = (((color565 >> 11) & 0x1f) * 255) / 31;
-    const g = (((color565 >> 5) & 0x3f) * 255) / 63;
-    const b = ((color565 & 0x1f) * 255) / 31;
+    const r = Math.round((((color565 >> 11) & 0x1f) * 255) / 31);
+    const g = Math.round((((color565 >> 5) & 0x3f) * 255) / 63);
+    const b = Math.round(((color565 & 0x1f) * 255) / 31);
     return `rgb(${r},${g},${b})`;
   };
 
@@ -713,6 +713,10 @@ async function renderTFT(data) {
       case 99: // SCREEN_INFO
         canvas.width = input.w;
         canvas.height = input.h;
+        ctx.fillStyle = "rgb(0,0,0)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        break;
+
       case 0: // FILLSCREEN
         ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -812,32 +816,21 @@ async function renderTFT(data) {
       case 15: // DRAWRIGHTSTRING
       case 16: // DRAWSTRING
       case 17: // PRINT
-        // This must be enhanced to make font width be multiple of 6px, the font used here is multiple of 4.5px,
-        // "\n" are not treated, and long lines do not split into multi lines..
-        if (input.bg == input.fg) {
-          input.bg = 0;
-        }
-        ctx.fillStyle = color565toCSS(input.bg);
-
-        input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
-        screenText.push(input.txt); // Collect text for WiFi detection
-
-        var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
-        var o = 0;
-        if (fn === 15) o = input.txt.length * fw;
-        if (fn === 14) o = (input.txt.length * fw) / 2;
-        // draw a rectangle at the text area, to avoid overlapping texts
-        ctx.fillRect(
-          input.x - o,
-          input.y,
-          input.txt.length * fw,
-          input.size * 8,
-        );
-
-        ctx.fillStyle = color565toCSS(input.fg);
+        input.txt = input.txt.replaceAll("\n", "").replaceAll("\\n", "");
+        screenText.push(input.txt);
         ctx.font = `${input.size * 8}px monospace`;
         ctx.textBaseline = "top";
         ctx.textAlign = fn === 14 ? "center" : fn === 15 ? "right" : "left";
+        if (input.bg !== input.fg) {
+          const fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
+          const bgW = Math.max(ctx.measureText(input.txt).width, input.txt.length * fw);
+          let o = 0;
+          if (fn === 15) o = bgW;
+          if (fn === 14) o = bgW / 2;
+          ctx.fillStyle = color565toCSS(input.bg);
+          ctx.fillRect(input.x - o, input.y, bgW, input.size * 8);
+        }
+        ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillText(input.txt, input.x, input.y);
         break;
 
