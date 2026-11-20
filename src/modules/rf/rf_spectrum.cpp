@@ -142,7 +142,10 @@ void rf_spectrum() {
         }
         // Checks to leave while
         if (check(EscPress)) { break; }
-        if (setMHZMenu()) yield();
+        if (setMHZMenu()) {
+            draw_rf_header("RF Spectrum", String(bruceConfigPins.rfFreq, 2) + " MHz");
+            draw_tf_spectrum_grid();
+        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     returnToMenu = true;
