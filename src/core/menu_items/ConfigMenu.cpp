@@ -28,7 +28,7 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
-#if !defined(LITE_VERSION) && (defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR))
+#if !defined(LITE_VERSION)
             {"Audio Config",  [this]() { audioMenu(); }    },
 #endif
             {"System Config", [this]() { systemMenu(); }   },
@@ -66,8 +66,12 @@ void ConfigMenu::displayUIMenu() {
             {"Brightness",  [this]() { setBrightnessMenu(); }               },
             {"Dim Time",    [this]() { setDimmerTimeMenu(); }               },
             {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
+            {"Menu Layout", [this]() { setMainMenuStyleMenu(); }            },
             {"UI Color",    [this]() { setUIColor(); }                      },
             {"UI Theme",    [this]() { setTheme(); }                        },
+#if defined(HAS_RESISTIVE_TOUCH)
+            {"Calibrate Touch", []() { calibrateTouch(); }                  },
+#endif
             {"Back",        []() {}                                         },
         };
 
@@ -127,18 +131,15 @@ void ConfigMenu::audioMenu() {
     while (true) {
         std::vector<Option> localOptions = {
 #if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR)
-
             {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
-                                                             [this]() {
+                                                                [this]() {
                  // Toggle sound setting
                  bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
                  bruceConfig.saveFile();
-             }                                                                                                                                            },
-#if defined(HAS_NS4168_SPKR)
+             }                                                                            },
+#if defined(HAS_SPEAKER)
             {"Sound Volume",                                                [this]() { setSoundVolume(); }},
-#endif  // BUZZ_PIN || HAS_NS4168_SPKR
-#endif  //  HAS_NS4168_SPKR
+#endif  //  HAS_SPEAKER
 #endif  //  LITE_VERSION
             {"Back",                                                        []() {}                       },
         };
@@ -298,9 +299,9 @@ void ConfigMenu::devMenu() {
 void ConfigMenu::pinsMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-            {"I2C Finder",     [this]() { find_i2c_addresses(); }                      },
-            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
-            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
+            {"I2C Finder",     [this]() { find_i2c_addresses(); }                       },
+            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); } },
+            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); }  },
 #if !defined(LITE_VERSION)
 #ifndef HELTEC_V4_EXPANSION_V2
             {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
@@ -316,9 +317,20 @@ void ConfigMenu::pinsMenu() {
 #ifndef HELTEC_V4_EXPANSION_V2
             {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
 #endif
+#ifndef HELTEC_V4_EXPANSION_V2
+            {"BadUSB Pins",    [this]() { setUARTPinsMenu(bruceConfigPins.badusb_bus); }},
+#if defined(HAS_SPEAKER)
+            {"Speaker Pins",   []() { setSpeakerPinsMenu(bruceConfigPins.speaker_bus); }},
+#else
+            {"Buzzer Pin",     []() { setBuzzerPinMenu(); }                             },
+#endif
+#if defined(HAS_MICROPHONE)
+            {"Mic Pins",       []() { setMicPinsMenu(bruceConfigPins.mic_bus); }        },
+#endif
+#endif
             //{"Serial use USB",  [this]() { switchToUSBSerial(); }                       },
             //{"Serial use UART", [this]() { switchToUARTSerial(); }                      },
-            {"Back",           []() {}                                                 },
+            {"Back",           []() {}                                                  },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Pins Setup");

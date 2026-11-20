@@ -19,6 +19,14 @@ static void assertFixed(const BruceConfigPins &config) {
     assert(config.sys_i2c.sda == 17 && config.sys_i2c.scl == 18);
     assert(config.gps_bus.rx == 39 && config.gps_bus.tx == 38);
     assert(config.gpsBaudrate == 9600);
+    assert(config.buzzer == 4);
+    assert(config.outer_bus.sck == -1 && config.outer_bus.miso == -1);
+    assert(config.outer_bus.mosi == -1 && config.outer_bus.cs == -1);
+    assert(config.outer_bus.io0 == -1 && config.outer_bus.io2 == -1);
+    assert(config.badusb_bus.rx == -1 && config.badusb_bus.tx == -1);
+    assert(config.speaker_bus.bclk == -1 && config.speaker_bus.ws == -1);
+    assert(config.speaker_bus.dout == -1 && config.speaker_bus.mclk == -1);
+    assert(config.mic_bus.clk == -1 && config.mic_bus.data == -1 && config.mic_bus.ws == -1);
 }
 
 static void assertDisabled(const BruceConfigPins::SPIPins &bus) {
@@ -36,6 +44,12 @@ int main() {
     const auto before = config.LoRa_bus;
     config.setW5500Pins({1, 2, 3, 4, 5, 6});
     assert(config.W5500_bus.sck == 1 && config.LoRa_bus.sck == before.sck);
+    config.setSpeakerPins({1, 2, 3, 4});
+    config.setMicPins({5, 6, 7, MIC_TYPE_I2S_PHILIPS});
+    config.setBuzzerPin(8);
+    assert(config.speaker_bus.dout == 3 && config.speaker_bus.mclk == 4);
+    assert(config.mic_bus.clk == 5 && config.mic_bus.data == 6 && config.mic_bus.ws == 7);
+    assert(config.mic_bus.type == MIC_TYPE_I2S_PHILIPS && config.buzzer == 8);
     std::cout << "Non-Heltec mutable configuration retained\n";
     return 0;
 #else
@@ -66,6 +80,11 @@ int main() {
     root["gpsBaudrate"] = 115200;
     root["sys_i2c"]["sda"] = 0;
     root["sys_i2c"]["scl"] = 44;
+    root["badusb_bus"]["rx"] = 0;
+    root["badusb_bus"]["tx"] = 44;
+    for (const char *field : {"bclk", "ws", "dout", "mclk"}) root["speaker_bus"][field] = 44;
+    for (const char *field : {"clk", "ws", "data"}) root["mic_bus"][field] = 44;
+    root["buzzer"] = 44;
     config.fromJson(imported.as<JsonObject>());
     assertFixed(config);
 
@@ -92,6 +111,13 @@ int main() {
         config.setUARTPins(config.uart_bus);
         assert(config.i2c_bus.sda == -1 && config.i2c_bus.scl == -1);
         assert(config.uart_bus.rx == -1 && config.uart_bus.tx == -1);
+        config.outer_bus = {pin, pin, pin, pin, pin, pin};
+        config.badusb_bus = {pin, pin};
+        config.setUARTPins(config.badusb_bus);
+        config.setSpeakerPins({pin, pin, pin, pin});
+        config.setMicPins({pin, pin, pin, MIC_TYPE_I2S_PHILIPS});
+        config.setBuzzerPin(pin);
+        assertFixed(config);
         config.setIrTxPin(pin);
         config.setIrRxPin(pin);
         config.setRfTxPin(pin);

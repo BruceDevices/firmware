@@ -35,7 +35,7 @@ const int maxMessages = 19;
 int contentWidth = tftWidth - 20;
 int yStart = 35;
 int yPos = yStart;
-int ySpacing = 10;
+int ySpacing = LH * FP + 2;
 int rightColumnX = tftWidth / 2 + 10;
 SPIClass *loraSpi = nullptr;
 Module *loraModule = nullptr;
@@ -62,6 +62,16 @@ static void disableLoraFrontend() {
     digitalWrite(LORA_FEM_POWER, LOW);
 #endif
 }
+
+#ifndef DEFAULT_LORA_RADIO
+#define DEFAULT_LORA_RADIO "SX1276"
+#endif
+
+#ifndef DEFAULT_LORA_FREQUENCY
+#define DEFAULT_LORA_FREQUENCY LORA_DEFAULT_FREQ_HZ
+#endif
+
+bool __attribute__((weak)) prepareBoardLoRaRadio() { return true; }
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -133,6 +143,12 @@ bool startLoraRadio(float bandMHz) {
     if (irqPin == GPIO_NUM_NC) {
         Serial.println("LoRa IRQ pin not configured!");
         displayError("LoRa IRQ pin not configured!", true);
+        return false;
+    }
+
+    if (!prepareBoardLoRaRadio()) {
+        Serial.println("Preparing LoRa frontend failed!");
+        displayError("LoRa Init Failed", true);
         return false;
     }
 
@@ -278,7 +294,7 @@ void reciveMessage() {
 
 void render() {
     if (!update) return;
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(0x6DFC);
     if (!intlora) { tft.drawString("Lora Init Failed", 10, 13); }
@@ -319,8 +335,8 @@ void sendmsg() {
         tft.setTextColor(bruceConfig.priColor);
 
         tft.setTextColor(TFT_RED);
-        tft.setTextSize(2);
-        tft.setCursor(10, tftHeight / 2 - 10);
+        tft.setTextSize(FM);
+        tft.setCursor(BORDER_PAD_X, tftHeight / 2 - BORDER_PAD_X);
         tft.print("LoRa not init!");
 
         tft.drawCentreString("LoRa not initialized!", tftWidth / 2, tftHeight / 2, 2);
@@ -372,7 +388,7 @@ void selectRadioVariant(JsonDocument &doc) {
     loraRadioVariant = LoRaRadioVariant::SX1262;
     return; // Integrated radio cannot be changed by an imported settings file.
 #else
-    String stored = doc["LoRa_Radio"] | "SX1276";
+    String stored = doc["LoRa_Radio"] | DEFAULT_LORA_RADIO;
     if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
@@ -463,12 +479,12 @@ static bool ensureLoraSettings() {
         Serial.println("creating lora settings .json file");
         JsonDocument doc;
         File file = LittleFS.open("/lora_settings.json", "w");
-        doc["LoRa_Frequency"] = LORA_DEFAULT_FREQ_HZ;
+        doc["LoRa_Frequency"] = DEFAULT_LORA_FREQUENCY;
         doc["LoRa_Name"] = "BruceTest";
 #ifdef LORA_FIXED_SX1262
         doc["LoRa_Radio"] = "SX1262";
 #else
-        doc["LoRa_Radio"] = "SX1276";
+        doc["LoRa_Radio"] = DEFAULT_LORA_RADIO;
 #endif
         const bool saved = file && serializeJson(doc, file) > 0;
         file.close();

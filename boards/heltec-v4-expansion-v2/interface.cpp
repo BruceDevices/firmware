@@ -161,6 +161,9 @@ void prepareDeepSleep() {
 } // namespace
 
 void _setup_gpio() {
+    // Runtime pin defaults replace the former per-board Arduino variant.
+    bruceConfigPins.enforceBoardPinConstraints();
+    bruceConfigPins.rotation = 1;
     releaseSleepHolds();
     outputLevel(LORA_FEM_ENABLE, LOW);
     outputLevel(LORA_FEM_CTX, LOW);

@@ -206,11 +206,11 @@ void Timer::playAlarmPattern() {
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorderWithTitle("Timer finished!", false);
 
-    tft.setTextSize(2);
+    tft.setTextSize(FM);
     tft.setTextColor(TFT_RED, bruceConfig.bgColor);
     tft.drawCentreString("TIME'S UP!", timerX, timerY - LH, 1);
 
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.drawCentreString("Press SEL or BACK to stop", timerX, timerY + (2 * LH), 1);
 
@@ -269,7 +269,7 @@ void Timer::underlineSeconds() {
 void Timer::drawSoundOption(bool highlight) {
     int optionY = underlineY + (2 * LH); // Position below timer
 
-    tft.setTextSize(1);
+    tft.setTextSize(FP);
 
     // Choose colors based on highlight state
     uint16_t textColor = highlight ? bruceConfig.priColor : TFT_DARKGREY;

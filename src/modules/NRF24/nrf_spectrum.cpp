@@ -1,13 +1,16 @@
 #include "nrf_spectrum.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
+#include "core/spectrum_plot.h"
 
 #define CHANNELS 80
-#define RGB565(r, g, b) ((((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)))
 uint8_t channel[CHANNELS];
 
-// scanning channels
-#define _BW tftWidth / CHANNELS
+// The RPD accumulator settles toward 125, so that is full scale for the plot.
+#define NRF_FULL_SCALE 125
+
+// Sweeps the whole 2.4GHz band once and updates the smoothed per-channel
+// levels. Drawing lives in nrf_draw() so the WebUI can scan without a screen.
 String scanChannels(bool web) {
     String result = "{";
 
@@ -21,74 +24,133 @@ String scanChannels(bool web) {
         NRFradio.stopListening();
 
         int rpd = NRFradio.testRPD() ? 1 : 0;
-        channel[i] = (channel[i] * 3 + rpd * 125) / 4;
+        channel[i] = (channel[i] * 3 + rpd * NRF_FULL_SCALE) / 4;
         rpdValues[i] = channel[i];
     }
 
     digitalWrite(bruceConfigPins.NRF24_bus.io0, HIGH);
 
-    for (int i = 0; i < CHANNELS; i++) {
-        int level = rpdValues[i];
-        int x = i * _BW;
-        int c = i;
-
-        tft.drawFastVLine(
-            x, tftHeight - (10 + level), level, (i % 2 == 0) ? bruceConfig.priColor : TFT_DARKGREY
-        ); // for level display
-
-        tft.drawFastVLine(
-            x, 0, tftHeight - (9 + level), (i % 8) ? TFT_BLACK : RGB565(25, 25, 25)
-        );                                                    /// for clearing
-        tft.drawFastVLine(x, 0, level, bruceConfig.secColor); /// for top display
-        // show 5 channel gap only
-        if (c % 5 == 0 && c != 0) { tft.drawCentreString(String(c).c_str(), x, tftHeight / 2, 1); }
-
-        if (web) {
+    if (web) {
+        for (int i = 0; i < CHANNELS; i++) {
             if (i > 0) result += ",";
-            result += String(level);
+            result += String(rpdValues[i]);
         }
+        result += "}";
     }
+    return result; // "{1,32,45,...}" with 80 values, for the WebUI
+}
 
-    if (web) result += "}";
-    return result; // return a string in this format "{1,32,45,32,84,32 .... 12,54,65}" with 80 values to be
-                   // used in the WebUI (Future)
+// Spreads the 80 channel levels across the plot columns, interpolating between
+// carriers so the trace reads as a continuous band instead of 80 blocks.
+static void nrf_envelope(const uint8_t *lvl, uint8_t *env, int plotW) {
+    for (int i = 0; i < plotW; i++) {
+        int32_t pos = (int32_t)i * (CHANNELS - 1) * 256 / (plotW - 1);
+        int ci = pos >> 8;
+        int frac = pos & 0xff;
+        if (ci >= CHANNELS - 1) {
+            ci = CHANNELS - 2;
+            frac = 256;
+        }
+        int v = lvl[ci] + (lvl[ci + 1] - lvl[ci]) * frac / 256;
+        v = v * 100 / NRF_FULL_SCALE;
+        env[i] = (uint8_t)(v < 0 ? 0 : (v > 100 ? 100 : v));
+    }
 }
 
 void nrf_spectrum() {
-    tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.drawString("2.40Ghz", 0, tftHeight - LH);
-    tft.drawCentreString("2.44Ghz", tftWidth / 2, tftHeight - LH, 1);
-    tft.drawRightString("2.48Ghz", tftWidth, tftHeight - LH, 1);
-
-    if (nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
-        NRFradio.setAutoAck(false);
-        NRFradio.disableCRC();       // accept any signal we find
-        NRFradio.setAddressWidth(2); // a reverse engineering tactic (not typically recommended)
-        const uint8_t noiseAddress[][2] = {
-            {0x55, 0x55},
-            {0xAA, 0xAA},
-            {0xA0, 0xAA},
-            {0xAB, 0xAA},
-            {0xAC, 0xAA},
-            {0xAD, 0xAA}
-        };
-        for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
-        NRFradio.setDataRate(RF24_1MBPS);
-
-        while (!check(EscPress)) {
-            scanChannels();
-            vTaskDelay(pdMS_TO_TICKS(1));
-        }
-        NRFradio.stopListening();
-        NRFradio.powerDown();
-        delay(250);
+    SpectrumPlot plot;
+    if (!plot.begin("NRF Spectrum")) {
+        displayError("Out of memory", true);
         return;
+    }
 
-    } else {
+    const int plotW = plot.width();
+    uint8_t *env = (uint8_t *)malloc(plotW);
+    uint8_t *envPeak = (uint8_t *)malloc(plotW);
+    uint8_t peak[CHANNELS] = {0};
+    if (!env || !envPeak) {
+        free(env);
+        free(envPeak);
+        plot.end();
+        displayError("Out of memory", true);
+        return;
+    }
+
+    // 2.400GHz to 2.479GHz, one tick every 20 channels
+    const int tickCount = 5;
+    int cols[tickCount];
+    String labels[tickCount];
+    for (int i = 0; i < tickCount; i++) {
+        int ch = i * (CHANNELS - 1) / (tickCount - 1);
+        cols[i] = ch * (plotW - 1) / (CHANNELS - 1);
+        labels[i] = String(2.400f + ch * 0.001f, 2);
+    }
+    plot.ruler(cols, labels, tickCount);
+    plot.status("starting radio...");
+
+    if (!nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
         Serial.println("Fail Starting radio");
+        free(env);
+        free(envPeak);
+        plot.end();
         displayError("NRF24 not found");
         delay(500);
         return;
     }
+
+    NRFradio.setAutoAck(false);
+    NRFradio.disableCRC();       // accept any signal we find
+    NRFradio.setAddressWidth(2); // a reverse engineering tactic (not typically recommended)
+    const uint8_t noiseAddress[][2] = {
+        {0x55, 0x55},
+        {0xAA, 0xAA},
+        {0xA0, 0xAA},
+        {0xAB, 0xAA},
+        {0xAC, 0xAA},
+        {0xAD, 0xAA}
+    };
+    for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
+    NRFradio.setDataRate(RF24_1MBPS);
+
+    uint32_t lastFrame = 0, lastRow = 0;
+    while (!check(EscPress)) {
+        scanChannels();
+
+        int maxCh = 0;
+        for (int i = 0; i < CHANNELS; i++) {
+            if (channel[i] > peak[i]) peak[i] = channel[i];
+            else if (peak[i]) peak[i]--; // slow decay keeps the hold line readable
+            if (channel[i] > channel[maxCh]) maxCh = i;
+        }
+
+        // A full sweep is far quicker than the panel needs to be repainted, so
+        // cap the redraw rate and let the radio keep integrating in between.
+        if (millis() - lastFrame >= 40) {
+            lastFrame = millis();
+            nrf_envelope(channel, env, plotW);
+            nrf_envelope(peak, envPeak, plotW);
+
+            // highlight the busiest carrier and its immediate neighbours
+            int hlC = maxCh * (plotW - 1) / (CHANNELS - 1);
+            int hlSpan = (2 * (plotW - 1)) / (CHANNELS - 1);
+            plot.trace(env, envPeak, hlC - hlSpan, hlC + hlSpan);
+
+            if (millis() - lastRow >= 120) {
+                lastRow = millis();
+                plot.pushRow(env);
+                plot.status(
+                    "peak ch" + String(maxCh) + "  " + String(2.400f + maxCh * 0.001f, 3) + "GHz  " +
+                    String(env[hlC]) + "%"
+                );
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    NRFradio.stopListening();
+    NRFradio.powerDown();
+    free(env);
+    free(envPeak);
+    plot.end();
+    delay(250);
 }
