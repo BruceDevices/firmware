@@ -17,6 +17,7 @@ on:
           - "arduino-nesso-n1"
           - "Awok-Mini"
           - "Awok-Touch"
+          - "heltec-v4-expansion-v2"
           - "CYD-2432S028"
           - "CYD-2432W328C"
           - "CYD-2432W328C_2"

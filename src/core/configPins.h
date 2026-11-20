@@ -271,7 +271,11 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
-    BruceConfigPins() {};
+    BruceConfigPins() {
+#ifdef HELTEC_V4_EXPANSION_V2
+        enforceBoardPinConstraints();
+#endif
+    };
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Operations
@@ -282,6 +286,10 @@ public:
     void loadFile(JsonDocument &jsonDoc, bool checkFS = true);
     void factoryReset();
     void validateConfig();
+#ifdef HELTEC_V4_EXPANSION_V2
+    // The expansion kit's wired peripherals must survive imported pin settings.
+    void enforceBoardPinConstraints();
+#endif
     void fromJson(JsonObject obj);
     void toJson(JsonObject obj) const;
 

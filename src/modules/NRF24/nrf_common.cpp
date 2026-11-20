@@ -31,6 +31,22 @@ bool nrf_start(NRF24_MODE mode) {
     bool result = false;
     if (mode == NRF_MODE_DISABLED) return false;
 
+    // Some applications request SPI directly instead of calling nrf_setMode().
+    // Reject an absent module before GPIO, UART or default-SPI initialization.
+    if (CHECK_NRF_SPI(mode)) {
+        const auto &pins = bruceConfigPins.NRF24_bus;
+        if (pins.sck == GPIO_NUM_NC || pins.miso == GPIO_NUM_NC || pins.mosi == GPIO_NUM_NC ||
+            pins.cs == GPIO_NUM_NC || pins.io0 == GPIO_NUM_NC) {
+            displayError("NRF24 pins not configured", true);
+            return false;
+        }
+    }
+    if (CHECK_NRF_UART(mode) &&
+        (bruceConfigPins.uart_bus.rx == GPIO_NUM_NC || bruceConfigPins.uart_bus.tx == GPIO_NUM_NC)) {
+        displayError("NRF24 UART pins not configured", true);
+        return false;
+    }
+
     if (CHECK_NRF_UART(mode)) {
         if (USBserial.getSerialOutput() == &Serial1) {
             displayError("(E) UART already in use", true);

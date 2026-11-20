@@ -32,8 +32,12 @@ void GpsMenu::wardrivingMenu() {
 }
 void GpsMenu::configMenu() {
     options = {
+#ifdef HELTEC_V4_EXPANSION_V2
+        {"Built-in GPS: 9600 bps", []() {}},
+#else
         {"Baudrate", setGpsBaudrateMenu                                 },
         {"GPS Pins", [=]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }},
+#endif
         {"Back",     [this]() { optionsMenu(); }                        },
     };
 

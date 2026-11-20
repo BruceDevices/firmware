@@ -64,7 +64,7 @@ void rf_raw_emit(RawRecording &recorded, bool &returnToMenu) {
     escPressed = false;
     frequency = recorded.frequency;
 
-    initRfModule("tx", recorded.frequency);
+    if (!initRfModule("tx", recorded.frequency)) return;
 
     gpio_num_t txPin = gpio_num_t(bruceConfigPins.rfTx);
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) txPin = gpio_num_t(bruceConfigPins.CC1101_bus.io0);
