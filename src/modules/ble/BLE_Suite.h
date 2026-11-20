@@ -1,8 +1,8 @@
 /*
- * BLE Suite v4.1 - Complete BLE attack and analysis toolkit
+ * BLE Suite v4.0 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
- * Version: 4.1
- * Last Updated: 19/11/2026
+ * Version: 4.0
+ * Last Updated: 07/09/2026
  *
  * Contains: Smart device recon, connection caching, graduated connection
  *           strategies, robust GATT client, device fingerprinting,
@@ -11,13 +11,6 @@
  *           vulnerability scanning, HID attacks, FastPair exploits,
  *           HFP attacks, Audio attacks, DuckyScript injection,
  *           BLE Sniffer, Samsung detection, and expanded model database.
- *
- * v4.1 changes:
- *   - Removed per-attempt NimBLE deinit/init cycles that leaked DMA memory
- *     and triggered false "low RAM" errors. BLE is now initialized once per
- *     suite session; attacks only create/delete clients.
- *   - BLEStateManager::initBLE() now suspends WiFi via wifiSuspend() so the
- *     driver's DMA buffers are actually released.
  */
 #ifndef BLE_SUITE_H
 #define BLE_SUITE_H
