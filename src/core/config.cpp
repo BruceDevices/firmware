@@ -14,6 +14,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["themeOnSd"] = theme.fs;
 
     setting["dimmerSet"] = dimmerSet;
+    setting["autoDeepSleepSet"] = autoDeepSleepSet;
     setting["bright"] = bright;
     setting["automaticTimeUpdateViaNTP"] = automaticTimeUpdateViaNTP;
     setting["tmz"] = tmz;
@@ -158,6 +159,12 @@ void BruceConfig::fromFile(bool checkFS) {
 
     if (!setting["dimmerSet"].isNull()) {
         dimmerSet = setting["dimmerSet"].as<int>();
+    } else {
+        count++;
+        log_e("Fail");
+    }
+    if (!setting["autoDeepSleepSet"].isNull()) {
+        autoDeepSleepSet = setting["autoDeepSleepSet"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -485,6 +492,7 @@ void BruceConfig::factoryReset() {
 
 void BruceConfig::validateConfig() {
     validateDimmerValue();
+    validateAutoDeepSleepValue();
     validateBrightValue();
     validateTmzValue();
     validateSoundEnabledValue();
@@ -524,6 +532,24 @@ void BruceConfig::setDimmer(int value) {
 void BruceConfig::validateDimmerValue() {
     if (dimmerSet < 0) dimmerSet = 10;
     if (dimmerSet > 60) dimmerSet = 0;
+}
+
+void BruceConfig::setAutoDeepSleep(int value) {
+    autoDeepSleepSet = value;
+    validateAutoDeepSleepValue();
+    saveFile();
+}
+
+void BruceConfig::validateAutoDeepSleepValue() {
+    switch (autoDeepSleepSet) {
+        case 0:
+        case 60:
+        case 300:
+        case 900:
+        case 1800:
+        case 3600: return;
+        default:   autoDeepSleepSet = 0;
+    }
 }
 
 void BruceConfig::setBright(uint8_t value) {
