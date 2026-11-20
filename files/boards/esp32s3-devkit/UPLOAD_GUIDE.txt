@@ -1,0 +1,54 @@
+QUICK START GUIDE FOR ARDUINO IDE UPLOAD
+==========================================
+
+1. INSTALL ESP32 BOARDS:
+   - Arduino IDE → Preferences
+   - Paste URL: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   - Tools → Board Manager → Search "esp32" → Install latest
+
+2. INSTALL LIBRARIES:
+   - Tools → Manage Libraries
+   - Search and install:
+     * Adafruit GFX
+     * Adafruit SH110X
+
+3. SELECT BOARD:
+   - Tools → Board → ESP32 → ESP32-S3 Dev Module
+
+4. CONFIGURE SETTINGS:
+   - USB CDC On Boot: Enabled
+   - CPU Frequency: 240 MHz
+   - Flash Size: 16MB
+   - Partition Scheme: Huge APP (3MB No OTA)
+   - Upload Speed: 921600
+
+5. SELECT PORT:
+   - Tools → Port → COM# (Windows) or /dev/ttyUSB# (Linux/Mac)
+
+6. UPLOAD:
+   - Open ESP32_OLED_Buttons.ino
+   - Sketch → Upload (or Ctrl+U)
+   - Wait for "Connecting..." then "Upload complete"
+
+7. TEST:
+   - Open Tools → Serial Monitor (115200 baud)
+   - Press buttons on your board
+   - Should see debug output and OLED display updates
+
+HARDWARE CONNECTIONS:
+
+OLED (I2C):
+  VCC → 3V3
+  GND → GND
+  SDA → GPIO 8
+  SCL → GPIO 9
+
+BUTTONS (all to GND when pressed):
+  UP    → GPIO 35
+  DOWN  → GPIO 36
+  LEFT  → GPIO 37
+  RIGHT → GPIO 38
+  SEL   → GPIO 39
+  BACK  → GPIO 40
+
+For issues: See README.md
