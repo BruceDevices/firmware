@@ -17,10 +17,6 @@
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
-// WiFi suspend/resume state — owned by wifi_common.
-static bool wifiSuspended = false;
-static wifi_mode_t wifiSuspendedMode = WIFI_MODE_NULL;
-
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
     esp_err_t err = esp_wifi_80211_tx(ifx, frame, len, false);
     for (uint8_t i = 0; err == ESP_ERR_NO_MEM && i < retries; i++) {
@@ -56,57 +52,7 @@ void ensureWifiPlatform() {
     }
 }
 
-bool wifiSuspend() {
-    if (wifiSuspended) return true;
-
-    wifi_mode_t mode = WiFi.getMode();
-    if (mode == WIFI_MODE_NULL && !wifiConnected) {
-        // Nothing to suspend, but mark suspended so resume is a no-op.
-        wifiSuspended = true;
-        wifiSuspendedMode = WIFI_MODE_NULL;
-        return true;
-    }
-
-    wifiTransitioning = true;
-    wifiSuspendedMode = mode;
-
-    if (wifiConnected) {
-        WiFi.disconnect(false, false);
-        wifiConnected = false;
-        vTaskDelay(20 / portTICK_PERIOD_MS);
-    }
-
-    esp_err_t err = esp_wifi_stop();
-    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT) {
-        Serial.printf("[WiFi] esp_wifi_stop failed: %s\n", esp_err_to_name(err));
-        wifiTransitioning = false;
-        return false;
-    }
-
-    wifiSuspended = true;
-    wifiTransitioning = false;
-    Serial.printf("[WiFi] Suspended (mode was %d)\n", (int)mode);
-    return true;
-}
-
-bool wifiResume() {
-    if (!wifiSuspended) return true;
-
-    esp_err_t err = esp_wifi_start();
-    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_INIT) {
-        Serial.printf("[WiFi] esp_wifi_start failed: %s\n", esp_err_to_name(err));
-        return false;
-    }
-
-    wifiSuspended = false;
-    wifiSuspendedMode = WIFI_MODE_NULL;
-    Serial.println("[WiFi] Resumed");
-    return true;
-}
-
-bool isWifiSuspended() { return wifiSuspended; }
-
-bool _wifiConnect(const String &ssid, int encryption, int32_t channel, const uint8_t* bssid) {
+bool _wifiConnect(const String &ssid, int encryption, int32_t channel, const uint8_t *bssid) {
     String password = bruceConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
     if (password == "\x1B") return false;
@@ -221,8 +167,6 @@ void wifiDisconnect() {
 #endif
 
     wifiConnected = false;
-    wifiSuspended = false;
-    wifiSuspendedMode = WIFI_MODE_NULL;
     wifiTransitioning = false;
 }
 
@@ -240,9 +184,6 @@ bool wifiConnectMenu(wifi_mode_t mode) {
         vTaskDelay(500 / portTICK_PERIOD_MS);
         return false;
     }
-
-    // If we were suspended, bring the driver back up first.
-    if (wifiSuspended) { wifiResume(); }
 
     switch (mode) {
         case WIFI_AP: // access point
@@ -366,9 +307,6 @@ void wifiConnectTask(void *pvParameters) {
         return;
     }
 
-    // If we were suspended, bring the driver back up first.
-    if (wifiSuspended) { wifiResume(); }
-
     // No-PSRAM guard: don't bring Wi-Fi up if the contiguous DMA block is too
     // small (e.g. BLE already active) — the scan would half-init the driver and
     // crash on teardown. Silent bail: this is a background auto-connect task.
@@ -430,9 +368,6 @@ bool wifiConnecttoKnownNet(void) {
         vTaskDelay(500 / portTICK_PERIOD_MS);
         return false;
     }
-
-    // If we were suspended, bring the driver back up first.
-    if (wifiSuspended) { wifiResume(); }
 
     // No-PSRAM guard: refuse before the scan brings Wi-Fi up in low memory.
     if (!radioHasMemForWifi()) {
