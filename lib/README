@@ -1,46 +1,29 @@
 
-This directory is intended for project specific (private) libraries.
-PlatformIO will compile them to static libraries and link into executable file.
+# `lib/` — Vendored and Custom Libraries
 
-The source code of each library should be placed in an own separate directory
-("lib/your_library_name/[here are source files]").
+This directory holds PlatformIO private libraries and Git submodules compiled and linked into Bruce. Libraries live here rather than in `platformio.ini` `lib_deps` when they are custom-built for Bruce, require hardware-specific patches for Arduino-ESP32 v3.x, or are generated at build time.
 
-For example, see a structure of the following two libraries `Foo` and `Bar`:
+> **Note:** Several directories in `lib/` are Git submodules (configured in `.gitmodules`). The pre-build script `check_submodules.py` automatically runs `git submodule update --init --recursive` if any submodule directory is empty.
 
-|--lib
-|  |
-|  |--Bar
-|  |  |--docs
-|  |  |--examples
-|  |  |--src
-|  |     |- Bar.c
-|  |     |- Bar.h
-|  |  |- library.json (optional, custom build options, etc) https://docs.platformio.org/page/librarymanager/config.html
-|  |
-|  |--Foo
-|  |  |- Foo.c
-|  |  |- Foo.h
-|  |
-|  |- README --> THIS FILE
-|
-|- platformio.ini
-|--src
-   |- main.c
+## Library Reference
 
-and a contents of `src/main.c`:
-```
-#include <Foo.h>
-#include <Bar.h>
+| Directory | Type | Description & Why It Is in `lib/` |
+| :--- | :--- | :--- |
+| `Bad_Usb_Lib/` | Vendored / Custom | Unified HID injection library combining TinyUSB (`USBHIDKeyboard`, `USBHIDMouse`), BLE HID (`BleKeyboard`), CH9329 UART-to-HID bridge, and multi-locale keyboard layouts (`KeyboardLayout*`) for BadUSB and BadBLE. |
+| `BruceWifite/` | Vendored / Custom | Native WiFite / WPS Pixie Dust engine and adapted ESP-IDF WPS SDK routines for full-featured boards (such as LilyGO T-Embed CC1101). |
+| `CYD-touch/` | Vendored | Resistive touch controller support (XPT2046) tailored for Cheap Yellow Display (`CYD-*`) boards sharing or splitting SPI buses. |
+| `DisplayDrivers/` | Git Submodule | Multi-backend display abstraction (`tft_display` / `tft_sprite`) that wraps `TFT_eSPI`, `LovyanGFX`, `M5GFX`, `Arduino_GFX`, `GxEPD2`, `epd_painter`, or a headless dummy driver behind a single API. Configured via `include/DisplayDrivers_User_Setup.h` and per-board `.ini` flags. |
+| `ESP32_Button/` | Git Submodule | ESP-IDF button component used by `src/hal/inputs/buttons.cpp` on 2-button devices (`-DBUTTONS_IDF_COMPONENT=1`) for click, double-click, and long-press detection. |
+| `HAL/` | Custom | Bruce's low-level peripheral adapters: I2C GPIO expanders (`io_expander`, `Adafruit_AW9523`, `PCA9555`) and customized `SD` / `SD_MMC` drivers adapted from Arduino-ESP32. |
+| `mquickjs_headers/` | Generated / Vendored | Pre-compiled MicroQuickJS standard library bytecode and C binding headers (`mqjs_stdlib.h`, `*_js.h`). Regenerated automatically by `gen_mqjs_headers.py` when `src/modules/bjs_interpreter/mqjs_stdlib.c` or JS binding headers change. |
+| `PN532_SRIX/` | Vendored | ST SRIX4K / SRI512 ISO14443-B NFC tag driver adapted to share constants with `Adafruit_PN532` without symbol collisions. |
+| `RotaryEncoder/` | Git Submodule | Quadrature rotary encoder library (`mathertel/RotaryEncoder`) used by `src/hal/inputs/encoder.cpp` for boards with `-DHAS_ENCODER`. |
+| `RTC/` | Vendored | Real-time clock drivers (`cplus_RTC` for BM8563 and `pcf85063_RTC` for NXP PCF85063A) used on M5Stack, LilyGO, and Waveshare boards. |
+| `SensorLib/` | Git Submodule | `lewisxhe/SensorLib` providing capacitive touch controller drivers (FT6336, CST816, CST226, GT911, CHSC5816), IMU drivers, and I2C sensor helpers used by `src/hal/inputs/touch.cpp`. |
+| `TFT_eSPI/` | Vendored | Customized copy of Bodmer's `TFT_eSPI` (2.5.43) patched for ESP32-S3/C5/P4 compatibility under Arduino-ESP32 3.x and integrated with `DisplayDrivers`. |
+| `TFT_eSPI_QRcode/` | Vendored | Compact QR code encoder (`qrencode`) and renderer adapted to draw onto Bruce's `tft` display instance. |
+| `utility/` | Vendored | M5Stack board support drivers: `AXP192` PMIC, `bq27220` fuel gauge (used by `src/hal/power/`), and the M5Stack Cardputer `Keyboard` matrix scanner. |
+| `XPowersLib/` | Git Submodule | `lewisxhe/XPowersLib` providing PMIC and charger drivers (`AXP2101`, `AXP192`, `BQ25896`, `SY6970`) consumed by `src/hal/power/pmic.cpp` and `src/hal/power/gauge.cpp`. |
 
-int main (void)
-{
-  ...
-}
+For full upstream license and copyright details on these libraries, see [`THIRD_PARTY.md`](../THIRD_PARTY.md).
 
-```
-
-PlatformIO Library Dependency Finder will find automatically dependent
-libraries scanning project source files.
-
-More information about PlatformIO Library Dependency Finder
-- https://docs.platformio.org/page/librarymanager/ldf.html
