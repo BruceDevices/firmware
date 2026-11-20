@@ -2,7 +2,7 @@
 bool rf_raw_save(RawRecording recorded) {
     FS *fs = nullptr;
     if (!getFsStorage(fs) || fs == nullptr) {
-        displayError("No space left on device", true);
+        displayError("No space left on device, Insert SD Card", true);
         return false;
     }
 
