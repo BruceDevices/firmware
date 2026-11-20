@@ -121,9 +121,18 @@ void onLoraPacket() {
 }
 
 SPIClass *selectLoraSPIBus() {
-    SPIClass *bus =
-        acquireSPIBus(bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi);
-    if (!bus) Serial.println("No hardware SPI bus available for LoRa");
+    SPIClass *bus = acquireSPIBus(
+        bruceConfigPins.LoRa_bus.sck, bruceConfigPins.LoRa_bus.miso, bruceConfigPins.LoRa_bus.mosi
+    );
+    if (!bus) {
+#ifdef HELTEC_V4_EXPANSION_V2
+        // Default SPI on the Expansion Kit is already wired to the display and SD.
+        Serial.println("No hardware SPI bus available for LoRa");
+#else
+        Serial.println("No hardware SPI bus available for LoRa, falling back to default SPI");
+        return &SPI;
+#endif
+    }
     return bus;
 }
 
