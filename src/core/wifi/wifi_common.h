@@ -13,32 +13,6 @@
 void wifiDisconnect();
 
 /**
- * @brief Suspends the WiFi driver without losing init state.
- *
- * Calls esp_wifi_stop(), which frees the driver's DMA buffers (internal RAM).
- * The esp_wifi_init() state is preserved, so wifiResume() is cheap (no
- * re-allocation). This is the correct way for another module (e.g. BLE) to
- * reclaim DMA memory: it goes through wifi_common, which owns the lifecycle.
- *
- * Returns true if WiFi is suspended (or was already off), false on error.
- */
-bool wifiSuspend();
-
-/**
- * @brief Resumes the WiFi driver after wifiSuspend().
- *
- * Calls esp_wifi_start() from the preserved init state. Does NOT reconnect
- * to an AP; callers that need the connection back should call wifiConnectMenu()
- * or _connectToWifiNetwork() afterward.
- */
-bool wifiResume();
-
-/**
- * @brief True if WiFi is currently suspended via wifiSuspend().
- */
-bool isWifiSuspended();
-
-/**
  * @brief Opens a menu to connect to a wifi
  * @param mode connection mode(AP, STA, AP_STA)
  * @note This is the primary entry point for establishing connections
