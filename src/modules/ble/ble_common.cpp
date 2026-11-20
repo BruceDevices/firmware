@@ -178,6 +178,60 @@ bool ble_scan_setup() {
     return true;
 }
 
+String resolveBleDeviceName(const NimBLEAdvertisedDevice *dev) {
+    if (!dev) return "";
+
+    String name = dev->getName().c_str();
+    if (!name.isEmpty() && name != "(null)" && name != "null" && name != "NULL" && name != "<no name>") {
+        return name;
+    }
+
+#if !defined(LITE_VERSION)
+    if (dev->haveServiceData()) {
+        std::string serviceData = dev->getServiceData(NimBLEUUID((uint16_t)0xFE2C));
+        if (serviceData.length() >= 3) {
+            uint32_t modelId =
+                ((uint8_t)serviceData[0] << 16) | ((uint8_t)serviceData[1] << 8) | (uint8_t)serviceData[2];
+            for (size_t i = 0; fastpair_models[i].name != nullptr; i++) {
+                if (fastpair_models[i].modelId == modelId) {
+                    return String(fastpair_models[i].name);
+                }
+            }
+            char modelBuf[32];
+            snprintf(modelBuf, sizeof(modelBuf), "FastPair 0x%06X", (unsigned int)modelId);
+            return String(modelBuf);
+        }
+    }
+#endif
+
+    if (dev->haveManufacturerData()) {
+        std::string manuf = dev->getManufacturerData();
+        if (manuf.length() >= 2) {
+            uint16_t company = (uint8_t)manuf[0] | ((uint8_t)manuf[1] << 8);
+            if (company == 0x004C) {
+                if (manuf.length() >= 3) {
+                    uint8_t type = (uint8_t)manuf[2];
+                    if (type == 0x07) return "Apple AirPods/Audio";
+                    if (type == 0x10) return "Apple AirTag/Nearby";
+                    if (type == 0x0F) return "Apple Device";
+                    if (type == 0x05) return "Apple AirDrop";
+                }
+                return "Apple Device";
+            } else if (company == 0x0075) {
+                if (manuf.length() >= 4) {
+                    if ((uint8_t)manuf[2] == 0x42 && (uint8_t)manuf[3] == 0x09) return "Samsung Galaxy Buds";
+                    if ((uint8_t)manuf[2] == 0x01 && (uint8_t)manuf[3] == 0x00) return "Samsung Galaxy Watch";
+                }
+                return "Samsung Galaxy Device";
+            } else if (company == 0x0006) {
+                return "Microsoft Device";
+            }
+        }
+    }
+
+    return "";
+}
+
 void ble_scan() {
     displayTextLine("Scanning..");
 
@@ -212,7 +266,7 @@ void ble_scan() {
             String bt_address;
             String bt_signal;
 
-            bt_name = advertisedDevice->getName().c_str();
+            bt_name = resolveBleDeviceName(advertisedDevice);
             bt_address = advertisedDevice->getAddress().toString().c_str();
             bt_signal = String(advertisedDevice->getRSSI());
 
