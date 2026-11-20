@@ -271,6 +271,8 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 | [Elecrow 3.5"](https://www.elecrow.com/esp-terminal-with-esp32-3-5-inch-parallel-480x320-tft-capacitive-touch-display-rgb-by-chip-ili9488.html)                                                                                                                                                        |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
 | [NM-CYD-C5 + RF HAT](https://rockbase.shop/products/nm-cyd-c5-colorful)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
 | [Waveshare ESP32-C5-Touch-LCD-3.5](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-3.5) |  :x:  | :x:  |   :x:    | :ok: | :ok: |  :x:   |  :x:   |  :ok:   |    :ok:    |     :x:      |
+| [Waveshare ESP32-C5-WIFI6-KIT + 2.8" ILI9341 touch](boards/waveshare-c5-kit-ili9341/connections.md) |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :x:   |  :ok:   |   :x:   |    :x:     |     :x:      |
+| [ESP32-S3 N16R8 + 1.8" ST7735 + 3 buttons](boards/esp32-s3-n16r8-st7735/connections.md) |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
 ² CYD have a LITE_VERSION version for Launcher Compatibility
 ¹ Core, CYD and StickCs Bad-USB: [here](https://wiki.bruce.computer/features/others/#badusb)
 

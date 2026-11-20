@@ -37,6 +37,7 @@ on:
           - "esp32-s3-devkitc-1"
           - "esp32-s3-devkitc-1-psram"
           - "esp32s3-ili9341"
+          - "esp32-s3-n16r8-st7735"
           - "esp32-s3-n16r8-st7789v"
           - "esp32s3-st7789"
           - "esp-wroom32-ili9341"
@@ -105,6 +106,7 @@ on:
           - "WaveSentry-R1"
           - "waveshare-c5-tft"
           - "waveshare-c5-35"
+          - "waveshare-c5-kit-ili9341"
           - "xk404"
 
 jobs:
