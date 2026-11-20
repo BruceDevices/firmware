@@ -73,27 +73,45 @@ static inline bool radioHasMemForWifi() {
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
+    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) return true;
 
-    // Already enough DMA memory — nothing to do.
+    // Not enough DMA memory - first hand the SDR bank back to the heap
+    sdrBankHeapInit();
+    sdrBankReleaseForRadio();
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
         return true;
     }
 
-    // Not enough DMA memory. Suspend WiFi through its owner (wifi_common),
-    // which calls esp_wifi_stop() and actually frees the driver's DMA buffers
-    // (unlike wifiDisconnect(), which only disconnects and leaves the driver
-    // holding its DMA allocations).
-    Serial.println("[RAM] Low contiguous DMA memory for BLE, suspending WiFi...");
-    wifiSuspend();
-    delay(200);
-
-    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
-        Serial.printf("[RAM] WiFi suspended, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
+    // The bank is back in the heap now (or was never reserved): the heap is
+    // the pre-1.17 layout, where BLE ran with the Wi-Fi-sized gate. Holding
+    // the raised gate here would refuse BLE in states pre-1.17 handled fine
+    // (WiFi up, SD mounted) even though the controller has what it had then.
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
         return true;
     }
 
-    Serial.printf("[RAM] Still only %u bytes DMA block, minimum %u needed\n",
-                  (unsigned)radioLargestDmaBlock(), (unsigned)RADIO_BLE_MIN_DMA_BLOCK);
+    // Still not enough - try to free WiFi
+    Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
+
+    // Disconnect WiFi if active
+    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+        wifiDisconnect();
+        delay(200);
+        #ifdef WIFI_DEINIT_ON_DISCONNECT
+        WiFi.mode(WIFI_OFF);
+        #endif
+        delay(300);
+    }
+
+    // Recheck after freeing WiFi (pre-1.17 gate, same reasoning as above)
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
+        Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
+        return true;
+    }
+
+    // Still not enough - return false, caller shows error
+    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n",
+                  radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
     return false;
 }
 
