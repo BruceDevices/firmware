@@ -32,7 +32,15 @@ jobs:
           pip install -U requests esptool intelhex platformio
 
       - name: Compile esp32-s3-zero-4mb firmware
-        run: pio run -e esp32-s3-zero-4mb
+        run: |
+          set -o pipefail
+          pio run -e esp32-s3-zero-4mb 2>&1 | tee build.log
+
+      - name: Print error log if failed
+        if: failure()
+        run: |
+          echo "==== LAST 150 LINES OF BUILD LOG ===="
+          tail -n 150 build.log
 
       - name: Upload merged binary artifact
         uses: actions/upload-artifact@v4
