@@ -1,0 +1,32 @@
+name: Build Bruce ESP32-S3-Zero 4MB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -U requests esptool intelhex platformio
+
+      - name: Compile esp32-s3-zero-4mb firmware
+        run: pio run -e esp32-s3-zero-4mb
+
+      - name: Upload merged binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bruce-esp32-s3-zero-4mb
+          path: Bruce-esp32-s3-zero-4mb.bin
+          if-no-files-found: error
