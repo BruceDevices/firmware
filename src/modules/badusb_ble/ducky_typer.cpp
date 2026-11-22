@@ -1295,6 +1295,8 @@ void MangaRemote(HIDInterface *&hid, bool ble) {
         NextPress = false;
         PrevPress = false;
         SelPress = false;
+        // Acknowledge encoder input so the input task keeps polling at full speed.
+        if (!EscPress && !SerialCmdPress) AnyKeyPress = false;
         inputUnlock();
 
         // Bruce encodes UI Next as a negative step. HID wheel negative is down.

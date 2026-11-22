@@ -9,8 +9,10 @@
 #include "current_year.h"
 #include "esp32-hal-psram.h"
 #include "esp_heap_caps.h"
+#include "esp_partition.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -189,15 +191,31 @@ volatile int tftHeight = TFT_WIDTH;
  **  Function: begin_storage
  **  Config LittleFS and SD storage
  *********************************************************************/
-void begin_storage() {
-    if (!setupLittleFS()) {
-        LittleFS.format();
-        setupLittleFS();
+static bool littleFsPartitionIsBlank() {
+    const auto *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+    if (!partition || partition->size == 0) return false;
+
+    uint8_t block[512];
+    for (size_t offset = 0; offset < partition->size;) {
+        const size_t count = std::min<size_t>(sizeof(block), partition->size - offset);
+        if (esp_partition_read_raw(partition, offset, block, count) != ESP_OK) return false;
+        if (!std::all_of(block, block + count, [](uint8_t byte) { return byte == 0xff; })) return false;
+        offset += count;
+        if (offset % (64 * 1024) == 0) delay(1);
     }
+    return true;
+}
+
+void begin_storage() {
+    bool littleFsReady = setupLittleFS() || setupLittleFS();
+    if (!littleFsReady && littleFsPartitionIsBlank() && LittleFS.format()) littleFsReady = setupLittleFS();
+    if (!littleFsReady) Serial.println("LittleFS unavailable; onboard files were not loaded");
     RAM_LOG("after LittleFS");
-    bool checkFS = setupSdCard();
-    bruceConfig.fromFile(checkFS);
-    bruceConfigPins.fromFile(checkFS);
+    const bool sdReady = setupSdCard();
+    if (littleFsReady || sdReady) {
+        bruceConfig.fromFile(sdReady);
+        bruceConfigPins.fromFile(sdReady);
+    }
 }
 
 /*********************************************************************

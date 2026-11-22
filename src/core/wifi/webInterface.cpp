@@ -12,12 +12,16 @@
 #include "webFiles.h"
 #include <MD5Builder.h>
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <new>
+#include <strings.h>
+#include <unistd.h>
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
 
-File uploadFile;
-FS _webFS = LittleFS;
 // WiFi as a Client
 const int default_webserverporthttp = 80;
 
@@ -26,7 +30,6 @@ IPAddress AP_GATEWAY(172, 0, 0, 1); // Gateway
 
 AsyncWebServer *server = nullptr; // initialise webserver
 const char *host = "bruce";
-String uploadFolder = "";
 static bool mdnsRunning = false;
 
 // Generate random token
@@ -129,10 +132,7 @@ String listFiles(FS &fs, const String &folder) {
     String returnText = "pa:" + folder + ":0\n";
     // Serial.println("Listing files stored on SD");
 
-    _webFS = fs;
-
     File root = fs.open(folder);
-    uploadFolder = folder;
 
     while (true) {
         bool isDir;
@@ -189,82 +189,215 @@ bool checkUserWebAuth(AsyncWebServerRequest *request, bool onFailureReturnLoginP
     return false;
 }
 
-/**********************************************************************
-**  Function: createDirRecursive
-** Create folders recursivelly
-**********************************************************************/
-void createDirRecursive(const String &path, FS fs) {
-    String currentPath = "";
-    int startIndex = 0;
-    // Serial.print("Verifying folder: ");
-    // Serial.println(path);
+namespace {
+constexpr char uploadPrefix[] = ".bruce-upload-";
 
-    while (startIndex < path.length()) {
-        int endIndex = path.indexOf("/", startIndex);
-        if (endIndex == -1) endIndex = path.length();
+struct WebUpload {
+    FS *fs = nullptr;
+    String destination;
+    String temporary;
+    FILE *file = nullptr;
+    size_t received = 0;
+    bool encrypted = false;
+    bool finished = false;
 
-        currentPath += path.substring(startIndex, endIndex);
-        if (currentPath.length() > 0) {
-            if (!fs.exists(currentPath)) {
-                fs.mkdir(currentPath);
-                // Serial.print("Creating folder: ");
-                // Serial.println(currentPath);
-            }
-        }
+    ~WebUpload() { discard(); }
 
-        if (endIndex < path.length()) { currentPath += "/"; }
-        startIndex = endIndex + 1;
+    void discard() {
+        if (file) fclose(file);
+        file = nullptr;
+        if (temporary.length()) fs->remove(temporary);
+        temporary.clear();
     }
-}
-/**********************************************************************
-**  Function: handleUpload
-** handles uploads to the filserver
-**********************************************************************/
-void handleUpload(
-    AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final
-) {
-    if (checkUserWebAuth(request)) {
-        if (uploadFolder == "/") uploadFolder = "";
-        if (!index) {
-            if (request->hasArg("password")) filename = filename + ".enc";
-            // Serial.println("File: " + uploadFolder + "/" + filename);
-            String relativePath = filename;
-            String fullPath = uploadFolder + "/" + relativePath;
-            String dirPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
-            if (dirPath.length() > 0) { createDirRecursive(dirPath, _webFS); }
-        RETRY:
-            request->_tempFile = _webFS.open(uploadFolder + "/" + filename, "w");
-            if (!request->_tempFile) {
-                // Serial.println("Failed to open file for writing: " + uploadFolder + "/" + filename);
-                goto RETRY;
-            }
-        }
+};
 
-        if (len) {
-            if (request->hasArg("password")) {
-                // encryption requested
-                static int chunck_no = 0;
-                if (chunck_no != 0) {
-                    // TODO: handle multiple chunks
-                    request->send(404, "text/html", "file is too big");
-                    return;
-                } else chunck_no += 1;
-                String enc_password = request->arg("password");
-                String plaintext = String((char *)data).substring(0, len);
-                String cyphertxt = encryptString(plaintext, enc_password);
-                if (cyphertxt == "") { return; }
-                if (request->_tempFile)
-                    request->_tempFile.write((const uint8_t *)cyphertxt.c_str(), cyphertxt.length());
-            } else {
-                if (request->_tempFile) request->_tempFile.write(data, len);
-            }
+bool validUploadPath(const String &path, bool absolute) {
+    if (!path.length() || path.startsWith("/") != absolute) return false;
+    if (absolute && path == "/") return true;
+    size_t start = absolute ? 1 : 0;
+    while (start < path.length()) {
+        const int slash = path.indexOf('/', start);
+        const size_t end = slash < 0 ? path.length() : slash;
+        if (end == start || path[end - 1] == '.' || path[end - 1] == ' ') return false;
+        if (strncasecmp(path.c_str() + start, uploadPrefix, sizeof(uploadPrefix) - 1) == 0) return false;
+        for (size_t i = start; i < end; ++i) {
+            const unsigned char c = path[i];
+            if (c < 32 || c == 127 || strchr("\\:*?\"<>|", c)) return false;
         }
-        if (final) {
-            // close the file handle as the upload is now done
-            if (request->_tempFile) request->_tempFile.close();
+        if (slash < 0) return true;
+        start = end + 1;
+    }
+    return false;
+}
+
+bool makeUploadDirectories(FS &fs, const String &directory) {
+    for (size_t end = 1; end < directory.length(); ++end) {
+        if (directory[end] != '/') continue;
+        const String part = directory.substring(0, end);
+        if (!fs.exists(part) && !fs.mkdir(part) && !fs.exists(part)) return false;
+    }
+    return true;
+}
+
+WebUpload *uploadState(AsyncWebServerRequest *request) {
+    const auto slot = static_cast<WebUpload **>(request->_tempObject);
+    return slot ? *slot : nullptr;
+}
+
+const AsyncWebParameter *uploadPassword(AsyncWebServerRequest *request) {
+    const auto *queryPassword = request->getParam("password");
+    return queryPassword ? queryPassword : request->getParam("password", true);
+}
+
+void failUpload(AsyncWebServerRequest *request, int status, const char *message) {
+    if (auto *upload = uploadState(request)) upload->discard();
+    request->send(status, "text/plain", message);
+}
+
+WebUpload *beginUpload(AsyncWebServerRequest *request, String filename) {
+    if (!checkUserWebAuth(request)) return nullptr;
+
+    const auto *drive = request->getParam("fs");
+    const auto *folder = request->getParam("folder");
+    if (!drive || !folder || !validUploadPath(filename, false)) {
+        failUpload(request, 400, "Invalid upload destination");
+        return nullptr;
+    }
+    String directory = folder->value();
+    if (directory.length() > 1 && directory.endsWith("/")) directory.remove(directory.length() - 1);
+    if (!validUploadPath(directory, true) || (drive->value() != "SD" && drive->value() != "LittleFS")) {
+        failUpload(request, 400, "Invalid upload destination");
+        return nullptr;
+    }
+
+    const bool useSd = drive->value() == "SD";
+    FS &fs = useSd ? static_cast<FS &>(SD) : static_cast<FS &>(LittleFS);
+    if ((useSd && !setupSdCard()) || !fs.mountpoint()) {
+        failUpload(request, 503, "Upload storage unavailable");
+        return nullptr;
+    }
+
+    auto state = std::shared_ptr<WebUpload>(new (std::nothrow) WebUpload);
+    auto slot = state ? static_cast<WebUpload **>(malloc(sizeof(WebUpload *))) : nullptr;
+    if (!slot) {
+        failUpload(request, 503, "Unable to start upload");
+        return nullptr;
+    }
+    *slot = state.get();
+    request->_tempObject = slot; // ESPAsyncWebServer frees the slot and owns the cleanup callback.
+    request->onDisconnect([state] { state->discard(); });
+
+    state->fs = &fs;
+    state->encrypted = uploadPassword(request) != nullptr;
+    if (state->encrypted) filename += ".enc";
+    state->destination = (directory == "/" ? directory : directory + "/") + filename;
+    const String parent = state->destination.substring(0, state->destination.lastIndexOf('/') + 1);
+    if (!parent.length() || !makeUploadDirectories(fs, parent)) {
+        failUpload(request, 507, "Unable to create upload directory");
+        return nullptr;
+    }
+
+    const char *mount = fs.mountpoint();
+    if (!mount) {
+        failUpload(request, 503, "Upload storage unavailable");
+        return nullptr;
+    }
+    String staged = String(mount) + parent + uploadPrefix + "XXXXXX";
+    const int fd = staged.length() ? mkstemp(staged.begin()) : -1;
+    if (fd >= 0) {
+        state->temporary = staged.c_str() + strlen(mount);
+        if (state->temporary.length()) state->file = fdopen(fd, "wb");
+        if (!state->file) {
+            close(fd);
+            unlink(staged.c_str());
         }
     }
+    if (!state->file) {
+        failUpload(request, 507, "Unable to open temporary upload");
+        return nullptr;
+    }
+    return state.get();
 }
+
+bool publishUpload(WebUpload &upload) {
+    FS &fs = *upload.fs;
+    const String &target = upload.destination;
+    if (!fs.exists(target)) return fs.rename(upload.temporary, target);
+
+    File existing = fs.open(target, FILE_READ);
+    if (!existing || existing.isDirectory()) return false;
+    existing.close();
+
+    // FAT requires the destination to be absent. Keep the original until the replacement succeeds.
+    const String backup = upload.temporary + ".bak";
+    if (!backup.length() || fs.exists(backup) || !fs.rename(target, backup)) return false;
+    if (!fs.rename(upload.temporary, target)) {
+        if (!fs.rename(backup, target)) log_e("Upload original remains at %s", backup.c_str());
+        return false;
+    }
+    if (!fs.remove(backup)) log_w("Upload backup remains at %s", backup.c_str());
+    return true;
+}
+
+void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    if (request->getResponse()) return;
+    auto *upload = uploadState(request);
+    if (!upload) upload = beginUpload(request, filename);
+    if (!upload) return;
+    if (upload->finished || index != upload->received) {
+        failUpload(request, 400, "Expected a single complete upload");
+        return;
+    }
+
+    const uint8_t *bytes = data;
+    size_t count = len;
+    String encrypted;
+    if (upload->encrypted) {
+        if (!final || !len || memchr(data, '\0', len)) {
+            failUpload(request, 400, "Encrypted upload must be a single text chunk");
+            return;
+        }
+        String plaintext(reinterpret_cast<const char *>(data), len);
+        encrypted = encryptString(plaintext, uploadPassword(request)->value());
+        if (!encrypted.length()) {
+            failUpload(request, 500, "Unable to encrypt upload");
+            return;
+        }
+        bytes = reinterpret_cast<const uint8_t *>(encrypted.c_str());
+        count = encrypted.length();
+    }
+
+    if (count && fwrite(bytes, 1, count, upload->file) != count) {
+        failUpload(request, 507, "Unable to write complete upload");
+        return;
+    }
+    upload->received += len;
+    upload->finished = final;
+}
+
+void finishUpload(AsyncWebServerRequest *request) {
+    if (request->getResponse() || !checkUserWebAuth(request)) return;
+    auto *upload = uploadState(request);
+    if (!upload || !upload->finished || (uploadPassword(request) != nullptr) != upload->encrypted) {
+        failUpload(request, 400, "Incomplete or invalid upload");
+        return;
+    }
+
+    const bool synced = fflush(upload->file) == 0 && fsync(fileno(upload->file)) == 0;
+    const bool closed = fclose(upload->file) == 0;
+    upload->file = nullptr;
+    if (!synced || !closed) {
+        failUpload(request, 507, "Unable to finish writing upload");
+        return;
+    }
+    if (!publishUpload(*upload)) {
+        failUpload(request, 500, "Unable to replace destination file");
+        return;
+    }
+    upload->temporary.clear();
+    request->send(200, "text/plain", "File upload completed");
+}
+} // namespace
 
 void notFound(AsyncWebServerRequest *request) { request->send(404, "text/plain", "Nothing in here Sharky"); }
 
@@ -717,12 +850,7 @@ void configureWebServer() {
     });
 
     // File upload
-    server->on(
-        "/upload",
-        HTTP_POST,
-        [](AsyncWebServerRequest *request) { request->send(200, "text/plain", "File upload completed"); },
-        handleUpload
-    );
+    server->on("/upload", HTTP_POST, finishUpload, handleUpload);
 
     // Wi-Fi configuration
     server->on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {

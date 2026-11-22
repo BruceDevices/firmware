@@ -197,7 +197,7 @@ function stringToId(str) {
 
 const _queueUpload = [];
 let _runningUpload = false;
-function appendFileToQueue(files) {
+function appendFileToQueue(files, destination) {
   Dialog.show("upload");
   let d = $(".dialog.upload");
   for (let i = 0; i < files.length; i++) {
@@ -211,31 +211,31 @@ function appendFileToQueue(files) {
       .setAttribute("id", fileId);
 
     d.querySelector(".dialog-body").appendChild(progressBar);
+    _queueUpload.push({ file, destination });
   }
 }
-async function appendDroppedFiles(entry) {
+async function appendDroppedFiles(entry, destination) {
   return new Promise((resolve, reject) => {
     if (entry.isFile) {
       entry.file((file) => {
         let fileWithPath = new File([file], entry.fullPath.substring(1), {
           type: file.type,
         });
-        appendFileToQueue([fileWithPath]);
-        _queueUpload.push(fileWithPath);
+        appendFileToQueue([fileWithPath], destination);
         resolve();
       });
     } else if (entry.isDirectory) {
       let proms = [];
       let reader = entry.createReader();
       reader.readEntries((entries) => {
-        for (let e of entries) proms.push(appendDroppedFiles(e));
+        for (let e of entries) proms.push(appendDroppedFiles(e, destination));
       });
 
       Promise.all(proms).then(resolve);
     }
   });
 }
-async function uploadFile() {
+function uploadFile() {
   if (_queueUpload.length === 0) {
     _runningUpload = false;
     $(".dialog.upload .dialog-body").innerHTML = "";
@@ -245,38 +245,33 @@ async function uploadFile() {
     return;
   }
 
-  return new Promise((resolve, reject) => {
-    _runningUpload = true;
-    let file = _queueUpload.shift();
-    let fd = new FormData();
-    let filename = file.webkitRelativePath || file.name;
-    let fileId = stringToId(filename);
-    fd.append("file", file, filename);
-    fd.append("folder", currentPath);
-    fd.append("fs", currentDrive);
-
-    let realUrl = `/upload`;
-    if (IS_DEV) realUrl = "/bruce" + realUrl;
-    let req = new XMLHttpRequest();
-    req.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        var percent = (e.loaded / e.total) * 100;
-        $("#" + fileId).style.width = Math.round(percent) + "%";
-      }
-    };
-    req.onload = () => {
-      uploadFile();
-      if (req.status >= 200 && req.status < 300) {
-        resolve(req.responseText);
-      } else {
-        reject();
-      }
-    };
-    req.onabort = () => reject();
-    req.onerror = () => reject();
-    req.open("POST", realUrl, true);
-    req.send(fd);
-  });
+  _runningUpload = true;
+  const { file, destination } = _queueUpload.shift();
+  const filename = file.webkitRelativePath || file.name;
+  const fileId = stringToId(filename);
+  const fd = new FormData();
+  fd.append("file", file, filename);
+  const query = new URLSearchParams(destination);
+  const req = new XMLHttpRequest();
+  const fail = (message) => {
+    _queueUpload.length = 0;
+    uploadFile();
+    alert("Upload failed: " + message);
+  };
+  req.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const bar = $("#" + fileId);
+      if (bar) bar.style.width = Math.round((e.loaded / e.total) * 100) + "%";
+    }
+  };
+  req.onload = () => {
+    if (req.status >= 200 && req.status < 300) uploadFile();
+    else fail(req.responseText || "HTTP " + req.status);
+  };
+  req.onabort = () => fail("Upload interrupted");
+  req.onerror = () => fail("Network connection lost");
+  req.open("POST", (IS_DEV ? "/bruce" : "") + "/upload?" + query, true);
+  req.send(fd);
 }
 
 async function runCommand(cmd) {
@@ -924,16 +919,17 @@ $(".upload-area").ondrop = async (e) => {
   $(".upload-area").classList.add("hidden");
   const items = e.dataTransfer.items;
   if (!items || items.length === 0) return;
+  const destination = { fs: currentDrive, folder: currentPath };
 
   for (let i of items) {
     let entry = i.webkitGetAsEntry();
     if (!entry) continue;
-    await appendDroppedFiles(entry);
+    await appendDroppedFiles(entry, destination);
   }
 
   if (!_runningUpload)
     setTimeout(() => {
-      if (_queueUpload.length === 0) return;
+      if (_runningUpload || _queueUpload.length === 0) return;
       uploadFile();
     }, 100);
 };
@@ -943,11 +939,10 @@ document.querySelectorAll(".inp-uploader").forEach((el) => {
     let files = e.target.files;
     if (!files || files.length === 0) return;
 
-    appendFileToQueue(files);
-    _queueUpload.push(...files);
+    appendFileToQueue(files, { fs: currentDrive, folder: currentPath });
     if (!_runningUpload) uploadFile();
 
-    this.value = "";
+    e.target.value = "";
   });
 });
 

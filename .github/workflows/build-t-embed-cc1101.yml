@@ -7,7 +7,9 @@ on:
       - "**.cpp"
       - "**.h"
       - "**.ini"
+      - "**.csv"
       - "**.py"
+      - "embedded_resources/web_interface/**"
       - ".github/workflows/build-t-embed-cc1101.yml"
   pull_request:
     branches: [main]
@@ -15,7 +17,9 @@ on:
       - "**.cpp"
       - "**.h"
       - "**.ini"
+      - "**.csv"
       - "**.py"
+      - "embedded_resources/web_interface/**"
       - ".github/workflows/build-t-embed-cc1101.yml"
   workflow_dispatch:
 
@@ -47,3 +51,6 @@ jobs:
 
       - name: Build firmware
         run: platformio run -e lilygo-t-embed-cc1101
+
+      - name: Run host regression tests
+        run: python -m unittest discover -s tests -v

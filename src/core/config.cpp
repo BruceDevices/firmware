@@ -1,4 +1,5 @@
 #include "config.h"
+#include "config_storage.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
 #include <algorithm>
@@ -88,36 +89,13 @@ JsonDocument BruceConfig::toJson() const {
 }
 
 void BruceConfig::fromFile(bool checkFS) {
-    FS *fs;
-    if (checkFS) {
-        if (!getFsStorage(fs)) {
-            log_i("Fail getting filesystem for config");
-            return;
-        }
-    } else {
-        if (checkLittleFsSize()) fs = &LittleFS;
-        else return;
-    }
-
-    if (!fs->exists(filepath)) {
-        log_i("Config file not found. Creating default config");
-        return saveFile();
-    }
-
-    File file;
-    file = fs->open(filepath, FILE_READ);
-    if (!file) {
-        log_i("Config file not found. Using default values");
-        return;
-    }
-
-    // Deserialize the JSON document
     JsonDocument jsonDoc;
-    if (deserializeJson(jsonDoc, file)) {
+    const auto result = loadConfigFile(filepath, jsonDoc, checkFS);
+    if (result == ConfigReadResult::Missing) return saveFile();
+    if (result == ConfigReadResult::Unreadable) {
         Serial.println("Failed to read config file, using default configuration");
         return;
     }
-    file.close();
 
     JsonObject setting = jsonDoc.as<JsonObject>();
     int count = 0;
@@ -444,31 +422,11 @@ void BruceConfig::fromFile(bool checkFS) {
 }
 
 void BruceConfig::saveFile() {
-    FS *fs = &LittleFS;
-    JsonDocument jsonDoc = toJson();
-
-    // Open file for writing
-    File file = fs->open(filepath, FILE_WRITE);
-    if (!file) {
-        log_e("Failed to open config file");
-        file.close();
-        return;
-    };
-
-    // Serialize JSON to file
-    serializeJsonPretty(jsonDoc, Serial);
-    if (serializeJsonPretty(jsonDoc, file) < 5) log_e("Failed to write config file");
-    else log_i("config file written successfully");
-
-    file.close();
-
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    saveConfigFile(filepath, toJson(), setupSdCard());
 }
 
 void BruceConfig::factoryReset() {
-    FS *fs = &LittleFS;
-    fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
+    backupConfigFile(filepath, setupSdCard());
     ESP.restart();
 }
 
