@@ -5,6 +5,7 @@ on:
 
 jobs:
   build:
+    name: Build ESP32-S3-Zero 4MB (Headless WebUI)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -17,6 +18,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-platformio-
+
       - name: Install dependencies
         run: |
           pip install -U requests esptool intelhex platformio
@@ -28,5 +38,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bruce-esp32-s3-zero-4mb
-          path: Bruce-esp32-s3-zero-4mb.bin
+          path: Bruce-*.*
           if-no-files-found: error

@@ -36,6 +36,7 @@ on:
           - "esp32-c5-tft-ST7789-240x320"
           - "esp32-s3-devkitc-1"
           - "esp32-s3-devkitc-1-psram"
+          - "esp32-s3-zero-4mb"
           - "esp32s3-ili9341"
           - "esp32-s3-n16r8-st7789v"
           - "esp32s3-st7789"
