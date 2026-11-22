@@ -262,14 +262,22 @@ svg > path {
 }
 .dialog.navigator .dialog-body {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .dialog.navigator #navigator-screen {
   border: 1px solid var(--color);
   border-radius: 3px;
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  aspect-ratio: 240 / 135;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
 }
 .dialog.navigator .navigator-canvas {
   position: relative;
