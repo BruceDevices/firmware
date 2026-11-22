@@ -2,6 +2,14 @@ name: Build Bruce ESP32-S3-Zero 4MB
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'boards/ESP-General/esp32-s3-zero-4mb.ini'
+      - 'embedded_resources/**'
+      - 'src/**'
+      - '.github/workflows/build-s3-zero.yml'
 
 jobs:
   build:
