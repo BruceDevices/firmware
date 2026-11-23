@@ -31,9 +31,10 @@ public:
     String getName() const { return String(_name); }
 
     void draw(float scale = 1) {
-        if (rotation != bruceConfigPins.rotation) resetCoordinates();
+        resetCoordinates();
         if (!checkTheme()) {
-            tft.fillRect(0, 27, tftWidth, tftHeight - 27, bruceConfig.bgColor);
+            int topY = (tftHeight <= 64) ? (STATUS_BAR_HEIGHT + 1) : 27;
+            tft.fillRect(0, topY, tftWidth, tftHeight - topY, bruceConfig.bgColor);
             drawIcon(scale);
             drawArrows(scale);
             drawTitle(scale);
@@ -90,7 +91,7 @@ public:
         int lineWidth = scale * 3;
 
         int arrowX = BORDER_PAD_X + 1.5 * arrowSize;
-        int arrowY = iconCenterY + 1.5 * arrowSize;
+        int arrowY = (tftHeight <= 64) ? iconCenterY : (iconCenterY + 1.5 * arrowSize);
 
         // Left Arrow
         tft.drawWideLine(
@@ -134,12 +135,12 @@ public:
     }
 
     void drawTitle(float scale = 1) {
-        int titleY = iconCenterY + iconAreaH / 2 + FG;
+        int titleY = (tftHeight <= 64) ? (tftHeight - (LH * FP) - 1) : (iconCenterY + iconAreaH / 2 + FG);
 
-        tft.setTextSize(FM);
+        tft.setTextSize(FP);
         tft.drawPixel(0, 0, 0);
-        tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
-        int nchars = (tftWidth - 16) / (LW * FM);
+        tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FP, bruceConfig.bgColor);
+        int nchars = (tftWidth - 16) / (LW * FP);
         tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
     }
 
@@ -169,6 +170,19 @@ protected:
     }
     void clearImgArea(void) { tft.fillRect(7, 27, tftWidth - 14, tftHeight - 34, bruceConfig.bgColor); }
     void resetCoordinates(void) {
+        if (tftHeight <= 64) {
+            iconAreaH = 34;
+            iconAreaW = 34;
+            iconCenterX = tftWidth / 2;
+            iconCenterY = STATUS_BAR_HEIGHT + (iconAreaH / 2) + 1; // 11 + 17 + 1 = 29
+            iconAreaX = iconCenterX - iconAreaW / 2;
+            iconAreaY = iconCenterY - iconAreaH / 2;
+            arrowAreaX = BORDER_PAD_X;
+            arrowAreaW = iconAreaX - arrowAreaX;
+            rotation = bruceConfigPins.rotation;
+            return;
+        }
+
         // Recalculate Center and ared due to portrait/landscape changings
         if (tftWidth > tftHeight) {
             iconAreaH =

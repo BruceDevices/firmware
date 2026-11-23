@@ -1,0 +1,66 @@
+name: Build Bruce ESP32-S3-Zero 4MB
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'boards/ESP-General/**'
+      - 'embedded_resources/**'
+      - 'src/**'
+      - 'lib/**'
+      - '.github/workflows/build-s3-zero.yml'
+
+jobs:
+  build:
+    name: Build ESP32-S3-Zero 4MB (SH1106 OLED + WebUI)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+            ${{ runner.os }}-platformio-
+
+      - name: Install dependencies
+        run: |
+          pip install -U requests esptool intelhex platformio
+
+      - name: Compile esp32-s3-zero-4mb firmware
+        run: |
+          set -o pipefail
+          pio run -e esp32-s3-zero-4mb 2>&1 | tee build.log
+
+      - name: Print error log if failed
+        if: failure()
+        run: |
+          echo "==== LAST 150 LINES OF BUILD LOG ===="
+          tail -n 150 build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Upload merged binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bruce-esp32-s3-zero-4mb
+          path: Bruce-*.*
+          if-no-files-found: error

@@ -6,24 +6,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
-      - dev
-
-    paths:
-        - "**.yml"
-        - "**.h"
-        - "**.cpp"
-        - "**.py"
-        - "**.html"
-        - "**.css"
-        - "**.js"
-        - "**.ini"
-        - "**.json"
-        - "**.csv"
-    tags:
-      - "*"
   workflow_dispatch:
 
 jobs:

@@ -5,6 +5,8 @@
 
 class SerialDevice {
 public:
+    virtual void lock() {}
+    virtual void unlock() {}
     virtual size_t println(const String &s) = 0;
     virtual size_t println(size_t n) = 0;
     virtual size_t println(uint32_t n) = 0;

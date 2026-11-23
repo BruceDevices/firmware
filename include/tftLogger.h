@@ -58,6 +58,7 @@ private:
     bool _logging = false;
     void clearLog();
     bool async_serial = false;
+    SemaphoreHandle_t logMutex = nullptr;
     TaskHandle_t asyncSerialTask = NULL;
     QueueHandle_t asyncSerialQueue = NULL;
     static void asyncSerialTaskFunc(void *pv);

@@ -3,29 +3,130 @@
 
 #include "SerialDevice.h"
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 class USBSerial : public SerialDevice {
 public:
-    size_t println(const String &s) override { return out->println(s); }
-    size_t print(const String &s) override { return out->print(s); }
-    size_t print(const int n, int format) override { return out->print(n, format); }
-    void vprintf(const char *fmt, va_list args) override { out->printf(fmt, args); }
-    size_t println() override { return out->println(); }
-    size_t println(size_t n) override { return out->println(n); }
-    size_t println(const uint32_t n) override { return out->println(n); }
-    size_t println(const int n, int format) override { return out->println(n, format); }
-    String readStringUntil(char terminator) override { return out->readStringUntil(terminator); }
-    void flush() override { out->flush(); }
-    int available() override { return out->available(); }
-    size_t write(uint8_t *str, size_t size) override { return out->write(str, size); }
-    int read() override { return out->read(); }
-    void setSerialOutput(Stream *in) { out = in; }
+    USBSerial(Stream *in = &Serial) : out(in) {
+        serialMutex = xSemaphoreCreateRecursiveMutex();
+    }
+    ~USBSerial() override {
+        if (serialMutex) {
+            vSemaphoreDelete(serialMutex);
+            serialMutex = nullptr;
+        }
+    }
+
+    void lock() override {
+        if (serialMutex) xSemaphoreTakeRecursive(serialMutex, portMAX_DELAY);
+    }
+    void unlock() override {
+        if (serialMutex) xSemaphoreGiveRecursive(serialMutex);
+    }
+
+    size_t println(const String &s) override {
+        lock();
+        size_t res = out->println(s);
+        unlock();
+        return res;
+    }
+    size_t print(const String &s) override {
+        lock();
+        size_t res = out->print(s);
+        unlock();
+        return res;
+    }
+    size_t print(const int n, int format) override {
+        lock();
+        size_t res = out->print(n, format);
+        unlock();
+        return res;
+    }
+    void vprintf(const char *fmt, va_list args) override {
+        lock();
+        char buf[256];
+        va_list args_copy;
+        va_copy(args_copy, args);
+        int len = vsnprintf(buf, sizeof(buf), fmt, args_copy);
+        va_end(args_copy);
+        if (len >= 0 && len < (int)sizeof(buf)) {
+            out->write((const uint8_t *)buf, len);
+        } else if (len >= (int)sizeof(buf)) {
+            char *dyn = (char *)malloc(len + 1);
+            if (dyn) {
+                vsnprintf(dyn, len + 1, fmt, args);
+                out->write((const uint8_t *)dyn, len);
+                free(dyn);
+            } else {
+                out->write((const uint8_t *)buf, sizeof(buf) - 1);
+            }
+        }
+        unlock();
+    }
+    size_t println() override {
+        lock();
+        size_t res = out->println();
+        unlock();
+        return res;
+    }
+    size_t println(size_t n) override {
+        lock();
+        size_t res = out->println(n);
+        unlock();
+        return res;
+    }
+    size_t println(const uint32_t n) override {
+        lock();
+        size_t res = out->println(n);
+        unlock();
+        return res;
+    }
+    size_t println(const int n, int format) override {
+        lock();
+        size_t res = out->println(n, format);
+        unlock();
+        return res;
+    }
+    String readStringUntil(char terminator) override {
+        lock();
+        String res = out->readStringUntil(terminator);
+        unlock();
+        return res;
+    }
+    void flush() override {
+        lock();
+        out->flush();
+        unlock();
+    }
+    int available() override {
+        lock();
+        int res = out->available();
+        unlock();
+        return res;
+    }
+    size_t write(uint8_t *str, size_t size) override {
+        lock();
+        size_t res = out->write(str, size);
+        unlock();
+        return res;
+    }
+    int read() override {
+        lock();
+        int res = out->read();
+        unlock();
+        return res;
+    }
+    void setSerialOutput(Stream *in) {
+        lock();
+        out = in;
+        unlock();
+    }
     Stream *getSerialOutput() { return out; }
-    USBSerial(Stream *in = &Serial) { out = in; }
-    ~USBSerial() override = default;
 
 private:
     Stream *out;
+    SemaphoreHandle_t serialMutex = nullptr;
 };
 
 #endif // BRUCE_USBSERIAL_H

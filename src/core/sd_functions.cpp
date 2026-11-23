@@ -794,7 +794,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                                                  }});
             }
 #endif
-#if defined(USB_as_HID)
+#if defined(USB_as_HID) && !defined(LITE_VERSION)
             if (filepath.endsWith(".txt")) {
                 options.push_back({"BadUSB Run", [&]() {
                                        ducky_startKb(hid_usb, false);

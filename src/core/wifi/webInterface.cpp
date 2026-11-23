@@ -279,11 +279,41 @@ void drawWebUiScreen(bool mode_ap) {
     if (!mode_ap) txt = WiFi.localIP().toString();
     else txt = WiFi.softAPIP().toString();
 
-    int padX = 14;
-    int currentY = 55;
-
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
+
+    if (tftHeight <= 64) {
+        int padX = 4;
+        int currentY = STATUS_BAR_HEIGHT + 1; // 12
+        int linePitch = LH * FP + 1;          // 9
+
+        tft.setCursor(padX, currentY);
+        if (mode_ap) tft.print("Net: BruceNet");
+        else tft.print("Net: " + (WiFi.SSID().length() > 0 ? WiFi.SSID() : "Compass1"));
+        currentY += linePitch; // 21
+
+        tft.setCursor(padX, currentY);
+        tft.print("IP:  " + txt);
+        currentY += linePitch; // 30
+
+        tft.setCursor(padX, currentY);
+        tft.print("Web: " + String(bruceConfig.webUI.user) + "/" + String(bruceConfig.webUI.pwd));
+        currentY += linePitch; // 39
+
+        tft.setCursor(padX, currentY);
+        tft.print(mdnsRunning ? "Url: bruce.local" : "Port: 80");
+        currentY += linePitch; // 48
+
+        tft.setTextColor(TFT_RED, bruceConfig.bgColor);
+        tft.drawCentreString("Esc to exit", tftWidth / 2, tftHeight - (LH * FP) - 1, 1);
+#if defined(HAS_TOUCH)
+        TouchFooter();
+#endif
+        return;
+    }
+
+    int padX = 14;
+    int currentY = 55;
 
     if (mode_ap) {
         tft.setCursor(padX, currentY);
@@ -512,7 +542,13 @@ void configureWebServer() {
                 request->send(500, "text/plain", "Screen buffer overflow");
                 return;
             }
-            request->send(200, "application/octet-stream", (const uint8_t *)screenBinBuffer, binSize);
+            AsyncResponseStream *response = request->beginResponseStream("application/octet-stream", binSize);
+            if (!response) {
+                request->send(503, "text/plain", "Failed to allocate response stream");
+                return;
+            }
+            response->write(screenBinBuffer, binSize);
+            request->send(response);
         }
     });
 
@@ -546,24 +582,21 @@ void configureWebServer() {
             String cmnd = request->arg("cmnd");
             if (cmnd.startsWith("nav")) {
                 volatile bool *var = &SelPress;
-                if (cmnd.startsWith("nav sel")) var = &SelPress;
-                if (cmnd.startsWith("nav esc")) var = &EscPress;
-                if (cmnd.startsWith("nav up")) var = &UpPress;
-                if (cmnd.startsWith("nav down")) var = &DownPress;
-                if (cmnd.startsWith("nav next")) var = &NextPress;
-                if (cmnd.startsWith("nav prev")) var = &PrevPress;
+                if (cmnd.startsWith("nav nextpage")) var = &NextPagePress;
+                else if (cmnd.startsWith("nav next") || cmnd.startsWith("nav right")) var = &NextPress;
+                else if (cmnd.startsWith("nav prevpage")) var = &PrevPagePress;
+                else if (cmnd.startsWith("nav prev") || cmnd.startsWith("nav left")) var = &PrevPress;
+                else if (cmnd.startsWith("nav sel")) var = &SelPress;
+                else if (cmnd.startsWith("nav esc")) var = &EscPress;
+                else if (cmnd.startsWith("nav up")) var = &UpPress;
+                else if (cmnd.startsWith("nav down")) var = &DownPress;
                 request->send(200, "text/plain", "command " + cmnd + " success");
-                int time;
-                if (cmnd.endsWith("0")) time = cmnd.substring(cmnd.lastIndexOf(' ')).toInt();
-                else time = 10;
-                auto tmp = millis() + time;
-                while (tmp > millis()) {
-                    AnyKeyPress = true;
-                    SerialCmdPress = true;
-                    *var = true;
-                    if (!LongPress) vTaskDelay(pdMS_TO_TICKS(190));
-                    else vTaskDelay(pdMS_TO_TICKS(50));
-                }
+
+                inputLock();
+                AnyKeyPress = true;
+                SerialCmdPress = true;
+                *var = true;
+                inputUnlock();
             } else {
                 if (parseSerialCommand(cmnd, false)) {
                     request->send(200, "text/plain", "command " + cmnd + " queued");
@@ -742,53 +775,39 @@ void configureWebServer() {
 }
 
 /**********************************************************************
-**  Function: startWebUi
-**  Start the WebUI
+**  Function: startWebUiBackground
+**  Start the WebUI server non-blocking in background
 **********************************************************************/
-void startWebUi(bool mode_ap) {
-    bool keepWifiConnected = false;
-    if (!WiFi.isConnected()) {
-        if (mode_ap) wifiConnectMenu(WIFI_AP);
-        else wifiConnectMenu(WIFI_STA);
-    } else {
-        keepWifiConnected = true;
-    }
-
-    // configure web server
-
+void startWebUiBackground() {
     if (!server) {
-        // Clear this vector to free stack memory
-        options.clear();
-
-        Serial.println("Configuring Webserver ...");
+        Serial.println("Configuring Webserver in background...");
         if (psramFound()) server = (AsyncWebServer *)ps_malloc(sizeof(AsyncWebServer));
         else server = (AsyncWebServer *)malloc(sizeof(AsyncWebServer));
 
         new (server) AsyncWebServer(default_webserverporthttp);
-
         configureWebServer();
-
         isWebUIActive = true;
     }
-    tft.setLogging();
-    drawWebUiScreen(mode_ap);
+    if (!tft.getLogging()) {
+        tft.setLogging();
+    }
+    startMdnsResponder();
+}
 
-    while (!check(EscPress)) {
-        // nothing here, just to hold the screen until the server is on.
-        vTaskDelay(pdMS_TO_TICKS(70));
+/**********************************************************************
+**  Function: startWebUi
+**  Start the WebUI
+**********************************************************************/
+void startWebUi(bool mode_ap) {
+    if (!WiFi.isConnected()) {
+        if (mode_ap) wifiConnectMenu(WIFI_AP);
+        else wifiConnectMenu(WIFI_STA);
     }
 
-    bool closeServer = false;
+    startWebUiBackground();
+    drawWebUiScreen(mode_ap);
 
-    options.clear();
-    options.emplace_back("Run in background", []() {});
-    options.emplace_back("Exit", [&closeServer]() { closeServer = true; });
-
-    loopOptions(options);
-
-    if (closeServer) {
-        stopWebUi();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        if (!keepWifiConnected) { wifiDisconnect(); }
+    while (!check(EscPress) && !check(SelPress)) {
+        vTaskDelay(pdMS_TO_TICKS(70));
     }
 }

@@ -7,17 +7,35 @@
 AUXILIARY FUNCTIONS TO CREATE THE JSONS
 */
 
+class AutoLogLock {
+    SemaphoreHandle_t m;
+public:
+    AutoLogLock(SemaphoreHandle_t mutex) : m(mutex) {
+        if (m) xSemaphoreTakeRecursive(m, portMAX_DELAY);
+    }
+    ~AutoLogLock() {
+        if (m) xSemaphoreGiveRecursive(m);
+    }
+};
+
 /* TFT LOGGER FUNCTIONS */
-tft_logger::tft_logger(int16_t w, int16_t h) : BRUCE_TFT_DRIVER(w, h) {}
+tft_logger::tft_logger(int16_t w, int16_t h) : BRUCE_TFT_DRIVER(w, h) {
+    logMutex = xSemaphoreCreateRecursiveMutex();
+}
 tft_logger::~tft_logger() {
     clearLog();
     if (log) free(log);
     if (images) free(images);
     log = nullptr;
     images = nullptr;
+    if (logMutex) {
+        vSemaphoreDelete(logMutex);
+        logMutex = nullptr;
+    }
 }
 
 void tft_logger::clearLog() {
+    AutoLogLock lock(logMutex);
     if (log) memset(log, 0, sizeof(tftLog) * MAX_LOG_ENTRIES);
     if (images) memset(images, 0, MAX_LOG_IMAGES * MAX_LOG_IMG_PATH);
     logWriteIndex = 0;
@@ -25,6 +43,7 @@ void tft_logger::clearLog() {
 }
 
 void tft_logger::addLogEntry(const uint8_t *buffer, uint8_t size) {
+    AutoLogLock lock(logMutex);
     if (!log) return;
     memcpy(log[logWriteIndex].data, buffer, size);
     logWriteIndex = (logWriteIndex + 1) % MAX_LOG_ENTRIES;
@@ -43,6 +62,7 @@ void tft_logger::writeUint16(uint8_t *buffer, uint8_t &pos, uint16_t value) {
 }
 
 void tft_logger::setLogging(bool _log) {
+    AutoLogLock lock(logMutex);
     clearLog();
     if (_log) {
         size_t logBytes = sizeof(tftLog) * MAX_LOG_ENTRIES;
@@ -86,21 +106,31 @@ void tft_logger::asyncSerialTaskFunc(void *pv) {
             uint8_t *entry = item.data;
             uint8_t fn = entry[2];
             if (fn == DRAWIMAGE) {
-                if (!logger->images) {
-                    uint8_t size = entry[1];
-                    serialDevice->write(entry, size);
-                    continue;
-                }
-                uint8_t imageSlot = entry[12];
-                const char *imgPath = logger->images[imageSlot];
-                size_t baseLen = 12; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS
-                size_t imgLen = strlen(imgPath);
                 uint8_t packet[MAX_LOG_SIZE];
-                memcpy(packet, entry, baseLen);
-                if (imgLen > MAX_LOG_SIZE - baseLen) imgLen = MAX_LOG_SIZE - baseLen;
-                memcpy(packet + baseLen, imgPath, imgLen);
-                packet[1] = baseLen + imgLen;
-                serialDevice->write(packet, baseLen + imgLen);
+                size_t packetLen = 0;
+                {
+                    AutoLogLock lock(logger->logMutex);
+                    uint8_t imageSlot = entry[12];
+                    if (!logger->images || imageSlot >= MAX_LOG_IMAGES) {
+                        uint8_t size = entry[1];
+                        serialDevice->write(entry, size);
+                        continue;
+                    }
+                    const char *imgPath = logger->images[imageSlot];
+                    if (!imgPath || imgPath[0] == '\0') {
+                        uint8_t size = entry[1];
+                        serialDevice->write(entry, size);
+                        continue;
+                    }
+                    size_t baseLen = 12; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS
+                    size_t imgLen = strlen(imgPath);
+                    memcpy(packet, entry, baseLen);
+                    if (imgLen > MAX_LOG_SIZE - baseLen) imgLen = MAX_LOG_SIZE - baseLen;
+                    memcpy(packet + baseLen, imgPath, imgLen);
+                    packet[1] = baseLen + imgLen;
+                    packetLen = baseLen + imgLen;
+                }
+                serialDevice->write(packet, packetLen);
             } else {
                 uint8_t size = entry[1];
                 serialDevice->write(entry, size);
@@ -146,6 +176,7 @@ void tft_logger::getTftInfo() {
     pushLogIfUnique(l);
 }
 void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
+    AutoLogLock lock(logMutex);
     outSize = 0;
     // add Screen Info at the beginning of the Bin packet
     uint8_t buffer[16];
@@ -162,16 +193,20 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     outSize += pos;
 
     if (!log) return;
+    int start = (logCount >= MAX_LOG_ENTRIES) ? logWriteIndex : 0;
     for (int i = 0; i < logCount; i++) {
-        if (log[i].data[0] != LOG_PACKET_HEADER) continue;
-        uint8_t *entry = log[i].data;
+        int idx = (start + i) % MAX_LOG_ENTRIES;
+        if (log[idx].data[0] != LOG_PACKET_HEADER) continue;
+        uint8_t *entry = log[idx].data;
         uint8_t fn = entry[2];
 
         if (fn == DRAWIMAGE) {
             if (!images) continue;
             uint8_t imageSlot = entry[12]; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS SLOT
                                            // 0  1  2  3  4  5  6  7  8  9  10 11 12
+            if (imageSlot >= MAX_LOG_IMAGES) continue;
             const char *imgPath = images[imageSlot];
+            if (!imgPath || imgPath[0] == '\0') continue;
             size_t baseLen = 12; // AA SS FN XX XX YY YY Ce Ce Ms Ms FS + PATH
             size_t imgLen = strlen(imgPath);
             if (outSize + baseLen + imgLen > MAX_LOG_SIZE * MAX_LOG_ENTRIES) continue;
@@ -184,6 +219,7 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
             outBuffer[outSize - imgLen - baseLen + 1] = baseLen + imgLen; // update packet size
         } else {
             uint8_t size = entry[1];
+            if (size == 0 || size > MAX_LOG_SIZE) continue;
             if (outSize + size > MAX_LOG_SIZE * MAX_LOG_ENTRIES) continue;
             memcpy(outBuffer + outSize, entry, size);
             outSize += size;
@@ -203,6 +239,7 @@ bool tft_logger::isLogEqual(const tftLog &a, const tftLog &b) {
 }
 
 void tft_logger::pushLogIfUnique(const tftLog &l) {
+    AutoLogLock lock(logMutex);
     if (!log) return;
     for (int i = 0; i < logCount; i++) {
         if (isLogEqual(log[i], l)) {
@@ -216,6 +253,7 @@ void tft_logger::pushLogIfUnique(const tftLog &l) {
 }
 
 bool tft_logger::removeLogEntriesInsideRect(int rx, int ry, int rw, int rh) {
+    AutoLogLock lock(logMutex);
     bool r = false;
     int rx1 = rx;
     int ry1 = ry;
@@ -237,6 +275,7 @@ bool tft_logger::removeLogEntriesInsideRect(int rx, int ry, int rw, int rh) {
 }
 
 void tft_logger::removeOverlappedImages(int x, int y, int center, int ms) {
+    AutoLogLock lock(logMutex);
     if (!log) return;
     for (int i = 0; i < logCount; i++) {
         uint8_t *data = log[i].data;
@@ -260,10 +299,12 @@ void tft_logger::fillScreen(int32_t color) {
     }
     if (isSleeping) return;
     BRUCE_TFT_DRIVER::fillScreen(color);
+    restoreLogger();
 }
 
 void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, int Ms) {
     if (!logging) return;
+    AutoLogLock lock(logMutex);
     if (!log || !images) return;
 
     removeOverlappedImages(x, y, center, Ms);
@@ -285,6 +326,11 @@ void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, 
                 break;
             }
         }
+    }
+
+    if (imageSlot >= MAX_LOG_IMAGES) {
+        restoreLogger();
+        return;
     }
 
     // Use image path as identifier in log.data

@@ -16,8 +16,8 @@
 #include <vector>
 // Native RF decoding runs beneath the menu callbacks on loopTask. The default
 // 8 KiB stack overflows on the full protocol path (including RAW fallback).
-// Keep the smaller framework default on Lite builds without stream codecs.
-#if !defined(LITE_VERSION)
+// Keep the smaller framework default on Lite builds without stream codecs unless PSRAM is present.
+#if !defined(LITE_VERSION) || defined(BOARD_HAS_PSRAM)
 SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 #endif
 
@@ -153,12 +153,17 @@ std::vector<Option> options;
 tft_logger tft = tft_logger(); // Invoke custom library
 tft_sprite sprite = tft_sprite(&tft);
 tft_sprite draw = tft_sprite(&tft);
+#if defined(TFT_WIDTH) && defined(TFT_HEIGHT) && (TFT_HEIGHT <= 64)
+volatile int tftWidth = TFT_WIDTH;
+volatile int tftHeight = TFT_HEIGHT;
+#else
 volatile int tftWidth = TFT_HEIGHT;
 #ifdef HAS_TOUCH
 volatile int tftHeight = TFT_WIDTH - TOUCH_FOOTER_HEIGHT; // reserved to draw the TouchFooter(), were the btns
                                                           // are being read in touch devices.
 #else
 volatile int tftHeight = TFT_WIDTH;
+#endif
 #endif
 
 #include "core/bus_HAL.h"
@@ -303,7 +308,11 @@ void boot_screen_anim() {
 
     tft.drawPixel(0, 0, 0);       // Forces back communication with TFT, to avoid ghosting
                                   // Start image loop
+#if defined(LITE_VERSION) || (defined(TFT_HEIGHT) && (TFT_HEIGHT <= 64))
+    while (millis() < i + 1000) { // compact 1s boot screen for headless/small screens
+#else
     while (millis() < i + 7000) { // boot image lasts for 5 secs
+#endif
         if ((millis() - i > 2000) && !drawn) {
             tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
             if (boot_img > 0 && !drawn) {
@@ -461,6 +470,7 @@ void setup() {
     ); // Must be invoked before Serial.begin(). Default is 256 chars
     Serial.begin(115200);
 
+
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
     bool psramStarted = psramInit();
@@ -545,6 +555,8 @@ void setup() {
         &xHandle                       // Task handle (not used)
     );
     _late_setup_gpio();
+    // Start serial CLI early so it is immediately responsive on boot
+    startSerialCommandsHandlerTask(true);
 #if !defined(USE_DUMMY_TFT)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
@@ -556,15 +568,13 @@ void setup() {
         xTaskCreate(
             wifiConnectTask,   // Task function
             "wifiConnectTask", // Task Name
-            4096,              // Stack size
+            6144,              // Stack size
             NULL,              // Task parameters
             2,                 // Task priority (0 to 3), loopTask has priority 2.
             NULL               // Task handle (not used)
         );
     }
 #endif
-    //  start a task to handle serial commands while the webui is running
-    startSerialCommandsHandlerTask(true);
 
     wakeUpScreen();
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {

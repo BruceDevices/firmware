@@ -858,7 +858,7 @@ uint32_t freeStorageCallback(cmd *c) {
             serialDevice->printf("SD Used space: %llu Bytes\n", usedBytes);
             serialDevice->printf("SD Free space: %llu Bytes\n", freeBytes);
         } else {
-            serialDevice->println("No SD card installed");
+            serialDevice->println("[E][sd_diskio.cpp: No SD card installed");
         }
     } else if (arg.getValue() == "littlefs") {
 

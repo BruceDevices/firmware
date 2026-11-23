@@ -7,10 +7,17 @@
 #include <LittleFS.h>
 #include <SD.h>
 #include <globals.h>
+#if defined(TFT_HEIGHT) && (TFT_HEIGHT <= 64)
+#define BORDER_OFFSET_FROM_SCREEN_EDGE 1
+#define BORDER_PAD_X 2
+#define STATUS_BAR_HEIGHT 11
+#define BORDER_PAD_Y (STATUS_BAR_HEIGHT)
+#else
 #define BORDER_OFFSET_FROM_SCREEN_EDGE 5
 #define BORDER_PAD_X (LW * FP + 4)
 #define STATUS_BAR_HEIGHT (LH * FM + 14)
 #define BORDER_PAD_Y (STATUS_BAR_HEIGHT - 2)
+#endif
 #define MENU_TYPE_MAIN 0
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
