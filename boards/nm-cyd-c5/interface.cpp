@@ -1,10 +1,10 @@
-#include "hal/bright/bright.h"
-#include "hal/device.h"
-#include "hal/inputs/touch.h"
 #include "CYD28_TouchscreenR.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/bright/bright.h"
+#include "hal/device.h"
 #include "hal/inputs/buttons.h"
+#include "hal/inputs/touch.h"
 #include <interface.h>
 
 #ifdef HAS_3_BUTTONS
@@ -69,8 +69,6 @@ void _setup_gpio() {
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
@@ -98,6 +96,9 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
+
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100);
 #ifdef HAS_TOUCH
     hal_touch_init(touchCfg(), 0, true); // shares the display SPI bus
 #endif
@@ -125,19 +126,6 @@ void _post_setup_gpio() {
     bruceConfigPins.i2c_bus.sda = (gpio_num_t)9;
     bruceConfigPins.i2c_bus.scl = (gpio_num_t)8;
 }
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
-
-/***************************************************************************************
-** Function name: isCharging()
-** Description:   Default implementation that returns false
-***************************************************************************************/
-bool isCharging() { return false; }
 
 /*********************************************************************
 ** Function: setBrightness

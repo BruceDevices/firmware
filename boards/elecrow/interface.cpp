@@ -1,8 +1,8 @@
+#include "core/powerSave.h"
+#include "core/utils.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/touch.h"
-#include "core/powerSave.h"
-#include "core/utils.h"
 #include <interface.h>
 
 #include <CYD28_TouchscreenR.h>
@@ -36,8 +36,8 @@ void _setup_gpio() {
     bruceConfigPins.irTx = 22;
     bruceConfigPins.irRx = 22;
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)3, (gpio_num_t)1};   // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)3, (gpio_num_t)1};    // rx, tx
+    bruceConfigPins.uart_bus = {(gpio_num_t)3, (gpio_num_t)1};     // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)3, (gpio_num_t)1};      // rx, tx
     bruceConfigPins.badusb_bus = {(gpio_num_t)22, (gpio_num_t)21}; // rx, tx (Grove)
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)25};
@@ -49,7 +49,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)25, (gpio_num_t)22
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)5
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23, (gpio_num_t)5
     }; // sck,miso,mosi,cs
 #if !defined(LITE_VERSION)
     bruceConfigPins.W5500_bus = {
@@ -76,13 +77,6 @@ void _post_setup_gpio() {
     hal_bright_attach(TFT_BL);
     hal_bright_set(TFT_BL, 100);
 }
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
 
 /*********************************************************************
 ** Function: setBrightness

@@ -2,13 +2,11 @@
 #include "../mykeyboard.h"
 #include "core/display.h"
 #include "core/i2c_finder.h"
+#include "core/led_control.h"
 #include "core/main_menu.h"
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#ifdef HAS_RGB_LED
-#include "core/led_control.h"
-#endif
 
 /*********************************************************************
 **  Function: optionsMenu
@@ -33,6 +31,9 @@ void ConfigMenu::optionsMenu() {
 #endif
             {"System Config", [this]() { systemMenu(); }   },
             {"Power",         [this]() { powerMenu(); }    },
+#if defined(IO_EXPANDER_AW9523) && IO_EXP_VIBRO >= 0
+            {"Vibrate",       []() { vibrate(); }          },
+#endif
         };
 
 #if !defined(LITE_VERSION)
@@ -91,6 +92,23 @@ void ConfigMenu::displayUIMenu() {
 void ConfigMenu::ledMenu() {
     while (true) {
         std::vector<Option> localOptions = {
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+            {String("RGB LEDs: ") + (bruceConfig.ledEnabled ? "ON" : "OFF"),
+             [this]() {
+                 // WS2812 chain only (color/effects live below)
+                 bruceConfig.setLedEnabled(bruceConfig.ledEnabled ? 0 : 1);
+                 beginLed();
+             }                                                                            },
+#if defined(IO_EXPANDER_AW9523) && IO_EXP_LOGO >= 0
+            {String("BackLED: ") + (bruceConfig.backLedEnabled ? "ON" : "OFF"),
+             [this]() {
+                 // Rear red LED rail, independent of the WS2812 chain
+                 bruceConfig.backLedEnabled = !bruceConfig.backLedEnabled;
+                 bruceConfig.saveFile();
+                 applyBackLed(bruceConfig.backLedEnabled);
+             }                                                                            },
+#endif
+#endif
             {"LED Color",
              [this]() {
                  beginLed();

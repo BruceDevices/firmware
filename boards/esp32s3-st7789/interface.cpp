@@ -79,19 +79,6 @@ void _post_setup_gpio() {
     hal_bright_set(TFT_BL, 100);
 }
 
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
-
-/***************************************************************************************
-** Function name: isCharging()
-** Description:   Determines if the device is charging
-***************************************************************************************/
-bool isCharging() { return false; }
-
 /*********************************************************************
 ** Function: setBrightness
 ** location: settings.cpp

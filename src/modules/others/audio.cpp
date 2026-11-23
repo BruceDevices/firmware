@@ -27,6 +27,11 @@ static const uint32_t AUDIO_TASK_STACK_SIZE = 16384; // 16KB - increased for com
 static const UBaseType_t AUDIO_TASK_PRIORITY = 1;
 static const BaseType_t AUDIO_TASK_CORE = 1; // Core 1
 
+// playTone() output: 8 kHz tone, DMA of 3 x 80 frames = 30 ms (see playTone())
+static const uint32_t TONE_SAMPLE_RATE = 8000;
+static const int TONE_DMA_BUFFERS = 3;
+static const int TONE_DMA_FRAMES = 80;
+
 // ===== ASYNC PLAYBACK STATE =====
 struct AudioPlayerState {
     // Playback objects
@@ -629,13 +634,9 @@ bool tts(String text, PlaybackMode mode) {
         return false;
     }
 
-    if (!audioout->begin()) {
-        Serial.println("ERROR: Failed to initialize audio output for TTS");
-        delete audioout;
-        _setup_codec_speaker(false);
-        return false;
-    }
-
+    // No audioout->begin() here: ESP8266SAM::Say() begins the output itself, and a second
+    // begin() allocates a second I2S channel. That leaks one on chips with two I2S
+    // controllers and asserts on single-controller chips such as the ESP32-C5.
     ESP8266SAM *sam = new ESP8266SAM;
     if (!sam) {
         delete audioout;
@@ -659,26 +660,37 @@ bool isAudioFile(const String &filepath) {
            filepath.endsWith(".aac") || filepath.endsWith(".flac");
 }
 
-void playTone(unsigned int frequency, unsigned long duration, short waveType) {
+void playTone(unsigned int frequency, unsigned long duration, short waveType, PlaybackMode mode) {
     if (!bruceConfig.soundEnabled) return;
+
+    // Stop any current playback
+    if (isAudioPlaying()) { stopAudioPlayback(); }
 
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
-        if (frequency == 0 && duration > 0) { delay(duration); }
+        if (frequency == 0 && duration > 0 && mode == PLAYBACK_BLOCKING) { delay(duration); }
         _setup_codec_speaker(false);
         return;
     }
 
     float hz = frequency;
+    float toneSec = duration / 1000.0f;
 
     AudioOutputI2S *out = createConfiguredAudioOutput();
     if (!out) {
         _setup_codec_speaker(false);
         return;
     }
+    // begin() fills the whole DMA with silence and the generator tears the output down as
+    // soon as its last sample is queued, so whatever is still in the DMA is never played.
+    // With the default 5 x 576 frames that is 360 ms at the 8 kHz used here: shorter tones
+    // were silent and longer ones lost their last 360 ms. Keep the DMA small and append
+    // one DMA worth of silence, which is what gets cut instead.
+    out->SetBuffers(TONE_DMA_BUFFERS, TONE_DMA_FRAMES * 4);
+    const float tailSec = (float)(TONE_DMA_BUFFERS * TONE_DMA_FRAMES) / TONE_SAMPLE_RATE;
 
-    AudioFileSourceFunction *file = new AudioFileSourceFunction(duration / 1000.0);
+    AudioFileSourceFunction *file = new AudioFileSourceFunction(toneSec + tailSec, 1, TONE_SAMPLE_RATE);
     if (!file) {
         delete out;
         _setup_codec_speaker(false);
@@ -688,13 +700,15 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     float volumeScale = (bruceConfig.soundVolume / AUDIO_VOLUME_MAX) * AUDIO_VOLUME_SCALE;
 
     if (waveType == 0) {
-        file->addAudioGenerators([volumeScale, hz](const float time) {
-            float v = (sin(hz * time) >= 0) ? 1.0f : -1.0f;
+        file->addAudioGenerators([volumeScale, hz, toneSec](const float time) {
+            if (time >= toneSec) return 0.0f;
+            float v = (sin(TWO_PI * hz * time) >= 0) ? 1.0f : -1.0f;
             v *= volumeScale;
             return v;
         });
     } else if (waveType == 1) {
-        file->addAudioGenerators([volumeScale, hz](const float time) {
+        file->addAudioGenerators([volumeScale, hz, toneSec](const float time) {
+            if (time >= toneSec) return 0.0f;
             float v = sin(TWO_PI * hz * time);
             v *= fmod(time, 1.f);
             v *= volumeScale;
@@ -716,6 +730,14 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
         delete file;
         delete out;
         _setup_codec_speaker(false);
+        return;
+    }
+
+    // === ASYNC MODE ===
+    // The playback task does not watch the keys, so a key press during the tone
+    // stays for the caller instead of being consumed to cut the tone short.
+    if (mode == PLAYBACK_ASYNC) {
+        startAsyncPlayback(wav, file, out, "tone");
         return;
     }
 
@@ -812,23 +834,24 @@ static void cardputerTone(unsigned int frequency, unsigned long duration) {
 }
 #endif
 
-void _tone(unsigned int frequency, unsigned long duration) {
+void _tone(unsigned int frequency, unsigned long duration, PlaybackMode mode) {
     if (!bruceConfig.soundEnabled) return;
 
 #if defined(HAS_SPEAKER)
 #if defined(ARDUINO_M5STACK_CARDPUTER)
+    // No async path here: cardputerTone() writes the samples itself
     cardputerTone(frequency, duration);
 #elif __has_include(<M5Unified.h>)
     if (frequency == 0) {
-        if (duration > 0) delay(duration);
+        if (duration > 0 && mode == PLAYBACK_BLOCKING) delay(duration);
     } else {
         uint8_t m5vol = (bruceConfig.soundVolume * 255) / AUDIO_VOLUME_MAX;
         M5.Speaker.setVolume(m5vol);
         M5.Speaker.tone(frequency, duration);
-        if (duration > 0) delay(duration);
+        if (duration > 0 && mode == PLAYBACK_BLOCKING) delay(duration);
     }
 #else
-    playTone(frequency, duration, 0);
+    playTone(frequency, duration, 0, mode);
 #endif
 #else
     // No I2S speaker: fall back to the buzzer, which stays silent until a pin is configured.

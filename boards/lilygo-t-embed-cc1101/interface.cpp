@@ -188,11 +188,16 @@ void _setup_gpio() {
 #endif
 
     hal_encoder_init(encoderCfg());
-
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
@@ -212,9 +217,17 @@ void powerOff() {
 }
 
 void powerDownNFC() {
+    // The onboard PN532 is wired to sys_i2c (shared with the PMIC/gauge on the CC1101 variant).
+    // Leasing that bus means no second Wire.begin() on it; begin() resets the chip through RST
+    // (45), so an asleep PN532 that NACKs the probe still gets powered down.
+    I2CLease lease = i2cLeaseBus(I2CBusId::Sys);
+    if (!lease) {
+        Serial.println("Can't powerDown PN532: no sys_i2c bus");
+        return;
+    }
     Adafruit_PN532 nfc = Adafruit_PN532(17, 45);
-    bool i2c_check = check_i2c_address(PN532_I2C_ADDRESS);
-    nfc.setInterface(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
+    bool i2c_check = i2cProbe(lease, PN532_I2C_ADDRESS);
+    nfc.setInterface(lease.wire());
     nfc.begin();
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (i2c_check || versiondata) {
@@ -381,6 +394,4 @@ void checkReboot() {
 bool isCharging() {
     return hal_gauge_is_charging(); // Return the charging status from BQ27220
 }
-#else
-bool isCharging() { return false; }
 #endif

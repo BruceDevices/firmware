@@ -1,11 +1,16 @@
 #pragma once
 
-#include "../structs.h" // HighLow, RfCodes
+#include "rf_codes.h"
 #include <stdint.h>
 #include <vector>
 
+// Saved captures include idle gaps and may span several transmissions.
+// Encoding and radio transmission retain their separate duration limits.
+constexpr uint64_t RF_MAX_CAPTURE_DURATION_US = 60000000ULL;
+
 // Forward declarations for callback signatures.
 struct RfCodes;
+struct RfStreamCodec;
 
 // ---------------------------------------------------------------------------
 // Callback signatures for protocol-specific decode / encode.
@@ -63,6 +68,9 @@ struct RfProtocolDef {
     // Optional callback for protocol-specific encode. When non-NULL the
     // generic factor-based encoder is replaced by this callback.
     RfEncodeCallback encode;
+
+    // Optional stateful lifecycle used for wide decoded records.
+    const RfStreamCodec *stream = nullptr;
 };
 
 // Protocol flags bitmask.

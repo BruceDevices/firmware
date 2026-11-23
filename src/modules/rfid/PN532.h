@@ -7,6 +7,7 @@
  */
 
 #include "RFIDInterface.h"
+#include "core/bus_HAL.h"
 #define private public
 #include <Adafruit_PN532.h>
 #undef private
@@ -53,9 +54,13 @@ public:
     int save(const String &filename);
     String emulationCaveat() const override;
 
+    // Bus the PN532 talks through in I2C modes (nullptr in SPI mode or before begin()).
+    TwoWire *i2cWire() const { return _i2cLease.wire(); }
+
 private:
     bool _use_i2c;
     CONNECTION_TYPE _connection_type;
+    I2CLease _i2cLease; // sys_i2c or i2c_bus, whichever the PN532 answered on
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Converters

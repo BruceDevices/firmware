@@ -76,6 +76,7 @@ on:
           - "lilygo-t-hmi"
           - "lilygo-t-lora-pager"
           - "lilygo-t-watch-s3"
+          - "lilygo-t-watch-ultra"
           - "m5stack-atoms3"
           - "m5stack-cardputer"
           - "m5stack-core16mb"
@@ -85,6 +86,7 @@ on:
           - "m5stack-cplus1_1"
           - "m5stack-cplus2"
           - "m5stack-dinmeter"
+          - "m5stack-stackchan"
           - "m5stack-sticks3"
           - "m5stack-tab5"
           - "Mako"
@@ -98,9 +100,11 @@ on:
           - "Phantom_S024R"
           - "reaper"
           - "S3_supermini_madara"
+          - "seeedstudio-xiao-esp32s3"
           - "smoochiee-board"
           - "WaveSentry-R1"
           - "waveshare-c5-tft"
+          - "waveshare-c5-35"
           - "xk404"
 
 jobs:

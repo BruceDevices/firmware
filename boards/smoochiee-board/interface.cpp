@@ -72,9 +72,15 @@ void _setup_gpio() {
     pmicCfg.pin_scl = bruceConfigPins.sys_i2c.scl;
     pmicCfg.address = 0x6B; // BQ25896
     hal_pmic_init(pmicCfg);
-
+}
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
     hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
 }
 bool isCharging() {
     // PPM.disableBatterPowerPath();

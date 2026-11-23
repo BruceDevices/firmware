@@ -56,8 +56,7 @@ TagOMatic::~TagOMatic() {
         _scanned_set.clear();
         _scanned_tags.clear();
     }
-    delete _rfid; // Deallocate memory for _rfid object
-    releaseI2CBus();
+    delete _rfid; // Deallocate memory for _rfid object (its I2C lease, if any, goes with it)
 }
 
 void TagOMatic::set_rfid_module() {

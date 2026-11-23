@@ -115,9 +115,7 @@ void _setup_gpio() {
 #endif
 
     // ---- Touch Screen Init (FT6336G) ----
-    if (!hal_touch_init(touchCfg(), FNK0104AB_TOUCH_ADDR)) {
-        Serial.println("Touch IC not Started");
-    }
+    if (!hal_touch_init(touchCfg(), FNK0104AB_TOUCH_ADDR)) { Serial.println("Touch IC not Started"); }
 
     // ---- Amplifier: disable by default (active LOW, so HIGH = disabled) ----
     pinMode(FNK0104AB_AMP_EN, OUTPUT);
@@ -211,12 +209,6 @@ void checkReboot() {
         }
     }
 }
-
-/***************************************************************************************
-** Function name: isCharging()
-** Description:   Determines if the device is charging (not available on ES3C28P)
-***************************************************************************************/
-bool isCharging() { return false; }
 
 // =============================================
 // ES8311 Audio Codec Setup (via I2C register writes)

@@ -1,10 +1,11 @@
+#include "core/bus_HAL.h"
 #include "core/i2c_finder.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include "hal/bright/bright.h"
+#include <Wire.h>
 #include <globals.h>
 #include <interface.h>
-#include <Wire.h>
 
 #define EXPANDER_INT_PIN 28
 
@@ -20,13 +21,17 @@ void IRAM_ATTR expanderISR() { expanderInterrupt = true; }
 ***************************************************************************************/
 void _setup_gpio() {
     bruceConfigPins.i2c_bus = {(gpio_num_t)4, (gpio_num_t)5}; // sda, scl (Grove)
-    bruceConfigPins.rfTx = 4;
-    bruceConfigPins.rfRx = 5;
+    // The IO expander (buttons, NRF/UART/NFC power) sits on these same Grove pins: declaring them
+    // as sys_i2c makes the I2C tools/modules share this Wire (the C5's only controller) instead of
+    // re-pinning it and ending it on release, which took the expander down until reboot.
+    bruceConfigPins.sys_i2c = {(gpio_num_t)4, (gpio_num_t)5}; // sda, scl
+    bruceConfigPins.rfTx = -1;
+    bruceConfigPins.rfRx = -1;
     bruceConfigPins.irTx = 26;
     bruceConfigPins.irRx = 25;
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)12, (gpio_num_t)11};  // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)11, (gpio_num_t)12};   // rx, tx
+    bruceConfigPins.uart_bus = {(gpio_num_t)12, (gpio_num_t)11};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)11, (gpio_num_t)12};    // rx, tx
     bruceConfigPins.badusb_bus = {(gpio_num_t)12, (gpio_num_t)11}; // rx, tx (CH9329)
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8};
@@ -37,7 +42,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)1, (gpio_num_t)0
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)10
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)10
     }; // sck,miso,mosi,cs
     bruceConfigPins.ST25R_bus = {
         (gpio_num_t)6, (gpio_num_t)2, (gpio_num_t)7, (gpio_num_t)8, (gpio_num_t)9, GPIO_NUM_NC
@@ -48,14 +54,12 @@ void _setup_gpio() {
     pinMode(TFT_MOSI, OUTPUT);
     digitalWrite(TFT_MOSI, HIGH);
     pinMode(TFT_SCLK, OUTPUT);
-
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
     pinMode(TFT_RST, OUTPUT);
     pinMode(TFT_DC, OUTPUT);
     digitalWrite(TFT_DC, HIGH);
 
-    Wire.begin(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
+    setSysI2CBus(&Wire); // IO expander lives on the default Wire object (GROVE == sys_i2c)
+    Wire.begin(bruceConfigPins.sys_i2c.sda, bruceConfigPins.sys_i2c.scl);
 
     // Configure buttons on expander as inputs
     ioExpander.button(IO_EXP_UP);
@@ -90,9 +94,12 @@ void _setup_gpio() {
 
 /***************************************************************************************
 ** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
 void _post_setup_gpio() {
-    // Can be used for second-stage init if needed
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
 }
 
 /***************************************************************************************

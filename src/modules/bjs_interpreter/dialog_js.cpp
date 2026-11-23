@@ -107,7 +107,7 @@ JSValue native_dialogPickFile(JSContext *ctx, JSValue *this_val, int argc, JSVal
     FS *fs = NULL;
     if (SD.exists(filepath)) fs = &SD;
     else if (LittleFS.exists(filepath)) fs = &LittleFS; // ← added 'else'
-    if (fs) { r = loopSD(*fs, true, extension, filepath); }
+    if (fs) { r = loopSD(*fs, true, extension, filepath, true); }
     return JS_NewString(ctx, r.c_str());
 }
 

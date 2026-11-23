@@ -26,6 +26,7 @@
 #define SRIX_PRINT(...)
 #endif
 
+#include "core/bus_HAL.h"
 #include "pn532_srix.h"
 #include <Arduino.h>
 #include <FS.h>
@@ -65,16 +66,17 @@ public:
     bool isDumpValid() { return _dump_valid_from_read || _dump_valid_from_load; }
 
 private:
-// PN532 for SRIX - uses IRQ/RST if board has them defined
-// Devices such as T-Embed CC1101 have embedded PN532 that needs IRQ and RST pins
-// If using other device, set -DPN532_IRQ=pin_num and -DPN532_RF_REST=pin_num in platformio.ini
+    // PN532 for SRIX - uses IRQ/RST if board has them defined
+    // Devices such as T-Embed CC1101 have embedded PN532 that needs IRQ and RST pins
+    // If using other device, set -DPN532_IRQ=pin_num and -DPN532_RF_REST=pin_num in platformio.ini
+    Arduino_PN532_SRIX *nfc = nullptr;
 #if defined(PN532_IRQ) && defined(PN532_RF_REST)
-    Arduino_PN532_SRIX *nfc;
     bool _has_hardware_pins = true;
 #else
-    Arduino_PN532_SRIX *nfc;
     bool _has_hardware_pins = false;
 #endif
+    I2CLease _i2cLease; // sys_i2c or i2c_bus, whichever the PN532 answered on
+    bool openBus();
 
     SRIX_State current_state;
     bool _tag_read = false;

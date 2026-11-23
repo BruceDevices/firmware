@@ -6,7 +6,8 @@ uint16_t hal_bright_curve(uint8_t percent, const HalBrightCurve &curve) {
     if (percent > 100) percent = 100;
     float linear = percent / 100.0f;
     float scaled = curve.gamma == 1.0f ? linear : powf(linear, curve.gamma);
-    return curve.pwm_min + (uint16_t)roundf(scaled * (curve.pwm_max - curve.pwm_min));
+    uint16_t duty = curve.pwm_min + (uint16_t)roundf(scaled * (curve.pwm_max - curve.pwm_min));
+    return curve.invert ? (uint16_t)(curve.pwm_min + curve.pwm_max - duty) : duty;
 }
 
 void hal_bright_attach(const uint8_t *pins, uint8_t pin_count) {
@@ -22,4 +23,5 @@ void hal_bright_set(const uint8_t *pins, uint8_t pin_count, uint8_t percent, con
             ledcWrite(pins[i], duty);
         }
     }
+    vTaskDelay(pdMS_TO_TICKS(10));
 }

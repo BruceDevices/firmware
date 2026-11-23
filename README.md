@@ -209,7 +209,11 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
   - [x] CS-framed HEX console (arbitrary transfers)
 - [x] JTAG Scanner
   - [x] IDCODE read (TAP reset + DR shift, bit-banged TCK/TMS/TDI/TDO)
-- [x] Serial control: `wire uart|i2c|spi|jtag ...` commands over the serial CLI
+- [x] Multimeter
+  - [x] Continuity: pin <-> pin (A driven LOW, B pulled up) with beeper
+  - [x] Continuity: pin -> GND (internal pull-up) with beeper
+  - [x] Held-pin detection (probe driven by another device, e.g. ADV Grove on CH9329)
+- [x] Serial control: `wire uart|i2c|spi|jtag|cont ...` commands over the serial CLI
 </details>
 
 <details>
@@ -252,6 +256,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 | [M5Stack M5Core BASIC](https://shop.m5stack.com/products/basic-core-iot-development-kit)                                                                                                    |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |  Tone   |    :x:     |     :x:      |
 | [M5Stack M5Core2](https://shop.m5stack.com/products/m5stack-core2-esp32-iot-development-kit-v1-1)                                                                                           |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:      |
 | [M5Stack M5CoreS3](https://shop.m5stack.com/products/m5stack-cores3-esp32s3-lotdevelopment-kit)/[SE](https://shop.m5stack.com/products/m5stack-cores3-se-iot-controller-w-o-battery-bottom) |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
+| [M5Stack StackChan](https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot) (CoreS3 on the robot body)                                                  |  :ok:  | :ok:  |   :ok:   |    ST25R3916 (I2C)   | :x:  |  :ok:  |   :x:   | AW88298 |    :x:     |     :x:      |
 | [JCZN CYD&#x2011;2432S028](https://www.aliexpress.us/item/3256804774970998.html)                                                                                                            |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
 | [Lilygo T&#x2011;Embed CC1101](https://lilygo.cc/products/t-embed-cc1101)                                                                                                                   |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: |  :ok:  |  :ok:   |  :ok:   |    :ok:    |     :x:      |
 | [Lilygo T&#x2011;Embed](https://lilygo.cc/products/t-embed)                                                                                                                                 |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: |  :ok:  |  :ok:   |  :ok:   |    :x:     |     :x:      |
@@ -265,6 +270,7 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
 | [Elecrow 24B](https://www.elecrow.com/2-4inch-esp32-miner-lcd-display-2pcs-cryptocurrency-solo-miner-with-1000kh-s-hashrate.html)                                                            |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
 | [Elecrow 3.5"](https://www.elecrow.com/esp-terminal-with-esp32-3-5-inch-parallel-480x320-tft-capacitive-touch-display-rgb-by-chip-ili9488.html)                                                                                                                                                        |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
 | [NM-CYD-C5 + RF HAT](https://rockbase.shop/products/nm-cyd-c5-colorful)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
+| [Waveshare ESP32-C5-Touch-LCD-3.5](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-3.5) |  :x:  | :x:  |   :x:    | :ok: | :ok: |  :x:   |  :x:   |  :ok:   |    :ok:    |     :x:      |
 ² CYD have a LITE_VERSION version for Launcher Compatibility
 ¹ Core, CYD and StickCs Bad-USB: [here](https://wiki.bruce.computer/features/others/#badusb)
 

@@ -50,7 +50,10 @@ void readFs(FS &fs, const String &folder, const String &allowed_ext = "*");
 
 bool sortList(const FileList &a, const FileList &b);
 
-String loopSD(FS &fs, bool filePicker = false, const String &allowed_ext = "*", String rootPath = "/");
+String loopSD(
+    FS &fs, bool filePicker = false, const String &allowed_ext = "*", String rootPath = "/",
+    bool interpreter = false
+);
 
 void viewFile(FS &fs, const String &filepath);
 

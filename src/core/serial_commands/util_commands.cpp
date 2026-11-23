@@ -1,12 +1,27 @@
 #include "util_commands.h"
+#include "core/bus_HAL.h"
 #include "core/main_menu.h"
 #include "core/sd_functions.h"
 #include "core/utils.h" // to return optionsJSON
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h" //to return MAC addr
-#include "core/bus_HAL.h"
+#include "hal/power/gauge.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include <globals.h>
+
+uint32_t batteryCallback(cmd *c) {
+    int percent = getBattery();
+    String out = "[BAT] " + String(percent) + "% charging=" + String(hal_gauge_is_charging() ? 1 : 0);
+#ifdef ANALOG_BAT_PIN
+#ifndef ANALOG_BAT_MULTIPLIER
+#define ANALOG_BAT_MULTIPLIER 2.0f
+#endif
+    uint32_t adcMv = analogReadMilliVolts(ANALOG_BAT_PIN);
+    out += " adc=" + String(adcMv) + "mV batt~" + String((uint32_t)(adcMv * ANALOG_BAT_MULTIPLIER)) + "mV";
+#endif
+    serialDevice->println(out);
+    return true;
+}
 
 uint32_t uptimeCallback(cmd *c) {
     // https://github.com/espressif/arduino-esp32/blob/66c9c0b1a6a36b85d27cdac0fb52098368de1a09/libraries/WebServer/examples/AdvancedWebServer/AdvancedWebServer.ino#L64
@@ -56,30 +71,22 @@ uint32_t dateCallback(cmd *c) {
 uint32_t i2cCallback(cmd *c) {
     // scan for connected i2c modules
     // derived from https://learn.adafruit.com/scanning-i2c-addresses/arduino
-    TwoWire *Wire = acquireI2CBus();
-    byte error, address;
-    int nDevices;
+    // Scans sys_i2c and i2c_bus (once when they share pins), tagging each hit with its bus.
     serialDevice->println("Scanning...");
-    nDevices = 0;
-    for (address = 1; address < 127; address++) {
-        // The i2c_scanner uses the return value of
-        // the Write.endTransmisstion to see if
-        // a device did acknowledge to the address.
-        Wire->beginTransmission(address);
-        error = Wire->endTransmission();
-        if (error == 0) {
+    int nDevices = i2cScanAll(
+        [](I2CBusId bus, uint8_t address, void *) {
             serialDevice->print("I2C device found at address 0x");
             if (address < 16) serialDevice->print("0");
             serialDevice->print(address, HEX);
-            nDevices++;
-        } else if (error == 4) {
-            serialDevice->print("Unknown error at address 0x");
-            if (address < 16) serialDevice->print("0");
-            serialDevice->println(address, HEX);
-        }
-    }
-    releaseI2CBus();
+            serialDevice->println(" (" + i2cBusLabel(bus) + ")");
+        },
+        nullptr
+    );
 
+    if (nDevices < 0) {
+        serialDevice->println("No I2C bus configured");
+        return false;
+    }
     if (nDevices == 0) {
         serialDevice->println("No I2C devices found");
         return false;
@@ -199,6 +206,7 @@ uint32_t helpCallback(cmd *c) {
 #endif
 
     serialDevice->println("\nPower Management:");
+    serialDevice->println("  battery, bat              - Show battery percentage and charging state.");
     serialDevice->println("  power <off/reboot/sleep>  - General power management.");
 
     serialDevice->println("\nGPIO Commands:");
@@ -427,6 +435,7 @@ uint32_t loaderCallback(cmd *c) {
 }
 
 void createUtilCommands(SimpleCLI *cli) {
+    cli->addCommand("battery,bat", batteryCallback);
     cli->addCommand("uptime", uptimeCallback);
     cli->addCommand("date", dateCallback);
     cli->addCommand("i2c", i2cCallback);

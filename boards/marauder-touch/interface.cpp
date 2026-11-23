@@ -66,7 +66,9 @@ void _setup_gpio() {
     // SDCARD CS differs by hardware revision: Marauder-V4-V6=12, Marauder-v61=14
     // (SDCARD_CS_V61 only defined by the Marauder-v61 env, see marauder-touch.ini)
     bruceConfigPins.SDCARD_bus = {
-        (gpio_num_t)18, (gpio_num_t)19, (gpio_num_t)23,
+        (gpio_num_t)18,
+        (gpio_num_t)19,
+        (gpio_num_t)23,
 #ifdef SDCARD_CS_V61
         (gpio_num_t)SDCARD_CS_V61
 #else
@@ -93,13 +95,6 @@ void _post_setup_gpio() {
         log_i("Touch IC not Started");
     } else Serial.println("Touch IC Started");
 }
-
-/***************************************************************************************
-** Function name: getBattery()
-** location: display.cpp
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
 
 /*********************************************************************
 ** Function: setBrightness

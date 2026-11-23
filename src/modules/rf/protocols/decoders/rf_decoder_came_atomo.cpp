@@ -1,3 +1,4 @@
+#include "manchester_helpers.h"
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #include "rf_decoder_came_atomo.h"
 #include "../rf_config.h"
@@ -11,26 +12,7 @@ static inline unsigned int ca_diff(unsigned int a, unsigned int b) {
     return (a > b) ? (a - b) : (b - a);
 }
 
-typedef enum { ME_RESET, ME_LOW, ME_HIGH } manchester_state;
 
-static bool manchester_advance(manchester_state& state, bool high_pulse, bool& bit) {
-    switch (state) {
-    case ME_RESET:
-        state = high_pulse ? ME_HIGH : ME_LOW;
-        return false;
-    case ME_LOW:
-        if (high_pulse) { state = ME_HIGH; return false; }
-        bit = 1; state = ME_LOW; return true;
-    case ME_HIGH:
-        if (!high_pulse) { state = ME_LOW; return false; }
-        bit = 0; state = ME_HIGH; return true;
-    }
-    return false;
-}
-
-static void manchester_reset(manchester_state& state) {
-    state = ME_RESET;
-}
 
 static const uint64_t ca_default_xor[32] = {
     0x1fafef3ed0f7d9efULL, 0x185fcc1531ee86e7ULL, 0x184fa96912c567ffULL, 0x187f8a42f3dc38f7ULL,
@@ -49,7 +31,7 @@ bool rf_decode_came_atomo(const std::vector<int>& durations, RfCodes& out) {
     enum { ST_RESET, ST_DATA } step = ST_RESET;
     uint64_t data = 0;
     int bits = 0;
-    manchester_state man_state;
+    ManchesterHalfState man_state;
 
     for (int raw : durations) {
         bool level = raw > 0;
@@ -59,9 +41,9 @@ bool rf_decode_came_atomo(const std::vector<int>& durations, RfCodes& out) {
     case ST_RESET:
         if (!level && ca_diff(dur, CA_TE_LONG * 60) < CA_TE_DELTA * 40) {
             data = 0; bits = 1;
-            manchester_reset(man_state);
+            manchester_half_reset(man_state);
             bool dummy = false;
-            manchester_advance(man_state, false, dummy);
+            manchester_half_advance(man_state, false, dummy);
             step = ST_DATA;
         }
         break;
@@ -70,13 +52,13 @@ bool rf_decode_came_atomo(const std::vector<int>& durations, RfCodes& out) {
         if (!level) {
             if (ca_diff(dur, CA_TE_SHORT) < CA_TE_DELTA) {
                 bool bit_out = false;
-                if (manchester_advance(man_state, false, bit_out)) {
+                if (manchester_half_advance(man_state, false, bit_out)) {
                     data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                     bits++;
                 }
             } else if (ca_diff(dur, CA_TE_LONG) < CA_TE_DELTA) {
                 bool bit_out = false;
-                if (manchester_advance(man_state, false, bit_out)) {
+                if (manchester_half_advance(man_state, false, bit_out)) {
                     data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                     bits++;
                 }
@@ -105,22 +87,22 @@ bool rf_decode_came_atomo(const std::vector<int>& durations, RfCodes& out) {
                         return true;
                     }
                     data = 0; bits = 1;
-                    manchester_reset(man_state);
+                    manchester_half_reset(man_state);
                     bool dummy = false;
-                    manchester_advance(man_state, false, dummy);
+                    manchester_half_advance(man_state, false, dummy);
                 } else {
                     step = ST_RESET;
                 }
             } else {
                 if (ca_diff(dur, CA_TE_SHORT) < CA_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }
                 } else if (ca_diff(dur, CA_TE_LONG) < CA_TE_DELTA) {
                     bool bit_out = false;
-                    if (manchester_advance(man_state, true, bit_out)) {
+                    if (manchester_half_advance(man_state, true, bit_out)) {
                         data = (data << 1) | (bit_out ? 0ULL : 1ULL);
                         bits++;
                     }

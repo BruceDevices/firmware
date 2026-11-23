@@ -75,11 +75,11 @@ void ScrollableTextArea::show(bool force) {
     draw(force);
 
     while (check(SelPress)) {
-        update(force);
+        update();
         yield();
     }
     while (!check(SelPress)) {
-        update(force);
+        update();
         yield();
     }
 }
@@ -182,17 +182,25 @@ void ScrollableTextArea::addLine(const String &text) {
 void ScrollableTextArea::draw(bool force) {
     if (!_redraw && !force) return;
 
-    _scrollBuffer.fillRect(_startX, _startY, _width, _height, bruceConfig.bgColor);
-    _scrollBuffer.setTextColor(bruceConfig.priColor);
+    // Paint opaque rows instead of blanking the whole view before
+    // every scroll. Idle views are drawn once, including show(true) callers.
+    _scrollBuffer.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     uint8_t _fSize = tft.getTextSize();
-    tft.setTextSize(FP);
+    uint8_t oldDatum = tft.getTextDatum();
+    tft.setTextSize(_fontSize);
+    tft.setTextDatum(TL_DATUM);
+    auto drawRow = [&](const String &text, int32_t y) {
+        int32_t width = _scrollBuffer.drawString(text, _startX, y);
+        if (width < _width)
+            _scrollBuffer.fillRect(_startX + width, y, _width - width, _pixelsPerLine, bruceConfig.bgColor);
+    };
 
     uint16_t yOffset = 0;
     size_t lines = 0;
 
     // if there is text above
     if (firstVisibleLine) {
-        _scrollBuffer.drawString("...", 0 + _startX, _startY + yOffset);
+        drawRow("...", _startY + yOffset);
         yOffset += _pixelsPerLine;
         lines++;
     }
@@ -200,21 +208,24 @@ void ScrollableTextArea::draw(bool force) {
     int32_t tmpHeight = _height;
     // if there is text below
     if (linesBuffer.size() - firstVisibleLine >= _maxVisibleLines) {
-        _scrollBuffer.drawString("...", 0 + _startX, _startY + _height - _pixelsPerLine);
+        drawRow("...", _startY + _height - _pixelsPerLine);
         tmpHeight -= _pixelsPerLine;
         lines++;
     }
 
     size_t idx{firstVisibleLine};
     while (yOffset < tmpHeight && lines < _maxVisibleLines && idx < linesBuffer.size()) {
-        _scrollBuffer.drawString(linesBuffer[idx], 0 + _startX, _startY + yOffset);
+        drawRow(linesBuffer[idx], _startY + yOffset);
         yOffset += _pixelsPerLine;
         lines++;
         idx++;
     }
 
+    if (yOffset < tmpHeight)
+        _scrollBuffer.fillRect(_startX, _startY + yOffset, _width, tmpHeight - yOffset, bruceConfig.bgColor);
     lastVisibleLine = firstVisibleLine + lines;
-    tft.setTextFont(_fSize);
+    tft.setTextSize(_fSize);
+    tft.setTextDatum(oldDatum);
 
     _redraw = false;
 }

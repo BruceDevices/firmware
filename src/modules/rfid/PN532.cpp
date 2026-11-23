@@ -319,12 +319,8 @@ bool buildNdefMessageFromStruct(const RFIDInterface::NdefMessage &src, std::vect
 PN532::PN532(CONNECTION_TYPE connection_type) {
     _connection_type = connection_type;
     _use_i2c = (connection_type == I2C || connection_type == I2C_SPI);
-    if (connection_type == CONNECTION_TYPE::I2C)
-        nfc.setInterface(bruceConfigPins.i2c_bus.sda, bruceConfigPins.i2c_bus.scl);
-#ifdef M5STICK
-    else if (connection_type == CONNECTION_TYPE::I2C_SPI) nfc.setInterface(GPIO_NUM_26, GPIO_NUM_25);
-#endif
-    else
+    // I2C modes get their bus in begin(): it depends on where the PN532 answers.
+    if (!_use_i2c)
         nfc.setInterface(
             bruceConfigPins.PN532_bus.sck,
             bruceConfigPins.PN532_bus.miso,
@@ -334,44 +330,40 @@ PN532::PN532(CONNECTION_TYPE connection_type) {
 }
 
 bool PN532::begin() {
-    TwoWire *Wire = nullptr;
+    // SPI mode never touches I2C (previously it still started i2c_bus, grabbing its pins).
+    // The lease survives repeated begin() calls (e.g. Tag-O-Matic re-inits after an operation).
+    if (_use_i2c && !_i2cLease) {
 #ifdef M5STICK
-    if (_connection_type == CONNECTION_TYPE::I2C_SPI) {
-        Wire = acquireI2CBus(GPIO_NUM_26, GPIO_NUM_25);
-    } else if (_connection_type == CONNECTION_TYPE::I2C) {
-        Wire = acquireI2CBus();
-    }
-#else
-    Wire = acquireI2CBus();
+        if (_connection_type == CONNECTION_TYPE::I2C_SPI) {
+            _i2cLease = i2cLeasePins(GPIO_NUM_26, GPIO_NUM_25); // PN532 hat
+        } else
 #endif
+        {
+            I2CDeviceQuery query{PN532_I2C_ADDRESS};
+            // An asleep PN532 may NACK the first probe: retry, and if it never ACKs, still hand
+            // the driver the user bus so nfc.begin() (reset + wakeup) can try.
+            query.retries = 3;
+            query.fallbackToUser = true;
+            _i2cLease = i2cLeaseDevice(query);
+        }
+        if (!_i2cLease) {
+            PN532_DBG("[PN532] begin: FAILED - no I2C bus available\n");
+            displayError("PN532: I2C bus unavailable", true);
+            return false;
+        }
+        nfc.setInterface(_i2cLease.wire()); // any bus: Wire, Wire1, M5 adapter...
+    }
 
     PN532_DBG(
-        "[PN532] begin: connection_type=%d use_i2c=%d i2c_bus=%d/%d sys_i2c=%d/%d Wire=%p "
-        "&Wire=%p\n",
+        "[PN532] begin: connection_type=%d use_i2c=%d bus=%s found=%d\n",
         (int)_connection_type,
         (int)_use_i2c,
-        (int)bruceConfigPins.i2c_bus.sda,
-        (int)bruceConfigPins.i2c_bus.scl,
-        (int)bruceConfigPins.sys_i2c.sda,
-        (int)bruceConfigPins.sys_i2c.scl,
-        (void *)Wire,
-        (void *)&::Wire
+        _use_i2c ? i2cBusLabel(_i2cLease.bus()).c_str() : "SPI",
+        (int)_i2cLease.found()
     );
 
-    if (_use_i2c && Wire != &::Wire) {
-        // Adafruit_PN532 always talks to the global `Wire` - can't work if
-        // bus_HAL remapped i2c_bus to Wire1 to avoid colliding with sys_i2c.
-        PN532_DBG("[PN532] begin: FAILED - I2C bus conflicts with system I2C bus\n");
-        displayError("I2C bus conflicts with system I2C bus", true);
-        return false;
-    }
-
     bool i2c_check = true;
-    if (_use_i2c && Wire != nullptr) {
-        Wire->beginTransmission(PN532_I2C_ADDRESS);
-        int error = Wire->endTransmission();
-        i2c_check = (error == 0);
-    }
+    if (_use_i2c) i2c_check = i2cProbe(_i2cLease, PN532_I2C_ADDRESS);
     PN532_DBG("[PN532] begin: i2c_check=%d (addr 0x%02X)\n", (int)i2c_check, PN532_I2C_ADDRESS);
 
     nfc.begin();
@@ -547,11 +539,11 @@ int PN532::emulate() {
     uint32_t nextArmTry = 0;
     bool targetReady = false;
 
-    if (_use_i2c) {
-        // PN532 target mode is sensitive to ESP32 I2C timing/clock stretching.
-        TwoWire *Wire = acquireI2CBus();
-        Wire->setClock(100000);
-        Wire->setTimeOut(50);
+    if (_use_i2c && _i2cLease) {
+        // PN532 target mode is sensitive to ESP32 I2C timing/clock stretching. Through the lease
+        // so sys_i2c gets its own clock/timeout back when this PN532 is destroyed.
+        _i2cLease.setClock(100000);
+        _i2cLease.setTimeOut(50);
     }
     // Adafruit's SAMConfig() has a 1s "stay in Normal Mode" window that can
     // expire before arming (e.g. UI navigation delay) - reset()+wakeup()

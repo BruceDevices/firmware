@@ -81,7 +81,7 @@ private:
     uint8_t _addr = 0;
     bool _open = false;
     uint8_t _error = 0;
-    uint8_t _rxBuf[64];
+    uint8_t _rxBuf[288]; // whole read in one transaction (BusIO chunks up to 250, EMV needs 281)
     size_t _rxLen = 0;
     size_t _rxPos = 0;
 };

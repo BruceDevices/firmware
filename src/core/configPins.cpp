@@ -22,6 +22,8 @@ String getMacAddress() {
     return String(macStr);
 }
 
+BruceConfigPins brucePinsSetupDefaults;
+
 void BruceConfigPins::fromJson(JsonObject obj) {
     int count = 0;
     String mac = getMacAddress();
@@ -347,8 +349,6 @@ void BruceConfigPins::loadFile(JsonDocument &jsonDoc, bool checkFS) {
         return;
     }
     file.close();
-
-    serializeJsonPretty(jsonDoc, Serial);
 }
 
 void BruceConfigPins::fromFile(bool checkFS) {
@@ -362,7 +362,6 @@ void BruceConfigPins::fromFile(bool checkFS) {
 void BruceConfigPins::createFile() {
     JsonDocument jsonDoc;
     toJson(jsonDoc.to<JsonObject>());
-    serializeJsonPretty(jsonDoc, Serial);
 
     // Open file for writing
     FS *fs = &LittleFS;

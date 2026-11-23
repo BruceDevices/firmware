@@ -590,14 +590,17 @@ void readFs(FS &fs, const String &folder, const String &allowed_ext) {
 **  Function: loopSD
 **  Where you choose what to do with your SD Files
 **********************************************************************/
-String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPath) {
+String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPath, bool interpreter) {
     delay(10);
     if (!fs.exists(rootPath)) {
         Serial.println("loopSD-> 1st exist test failed");
         rootPath = "/";
         if (!fs.exists(rootPath)) {
             Serial.println("loopSD-> 2nd exist test failed");
-            if (&fs == &SD) sdcardMounted = false;
+            if (&fs == &SD) {
+                closeSdCard();
+                displayError("SD Read/Mount Error", true);
+            }
             return "";
         }
     }
@@ -656,7 +659,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             readFs(fs, Folder, allowed_ext);
             rebuildSdOptions();
         }
-        index = loopOptions(sdOptions, MENU_TYPE_REGULAR, "", index, false, true, PAGE_JUMP_SIZE, false);
+        index = loopOptions(sdOptions, MENU_TYPE_REGULAR, "", index, interpreter, true, PAGE_JUMP_SIZE, false);
 
         if (index < 0) { // ESC
         BACK_FOLDER:

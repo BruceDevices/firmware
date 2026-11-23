@@ -1,13 +1,17 @@
 #pragma once
 
 /*
- * HAL for the user-facing I2C bus (bruceConfigPins.i2c_bus).
+ * HAL for the I2C buses external modules can be wired to, plus SPI bus arbitration (below).
  *
  * bruceConfigPins.sys_i2c is the bus used by system peripherals (touchscreen, PMIC, RTC, IMU,
- * ...) set up once in boards/*\/interface.cpp and must never be stopped.
- * bruceConfigPins.i2c_bus is user-configurable at runtime and may end up sharing the same
- * physical pins as sys_i2c. This HAL picks the right TwoWire instance for i2c_bus and keeps it
- * from ever colliding with, or shutting down, the sys_i2c bus.
+ * ...) set up once in boards/*\/interface.cpp and must never be stopped; some boards expose it.
+ * bruceConfigPins.i2c_bus is user-configurable at runtime, its pins may double as UART/GPIO/SPI,
+ * and it may share the same physical pins as sys_i2c.
+ *
+ * Every I2C user goes through an I2CLease (i2cLeaseDevice/i2cLeaseBus/i2cLeasePins): it finds the
+ * bus a module is on, picks the right TwoWire instance, opens i2c_bus only while leased, and keeps
+ * it from ever colliding with, or shutting down, the sys_i2c bus. Fixed system drivers (touch,
+ * PMIC, gauge, IO expander) keep using the board's own TwoWire directly.
  */
 
 #include <SPI.h>
@@ -21,22 +25,99 @@ void setSysI2CBus(TwoWire *wire);
 // Returns the TwoWire instance currently wired to sys_i2c.
 TwoWire *getSysI2CBus();
 
-// Acquires the TwoWire instance for bruceConfigPins.i2c_bus, starting it on the requested pins
-// (defaults to bruceConfigPins.i2c_bus.sda/scl). If those pins match sys_i2c, the shared sys bus
-// is returned instead of starting a second, colliding bus. Must be paired with releaseI2CBus()
-// once the caller is done using the bus.
-TwoWire *acquireI2CBus(int8_t sda, int8_t scl);
-TwoWire *acquireI2CBus();
+/*
+ * I2C leases - the single entry point every I2C user (modules, tools, scripts) should go through.
+ *
+ * Many boards expose both sys_i2c and i2c_bus, and an external module may be plugged into
+ * either. i2cLeaseDevice() looks for the module on every candidate bus (sys_i2c first by default,
+ * because probing it never touches the shared i2c_bus pins) and hands back whichever bus answered.
+ *
+ * A lease keeps its bus usable until it is released (explicitly or by its destructor), so a driver
+ * object that keeps a TwoWire* should own the lease as a member. Leases on the user bus are
+ * reference counted: the last one released shuts the bus down, freeing the pins for other uses
+ * (UART, GPIO, RF...). Leases on sys_i2c never shut it down, but restore any clock/timeout the
+ * holder changed through the lease.
+ */
+enum class I2CBusId : uint8_t { None, Sys, User };
+enum class I2CPrefer : uint8_t { SysFirst, UserFirst };
 
-// Board-specific escape hatch for devices that need a non-hardware I2C transport (for example,
-// a software bus when the only hardware controller is reserved for sys_i2c). Most boards use the
-// weak defaults in bus_HAL.cpp.
+struct I2CDeviceQuery {
+    uint8_t addr;
+    I2CPrefer prefer = I2CPrefer::SysFirst;
+    // Optional identity check run after the address ACKs (e.g. read a chip-ID register), so a
+    // different chip answering at the same address on the other bus isn't mistaken for the module.
+    bool (*verify)(TwoWire &wire, uint8_t addr) = nullptr;
+    uint8_t retries = 1;         // probe attempts per bus
+    bool fallbackToUser = false; // nothing answered: still return the user bus (found() == false)
+                                 // so drivers that must wake the chip first (PN532) can try.
+};
+
+class I2CLease {
+public:
+    I2CLease() = default;
+    ~I2CLease() { release(); }
+    I2CLease(const I2CLease &) = delete;
+    I2CLease &operator=(const I2CLease &) = delete;
+    I2CLease(I2CLease &&other) noexcept;
+    I2CLease &operator=(I2CLease &&other) noexcept;
+
+    TwoWire *wire() const { return _wire; }
+    I2CBusId bus() const { return _bus; }
+    bool found() const { return _found; }
+    int8_t sda() const { return _sda; }
+    int8_t scl() const { return _scl; }
+    explicit operator bool() const { return _wire != nullptr; }
+
+    // Change the bus clock/timeout for this holder; the original values are restored on release
+    // when the lease is on sys_i2c (the user bus is shut down anyway once its last lease goes).
+    void setClock(uint32_t hz);
+    void setTimeOut(uint16_t ms);
+    void release();
+
+private:
+    friend struct I2CLeaseAccess; // bus_HAL.cpp internals
+    TwoWire *_wire = nullptr;
+    I2CBusId _bus = I2CBusId::None;
+    bool _found = false;
+    int8_t _sda = -1;
+    int8_t _scl = -1;
+    bool _clockSaved = false;
+    uint32_t _savedClock = 0;
+    bool _timeoutSaved = false;
+    uint16_t _savedTimeout = 0;
+};
+
+// Looks for a device on sys_i2c and i2c_bus (order per q.prefer) and leases the bus it answered on.
+// An invalid lease (operator bool false) means it wasn't found and q.fallbackToUser was not set
+// (or the user bus couldn't be opened).
+I2CLease i2cLeaseDevice(const I2CDeviceQuery &q);
+
+// Leases one bus as configured (sys_i2c or i2c_bus). Leasing User when i2c_bus has the same pins
+// as sys_i2c returns the sys bus (bus() == Sys).
+I2CLease i2cLeaseBus(I2CBusId id);
+
+// Leases a bus on explicit pins (scripts, serial tools, board-specific hats). Pins equal to
+// sys_i2c return the sys bus. Fails (invalid lease) when the pins only partially overlap sys_i2c,
+// when the user bus is already leased on other pins, when the SoC's only I2C controller belongs to
+// sys_i2c, or when a line is held low before the bus is started.
+I2CLease i2cLeasePins(int8_t sda, int8_t scl);
+
+// Scans 0x08..0x77 on every configured bus (sys_i2c, then i2c_bus when distinct), calling cb for
+// each ACK. Returns the number of devices found, or -1 if no bus could be opened.
+int i2cScanAll(void (*cb)(I2CBusId bus, uint8_t addr, void *ctx), void *ctx);
+
+// Single ACK check on a leased bus (takes the sys_i2c lock where needed).
+bool i2cProbe(const I2CLease &lease, uint8_t addr);
+
+// Short label for messages, e.g. "SYS 12/11" or "EXT 2/1".
+String i2cBusLabel(I2CBusId id);
+
+// Board-specific escape hatch for the user bus, used by the leases above when they open i2c_bus
+// (for example, a board whose only hardware controller is reserved for sys_i2c can time-share it,
+// as the Nesso N1 does). Most boards use the weak defaults in bus_HAL.cpp. releaseBoardI2CBus()
+// returns true if it handled (shut down) that wire.
 TwoWire *acquireBoardI2CBus(int8_t sda, int8_t scl);
 bool releaseBoardI2CBus(TwoWire *wire);
-
-// Ends the i2c_bus TwoWire instance started by acquireI2CBus(), unless it turned out to be the
-// same physical bus as sys_i2c (which must stay on).
-void releaseI2CBus();
 
 // Watchdog for a wedged sys_i2c bus (a peripheral holding SDA/SCL low indefinitely - e.g. a
 // target-mode PN532 session torn down mid-transaction - can leave the ESP32's I2C driver

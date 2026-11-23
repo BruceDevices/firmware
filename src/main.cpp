@@ -14,6 +14,13 @@
 #include <functional>
 #include <string>
 #include <vector>
+// Native RF decoding runs beneath the menu callbacks on loopTask. The default
+// 8 KiB stack overflows on the full protocol path (including RAW fallback).
+// Keep the smaller framework default on Lite builds without stream codecs.
+#if !defined(LITE_VERSION)
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+#endif
+
 io_expander ioExpander;
 BruceConfig bruceConfig;
 BruceConfigPins bruceConfigPins;
@@ -222,8 +229,16 @@ void setup_gpio() {
     // init setup from /ports/*/interface.h
     _setup_gpio();
 
-    // Smoochiee v2 uses a AW9325 tro control GPS, MIC, Vibro and CC1101 RX/TX powerlines
-    ioExpander.init(IO_EXPANDER_ADDRESS, &Wire);
+    // Freeze the board's generic wiring so post-storage hooks can tell their own defaults
+    // apart from values loaded from /brucePins.conf (see applyBoardDefault() in configPins.h).
+    brucePinsSetupDefaults = bruceConfigPins;
+
+    // IO expander (AW9523/PCA9555: Smoochiee, Reaper, T-Lora Pager, Mako, Pebble) switching GPS,
+    // MIC, Vibro, CC1101 RX/TX, NFC... powerlines. It is an onboard peripheral, so it lives on the
+    // sys_i2c bus each board registers in _setup_gpio() via setSysI2CBus(); &Wire only for a board
+    // that never declared sys_i2c.
+    bool hasSysI2C = bruceConfigPins.sys_i2c.sda >= 0 && bruceConfigPins.sys_i2c.scl >= 0;
+    ioExpander.init(IO_EXPANDER_ADDRESS, hasSysI2C ? getSysI2CBus() : &Wire);
 
     initCC1101once(acquireSPIBus(
         bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
@@ -406,6 +421,11 @@ void init_clock() {
 void init_led() {
 #ifdef HAS_RGB_LED
     beginLed();
+#if defined(BRUCE_LED_MASTER_TOGGLE)
+    // Reaper: the rear red LED rail follows its own toggle (independent of the
+    // WS2812 chain); this runs after ioExpander.init() lit it.
+    applyBackLed(bruceConfig.backLedEnabled);
+#endif
 #endif
 }
 

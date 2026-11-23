@@ -50,9 +50,43 @@
 #include "decoders/rf_decoder_revers_rb2.h"
 #include "decoders/rf_decoder_megacode.h"
 
+#if !defined(LITE_VERSION)
+#include "decoders/rf_vehicle_protocols.h"
+#endif
+
 #define DECODE RF_PF_HAS_DECODER
 
 static const RfProtocolDef rf_ext_protocols[] = {
+#if !defined(LITE_VERSION)
+    // Specific vehicle framing is tested before broad generic matches.
+    rf_stream_definition<&chrysler_protocol_v0>("Chrysler V0"),
+    rf_stream_definition<&fiat_protocol_v0>("Fiat V0"),
+    rf_stream_definition<&fiat_v1_protocol>("Fiat V1"),
+    rf_stream_definition<&fiat_v2_protocol>("Fiat V2"),
+    rf_stream_definition<&ford_protocol_v0>("Ford V0"),
+    rf_stream_definition<&ford_protocol_v1>("Ford V1"),
+    rf_stream_definition<&ford_protocol_v2>("Ford V2"),
+    rf_stream_definition<&ford_protocol_v3>("Ford V3"),
+    rf_stream_definition<&honda_static_protocol>("Honda Static"),
+    rf_stream_definition<&honda_v1_protocol>("Honda V1"),
+    rf_stream_definition<&honda_v2_protocol>("Honda V2"),
+    rf_stream_definition<&kia_protocol_v0>("Kia V0"),
+    rf_stream_definition<&kia_protocol_v1>("Kia V1"),
+    rf_stream_definition<&kia_protocol_v2>("Kia V2"),
+    rf_stream_definition<&kia_protocol_v3_v4>("Kia V3/V4"),
+    rf_stream_definition<&kia_protocol_v5>("Kia V5"),
+    rf_stream_definition<&kia_protocol_v6>("Kia V6"),
+    rf_stream_definition<&kia_protocol_v7>("Kia V7"),
+    rf_stream_definition<&mazda_v0_protocol>("Mazda V0"),
+    rf_stream_definition<&psa_protocol>("PSA"),
+    rf_stream_definition<&renault_v0_protocol>("Renault V0"),
+    rf_stream_definition<&renault_v1_protocol>("Renault V1"),
+    rf_stream_definition<&rf_stream_protocol_scher_khan>("Scher-Khan"),
+    rf_stream_definition<&rf_stream_protocol_star_line>("Star Line"),
+    rf_stream_definition<&subaru_protocol>("Subaru"),
+    rf_stream_definition<&vag_protocol>("VAG"),
+#endif
+
     // name                   te    sync    zero     one     bits  inv  flags                decode                           encode
     {"FAAC_SLH",              255,  {0, 0}, {0, 0},  {0, 0}, 64,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_faac_slh,           rf_encode_faac_slh},
@@ -72,19 +106,19 @@ static const RfProtocolDef rf_ext_protocols[] = {
     {"SecPlus_v1",            500,  {0, 0}, {0, 0},  {0, 0}, 42,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_secplus_v1,         rf_encode_secplus_v1},
     {"SecPlus_v2",            250,  {0, 0}, {0, 0},  {0, 0}, 62,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_secplus_v2,         rf_encode_secplus_v2},
+     rf_decode_secplus_v2,         nullptr},
     {"Somfy_Telis",           640,  {0, 0}, {0, 0},  {0, 0}, 56,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_somfy_telis,        rf_encode_somfy_telis},
+     rf_decode_somfy_telis,        nullptr},
     {"Somfy_Keytis",          640,  {0, 0}, {0, 0},  {0, 0}, 80,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_somfy_keytis,       rf_encode_somfy_keytis},
+     rf_decode_somfy_keytis,       nullptr},
     {"Hormann_HSM",           500,  {0, 0}, {0, 0},  {0, 0}, 44,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_hormann,            rf_encode_hormann},
     {"CAME_Twee",             500,  {0, 0}, {0, 0},  {0, 0}, 54,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_came_twee,          rf_encode_came_twee},
     {"CAME_Atomo",            600,  {0, 0}, {0, 0},  {0, 0}, 62,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_came_atomo,         rf_encode_came_atomo},
+     rf_decode_came_atomo,         nullptr},
     {"Nice_Flor_S",           500,  {0, 0}, {0, 0},  {0, 0}, 52,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_nice_flor_s,        rf_encode_nice_flor_s},
+     rf_decode_nice_flor_s,        nullptr},
     {"IDO",                   450,  {0, 0}, {0, 0},  {0, 0}, 48,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_ido,                rf_encode_ido},
     {"Nero_Radio",            200,  {0, 0}, {0, 0},  {0, 0}, 56,   false, DECODE | RF_PF_FIXED_LEN,
@@ -102,15 +136,15 @@ static const RfProtocolDef rf_ext_protocols[] = {
      rf_decode_elplast,            rf_encode_elplast},
     // Phase 4 — TPMS decoders
     {"Schrader_TPMS",         120,  {0, 0}, {0, 0},  {0, 0}, 64,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_schrader_tpms,      rf_encode_schrader_tpms},
+     rf_decode_schrader_tpms,      nullptr},
     {"Ford_TPMS",             52,   {0, 0}, {0, 0},  {0, 0}, 64,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_ford_tpms,          rf_encode_ford_tpms},
+     rf_decode_ford_tpms,          nullptr},
     {"Renault_TPMS",          48,   {0, 0}, {0, 0},  {0, 0}, 72,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_renault_tpms,       rf_encode_renault_tpms},
+     rf_decode_renault_tpms,       nullptr},
     {"Citroen_TPMS",          52,   {0, 0}, {0, 0},  {0, 0}, 80,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_citroen_tpms,       rf_encode_citroen_tpms},
+     rf_decode_citroen_tpms,       nullptr},
     {"Toyota_TPMS",           48,   {0, 0}, {0, 0},  {0, 0}, 72,   false, DECODE | RF_PF_FIXED_LEN,
-     rf_decode_toyota_tpms,        rf_encode_toyota_tpms},
+     rf_decode_toyota_tpms,        nullptr},
     // Phase 5 — Flipper ported OOK decoders
     {"Doitrand",              400,  {0, 0}, {0, 0},  {0, 0}, 37,   false, DECODE | RF_PF_FIXED_LEN,
      rf_decode_doitrand,           rf_encode_doitrand},

@@ -158,15 +158,21 @@ void _setup_gpio() {
     pinMode(PIN_POWER_ON, OUTPUT);
     digitalWrite(PIN_POWER_ON, HIGH);
 
-    hal_bright_attach(TFT_BL);
-
     // Start with default IR, RF and RFID Configs, replace old
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = PN532_I2C_MODULE;
 
     Serial.begin(115200);
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value

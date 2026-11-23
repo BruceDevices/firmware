@@ -54,10 +54,12 @@ bool rf_tx_durations(const std::vector<int> &durations) {
     std::vector<rmt_symbol_word_t> syms;
     syms.reserve(durations.size() / 2 + 1);
     bool pendingLow = false;
+    uint64_t totalUs = 0;
     for (int d : durations) {
         if (d == 0) continue;
         uint8_t level = (d > 0) ? 1 : 0;
         long dur = (d > 0) ? d : -d;
+        totalUs += uint64_t(dur);
         rf_push_half(syms, pendingLow, level, dur);
     }
     if (syms.empty()) return false;
@@ -102,7 +104,9 @@ bool rf_tx_durations(const std::vector<int> &durations) {
             RF_DBG("rmt_transmit failed: %d", (int)err);
             ok = false;
         } else {
-            err = rmt_tx_wait_all_done(ch, 2000); // up to 2s for the frame to flush
+            // Long remote bursts must not be cut off by the former fixed 2 s timeout.
+            uint64_t waitMs = totalUs / 1000 + 500;
+            err = rmt_tx_wait_all_done(ch, int(waitMs > 60000 ? 60000 : waitMs));
             if (err != ESP_OK) {
                 RF_DBG("rmt_tx_wait_all_done failed: %d", (int)err);
                 ok = false;
@@ -114,42 +118,6 @@ bool rf_tx_durations(const std::vector<int> &durations) {
     rmt_del_encoder(encoder);
     rmt_del_channel(ch);
     return ok;
-}
-
-bool rf_encode_protocol(
-    uint64_t data, unsigned int bits, int te, const RfProtocolDef *def, int repeat,
-    std::vector<int> &out
-) {
-    out.clear();
-    if (def == nullptr || bits == 0) return false;
-    int base = (te > 0) ? te : def->te;
-    if (base <= 0) return false;
-    if (repeat < 1) repeat = 1;
-
-    // Faithful port of the classic OOK send: for each repetition emit the data bits
-    // MSB first, then the sync/pilot pulse. Each pulse is firstLevel for
-    // high*te µs then secondLevel for low*te µs; inverted protocols swap levels.
-    const bool inv = def->inverted;
-    const bool hasSync = (def->sync.high != 0 || def->sync.low != 0);
-
-    out.reserve((size_t)repeat * (bits + 1) * 2);
-
-    auto emitPulse = [&](const HighLow &p) {
-        long first = (long)p.high * base;
-        long second = (long)p.low * base;
-        // sign: + HIGH, - LOW. Non-inverted -> first half HIGH, second LOW.
-        out.push_back(inv ? -(int)first : (int)first);
-        out.push_back(inv ? (int)second : -(int)second);
-    };
-
-    for (int r = 0; r < repeat; r++) {
-        for (int i = (int)bits - 1; i >= 0; i--) {
-            const HighLow &p = ((data >> i) & 1ULL) ? def->one : def->zero;
-            emitPulse(p);
-        }
-        if (hasSync) emitPulse(def->sync);
-    }
-    return true;
 }
 
 bool rf_tx_protocol(uint64_t data, unsigned int bits, int te, const RfProtocolDef *def, int repeat) {
@@ -180,44 +148,6 @@ bool rf_tx_protocol(uint64_t data, unsigned int bits, int te, const RfProtocolDe
         (repeat < 1) ? 1 : repeat
     );
     return rf_tx_durations(durs);
-}
-
-// KeeLoq OOK framing (te_short=400, te_long=800), ported from the reference
-// encoder: 11x{short,short} header, sync {short HIGH, 10*short LOW}, then 64
-// data bits MSB-first (bit 1 = short HIGH + long LOW; bit 0 = long HIGH + short
-// LOW), a trailing status bit and a large inter-frame gap (40*short).
-#define RF_KL_SHORT 400
-#define RF_KL_LONG 800
-
-bool rf_keeloq_durations(uint64_t key, std::vector<int> &out) {
-    out.clear();
-    out.reserve(11 * 2 + 2 + 64 * 2 + 4);
-
-    // Header: 11 short HIGH/LOW pairs.
-    for (int i = 0; i < 11; i++) {
-        out.push_back(RF_KL_SHORT);
-        out.push_back(-RF_KL_SHORT);
-    }
-    // Sync: short HIGH then 10*short LOW.
-    out.push_back(RF_KL_SHORT);
-    out.push_back(-RF_KL_SHORT * 10);
-
-    // 64 data bits, MSB first.
-    for (int i = 63; i >= 0; i--) {
-        if ((key >> i) & 1ULL) { // bit 1: short HIGH, long LOW
-            out.push_back(RF_KL_SHORT);
-            out.push_back(-RF_KL_LONG);
-        } else { // bit 0: long HIGH, short LOW
-            out.push_back(RF_KL_LONG);
-            out.push_back(-RF_KL_SHORT);
-        }
-    }
-    // Trailing status bit + end pulse + large inter-frame gap.
-    out.push_back(RF_KL_SHORT);
-    out.push_back(-RF_KL_LONG);
-    out.push_back(RF_KL_SHORT);
-    out.push_back(-RF_KL_SHORT * 40);
-    return true;
 }
 
 bool rf_tx_keeloq(uint64_t key, int repeat) {

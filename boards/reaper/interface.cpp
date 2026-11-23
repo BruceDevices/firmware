@@ -1,8 +1,8 @@
+#include "core/bus_HAL.h"
+#include "core/powerSave.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/bus_HAL.h"
-#include "core/powerSave.h"
 #include <globals.h>
 #include <interface.h>
 
@@ -41,9 +41,9 @@ void _setup_gpio() {
     bruceConfigPins.irTx = 47;
     bruceConfigPins.irRx = 1;
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};     // rx, tx
-    bruceConfigPins.badusb_bus = {(gpio_num_t)48, (gpio_num_t)47};  // rx, tx (CH9329)
+    bruceConfigPins.uart_bus = {(gpio_num_t)44, (gpio_num_t)43};   // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)44, (gpio_num_t)43};    // rx, tx
+    bruceConfigPins.badusb_bus = {(gpio_num_t)48, (gpio_num_t)47}; // rx, tx (CH9329)
     // Board's default/generic SPI bus (used by drivers without their own bus, e.g. RC522-SPI)
     bruceConfigPins.outer_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)11};
     bruceConfigPins.PN532_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)11};
@@ -54,7 +54,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)13, (gpio_num_t)14
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)3
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)3
     }; // sck,miso,mosi,cs
     bruceConfigPins.ST25R_bus = {
         (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)11, (gpio_num_t)12, GPIO_NUM_NC
@@ -85,9 +86,6 @@ void _setup_gpio() {
     pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
-
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
     bruceConfigPins.rfidModule = ST25R3916_SPI_MODULE;
 
@@ -104,7 +102,15 @@ void _setup_gpio() {
         gaugeOn = true;
     }
 }
-
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
+}
 /***************************************************************************************
 ** Function name: getBattery()
 ** location: display.cpp
@@ -113,20 +119,30 @@ void _setup_gpio() {
 ***************************************************************************************/
 int getBattery() {
     int percent = 0;
-#if defined(GAUGE_BQ27220)
-    if (gaugeOn) percent = hal_gauge_get_percent();
-#endif
+    if (gaugeOn) {
+        percent = hal_gauge_get_percent();
+    } else {
+        int voltage = hal_pmic_get_batt_voltage_mv();
+        percent = (voltage - 3300) * 100 / (float)(4150 - 3350);
+
+        if (percent < 0) return 1;
+        if (percent > 100) percent = 100;
+
+        if (hal_pmic_is_charging() && percent >= 97) {
+            hal_pmic_disable_bat_load();
+            percent = 95; // estimate still charging
+        }
+
+        if (hal_pmic_is_charge_done()) { percent = 100; }
+    }
 
     return (percent < 0) ? 0 : (percent >= 100) ? 100 : percent;
 }
 
-#ifdef GAUGE_BQ27220
 bool isCharging() {
-    return gaugeOn ? hal_gauge_is_charging() : false; // Return the charging status from BQ27220
+    if (gaugeOn) return hal_gauge_is_charging();
+    return hal_pmic_is_charging();
 }
-#else
-bool isCharging() { return false; }
-#endif
 
 /*********************************************************************
 ** Function: setBrightness

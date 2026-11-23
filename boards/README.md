@@ -140,7 +140,13 @@ What goes where:
 - **`bruceConfigPins.*` in `_setup_gpio()`** — everything the user may re-map from
   *Config > Set Device pins*: SD card, CC1101, NRF24, PN532/RC522/ST25R, W5500, LoRa, I2C,
   UART, GPS, IR, one-pin RF, speaker, microphone, buzzer. What you assign here is only the
-  **default**; from the second boot on, `/brucePins.conf` wins.
+  **default**; from the second boot on, `/brucePins.conf` wins. Boards that must re-apply
+  wiring *after* storage in `_post_setup_gpio()` (e.g. the Cardputer ADV CC1101/NRF24
+  defaults, applied once the board variant is detected) must go through **`applyBoardDefault()`**
+  (`src/core/configPins.h`) instead of a direct assignment: the core snapshots the generic
+  wiring into `brucePinsSetupDefaults` right after `_setup_gpio()`, and the helper only takes
+  the board default when the pin still holds it — anything else came from `/brucePins.conf`
+  and the user's wiring wins. One line per pin; see `boards/m5stack-cardputer/interface.cpp`.
 
 Boot order in `src/main.cpp`:
 
@@ -148,7 +154,7 @@ Boot order in `src/main.cpp`:
 |---|---|---|
 | `_setup_gpio()` | first, before display and filesystem | `bruceConfigPins.*`, power-enable pins, parking SPI chip-selects HIGH, input `hal_*_init()`, PMIC/gauge |
 | `_pre_storage_gpio()` | after the first TFT use, before LittleFS/SD mount | rare storage/bus fix-ups (`m5stack-cores3`) |
-| `_post_setup_gpio()` | after display + storage | backlight, and touch controllers that share the display bus |
+| `_post_setup_gpio()` | after display + storage | backlight, touch controllers that share the display bus, guarded board pin re-applies (`applyBoardDefault()`, see Cardputer ADV) |
 | `_late_setup_gpio()` | after the input task exists | rare (`m5stack-tab5`) |
 
 `InputHandler()` runs in its own task every ~10ms. The task clears all the input globals,
@@ -204,6 +210,7 @@ When in doubt, copy from a board that already does the same thing:
 | Resistive touch (XPT2046) on the display SPI | `boards/phantom` |
 | Capacitive touch (GT911) | `boards/lilygo-t-deck` |
 | Capacitive touch (CST8xx) | `boards/lilygo-t-display-s3` (`-touch` env) |
+| I2C device behind a dedicated bus preset (ST25R3916 on sys_i2c) | `boards/m5stack-stackchan` |
 | Physical keyboard | `boards/m5stack-cardputer`, `boards/lilygo-t-lora-pager` |
 | Several envs from one folder | `boards/lilygo-t-display-s3`, `boards/lilygo-t-embed-cc1101` |
 | A fully worked, heavily commented `.ini` | `boards/ESP-General/ESP-General.ini` |

@@ -1,8 +1,8 @@
+#include "core/bus_HAL.h"
+#include "core/powerSave.h"
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/buttons.h"
-#include "core/bus_HAL.h"
-#include "core/powerSave.h"
 
 #define SEL_BTN 0
 
@@ -13,7 +13,6 @@
 #define UP_BTN 39
 
 static DeviceButtons buttonsCfg() { return DeviceButtons{L_BTN, R_BTN, UP_BTN, DW_BTN, SEL_BTN}; }
-
 
 /***************************************************************************************
 ** Function name: _setup_gpio()
@@ -48,7 +47,8 @@ void _setup_gpio() {
     bruceConfigPins.NRF24_bus = {
         (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)12, (gpio_num_t)13
     }; // sck,miso,mosi,cs(ss),ce
-    bruceConfigPins.SDCARD_bus = {(gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)3
+    bruceConfigPins.SDCARD_bus = {
+        (gpio_num_t)17, (gpio_num_t)8, (gpio_num_t)18, (gpio_num_t)3
     }; // sck,miso,mosi,cs
 
     hal_buttons_init(buttonsCfg(), 5);
@@ -63,9 +63,6 @@ void _setup_gpio() {
     pinMode(bruceConfigPins.SDCARD_bus.cs, OUTPUT);
     digitalWrite(bruceConfigPins.SDCARD_bus.cs, HIGH);
 
-    hal_bright_attach(TFT_BL);
-    hal_bright_set(TFT_BL, 100);
-
     // Starts SPI instance for CC1101 and NRF24 with CS pins blocking communication at start
 
     bruceConfigPins.rfModule = CC1101_SPI_MODULE;
@@ -76,6 +73,15 @@ void _setup_gpio() {
     pmicCfg.pin_scl = bruceConfigPins.sys_i2c.scl;
     pmicCfg.address = 0x6B; // BQ25896
     hal_pmic_init(pmicCfg);
+}
+/***************************************************************************************
+** Function name: _post_setup_gpio()
+** Description:   second stage gpio setup after TFT is initialized
+***************************************************************************************/
+void _post_setup_gpio() {
+    // Backlight control via PWM (must be after TFT init)
+    hal_bright_attach(TFT_BL);
+    hal_bright_set(TFT_BL, 100); // Full brightness initially
 }
 bool isCharging() {
     // PPM.disableBatterPowerPath();

@@ -1,7 +1,7 @@
-#include "hal/device.h"
-#include "hal/inputs/touch.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
+#include "hal/device.h"
+#include "hal/inputs/touch.h"
 #include <CYD28_TouchscreenR.h>
 #include <interface.h>
 
@@ -33,8 +33,8 @@ void _setup_gpio() {
     bruceConfigPins.irTx = -1;
     bruceConfigPins.irRx = 21;
     bruceConfigPins.rotation = 1;
-    bruceConfigPins.uart_bus = {(gpio_num_t)3, (gpio_num_t)1}; // rx, tx
-    bruceConfigPins.gps_bus = {(gpio_num_t)3, (gpio_num_t)1};  // rx, tx
+    bruceConfigPins.uart_bus = {(gpio_num_t)3, (gpio_num_t)1};     // rx, tx
+    bruceConfigPins.gps_bus = {(gpio_num_t)3, (gpio_num_t)1};      // rx, tx
     bruceConfigPins.badusb_bus = {(gpio_num_t)21, (gpio_num_t)22}; // rx, tx (Grove)
     bruceConfigPins.SDCARD_bus = {
         (gpio_num_t)-1, (gpio_num_t)-1, (gpio_num_t)-1, (gpio_num_t)-1
@@ -58,12 +58,6 @@ void _post_setup_gpio() {
         log_i("Touch IC not Started");
     } else Serial.println("Touch IC Started");
 }
-
-/***************************************************************************************
-** Function name: getBattery()
-** Description:   Delivers the battery value from 1-100
-***************************************************************************************/
-int getBattery() { return 0; }
 
 /*********************************************************************
 ** Function: setBrightness
