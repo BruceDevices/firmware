@@ -93,18 +93,9 @@ static void shuffleChannels(uint8_t *arr, size_t count) {
     }
 }
 
-static const char *hopModeLabel(uint8_t hopping_mode) {
-    switch (hopping_mode) {
-        case 1:  return "FHSS        ";
-        case 2:  return "Alt Seq+FHSS";
-        default: return "Sequential  ";
-    }
-}
-
 void nrf_jammer() {
     int OnX = 0;
-    uint8_t hopping_mode = 2; // 0: sequential, 1: random, 2: alternate 1 seq pass + 1 fhss pass
-    bool altUseFhssPass = false;
+    uint8_t hopping_mode = 0; // 0: sequential, 1: random
     NRF24_MODE mode = nrf_setMode();
     int NRFOnline = 1;
 
@@ -169,7 +160,7 @@ void nrf_jammer() {
                 String _modeName = String(modes[modeIndex].name) + "            ";
                 _modeName = _modeName.substring(0, 13);
                 padprintln("MODE : " + _modeName);
-                padprintln("HOP  : " + String(hopModeLabel(hopping_mode)));
+                padprintln("HOP  : " + String(hopping_mode == 0 ? "Sequential " : "FHSS        "));
                 padprintln("");
                 padprintln("> Switch Mode: Next/Prev");
                 padprintln("> Hop Mode: Sel");
@@ -188,14 +179,9 @@ void nrf_jammer() {
             if (hopIndex >= (int)modes[modeIndex].count) {
                 hopIndex = 0;
                 need_reshuffle = true;
-                if (hopping_mode == 2) {
-                    altUseFhssPass = !altUseFhssPass;
-                }
             }
-
-            bool useFhssThisHop = (hopping_mode == 1) || (hopping_mode == 2 && altUseFhssPass);
             uint8_t ch_idx;
-            if (useFhssThisHop) {
+            if (hopping_mode == 1) {
                 if (need_reshuffle) {
                     size_t cnt = modes[modeIndex].count;
                     for (size_t i = 0; i < cnt; i++) shuffled_idx[i] = i;
@@ -212,7 +198,6 @@ void nrf_jammer() {
                 modeIndex++;
                 if (modeIndex >= (int)(sizeof(modes) / sizeof(modes[0]))) modeIndex = 0;
                 hopIndex = 0;
-                altUseFhssPass = false;
                 need_reshuffle = true;
                 redraw = true;
             }
@@ -220,16 +205,14 @@ void nrf_jammer() {
                 modeIndex--;
                 if (modeIndex < 0) modeIndex = (sizeof(modes) / sizeof(modes[0])) - 1;
                 hopIndex = 0;
-                altUseFhssPass = false;
                 need_reshuffle = true;
                 redraw = true;
             }
             if (check(EscPress)) break;
             if (check(SelPress)) {
                 hopping_mode++;
-                if (hopping_mode > 2) hopping_mode = 0;
+                if (hopping_mode > 1) hopping_mode = 0;
                 hopIndex = 0;
-                altUseFhssPass = false;
                 need_reshuffle = true;
                 redraw = true;
             }
