@@ -220,3 +220,53 @@ for file_pattern, search, replace in conflicts:
                 print(f"Patched: {file_path}")
         except Exception as e:
             print(f"Failed to patch {file_path}: {e}")
+
+# Ensure DisplayDrivers submodule supports USE_SH1106
+sh1106_target = "lib/DisplayDrivers/src/backends/sh1106.h"
+sh1106_src = "boards/ESP-General/sh1106.h"
+if os.path.exists(sh1106_src):
+    try:
+        os.makedirs(os.path.dirname(sh1106_target), exist_ok=True)
+        import shutil
+        if not os.path.exists(sh1106_target) or open(sh1106_src, 'rb').read() != open(sh1106_target, 'rb').read():
+            shutil.copyfile(sh1106_src, sh1106_target)
+            print(f"Synced {sh1106_src} -> {sh1106_target}")
+    except Exception as e:
+        print(f"Failed to sync {sh1106_src} to {sh1106_target}: {e}")
+
+dd_header = "lib/DisplayDrivers/src/DisplayDrivers.h"
+if os.path.exists(dd_header):
+    try:
+        with open(dd_header, "r") as f:
+            dd_content = f.read()
+        if "USE_SH1106" not in dd_content:
+            target = "#if defined(USE_DUMMY_TFT)\n#undef USE_ARDUINO_GFX"
+            replacement = (
+                "#if defined(USE_DUMMY_TFT)\n#undef USE_ARDUINO_GFX\n#undef USE_LOVYANGFX\n"
+                "#undef USE_TFT_ESPI\n#undef USE_M5GFX\n#undef USE_EPD_PAINTER\n#undef USE_GXEPD2\n"
+                "#undef USE_NATIVE_SDL\n#undef USE_CANVAS\n#endif\n\n"
+                "#if defined(USE_SH1106)\n#undef USE_ARDUINO_GFX\n#undef USE_LOVYANGFX\n"
+                "#undef USE_TFT_ESPI\n#undef USE_M5GFX\n#undef USE_EPD_PAINTER\n#undef USE_GXEPD2\n"
+                "#undef USE_NATIVE_SDL\n#undef USE_CANVAS\n#undef USE_DUMMY_TFT\n#endif\n\n"
+                "#if !defined(USE_ARDUINO_GFX) && !defined(USE_LOVYANGFX) && !defined(USE_TFT_ESPI) && !defined(USE_M5GFX) &&  \\\n"
+                "    !defined(USE_EPD_PAINTER) && !defined(USE_GXEPD2) && !defined(USE_NATIVE_SDL) && !defined(USE_DUMMY_TFT) && \\\n"
+                "    !defined(USE_SH1106)\n#define USE_ARDUINO_GFX\n#endif\n"
+            )
+            if target in dd_content:
+                dd_content = re.sub(
+                    r"#if defined\(USE_DUMMY_TFT\).*?#define USE_ARDUINO_GFX\n#endif",
+                    replacement,
+                    dd_content,
+                    flags=re.DOTALL
+                )
+            if "#include \"backends/sh1106.h\"" not in dd_content:
+                dd_content = dd_content.replace(
+                    "#if defined(USE_DUMMY_TFT)\n#include \"backends/dummy.h\"",
+                    "#if defined(USE_DUMMY_TFT)\n#include \"backends/dummy.h\"\n\n#elif defined(USE_SH1106)\n#include \"backends/sh1106.h\""
+                )
+            with open(dd_header, "w") as f:
+                f.write(dd_content)
+            print(f"Patched: {dd_header} for USE_SH1106")
+    except Exception as e:
+        print(f"Failed to patch {dd_header}: {e}")
+

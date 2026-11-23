@@ -1,6 +1,7 @@
 [submodule "lib/DisplayDrivers"]
 	path = lib/DisplayDrivers
 	url = https://github.com/bmorcelli/DisplayDrivers
+	ignore = dirty
 [submodule "lib/SensorLib"]
 	path = lib/SensorLib
 	url = https://github.com/lewisxhe/SensorLib

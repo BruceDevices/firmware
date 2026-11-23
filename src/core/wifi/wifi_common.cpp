@@ -1,4 +1,5 @@
 #include "core/wifi/wifi_common.h"
+#include "core/wifi/webInterface.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/powerSave.h"
@@ -341,12 +342,24 @@ void wifiConnectTask(void *pvParameters) {
                     xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
                 }
                 drawStatusBar();
+                startWebUiBackground();
                 break;
             }
             vTaskDelay(100 / portTICK_RATE_MS);
         }
     }
     WiFi.scanDelete();
+
+    // If unable to connect to known STA network, start AP mode so user is never locked out
+    if (!WiFi.isConnected()) {
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(bruceConfig.wifiAp.ssid.c_str(), bruceConfig.wifiAp.pwd.c_str());
+        wifiConnected = true;
+        wifiIP = WiFi.softAPIP().toString();
+        startWebUiBackground();
+        drawStatusBar();
+    }
 
     vTaskDelete(NULL);
     return;

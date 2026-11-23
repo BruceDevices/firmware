@@ -456,7 +456,6 @@ void BruceConfig::saveFile() {
     };
 
     // Serialize JSON to file
-    serializeJsonPretty(jsonDoc, Serial);
     if (serializeJsonPretty(jsonDoc, file) < 5) log_e("Failed to write config file");
     else log_i("config file written successfully");
 

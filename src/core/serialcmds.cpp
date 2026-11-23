@@ -34,6 +34,13 @@ bool parseSerialCommand(const String &command, bool waitForResponse) {
     return false;
 }
 
+static inline bool isQueryOnlyCommand(const String &cmd) {
+    return cmd.startsWith("nav") || cmd.startsWith("option") || cmd.startsWith("display") ||
+           cmd.startsWith("info") || cmd.startsWith("uptime") || cmd.startsWith("free") ||
+           cmd.startsWith("storage") || cmd.startsWith("help") || cmd.startsWith("date") ||
+           cmd.startsWith("i2c");
+}
+
 void handleSerialCommands(SerialCli &serialCli) {
     CmdPacket packet;
     if (cmdQueue && rspQueue) {
@@ -44,23 +51,66 @@ void handleSerialCommands(SerialCli &serialCli) {
             Serial.printf("[CLI] Result: %s\n", result ? "TRUE" : "FALSE");
         }
     }
-    if (!serialDevice->available()) return;
+    static String inputBuffer = "";
+    static unsigned long lastInputTime = 0;
 
-    String cmd_str = serialDevice->readStringUntil('\n');
-    Serial.println("COMMAND: " + cmd_str);
-    serialCli.parse(cmd_str);
-    serialDevice->print("# "); // prompt
+    while (serialDevice->available()) {
+        int c = serialDevice->read();
+        if (c < 0) break;
+        if (c == '\r' || c == '\n') {
+            if (inputBuffer.length() > 0) {
+                String cmd = inputBuffer;
+                inputBuffer = "";
+                lastInputTime = 0;
+                cmd.trim();
+                if (cmd.length() > 0) {
+                    Serial.println("COMMAND: " + cmd);
+                    serialCli.parse(cmd);
+                    if (!isQueryOnlyCommand(cmd)) {
+                        backToMenu();
+                    }
+                }
+            }
+            serialDevice->print("# ");
+        } else if (c == '\b' || c == 127) {
+            if (inputBuffer.length() > 0) {
+                inputBuffer.remove(inputBuffer.length() - 1);
+            }
+            lastInputTime = millis();
+        } else if (c >= 32 && c <= 126) {
+            inputBuffer += (char)c;
+            lastInputTime = millis();
+        }
+    }
 
-    // forced menu redrawn if the command is not "nav" or "option"
-    // it allows navigation commands to be executed without returning to the menu, while other commands will
-    // return to the menu after execution.
-    String cmd_trimmed = cmd_str;
-    cmd_trimmed.trim();
-    if (!cmd_trimmed.startsWith("nav") && !cmd_trimmed.startsWith("option")) { backToMenu(); }
+    // Idle line flush timeout: if characters were buffered but no newline arrived
+    // (e.g. programmatic WebSerial clients like https://bruce.computer/my_bruce),
+    // automatically execute after 150ms of silence.
+    if (inputBuffer.length() > 0 && lastInputTime > 0 && (millis() - lastInputTime >= 150)) {
+        String cmd = inputBuffer;
+        inputBuffer = "";
+        lastInputTime = 0;
+        cmd.trim();
+        if (cmd.length() > 0) {
+            Serial.println("COMMAND: " + cmd);
+            serialCli.parse(cmd);
+            if (!isQueryOnlyCommand(cmd)) {
+                backToMenu();
+            }
+        }
+        serialDevice->print("# ");
+    }
 }
 
 void _serialCmdsTaskLoop(void *pvParameters) {
     Serial.begin(115200);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    serialDevice->println("\r\n==========================================");
+    serialDevice->println("   Bruce ESP32-S3-Zero CLI Ready");
+    serialDevice->println("   Type 'help' or 'info' for commands");
+    serialDevice->println("==========================================");
+    serialDevice->print("# ");
+
     while (1) {
         handleSerialCommands(serialCli);
         // handleSerialCommands() runs one command per pass, so a burst queued by

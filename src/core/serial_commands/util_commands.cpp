@@ -331,7 +331,14 @@ uint32_t displayCallback(cmd *c) {
         if (tft.getLogging()) serialDevice->println("Display: Logging tft is ACTIVATED");
         else serialDevice->println("Display: Logging tft is DEACTIVATED");
     } else if (opt == "dump") {
-        uint8_t binData[MAX_LOG_ENTRIES * MAX_LOG_SIZE];
+        size_t totalBytes = MAX_LOG_ENTRIES * MAX_LOG_SIZE;
+        uint8_t *binData = nullptr;
+        if (psramFound()) binData = (uint8_t *)ps_malloc(totalBytes);
+        if (!binData) binData = (uint8_t *)malloc(totalBytes);
+        if (!binData) {
+            serialDevice->println("Display: memory allocation failed");
+            return false;
+        }
         size_t binSize = 0;
         tft.getBinLog(binData, binSize);
 
@@ -342,6 +349,7 @@ uint32_t displayCallback(cmd *c) {
             serialDevice->printf("%02X ", binData[i]);
         }
         serialDevice->println("\n[End of Dump]");
+        free(binData);
     } else if (opt == "info") {
         serialDevice->println(
             TFT_WIDTH + String("x") + TFT_HEIGHT + String("x") + bruceConfigPins.rotation

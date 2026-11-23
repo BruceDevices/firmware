@@ -218,11 +218,12 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
 
     // Line pitch must fit the actual glyph height at this size, or wrapped lines overlap.
     int lineHeight = LH * size + 2;
-    int boxHeight = wrappedLines.size() * lineHeight + 8;
+    int boxHeight = wrappedLines.size() * lineHeight + (tftHeight <= 64 ? 4 : 8);
+    int radius = (tftHeight <= 64) ? 3 : 7;
 
     tft.drawPixel(0, 0, 0);
     tft.fillRoundRect(
-        BORDER_PAD_X, tftHeight / 2 - boxHeight / 2, tftWidth - 2 * BORDER_PAD_X, boxHeight, 7, bgcolor
+        BORDER_PAD_X, tftHeight / 2 - boxHeight / 2, tftWidth - 2 * BORDER_PAD_X, boxHeight, radius, bgcolor
     );
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(size);
@@ -821,7 +822,16 @@ int loopOptions(
         } else
 #endif
         {
-            if (PrevPress || check(UpPress)) {
+            bool isPrev = false;
+            bool isUp = false;
+            if (SerialCmdPress) {
+                isPrev = check(PrevPress);
+                isUp = check(UpPress);
+            } else {
+                isUp = check(UpPress);
+                isPrev = PrevPress;
+            }
+            if (isPrev || isUp) {
                 devModeCounter = 0;
 #ifdef HAS_KEYBOARD
                 check(PrevPress);
@@ -829,36 +839,44 @@ int loopOptions(
                 if (prevEnabled >= 0) index = prevEnabled;
                 redraw = true;
 #else
-                long _tmp = millis();
-#ifndef HAS_ENCODER // T-Embed doesn't need it
-                LongPress = true;
-                while (PrevPress && menuType != MENU_TYPE_MAIN) {
-                    if (millis() - _tmp > 200)
-                        tft.drawArc(
-                            tftWidth / 2,
-                            tftHeight / 2,
-                            25,
-                            15,
-                            0,
-                            360 * (millis() - (_tmp + 200)) / 500,
-                            getColorVariation(bruceConfig.priColor),
-                            bruceConfig.bgColor
-                        );
-                    vTaskDelay(10 / portTICK_RATE_MS);
-                }
-                tft.drawArc(
-                    tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
-                );
-                LongPress = false;
-#endif
-                if (millis() - _tmp > 700) { // longpress detected to exit
-                    index = -1;
-                    break;
-                } else {
+                if (SerialCmdPress || isUp) {
                     check(PrevPress);
                     int prevEnabled = findNextEnabled(index, -1);
                     if (prevEnabled >= 0) index = prevEnabled;
                     redraw = true;
+                } else {
+                    long _tmp = millis();
+#ifndef HAS_ENCODER // T-Embed doesn't need it
+                    LongPress = true;
+                    while (PrevPress && !SerialCmdPress && menuType != MENU_TYPE_MAIN && (millis() - _tmp <= 750)) {
+                        if (millis() - _tmp > 200)
+                            tft.drawArc(
+                                tftWidth / 2,
+                                tftHeight / 2,
+                                25,
+                                15,
+                                0,
+                                360 * (millis() - (_tmp + 200)) / 500,
+                                getColorVariation(bruceConfig.priColor),
+                                bruceConfig.bgColor
+                            );
+                        vTaskDelay(10 / portTICK_RATE_MS);
+                    }
+                    tft.drawArc(
+                        tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
+                    );
+                    LongPress = false;
+#endif
+                    if (millis() - _tmp > 700) { // longpress detected to exit
+                        check(PrevPress);
+                        index = -1;
+                        break;
+                    } else {
+                        check(PrevPress);
+                        int prevEnabled = findNextEnabled(index, -1);
+                        if (prevEnabled >= 0) index = prevEnabled;
+                        redraw = true;
+                    }
                 }
 #endif
             }
@@ -909,19 +927,19 @@ int loopOptions(
 ** Dependencia: prog_handler =>>    0 - Flash, 1 - LittleFS
 ***************************************************************************************/
 void progressHandler(int progress, size_t total, const String &message) {
-    int barHeight = LH * FP + 5;
-    int barY = tftHeight - barHeight - BORDER_PAD_Y;
+    int barHeight = (tftHeight <= 64) ? 4 : (LH * FP + 5);
+    int barY = (tftHeight <= 64) ? (tftHeight - barHeight - 2) : (tftHeight - barHeight - BORDER_PAD_Y);
     int barWidth = map(progress, 0, total, 0, tftWidth - 4 * BORDER_PAD_X);
     if (barWidth < 3) {
         tft.fillRect(
             BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
-            STATUS_BAR_HEIGHT - 3,
+            STATUS_BAR_HEIGHT - 1,
             tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
             tftHeight - STATUS_BAR_HEIGHT - BORDER_OFFSET_FROM_SCREEN_EDGE,
             bruceConfig.bgColor
         );
         tft.drawRect(
-            2 * BORDER_PAD_X, barY - 2, tftWidth - 4 * BORDER_PAD_X, barHeight + 4, bruceConfig.priColor
+            2 * BORDER_PAD_X, barY - 1, tftWidth - 4 * BORDER_PAD_X, barHeight + 2, bruceConfig.priColor
         );
         displayRedStripe(message, TFT_WHITE, bruceConfig.priColor);
     }
@@ -941,9 +959,9 @@ Opt_Coord drawOptions(
 
     Opt_Coord coord;
 
-    int rowHeightPx = FM * LH + 4;
-    int32_t margin = 10; // matches Launcher's tftHeight-20 (10px top+bottom) for both border states
-    int fitRows = (tftHeight - 2 * margin) / rowHeightPx;
+    int rowHeightPx = (tftHeight <= 64) ? (FM * LH + 2) : (FM * LH + 4);
+    int32_t margin = (tftHeight <= 64) ? (border ? 2 : (STATUS_BAR_HEIGHT + 1)) : 10;
+    int fitRows = (tftHeight <= 64) ? (tftHeight - margin - 2) / rowHeightPx : (tftHeight - 2 * margin) / rowHeightPx;
     // Compact context menus sit over their caller's screen; keep them small
     // even when there are many actions. The existing paging handles the rest.
     if (compact && fitRows > 5) fitRows = 5;
@@ -1015,8 +1033,8 @@ Opt_Coord drawOptions(
     int32_t boxX = border ? tftWidth * 0.10 : BORDER_OFFSET_FROM_SCREEN_EDGE;
     int32_t boxW = border ? tftWidth * 0.8 : tftWidth - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE;
     int32_t contentTopY = border ? tftHeight / 2 - totalRows * rowHeightPx / 2 : margin;
-    int32_t boxTopY = border ? contentTopY - BORDER_OFFSET_FROM_SCREEN_EDGE : BORDER_OFFSET_FROM_SCREEN_EDGE;
-    int32_t boxH = border ? rowHeightPx * totalRows + 10 : tftHeight - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE;
+    int32_t boxTopY = (tftHeight <= 64 && border) ? (contentTopY - 1) : (border ? contentTopY - BORDER_OFFSET_FROM_SCREEN_EDGE : BORDER_OFFSET_FROM_SCREEN_EDGE);
+    int32_t boxH = (tftHeight <= 64 && border) ? (rowHeightPx * totalRows + 2) : (border ? rowHeightPx * totalRows + 10 : tftHeight - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE);
 
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
@@ -1284,9 +1302,9 @@ void drawStatusBar() {
         );
         tft.drawLine(
             BORDER_OFFSET_FROM_SCREEN_EDGE,
-            STATUS_BAR_HEIGHT - 5,
+            STATUS_BAR_HEIGHT - (tftHeight <= 64 ? 1 : 5),
             tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 1,
-            STATUS_BAR_HEIGHT - 5,
+            STATUS_BAR_HEIGHT - (tftHeight <= 64 ? 1 : 5),
             bruceConfig.priColor
         );
     }
@@ -1324,6 +1342,18 @@ void drawStatusBar() {
     if (showWG) iconCount++;
 
     if (iconCount > 0) {
+        if (tftHeight <= 64) {
+            int badgeX = 36;
+            int badgeY = 2;
+            tft.setTextSize(1);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            if (showWifi) { tft.setCursor(badgeX, badgeY); tft.print("W"); badgeX += 7; }
+            if (showWeb)  { tft.setCursor(badgeX, badgeY); tft.print("@"); badgeX += 7; }
+            if (showBLE)  { tft.setCursor(badgeX, badgeY); tft.print("B"); badgeX += 7; }
+            if (showSD)   { tft.setCursor(badgeX, badgeY); tft.print("S"); badgeX += 7; }
+            return;
+        }
+
         // Icon glyphs are fixed-size bitmaps (not text), so they don't scale with FP/FM/FG;
         // only their position within the status bar is kept relative.
         const int IW = 16;
@@ -1401,13 +1431,14 @@ void printTitle(const String &title) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     // Scale down title font if it doesn't fit the screen width
-    int titleSize = FM;
+    int titleSize = (tftHeight <= 64) ? 1 : FM;
     while (titleSize > FP && (int)(t.length() * titleSize * LW) > tftWidth - 2 * BORDER_PAD_X) {
         titleSize--;
     }
 
     tft.setTextSize(titleSize);
-    tft.setCursor((tftWidth - (t.length() * titleSize * LW)) / 2, BORDER_PAD_Y);
+    int titleY = (tftHeight <= 64) ? (STATUS_BAR_HEIGHT + 1) : BORDER_PAD_Y;
+    tft.setCursor((tftWidth - (t.length() * titleSize * LW)) / 2, titleY);
     tft.println(t);
 
     tft.setTextSize(FP);
@@ -1451,6 +1482,15 @@ void drawBatteryStatus(uint8_t bat) {
     if (bat == 0) return;
 
     bool charging = isCharging();
+
+    if (tftHeight <= 64) {
+        tft.setTextSize(FP);
+        tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+        int textY = 2;
+        if (charging) tft.drawRightString("CHG", tftWidth - 3, textY, 1);
+        else tft.drawRightString(String(bat) + "%", tftWidth - 3, textY, 1);
+        return;
+    }
 
     uint16_t color = bruceConfig.priColor;
     uint16_t barcolor = bruceConfig.priColor;

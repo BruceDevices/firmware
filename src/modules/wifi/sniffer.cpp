@@ -1259,7 +1259,7 @@ void sniffer_setup() {
 #if !defined(HAS_KEYBOARD) && !defined(HAS_ENCODER)
             LongPress = true;
             long _tmp = millis();
-            while (PrevPress) {
+            while (PrevPress && !SerialCmdPress) {
                 if (millis() - _tmp > 150)
                     tft.drawArc(
                         tftWidth / 2,

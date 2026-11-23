@@ -58,7 +58,8 @@ void MainMenu::begin(void) {
 
         MenuItemInterface *obj = static_cast<MenuItemInterface *>(menuItem);
         float scale = float((float)tftWidth / (float)240);
-        if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
+        if (tftHeight <= 64) scale = 0.38f;
+        else if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
         obj->draw(scale);
 #if defined(HAS_TOUCH)
         TouchFooter();
@@ -127,16 +128,16 @@ int MainMenu::gridIndexOf(MenuItemInterface *item) {
 void MainMenu::buildGridLayout(int itemCount) {
     // Floor so a cell never gets too small to tap/read — this is what triggers paging, not a
     // preferred size. Scaled by FP so it still means something on high-res boards.
-    const int MIN_CELL_W = 54 * FP;
-    const int MIN_CELL_H = 40 * FP;
+    const int MIN_CELL_W = (tftHeight <= 64) ? 50 : (54 * FP);
+    const int MIN_CELL_H = (tftHeight <= 64) ? 40 : (40 * FP);
     // Right-edge column reserved for the scrollbar and the page-up/page-down tap zone (see
     // MainMenu::handleGridPageTap()) — wide enough to actually tap, not just the 3px bar itself.
     const int PAGE_TAP_W = 4 * BORDER_OFFSET_FROM_SCREEN_EDGE;
 
     if (itemCount < 1) itemCount = 1;
 
-    int areaX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
-    int areaY = STATUS_BAR_HEIGHT - 2; // first line free under the status bar separator
+    int areaX = BORDER_OFFSET_FROM_SCREEN_EDGE + (tftHeight <= 64 ? 1 : 2);
+    int areaY = (tftHeight <= 64) ? (STATUS_BAR_HEIGHT + 1) : (STATUS_BAR_HEIGHT - 2); // first line free under the status bar separator
     int areaW = tftWidth - 2 * areaX - PAGE_TAP_W;
     int areaH = tftHeight - areaY - areaX;
 

@@ -6,14 +6,15 @@ on:
     branches:
       - main
     paths:
-      - 'boards/ESP-General/esp32-s3-zero-4mb.ini'
+      - 'boards/ESP-General/**'
       - 'embedded_resources/**'
       - 'src/**'
+      - 'lib/**'
       - '.github/workflows/build-s3-zero.yml'
 
 jobs:
   build:
-    name: Build ESP32-S3-Zero 4MB (Headless WebUI)
+    name: Build ESP32-S3-Zero 4MB (SH1106 OLED + WebUI)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
