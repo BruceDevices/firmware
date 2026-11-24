@@ -1,8 +1,8 @@
 /*
  * BLE Suite v4.0 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
- * Version: 4.0
- * Last Updated: 07/09/2026
+ * Version: 4.1
+ * Last Updated: 24/11/2026
  *
  * Contains: Smart device recon, connection caching, graduated connection
  *           strategies, robust GATT client, device fingerprinting,
