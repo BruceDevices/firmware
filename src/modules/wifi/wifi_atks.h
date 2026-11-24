@@ -60,4 +60,10 @@ void enhancedDeauthMenu();
 void showTargetSelection();
 std::vector<Host> buildTargetListFromScan();
 
+// Bring-up / teardown shared with the Wi-Fi pages added on top of the original
+// attacks (MITM, counter-surveillance, EAPOL harvest). Defined in this file.
+bool wifi_atk_setWifi();
+bool wifi_atk_unsetWifi();
+void wifi_complete_cleanup(bool wait = true);
+
 #endif

@@ -7,6 +7,7 @@
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_mac.h"
+#include "core/wifi/webInterface.h"
 #include "esp_wifi.h"
 #include "modules/ble/ble_common.h"
 #include <array>
@@ -24,6 +25,43 @@ esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t re
         err = esp_wifi_80211_tx(ifx, frame, len, false);
     }
     return err;
+}
+
+#define WIFI_SCAN_MIN_MS 100
+#define WIFI_SCAN_MAX_MS 150
+
+bool wifiEnsureRadioMem() {
+    if (radioHasMemForWifi()) return true;
+    Serial.printf(
+        "[RAM] Low memory for WiFi (free internal %u, DMA block %u), releasing BLE...\n",
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA)
+    );
+    // BLE is the usual reason the contiguous DMA block is gone, but on this
+    // board the Web UI's ports and any stale capture/promiscuous session also
+    // hold it. Free all three before giving up: this is what lets the scripted
+    // interception path arm while a BLE feature was used earlier in the boot.
+    stopBLEStack();
+    cleanlyStopWebUiForWiFiFeature();
+    vTaskDelay(150 / portTICK_PERIOD_MS);
+    if (radioHasMemForWifi()) return true;
+
+    // Last resort: a promiscuous capture left running pins driver RX buffers.
+    // Stopping it is safe here (the caller is about to bring Wi-Fi up anyway).
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    vTaskDelay(120 / portTICK_PERIOD_MS);
+    return radioHasMemForWifi();
+}
+
+int wifiScanNets(bool showHidden) {
+    static bool timingsSet = false;
+    if (!timingsSet) {
+        WiFi.setScanActiveMinTime(WIFI_SCAN_MIN_MS);
+        timingsSet = true;
+    }
+    int16_t nets = WiFi.scanNetworks(false, showHidden, false, WIFI_SCAN_MAX_MS);
+    return nets > 0 ? (int)nets : 0;
 }
 
 void ensureWifiPlatform() {

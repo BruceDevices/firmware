@@ -44,6 +44,16 @@ bool ble_scan_setup();
 void ble_scan();
 void stopBLEStack();
 
+/**
+ * @brief Bring the NimBLE host up once and report whether it came up.
+ *
+ * Returns true when the stack is already running. On failure the half-started
+ * controller is disabled and deinitialised before returning false, so the RAM it
+ * took is handed back instead of leaking - which is what makes a "not enough
+ * memory" answer survivable and lets a later attempt succeed.
+ */
+bool bleInit(const char *name = "");
+
 bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries = 8);
 bool bleNotifyRetry(NimBLECharacteristic *chr, uint8_t retries = 8);
 
