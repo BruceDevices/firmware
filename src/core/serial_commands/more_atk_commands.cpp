@@ -2,6 +2,7 @@
 #include "core/wifi/wifi_common.h"
 #include "helpers.h"
 #include "modules/wifi/more_atks.h"
+#include "modules/wifi/wifi_raw_portal.h"
 #include "modules/wifi/wifi_atks.h"
 #include <WiFi.h>
 #include <globals.h>

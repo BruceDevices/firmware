@@ -12,6 +12,21 @@
 #include <stdint.h>
 #include <vector>
 
+// ----------------------------------------------------------------------------
+// Helpers this port adds or borrows, declared here so that no existing Bruce
+// header has to change.
+//
+// wifi_atk_setWifi() / wifi_atk_unsetWifi() / wifi_complete_cleanup() are
+// defined in wifi_atks.cpp but are not declared by its header.
+// wifiEnsureRadioMem() / wifiScanNets() are defined in this module.
+// ----------------------------------------------------------------------------
+bool wifi_atk_setWifi();
+bool wifi_atk_unsetWifi();
+void wifi_complete_cleanup(bool wait = true);
+
+bool wifiEnsureRadioMem();
+int wifiScanNets(bool showHidden = false);
+
 /**
  * @brief Spam 802.11 beacon frames for a bounded amount of time.
  *

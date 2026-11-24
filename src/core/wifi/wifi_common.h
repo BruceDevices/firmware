@@ -59,32 +59,6 @@ void wifiConnectTask(void *pvParameters);
  */
 void ensureWifiPlatform();
 
-/**
- * @brief Makes room for Wi-Fi before a bring-up.
- *
- * Returns true when a contiguous DMA block is available. When it is not, this
- * releases the things that normally hold it (the BLE host, the built-in Web UI
- * and any stale promiscuous capture) and retries before giving up. Callers that
- * would otherwise crash inside esp_wifi_init should refuse cleanly when this
- * returns false.
- */
-bool wifiEnsureRadioMem();
-
-/**
- * @brief Scans for Wi-Fi networks with a bounded per-channel dwell.
- *
- * Every page that lists networks goes through this instead of calling
- * `WiFi.scanNetworks()` directly, because the Arduino default (min 100 ms /
- * max 300 ms per channel) spends up to 3.9 s on a 2.4 GHz sweep. This uses
- * 100/150 ms, which keeps the APs the default finds and roughly halves the wait.
- * The result stays in the library's scan list, so the usual `WiFi.SSID(i)` /
- * `WiFi.RSSI(i)` / `WiFi.scanDelete()` calls follow as before.
- *
- * @param showHidden include networks that do not broadcast an SSID
- * @return number of networks found (0 on failure)
- */
-int wifiScanNets(bool showHidden = false);
-
 // private
 /**
  * @brief Connects to wifiNetwork

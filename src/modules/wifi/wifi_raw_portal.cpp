@@ -21,6 +21,47 @@
 // outside this module reads it, so it is file-local here.
 static uint8_t wifi_channel = 0;
 
+// ----------------------------------------------------------------------------
+// Radio bring-up helpers used by every page in this port.
+// ----------------------------------------------------------------------------
+
+#define WIFI_SCAN_MIN_MS 100
+#define WIFI_SCAN_MAX_MS 150
+
+bool wifiEnsureRadioMem() {
+    if (radioHasMemForWifi()) return true;
+    Serial.printf(
+        "[RAM] Low memory for WiFi (free internal %u, DMA block %u), releasing BLE...\n",
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA)
+    );
+    // BLE is the usual reason the contiguous DMA block is gone, but the Web UI's
+    // ports and any stale capture/promiscuous session also hold it. Free all
+    // three before giving up, so a Wi-Fi page can still arm after a BLE feature
+    // ran earlier in the boot.
+    stopBLEStack();
+    cleanlyStopWebUiForWiFiFeature();
+    vTaskDelay(150 / portTICK_PERIOD_MS);
+    if (radioHasMemForWifi()) return true;
+
+    // Last resort: a promiscuous capture left running pins driver RX buffers.
+    // Stopping it is safe here (the caller is about to bring Wi-Fi up anyway).
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    vTaskDelay(120 / portTICK_PERIOD_MS);
+    return radioHasMemForWifi();
+}
+
+int wifiScanNets(bool showHidden) {
+    static bool timingsSet = false;
+    if (!timingsSet) {
+        WiFi.setScanActiveMinTime(WIFI_SCAN_MIN_MS);
+        timingsSet = true;
+    }
+    int16_t nets = WiFi.scanNetworks(false, showHidden, false, WIFI_SCAN_MAX_MS);
+    return nets > 0 ? (int)nets : 0;
+}
+
 // ============================================================================
 // Raw 802.11 injection / capture engine.
 //

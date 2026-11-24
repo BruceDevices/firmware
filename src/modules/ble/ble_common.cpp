@@ -4,9 +4,7 @@
 #include "core/ram_profile.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
-#include "esp_bt.h"
 #include "esp_mac.h"
-#include <esp_heap_caps.h>
 #include "modules/badusb_ble/ducky_typer.h"
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
@@ -18,24 +16,6 @@
 
 BLEScan *pBLEScan = nullptr;
 int scanTime = SCANTIME;
-
-bool bleInit(const char *name) {
-    if (NimBLEDevice::isInitialized()) return true;
-
-    if (NimBLEDevice::init(name == nullptr ? "" : name)) return true;
-
-    // The controller came up far enough to allocate, then failed. Release it so
-    // the DMA block and the host's heap go back to the caller.
-    esp_bt_controller_disable();
-    esp_bt_controller_deinit();
-
-    Serial.printf(
-        "[BLE] init failed; controller released, internal free=%u dma free=%u\n",
-        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-        (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA)
-    );
-    return false;
-}
 
 bool bleNotifyRetry(NimBLECharacteristic *chr, const uint8_t *value, size_t length, uint8_t retries) {
     if (chr == nullptr) return false;

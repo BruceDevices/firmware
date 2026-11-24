@@ -2,8 +2,28 @@
 
 #include "modules/ble/ble_common.h"
 #include <WiFi.h>
+#include <esp_bt.h>
+#include <esp_heap_caps.h>
 #include <globals.h>
 #include <string.h>
+
+namespace {
+// Bring the NimBLE host up once, and release a half-started controller on
+// failure so its RAM goes back instead of leaking. Kept local: upstream's
+// ble_common has no such helper and this port does not edit it.
+bool cadenceBleInit(const char *name) {
+    if (NimBLEDevice::isInitialized()) return true;
+    if (NimBLEDevice::init(name == nullptr ? "" : name)) return true;
+    esp_bt_controller_disable();
+    esp_bt_controller_deinit();
+    Serial.printf(
+        "[BLE] init failed; controller released, internal free=%u dma free=%u\n",
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA)
+    );
+    return false;
+}
+} // namespace
 
 // Task 3, BLE half of the dashboard.
 //
@@ -171,7 +191,7 @@ String bleCadence(int seconds) {
         delay(100);
     }
 
-    if (!bleInit("vnd-cadence")) return "ble: radio unavailable (no memory for the stack)";
+    if (!cadenceBleInit("vnd-cadence")) return "ble: radio unavailable (no memory for the stack)";
     NimBLEScan *scan = NimBLEDevice::getScan();
     if (scan == nullptr) {
         stopBLEStack();

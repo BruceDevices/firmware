@@ -6,6 +6,7 @@
 #include "core/wifi/wifi_common.h"
 #include "mitm_uc.h"
 #include "wifi_atks.h"
+#include "wifi_raw_portal.h"
 #include <FS.h>
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
