@@ -1154,7 +1154,7 @@ void RfReceiveSession::stop() {
 
 String rfReceiveSignal(
     float frequency, int maxSeconds, bool raw, bool headless, const String &rxPreset,
-    bool interruptOnNavigation, RfReceiveSession *session
+    bool interruptOnNavigation, RfReceiveSession *session, bool *selectInterrupted
 ) {
     RfCodes received;
 
@@ -1230,6 +1230,11 @@ String rfReceiveSignal(
     const uint32_t started = millis();
     // Headless JS owns the Back event; checking it here must not consume it.
     while (!(headless ? EscPress : check(EscPress))) {
+        // The JS call requested Select cancellation and will receive its own result.
+        if (selectInterrupted && check(SelPress)) {
+            *selectInterrupted = true;
+            break;
+        }
         // The native capture list owns navigation; leave its events unconsumed.
         if (interruptOnNavigation && (SelPress || NextPress || PrevPress || UpPress || DownPress)) break;
         std::vector<int> durations;

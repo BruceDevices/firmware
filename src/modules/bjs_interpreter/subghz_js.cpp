@@ -83,7 +83,7 @@ JSValue native_subghzRead(JSContext *ctx, JSValue *this_val, int argc, JSValue *
 }
 
 JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    // readRaw(timeoutSeconds = 10, rxPreset = ""). Empty preserves the default profile.
+    // readRaw(timeoutSeconds = 10, rxPreset = "", interruptOnSelect = false).
     int timeout = 10;
     if (argc > 0 && JS_IsNumber(ctx, argv[0])) JS_ToInt32(ctx, &timeout, argv[0]);
     timeout = constrain(timeout, 1, 60);
@@ -93,7 +93,14 @@ JSValue native_subghzReadRaw(JSContext *ctx, JSValue *this_val, int argc, JSValu
         const char *name = JS_ToCString(ctx, argv[1], &presetBuf);
         if (name) preset = name;
     }
-    String r = rfReceiveSignal(bruceConfigPins.rfFreq, timeout, true, true, preset);
+    // Return a dedicated result instead of relying on input flags surviving radio cleanup.
+    bool selected = false;
+    const bool interruptOnSelect = argc > 2 && JS_IsBool(argv[2]) && JS_ToBool(ctx, argv[2]);
+    String r = rfReceiveSignal(
+        bruceConfigPins.rfFreq, timeout, true, true, preset, false, nullptr,
+        interruptOnSelect ? &selected : nullptr
+    );
+    if (selected) return JS_NULL;
     return JS_NewString(ctx, r.c_str());
 }
 

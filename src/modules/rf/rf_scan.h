@@ -136,12 +136,13 @@ private:
     bool radioActive = false;
     float frequency = 0;
     String preset, registers;
-    friend String rfReceiveSignal(float, int, bool, bool, const String &, bool, RfReceiveSession *);
+    friend String rfReceiveSignal(float, int, bool, bool, const String &, bool, RfReceiveSession *, bool *);
 };
 
 String rfReceiveSignal(
     float frequency = 0, int maxSeconds = -1, bool raw = false, bool headless = false,
-    const String &rxPreset = "", bool interruptOnNavigation = false, RfReceiveSession *session = nullptr
+    const String &rxPreset = "", bool interruptOnNavigation = false, RfReceiveSession *session = nullptr,
+    bool *selectInterrupted = nullptr
 );
 
 // Shared native capture-list presentation and navigation reset.
