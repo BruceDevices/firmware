@@ -28,6 +28,72 @@
 #define ES8311_ADDR 0x18
 #define ES8311_CODEC 1
 
+// M5Stack Unit CardKB v1.1 on shared Wire (SDA=16, SCL=15) @ 0x5F
+#define CARDKB_ADDR 0x5F
+#define CARDKB_LEFT 0xB4
+#define CARDKB_UP 0xB5
+#define CARDKB_DOWN 0xB6
+#define CARDKB_RIGHT 0xB7
+#define CARDKB_POLL_MS 25
+#define CARDKB_I2C_TIMEOUT_MS 20
+
+static void cardKbPoll() {
+    static uint32_t lastPollMs = 0;
+    const uint32_t now = millis();
+    if (now - lastPollMs < CARDKB_POLL_MS) return;
+    lastPollMs = now;
+
+    Wire.setTimeOut(CARDKB_I2C_TIMEOUT_MS);
+    const int n = Wire.requestFrom((uint8_t)CARDKB_ADDR, (uint8_t)1);
+    if (n < 1 || !Wire.available()) {
+        KeyStroke.Clear();
+        return;
+    }
+    const uint8_t c = Wire.read();
+    if (c == 0) {
+        KeyStroke.Clear();
+        return;
+    }
+
+    if (wakeUpScreen()) {
+        AnyKeyPress = true;
+        KeyStroke.Clear();
+        return;
+    }
+
+    keyStroke key;
+    bool handled = true;
+    switch (c) {
+        case CARDKB_LEFT: PrevPress = true; break;
+        case CARDKB_UP: UpPress = true; break;
+        case CARDKB_DOWN: DownPress = true; break;
+        case CARDKB_RIGHT: NextPress = true; break;
+        case 0x0D:
+            key.enter = true;
+            SelPress = true;
+            break;
+        case 0x1B:
+            key.exit_key = true;
+            key.fn = true;
+            EscPress = true;
+            break;
+        case 0x08: key.del = true; break;
+        default:
+            if (c >= 0x20 && c <= 0x7E) key.word.emplace_back(static_cast<char>(c));
+            else handled = false;
+            break;
+    }
+
+    if (!handled) {
+        KeyStroke.Clear();
+        return;
+    }
+
+    AnyKeyPress = true;
+    key.pressed = true;
+    KeyStroke = key;
+}
+
 // =============================================
 // SD Card SDIO pins (defined locally for USE_SD_MMC)
 // =============================================
@@ -157,6 +223,9 @@ void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 **********************************************************************/
 void InputHandler(void) {
     static long tm = 0;
+
+    // CardKB on shared I2C — polled outside the 200ms touch debounce so typing stays responsive.
+    cardKbPoll();
 
     if (millis() - tm > 200 || LongPress) {
         // ---- Touch Screen Input ----

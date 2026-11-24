@@ -45,5 +45,17 @@ Power modules from the header **3V3** pin — CC1101 and nRF24 are 3.3V, not 5V-
 PN532 (NFC), DS3231 (RTC) and other I2C devices join the IIC header
 (SDA 16 / SCL 15) at their own addresses.
 
+### CardKB v1.1 (supported)
+
+| Cable | CardKB | Freenove IIC |
+| --- | --- | --- |
+| Black | GND | GND |
+| Red | 5V label (runs at 3.3V) | **3.3V** |
+| Yellow | SDA | SDA GPIO16 |
+| White | SCL | SCL GPIO15 |
+
+Address **0x5F**. Bruce polls one byte per key; arrows/Enter/Esc/Backspace map into
+menu navigation and text entry (`HAS_KEYBOARD`). See `E:\cyd\bruce-cardkb-readme.md`.
+
 > Match wiring by **GPIO number to the header silkscreen** (IO2/IO3/IO14/IO21,
 > TX/RX), not by connector position.

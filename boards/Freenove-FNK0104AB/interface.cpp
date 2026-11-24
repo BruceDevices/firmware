@@ -13,6 +13,7 @@
  *   - BOOT button (GPIO0)
  */
 
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include "hal/bright/bright.h"
@@ -25,6 +26,79 @@
 
 #define ES8311_ADDR 0x18
 #define ES8311_CODEC 1
+
+// =============================================
+// M5Stack Unit CardKB v1.1 (I2C @ 0x5F on Grove / board IIC)
+// Shared Wire bus with FT6336 touch (0x38) and ES8311 (0x18).
+// Poll 1 byte: 0 = none; ASCII for keys; arrows 0xB4..0xB7; Enter 0x0D;
+// Backspace 0x08; Esc 0x1B (M5 CardKB docs).
+// =============================================
+#define CARDKB_ADDR 0x5F
+#define CARDKB_LEFT 0xB4
+#define CARDKB_UP 0xB5
+#define CARDKB_DOWN 0xB6
+#define CARDKB_RIGHT 0xB7
+#define CARDKB_POLL_MS 25
+#define CARDKB_I2C_TIMEOUT_MS 20
+
+static void cardKbPoll() {
+    static uint32_t lastPollMs = 0;
+    const uint32_t now = millis();
+    if (now - lastPollMs < CARDKB_POLL_MS) return;
+    lastPollMs = now;
+
+    // Short timeout so a missing/NACK'd CardKB cannot stall taskInputHandler / WDT.
+    Wire.setTimeOut(CARDKB_I2C_TIMEOUT_MS);
+    const int n = Wire.requestFrom((uint8_t)CARDKB_ADDR, (uint8_t)1);
+    if (n < 1 || !Wire.available()) {
+        KeyStroke.Clear();
+        return;
+    }
+    const uint8_t c = Wire.read();
+    if (c == 0) {
+        KeyStroke.Clear();
+        return;
+    }
+
+    // Key while asleep only wakes the screen (same pattern as Tab5 / Cardputer).
+    if (wakeUpScreen()) {
+        AnyKeyPress = true;
+        KeyStroke.Clear();
+        return;
+    }
+
+    keyStroke key;
+    bool handled = true;
+    switch (c) {
+        case CARDKB_LEFT: PrevPress = true; break;
+        case CARDKB_UP: UpPress = true; break;
+        case CARDKB_DOWN: DownPress = true; break;
+        case CARDKB_RIGHT: NextPress = true; break;
+        case 0x0D:
+            key.enter = true;
+            SelPress = true;
+            break;
+        case 0x1B:
+            key.exit_key = true;
+            key.fn = true; // text UI cancels on fn+exit_key
+            EscPress = true;
+            break;
+        case 0x08: key.del = true; break;
+        default:
+            if (c >= 0x20 && c <= 0x7E) key.word.emplace_back(static_cast<char>(c));
+            else handled = false;
+            break;
+    }
+
+    if (!handled) {
+        KeyStroke.Clear();
+        return;
+    }
+
+    AnyKeyPress = true;
+    key.pressed = true;
+    KeyStroke = key;
+}
 
 // =============================================
 // SD Card SDIO pins (defined locally for USE_SD_MMC)
@@ -84,6 +158,7 @@ void _setup_gpio() {
     // ES8311 ADC: clocked off the speaker BCLK, and its LRCLK doubles as the mic WS
     // clk,data,ws,type
     bruceConfigPins.mic_bus = {(gpio_num_t)5, (gpio_num_t)6, (gpio_num_t)7, MIC_TYPE_I2S_MSB};
+    bruceConfigPins.sys_i2c = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl (touch/codec/CardKB)
     bruceConfigPins.i2c_bus = {(gpio_num_t)16, (gpio_num_t)15}; // sda, scl (Grove)
     bruceConfigPins.rfTx = 16;
     bruceConfigPins.rfRx = 15;
@@ -113,6 +188,9 @@ void _setup_gpio() {
     // ---- SD Card (SDIO mode, 1-bit) ----
     SD.setPins(PIN_SD_CLK, PIN_SD_CMD, PIN_SD_D0);
 #endif
+
+    // Shared I2C: touch + ES8311 + CardKB
+    setSysI2CBus(&Wire);
 
     // ---- Touch Screen Init (FT6336G) ----
     if (!hal_touch_init(touchCfg(), FNK0104AB_TOUCH_ADDR)) { Serial.println("Touch IC not Started"); }
@@ -151,6 +229,9 @@ void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
 **********************************************************************/
 void InputHandler(void) {
     static long tm = 0;
+
+    // CardKB on shared I2C — polled outside the 200ms touch debounce so typing stays responsive.
+    cardKbPoll();
 
     if (millis() - tm > 200 || LongPress) {
         // ---- Touch Screen Input ----
