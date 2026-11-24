@@ -5,8 +5,12 @@
 #include <USB.h>
 #include <USBMSC.h>
 #include <atomic>
+#include <algorithm>
+#include <cstring>
 #include <device/usbd_pvt.h>
+#include <memory>
 #include <mutex>
+#include <new>
 #include <tusb.h>
 
 namespace {
@@ -18,20 +22,54 @@ std::atomic<Session> session{Session::Idle};
 uint32_t sectorCount;
 uint16_t sectorSize;
 bool exportedBefore;
+std::unique_ptr<uint8_t[]> sectorBuffer;
 
 bool validTransfer(uint32_t lba, uint32_t offset, const void *buffer, uint32_t size) {
-    if (session != Session::Active || !buffer || offset != 0 || size > INT32_MAX ||
-        size % sectorSize != 0 || lba >= sectorCount) {
+    if (session != Session::Active || !buffer || sectorSize == 0 || sectorCount == 0 || size == 0 ||
+        size > INT32_MAX) {
         return false;
     }
-    return size / sectorSize <= sectorCount - lba;
+    const uint64_t address = static_cast<uint64_t>(lba) * sectorSize + offset;
+    const uint64_t capacity = static_cast<uint64_t>(sectorCount) * sectorSize;
+    return address < capacity && size <= capacity - address;
+}
+
+bool alignedBuffer(const void *buffer) {
+    return reinterpret_cast<uintptr_t>(buffer) % alignof(uint32_t) == 0;
+}
+
+bool prepareSectorBuffer(uint32_t offset, const void *buffer, uint32_t size) {
+    if (offset == 0 && size % sectorSize == 0 && alignedBuffer(buffer) &&
+        (size <= sectorSize || sectorSize % alignof(uint32_t) == 0)) {
+        return true;
+    }
+    // Reserve before any I/O so allocation failure cannot follow an earlier sector write.
+    // The session mutex protects this reusable buffer and its lifetime.
+    if (!sectorBuffer) sectorBuffer.reset(new (std::nothrow) uint8_t[sectorSize]);
+    return static_cast<bool>(sectorBuffer);
 }
 
 int32_t writeBlocks(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t size) {
     std::lock_guard<std::mutex> lock(sessionMutex);
     if (!validTransfer(lba, offset, buffer, size)) return -1;
-    for (uint32_t pos = 0; pos < size; pos += sectorSize, ++lba) {
-        if (!SD.writeRAW(buffer + pos, lba)) return -1;
+    lba += offset / sectorSize;
+    offset %= sectorSize;
+    if (!prepareSectorBuffer(offset, buffer, size)) return -1;
+    for (uint32_t pos = 0; pos < size; ++lba) {
+        const uint32_t count = std::min<uint32_t>(sectorSize - offset, size - pos);
+        uint8_t *block = buffer + pos;
+        if (offset != 0 || count != sectorSize) {
+            if (!SD.readRAW(sectorBuffer.get(), lba)) return -1;
+            memcpy(sectorBuffer.get() + offset, block, count);
+            block = sectorBuffer.get();
+        } else if (!alignedBuffer(block)) {
+            // The SPI driver may access a complete block through word-sized pointers.
+            memcpy(sectorBuffer.get(), block, count);
+            block = sectorBuffer.get();
+        }
+        if (!SD.writeRAW(block, lba)) return -1;
+        pos += count;
+        offset = 0;
     }
     return size;
 }
@@ -39,9 +77,21 @@ int32_t writeBlocks(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t siz
 int32_t readBlocks(uint32_t lba, uint32_t offset, void *buffer, uint32_t size) {
     std::lock_guard<std::mutex> lock(sessionMutex);
     if (!validTransfer(lba, offset, buffer, size)) return -1;
+    lba += offset / sectorSize;
+    offset %= sectorSize;
+    if (!prepareSectorBuffer(offset, buffer, size)) return -1;
     auto *bytes = static_cast<uint8_t *>(buffer);
-    for (uint32_t pos = 0; pos < size; pos += sectorSize, ++lba) {
-        if (!SD.readRAW(bytes + pos, lba)) return -1;
+    for (uint32_t pos = 0; pos < size; ++lba) {
+        const uint32_t count = std::min<uint32_t>(sectorSize - offset, size - pos);
+        uint8_t *block = bytes + pos;
+        if (offset != 0 || count != sectorSize || !alignedBuffer(block)) {
+            if (!SD.readRAW(sectorBuffer.get(), lba)) return -1;
+            memcpy(block, sectorBuffer.get() + offset, count);
+        } else if (!SD.readRAW(block, lba)) {
+            return -1;
+        }
+        pos += count;
+        offset = 0;
     }
     return size;
 }
@@ -205,6 +255,11 @@ MassStorage::MassStorage() {
         showSession();
     }
     if (canStart) stopMedia();
+
+    {
+        std::lock_guard<std::mutex> lock(sessionMutex);
+        sectorBuffer.reset();
+    }
 
     if (!endSdCardRawAccess()) displayError("SD remount failed", true);
     else if (!started) displayError("USB storage failed", true);
