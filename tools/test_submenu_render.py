@@ -25,8 +25,8 @@ timer = SOURCE[timer_start:timer_end]
 init_start = SOURCE.index("    if (!compact) drawMainBorder();")
 init_end = SOURCE.index("    while (1)", init_start)
 init = SOURCE[init_start:init_end]
-assert SOURCE.index("submenuNeedsFullRedraw = true;", SOURCE.index("bool renderedByLambda")) < SOURCE.index("renderedByLambda = options[index].hover")
-assert SOURCE.index("drawSubmenu(index, options, subText,") < timer_start
+assert SOURCE.index("submenuNeedsFullRedraw = true;", SOURCE.index("bool renderedByLambda")) < SOURCE.index("renderedByLambda = options.renderHover(index)")
+assert SOURCE.index("drawSubmenu(index, options.normalOptions(), subText,") < timer_start
 assert SOURCE.index("statusBarDrawTs = millis();", init_start) < init_end
 
 preamble = r"""

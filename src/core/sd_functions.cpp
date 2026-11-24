@@ -20,6 +20,7 @@
 
 #include <MD5Builder.h>
 #include <algorithm> // for std::sort
+#include <cctype>
 #include <esp_rom_crc.h>
 #include <mutex>
 
@@ -548,11 +549,18 @@ bool sortList(const FileList &a, const FileList &b) {
         return a.folder > b.folder; // true if a is a folder and b is not
     }
     // Order items alphabetically
-    String fa = a.filename.c_str();
-    fa.toUpperCase();
-    String fb = b.filename.c_str();
-    fb.toUpperCase();
-    return fa < fb;
+    const unsigned char *left = reinterpret_cast<const unsigned char *>(a.filename.c_str());
+    const unsigned char *right = reinterpret_cast<const unsigned char *>(b.filename.c_str());
+    // Borrowed NUL-terminated strings remain valid for this synchronous comparison.
+    // Unsigned bytes keep toupper() defined for UTF-8 names; no temporary allocation.
+    while (*left && *right) {
+        int l = std::toupper(*left);
+        int r = std::toupper(*right);
+        if (l != r) return l < r;
+        ++left;
+        ++right;
+    }
+    return *left < *right;
 }
 
 /***************************************************************************************
@@ -661,26 +669,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             return "";
         }
     }
-    std::vector<Option> sdOptions;
-    auto rebuildSdOptions = [&]() {
-        sdOptions.clear();
-        for (auto &f : fileList) {
-            String label = f.filename + (f.folder && !f.operation ? "/" : "");
-            Option opt(label, []() {});
-            // Matches the colors the old listFiles() drew: folders dimmer than files, "> Back" in
-            // ALCOLOR; plain files keep drawOptions()'s default (fgcolor) by leaving hasColor unset.
-            if (f.operation) {
-                opt.hasColor = true;
-                opt.color = ALCOLOR;
-            } else if (f.folder) {
-                opt.hasColor = true;
-                opt.color = getColorVariation(bruceConfig.priColor);
-            }
-            sdOptions.push_back(opt);
-        }
-    };
     readFs(fs, Folder, allowed_ext);
-    rebuildSdOptions();
 
     while (1) {
         if (exit) break; // stop this loop and return to the previous loop
@@ -690,18 +679,16 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
             Serial.println("reload to read: " + Folder);
             readFs(fs, Folder, allowed_ext);
-            rebuildSdOptions();
             PreFolder = Folder;
-            if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index >= (int)sdOptions.size()) index = 0;
+            if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index >= (int)fileList.size()) index = 0;
             reload = false;
         }
-        if (sdOptions.size() < 2) {
+        if (fileList.size() < 2) {
             readFs(fs, Folder, allowed_ext);
-            rebuildSdOptions();
         }
         bool longPressDetected = false;
-        index = loopOptions(
-            sdOptions, MENU_TYPE_REGULAR, "", index, false, true, PAGE_JUMP_SIZE, false, false,
+        index = loopFileOptions(
+            fileList, index, PAGE_JUMP_SIZE,
 #ifdef HAS_ENCODER
             &longPressDetected
 #else
@@ -774,7 +761,6 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             String filename = fileList[index].filename;
             Serial.println(filepath + " --> " + filename);
             fileList.clear();  // Clear memory to allow other functions to work better
-            sdOptions.clear(); // its parallel display list too
 
             options = {
                 {"View File",  [=, &fs]() { viewFile(fs, filepath); }            },

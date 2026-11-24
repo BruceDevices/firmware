@@ -181,6 +181,9 @@ int loopOptions(
     bool interpreter = false, bool letterShortcuts = false, uint16_t pageJumpSize = 0, bool border = true,
     bool compact = false, bool *longPressResult = nullptr
 );
+// Borrows a stable file list until the selection or Esc returns; creates labels on demand.
+int loopFileOptions(const std::vector<FileList> &files, int index = 0, uint16_t pageJumpSize = 0, bool *longPressResult = nullptr);
+
 inline int loopOptions(std::vector<Option> &options, int _index) {
     return loopOptions(options, MENU_TYPE_REGULAR, "", _index, false);
 }
