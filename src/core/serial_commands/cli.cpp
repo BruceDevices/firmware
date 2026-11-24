@@ -6,6 +6,8 @@
 #include "interpreter_commands.h"
 #include "ir_commands.h"
 #include "led_commands.h"
+#include "mitm_commands.h"
+#include "more_atk_commands.h"
 #include "power_commands.h"
 #include "rf_commands.h"
 #include "rfid_commands.h"
@@ -46,6 +48,11 @@ void SerialCli::setup() {
     createStorageCommands(&_cli);
     createUtilCommands(&_cli);
     createWifiCommands(&_cli);
+
+#ifndef LITE_VERSION
+    createMitmCommands(&_cli);
+    createMoreCommands(&_cli);
+#endif
 
 #ifndef LITE_VERSION
     createWireCommands(&_cli);
