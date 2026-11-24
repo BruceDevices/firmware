@@ -57,6 +57,7 @@ public:
     int wifiAtStartup = 0;
     int instantBoot = 0;
     String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
+    String language = "en";         // "en" | "zh-CN"
 
 #ifdef HAS_RGB_LED
     // Led
@@ -151,6 +152,8 @@ public:
     void validateSoundVolumeValue();
     void setWifiAtStartup(int value);
     void validateWifiAtStartupValue();
+    void setLanguage(const String &value);
+    void validateLanguage();
 
 #ifdef HAS_RGB_LED
     // Led

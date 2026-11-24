@@ -2,6 +2,27 @@
 #include <esp32-hal-psram.h>
 #include <globals.h>
 #include <tftLogger.h>
+#include "core/cjk_font_data.h"
+#include "core/i18n.h"
+
+namespace {
+
+const bruce_i18n::CjkGlyph *findCjkGlyph(uint32_t cp) {
+    if (cp > 0xFFFF) return nullptr;
+    uint16_t target = static_cast<uint16_t>(cp);
+    size_t lo = 0;
+    size_t hi = bruce_i18n::kCjkGlyphCount;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        uint16_t midCp = pgm_read_word(&bruce_i18n::kCjkGlyphs[mid].codepoint);
+        if (midCp == target) return &bruce_i18n::kCjkGlyphs[mid];
+        if (midCp < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return nullptr;
+}
+
+} // namespace
 
 /*
 AUXILIARY FUNCTIONS TO CREATE THE JSONS
@@ -441,9 +462,10 @@ void tft_logger::drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg) {
 void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     if (!logging) return;
     if (!log) return;
-    if (removeLogEntriesInsideRect(
-            x, y, s.length() * LW * currentTextSize(), s.length() * LH * currentTextSize()
-        )) {
+    uint8_t ts = currentTextSize();
+    int32_t rectW = bruce_i18n::containsNonAscii(s) ? bruce_i18n::utf8PixelWidth(s, ts)
+                                                    : static_cast<int32_t>(s.length() * LW * ts);
+    if (removeLogEntriesInsideRect(x, y, rectW, LH * ts)) {
         // debug purpose
         // Serial.printf("Something was removed while processing: %s\n", s.c_str());
     }
@@ -454,13 +476,12 @@ void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
 
     writeUint16(buffer, pos, x);
     writeUint16(buffer, pos, y);
-    writeUint16(buffer, pos, currentTextSize());
+    writeUint16(buffer, pos, ts);
     writeUint16(buffer, pos, currentTextColor());
     writeUint16(buffer, pos, currentTextBgColor());
 
     size_t maxLen = MAX_LOG_SIZE - pos - 1;
-    size_t len = s.length();
-    if (len > maxLen) len = maxLen;
+    size_t len = bruce_i18n::utf8SafeCutBytes(s.c_str(), s.length(), maxLen);
     memcpy(buffer + pos, s.c_str(), len);
     pos += len;
 
@@ -472,29 +493,167 @@ void tft_logger::log_drawString(String s, tftFuncs fn, int32_t x, int32_t y) {
     logging = false;
 }
 
+int16_t tft_logger::textWidth(const String &string) {
+    if (bruce_i18n::containsNonAscii(string)) {
+        return bruce_i18n::utf8PixelWidth(string, currentTextSize());
+    }
+    return BRUCE_TFT_DRIVER::textWidth(string);
+}
+
+int16_t tft_logger::textWidth(const String &string, uint8_t font) {
+    if (bruce_i18n::containsNonAscii(string)) {
+        return bruce_i18n::utf8PixelWidth(string, currentTextSize());
+    }
+    return BRUCE_TFT_DRIVER::textWidth(string, font);
+}
+
+int16_t tft_logger::drawUtf8Text(
+    const String &s, int32_t x, int32_t y, uint8_t font, uint8_t alignOverride
+) {
+    uint8_t ts = currentTextSize();
+    if (ts < 1) ts = 1;
+    uint16_t fg = currentTextColor();
+    uint16_t bg = currentTextBgColor();
+    bool opaque = (fg != bg);
+
+    int16_t totalW = bruce_i18n::utf8PixelWidth(s, ts);
+    int16_t lineH = bruce_i18n::utf8LineHeight(ts);
+    uint8_t oldDatum = getTextDatum();
+
+    int32_t startX = x;
+    int32_t startY = y;
+
+    if (alignOverride == 1) {
+        startX = x - totalW / 2;
+    } else if (alignOverride == 2) {
+        startX = x - totalW;
+    } else {
+        // Horizontal datum
+        if (oldDatum == TC_DATUM || oldDatum == MC_DATUM || oldDatum == BC_DATUM) {
+            startX = x - totalW / 2;
+        } else if (oldDatum == TR_DATUM || oldDatum == MR_DATUM || oldDatum == BR_DATUM) {
+            startX = x - totalW;
+        }
+        // Vertical datum
+        if (oldDatum == ML_DATUM || oldDatum == MC_DATUM || oldDatum == MR_DATUM) {
+            startY = y - lineH / 2;
+        } else if (oldDatum == BL_DATUM || oldDatum == BC_DATUM || oldDatum == BR_DATUM) {
+            startY = y - lineH;
+        }
+    }
+
+    BRUCE_TFT_DRIVER::setTextDatum(TL_DATUM);
+
+    const char *p = s.c_str();
+    int32_t curX = startX;
+    while (*p) {
+        if (static_cast<unsigned char>(*p) < 0x80) {
+            const char *runStart = p;
+            while (*p && static_cast<unsigned char>(*p) < 0x80 && *p != '\n' && *p != '\r') { ++p; }
+            if (p > runStart) {
+                String run = s.substring(runStart - s.c_str(), p - s.c_str());
+                BRUCE_TFT_DRIVER::drawString(run, curX, startY, font);
+                curX += static_cast<int32_t>(run.length()) * LW * ts;
+            } else {
+                ++p; // skip CR/LF inside single-line drawString
+            }
+            continue;
+        }
+
+        uint32_t cp = bruce_i18n::utf8NextCodepoint(p);
+        int16_t adv = bruce_i18n::glyphAdvancePx(cp, ts);
+        const bruce_i18n::CjkGlyph *glyph = findCjkGlyph(cp);
+
+        int32_t glyphY = startY;
+        int16_t drawSize = (ts == 1) ? 12 : (ts == 2 ? 16 : static_cast<int16_t>(8 * ts));
+        if (ts == 1 && startY >= 2) glyphY = startY - 2;
+
+        if (opaque) {
+            BRUCE_TFT_DRIVER::fillRect(curX, glyphY, drawSize, drawSize, bg);
+        }
+
+        if (glyph) {
+            if (ts == 1) {
+                for (int row = 0; row < 12; ++row) {
+                    uint16_t bits = pgm_read_word(&glyph->rows12[row]);
+                    if (!bits) continue;
+                    for (int col = 0; col < 12; ++col) {
+                        if (bits & (1u << (11 - col))) {
+                            BRUCE_TFT_DRIVER::drawPixel(curX + col, glyphY + row, fg);
+                        }
+                    }
+                }
+            } else if (ts == 2) {
+                for (int row = 0; row < 16; ++row) {
+                    uint16_t bits = pgm_read_word(&glyph->rows16[row]);
+                    if (!bits) continue;
+                    for (int col = 0; col < 16; ++col) {
+                        if (bits & (1u << (15 - col))) {
+                            BRUCE_TFT_DRIVER::drawPixel(curX + col, glyphY + row, fg);
+                        }
+                    }
+                }
+            } else {
+                // Scale 16x16 glyph cleanly to drawSize x drawSize (e.g. 24x24 at ts=3)
+                for (int dy = 0; dy < drawSize; ++dy) {
+                    int sy = (dy * 16) / drawSize;
+                    uint16_t bits = pgm_read_word(&glyph->rows16[sy]);
+                    if (!bits) continue;
+                    for (int dx = 0; dx < drawSize; ++dx) {
+                        int sx = (dx * 16) / drawSize;
+                        if (bits & (1u << (15 - sx))) {
+                            BRUCE_TFT_DRIVER::drawPixel(curX + dx, glyphY + dy, fg);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback hollow box for unmapped non-ASCII codepoint
+            BRUCE_TFT_DRIVER::drawRect(curX + 1, glyphY + 1, drawSize - 2, drawSize - 2, fg);
+        }
+
+        curX += adv;
+    }
+
+    BRUCE_TFT_DRIVER::setTextDatum(oldDatum);
+    return totalW;
+}
+
 int16_t tft_logger::drawString(const String &string, int32_t x, int32_t y, uint8_t font) {
     log_drawString(string, DRAWSTRING, x, y);
+    if (isSleeping) return bruce_i18n::utf8PixelWidth(string, currentTextSize());
     int16_t r;
-    if (isSleeping) return string.length();
-    r = BRUCE_TFT_DRIVER::drawString(string, x, y, font);
+    if (bruce_i18n::containsNonAscii(string)) {
+        r = drawUtf8Text(string, x, y, font, 0);
+    } else {
+        r = BRUCE_TFT_DRIVER::drawString(string, x, y, font);
+    }
     restoreLogger();
     return r;
 }
 
 int16_t tft_logger::drawCentreString(const String &string, int32_t x, int32_t y, uint8_t font) {
     log_drawString(string, DRAWCENTRESTRING, x, y);
+    if (isSleeping) return bruce_i18n::utf8PixelWidth(string, currentTextSize());
     int16_t r;
-    if (isSleeping) return string.length();
-    r = BRUCE_TFT_DRIVER::drawCentreString(string, x, y, font);
+    if (bruce_i18n::containsNonAscii(string)) {
+        r = drawUtf8Text(string, x, y, font, 1);
+    } else {
+        r = BRUCE_TFT_DRIVER::drawCentreString(string, x, y, font);
+    }
     restoreLogger();
     return r;
 }
 
 int16_t tft_logger::drawRightString(const String &string, int32_t x, int32_t y, uint8_t font) {
     log_drawString(string, DRAWRIGHTSTRING, x, y);
+    if (isSleeping) return bruce_i18n::utf8PixelWidth(string, currentTextSize());
     int16_t r;
-    if (isSleeping) return string.length();
-    r = BRUCE_TFT_DRIVER::drawRightString(string, x, y, font);
+    if (bruce_i18n::containsNonAscii(string)) {
+        r = drawUtf8Text(string, x, y, font, 2);
+    } else {
+        r = BRUCE_TFT_DRIVER::drawRightString(string, x, y, font);
+    }
     restoreLogger();
     return r;
 }
@@ -503,12 +662,10 @@ void tft_logger::log_print(String s) {
     if (!logging) return;
     if (!log) return;
 
-    removeLogEntriesInsideRect(
-        getCursorX() - 1,
-        getCursorY() - 1,
-        s.length() * LW * currentTextSize() + 2,
-        s.length() * LH * currentTextSize() + 2
-    );
+    uint8_t ts = currentTextSize();
+    int32_t rectW = bruce_i18n::containsNonAscii(s) ? bruce_i18n::utf8PixelWidth(s, ts)
+                                                    : static_cast<int32_t>(s.length() * LW * ts);
+    removeLogEntriesInsideRect(getCursorX() - 1, getCursorY() - 1, rectW + 2, LH * ts + 2);
 
     uint8_t buffer[MAX_LOG_SIZE];
     uint8_t pos = 0;
@@ -516,13 +673,12 @@ void tft_logger::log_print(String s) {
 
     writeUint16(buffer, pos, getCursorX());
     writeUint16(buffer, pos, getCursorY());
-    writeUint16(buffer, pos, currentTextSize());
+    writeUint16(buffer, pos, ts);
     writeUint16(buffer, pos, currentTextColor());
     writeUint16(buffer, pos, currentTextBgColor());
 
     size_t maxLen = MAX_LOG_SIZE - pos - 1;
-    size_t len = s.length();
-    if (len > maxLen) len = maxLen;
+    size_t len = bruce_i18n::utf8SafeCutBytes(s.c_str(), s.length(), maxLen);
     memcpy(buffer + pos, s.c_str(), len);
     pos += len;
 
@@ -535,21 +691,56 @@ void tft_logger::log_print(String s) {
 
 size_t tft_logger::print(const String &s) {
     size_t totalPrinted = 0;
-    int remaining = s.length();
-    int offset = 0;
+    size_t totalLen = s.length();
+    size_t offset = 0;
 
-    const int maxChunkSize = MAX_LOG_SIZE - 13; // 13 bytes reserved to header + metadata
+    const size_t maxChunkSize = MAX_LOG_SIZE - 13; // 13 bytes reserved to header + metadata
 
-    while (remaining > 0) {
-        int chunkSize = (remaining > maxChunkSize) ? maxChunkSize : remaining;
+    while (offset < totalLen) {
+        size_t remaining = totalLen - offset;
+        size_t chunkSize = bruce_i18n::utf8SafeCutBytes(s.c_str() + offset, remaining, maxChunkSize);
+        if (chunkSize == 0) chunkSize = (remaining > maxChunkSize) ? maxChunkSize : remaining;
         String chunk = s.substring(offset, offset + chunkSize);
 
         log_print(chunk);
-        if (isSleeping) totalPrinted += chunk.length();
-        else totalPrinted += BRUCE_TFT_DRIVER::print(chunk);
+        if (isSleeping) {
+            totalPrinted += chunk.length();
+        } else if (bruce_i18n::containsNonAscii(chunk)) {
+            bool prevLog = logging;
+            logging = false;
+            uint8_t ts = currentTextSize();
+            if (ts < 1) ts = 1;
+            int32_t cx = getCursorX();
+            int32_t cy = getCursorY();
+            uint8_t oldDatum = getTextDatum();
+            BRUCE_TFT_DRIVER::setTextDatum(TL_DATUM);
+
+            int start = 0;
+            while (start <= static_cast<int>(chunk.length())) {
+                int nl = chunk.indexOf('\n', start);
+                String seg = (nl == -1) ? chunk.substring(start) : chunk.substring(start, nl);
+                if (!seg.isEmpty()) {
+                    int16_t w = drawUtf8Text(seg, cx, cy, 1, 0);
+                    cx += w;
+                }
+                if (nl != -1) {
+                    cx = 0;
+                    cy += LH * ts;
+                    start = nl + 1;
+                    if (start == static_cast<int>(chunk.length())) break;
+                } else {
+                    break;
+                }
+            }
+            BRUCE_TFT_DRIVER::setTextDatum(oldDatum);
+            BRUCE_TFT_DRIVER::setCursor(cx, cy);
+            logging = prevLog;
+            totalPrinted += chunk.length();
+        } else {
+            totalPrinted += BRUCE_TFT_DRIVER::print(chunk);
+        }
 
         offset += chunkSize;
-        remaining -= chunkSize;
     }
 
     return totalPrinted;

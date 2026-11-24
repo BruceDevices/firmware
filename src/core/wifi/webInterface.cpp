@@ -460,7 +460,7 @@ void configureWebServer() {
     // System Info
     server->on("/systeminfo", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (checkUserWebAuth(request)) {
-            char response_body[300];
+            char response_body[340];
             uint64_t LittleFSTotalBytes = LittleFS.totalBytes();
             uint64_t LittleFSUsedBytes = LittleFS.usedBytes();
             uint64_t SDTotalBytes = SD.totalBytes();
@@ -468,10 +468,11 @@ void configureWebServer() {
             snprintf(
                 response_body,
                 sizeof(response_body),
-                "{\"%s\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
+                "{\"%s\":\"%s\",\"lang\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
                 "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"}}",
                 "BRUCE_VERSION",
                 BRUCE_VERSION,
+                bruceConfig.language.c_str(),
                 "free",
                 humanReadableSize(SDTotalBytes - SDUsedBytes).c_str(),
                 "used",
@@ -486,6 +487,16 @@ void configureWebServer() {
                 humanReadableSize(LittleFSTotalBytes).c_str()
             );
             request->send(200, "application/json", response_body);
+        }
+    });
+
+    // Firmware & WebUI Language
+    server->on("/setlang", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (checkUserWebAuth(request)) {
+            if (request->hasParam("lang")) {
+                bruceConfig.setLanguage(request->getParam("lang")->value());
+            }
+            request->send(200, "text/plain", bruceConfig.language);
         }
     });
 

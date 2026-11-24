@@ -2,6 +2,119 @@ function $(s) {
   return document.querySelector(s);
 }
 const IS_DEV = window.location.host === "127.0.0.1:8080";
+
+const WebI18n = {
+  lang: localStorage.getItem("bruceLang") || "en",
+  zh: {
+    "Serial Cmd": "串口命令",
+    Navigator: "设备导航",
+    Settings: "设置",
+    "Log Out": "退出登录",
+    Name: "名称",
+    Size: "大小",
+    Action: "操作",
+    Uploading: "正在上传",
+    "Change WebUI Credentials": "修改网页凭据",
+    Reboot: "重启设备",
+    Close: "关闭",
+    "Navigator Shortcut": "导航快捷键",
+    "Device Navigator": "设备屏幕导航",
+    Shortcut: "快捷键",
+    Info: "关于",
+    Username: "用户名",
+    Password: "密码",
+    Save: "保存",
+    Run: "运行",
+    "Loading...": "加载中...",
+    "Fetching system info...": "正在获取系统信息...",
+    "Fetching content...": "正在读取文件内容...",
+    "Deleting...": "正在删除...",
+    "Renaming...": "正在重命名...",
+    "Creating Folder...": "正在创建文件夹...",
+    "Creating File...": "正在创建文件...",
+    "Running Serial Command...": "正在执行串口命令...",
+    "Saving WiFi Credentials...": "正在保存凭据...",
+    "Saving...": "正在保存...",
+    "Rebooting...": "正在重启...",
+    "Navigating...": "导航中...",
+    "Reload After Navigate": "操作后刷新",
+    "Auto Reload: 1s": "自动刷新: 1秒",
+    "Auto Reload: 2s": "自动刷新: 2秒",
+    "Auto Reload: 5s": "自动刷新: 5秒",
+    "Auto Reload: 10s": "自动刷新: 10秒",
+    "Rename": "重命名",
+    "Create Folder": "创建文件夹",
+    "Create File": "创建文件",
+    "Serial Command": "串口命令",
+    "New Folder Name:": "新文件夹名称:",
+    "New File Name:": "新文件名称:",
+    "Folder Name:": "文件夹名称:",
+    "File Name:": "文件名称:",
+    "Command:": "命令:",
+    "⚠️ WiFi features will stop the WebUI after configuration":
+      "⚠️ 配置 WiFi 功能后网页管理将断开连接",
+  },
+  t(key) {
+    if (this.lang === "zh-CN" && this.zh[key]) return this.zh[key];
+    return key;
+  },
+  apply(lang) {
+    this.lang = lang === "zh-CN" ? "zh-CN" : "en";
+    localStorage.setItem("bruceLang", this.lang);
+    document.documentElement.lang = this.lang;
+    const isZh = this.lang === "zh-CN";
+    const setTxt = (sel, en) => {
+      const el = $(sel);
+      if (el) el.textContent = isZh ? this.t(en) : en;
+    };
+    setTxt('.act-oinput[data-action="serial"]', "Serial Cmd");
+    setTxt(".act-navigation", "Navigator");
+    setTxt('.right-part button[onclick*="settings"]', "Settings");
+    setTxt('.right-part button[onclick*="/logout"]', "Log Out");
+    setTxt("th.col-name", "Name");
+    setTxt("th.col-size", "Size");
+    setTxt("th.col-action", "Action");
+    setTxt(".dialog.upload .dialog-head", "Uploading");
+    setTxt(".dialog.settings .dialog-head", "Settings");
+    setTxt(".dialog.settings .act-cred", "Change WebUI Credentials");
+    setTxt(".dialog.settings .act-reboot", "Reboot");
+    setTxt(".dialog.navigator-shortcut .dialog-head", "Navigator Shortcut");
+    setTxt(".dialog.navigator .dialog-head > span", "Device Navigator");
+    setTxt("#wifi-warning", "⚠️ WiFi features will stop the WebUI after configuration");
+    setTxt(".dialog.info .dialog-head", "Info");
+    setTxt(".dialog.credential .dialog-head", "Change WebUI Credentials");
+    setTxt('label[for="cred-username"]', "Username");
+    setTxt('label[for="cred-password"]', "Password");
+    setTxt(".act-save-credential", "Save");
+    setTxt(".act-save-edit-file", "Save");
+    setTxt(".act-run-edit-file", "Run");
+    document.querySelectorAll(".act-dialog-close").forEach((el) => {
+      el.textContent = isZh ? "关闭" : "Close";
+    });
+    const langBtn = $(".act-toggle-lang");
+    if (langBtn) {
+      langBtn.textContent = isZh
+        ? "语言 / Language: 简体中文"
+        : "Language / 语言: English";
+    }
+    const selAuto = $("#navigator-auto-reload");
+    if (selAuto) {
+      const opts = [
+        "Reload After Navigate",
+        "Auto Reload: 1s",
+        "Auto Reload: 2s",
+        "Auto Reload: 5s",
+        "Auto Reload: 10s",
+      ];
+      opts.forEach((en, idx) => {
+        if (selAuto.options[idx]) selAuto.options[idx].textContent = this.t(en);
+      });
+    }
+    if (typeof updateShowHideNavigatingButton === "function") {
+      updateShowHideNavigatingButton();
+    }
+  },
+};
 const T = {
   master: $("#t"),
   fileRow: function () {
@@ -461,9 +574,12 @@ async function fetchFiles(drive, path) {
 }
 
 async function fetchSystemInfo() {
-  Dialog.loading.show("Fetching system info...");
+  Dialog.loading.show(WebI18n.t("Fetching system info..."));
   let req = await requestGet("/systeminfo");
   let info = JSON.parse(req);
+  if (info.lang) {
+    WebI18n.apply(info.lang);
+  }
   $(".bruce-version").textContent = info.BRUCE_VERSION;
   $(".free-space .free-sd span").innerHTML =
     `${info.SD.used} / ${info.SD.total}`;
@@ -822,20 +938,23 @@ async function renderTFT(data) {
         input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
         screenText.push(input.txt); // Collect text for WiFi detection
 
-        var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
+        ctx.font = `${input.size * 8}px monospace`;
+        var measuredW = Math.max(
+          ctx.measureText(input.txt).width,
+          input.txt.length * (input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5),
+        );
         var o = 0;
-        if (fn === 15) o = input.txt.length * fw;
-        if (fn === 14) o = (input.txt.length * fw) / 2;
+        if (fn === 15) o = measuredW;
+        if (fn === 14) o = measuredW / 2;
         // draw a rectangle at the text area, to avoid overlapping texts
         ctx.fillRect(
           input.x - o,
           input.y,
-          input.txt.length * fw,
+          measuredW,
           input.size * 8,
         );
 
         ctx.fillStyle = color565toCSS(input.fg);
-        ctx.font = `${input.size * 8}px monospace`;
         ctx.textBaseline = "top";
         ctx.textAlign = fn === 14 ? "center" : fn === 15 ? "right" : "left";
         ctx.fillText(input.txt, input.x, input.y);
@@ -1164,11 +1283,26 @@ $(".act-hide-show-navigating").addEventListener("click", async (e) => {
 });
 
 function updateShowHideNavigatingButton() {
-  document.querySelector(".act-hide-show-navigating").innerHTML =
-    "'Navigating...' Overlay<br>" +
-    (showNavigating ? "Shown" : "Hidden") +
-    "<br>(click to toggle)";
+  const isZh = WebI18n.lang === "zh-CN";
+  document.querySelector(".act-hide-show-navigating").innerHTML = isZh
+    ? "“导航中...”遮罩<br>" + (showNavigating ? "已显示" : "已隐藏") + "<br>（点击切换）"
+    : "'Navigating...' Overlay<br>" +
+      (showNavigating ? "Shown" : "Hidden") +
+      "<br>(click to toggle)";
 }
+
+$(".act-toggle-lang").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const nextLang = WebI18n.lang === "zh-CN" ? "en" : "zh-CN";
+  WebI18n.apply(nextLang);
+  try {
+    await requestGet("/setlang", { lang: nextLang });
+  } catch (err) {
+    console.warn("Failed to persist language to firmware:", err);
+  }
+});
+
+WebI18n.apply(WebI18n.lang);
 
 $(".act-reboot").addEventListener("click", async (e) => {
   e.preventDefault();

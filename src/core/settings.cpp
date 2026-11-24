@@ -347,6 +347,24 @@ void setMainMenuStyleMenu() {
     loopOptions(options, bruceConfig.mainMenuStyle);
 }
 
+/*********************************************************************
+**  Function: setLanguageMenu
+**  Choose firmware UI language (English default, Simplified Chinese)
+**********************************************************************/
+void setLanguageMenu() {
+    std::vector<Option> langOptions = {
+        {"English",
+         []() { bruceConfig.setLanguage("en"); },
+         bruceConfig.language == "en"},
+        {"简体中文",
+         []() { bruceConfig.setLanguage("zh-CN"); },
+         bruceConfig.language == "zh-CN"},
+        {"Back", []() {}},
+    };
+    int initialIdx = (bruceConfig.language == "zh-CN") ? 1 : 0;
+    loopOptions(langOptions, MENU_TYPE_SUBMENU, "Firmware Language", initialIdx);
+}
+
 uint16_t alterOneColorChannel565(uint16_t color, int newR, int newG, int newB) {
     uint8_t r = (color >> 11) & 0x1F;
     uint8_t g = (color >> 5) & 0x3F;

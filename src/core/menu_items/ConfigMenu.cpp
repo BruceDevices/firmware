@@ -24,7 +24,8 @@ void ConfigMenu::optionsMenu() {
         }
 
         std::vector<Option> localOptions = {
-            {"Display & UI",  [this]() { displayUIMenu(); }},
+            {"Display & UI",    [this]() { displayUIMenu(); }   },
+            {"Language / 语言", [this]() { setLanguageMenu(); } },
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif

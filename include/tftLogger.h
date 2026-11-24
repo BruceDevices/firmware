@@ -106,6 +106,8 @@ public:
     void drawFastVLine(int32_t x, int32_t y, int32_t h, int32_t fg);
     void drawFastHLine(int32_t x, int32_t y, int32_t w, int32_t fg);
     void log_drawString(String s, tftFuncs fn, int32_t x, int32_t y);
+    int16_t textWidth(const String &string);
+    int16_t textWidth(const String &string, uint8_t font);
     int16_t drawString(const String &string, int32_t x, int32_t y, uint8_t font = 1);
     int16_t drawCentreString(const String &string, int32_t x, int32_t y, uint8_t font = 1);
     int16_t drawRightString(const String &string, int32_t x, int32_t y, uint8_t font = 1);
@@ -161,6 +163,7 @@ protected:
     void addLogEntry(const uint8_t *buffer, uint8_t size);
     void logWriteHeader(uint8_t *buffer, uint8_t &pos, tftFuncs fn);
     void writeUint16(uint8_t *buffer, uint8_t &pos, uint16_t value);
+    int16_t drawUtf8Text(const String &s, int32_t x, int32_t y, uint8_t font, uint8_t alignOverride);
 };
 
 #endif //__DISPLAY_LOGER

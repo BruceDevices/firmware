@@ -1,5 +1,6 @@
 #include "display.h"
 #include "hal/power/gauge.h"
+#include "i18n.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -43,29 +44,46 @@ bool __attribute__((weak)) isCharging() { return hal_gauge_is_charging(); }
 ** Description:   Scroll large texts into screen
 ***************************************************************************************/
 void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight) {
-    int len = text.length();
-    String displayText = text + "        "; // Add spaces for smooth looping
-    int scrollLen = len + 8;                // Full text plus space buffer
+    String trText = bruce_i18n::tr(text);
+    uint8_t ts = tft.getTextSize();
+    if (ts < 1) ts = 1;
+    int16_t boxPx = (coord.size - 1) * LW * ts;
+    int16_t textPx = bruce_i18n::utf8PixelWidth(trText, ts);
     static int i = 0;
     static long _lastmillis = 0;
     if (highlight) tft.setTextColor(coord.bgcolor, coord.fgcolor);
     else tft.setTextColor(coord.fgcolor, coord.bgcolor);
-    if (len < coord.size) {
+    if (textPx <= boxPx) {
         // Text fits within limit, no scrolling needed
         return;
     } else if (millis() > _lastmillis + 200) {
-        String scrollingPart =
-            displayText.substring(i, i + (coord.size - 1)); // Display charLimit characters at a time
+        String displayText = trText + "    ";
+        // Advance by UTF-8 codepoint index `i`
+        const char *base = displayText.c_str();
+        const char *p = base;
+        int cpCount = 0;
+        const char *startPtr = base;
+        while (*p) {
+            if (cpCount == i) startPtr = p;
+            bruce_i18n::utf8NextCodepoint(p);
+            ++cpCount;
+        }
+        if (i >= cpCount) {
+            i = 0;
+            startPtr = base;
+        }
+        String tail = displayText.substring(startPtr - base);
+        String scrollingPart = bruce_i18n::utf8TruncateToWidth(tail, boxPx, ts);
         tft.fillRect(
             coord.x,
             coord.y,
-            (coord.size - 1) * LW * tft.getTextSize(),
-            LH * tft.getTextSize(),
+            boxPx,
+            LH * ts,
             highlight ? coord.fgcolor : bruceConfig.bgColor
         ); // Clear display area
         tft.setCursor(coord.x, coord.y);
         tft.print(scrollingPart);
-        if (i >= scrollLen - coord.size) i = -1; // Loop back
+        if (i >= cpCount - 2) i = -1; // Loop back
         _lastmillis = millis();
         i++;
         if (i == 1) _lastmillis = millis() + 1000;
@@ -88,9 +106,9 @@ void TouchFooter(uint16_t color) {
     );
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
-    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
-    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("PREV"), tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("SEL"), tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("NEXT"), 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
 #endif
 }
 /***************************************************************************************
@@ -108,9 +126,9 @@ void MegaFooter(uint16_t color) {
     );
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("Exit", tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
-    tft.drawCentreString("UP", tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
-    tft.drawCentreString("DOWN", 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("Exit"), tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("UP"), tftWidth / 2, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
+    tft.drawCentreString(bruce_i18n::tr("DOWN"), 5 * tftWidth / 6, tftHeight + BORDER_OFFSET_FROM_SCREEN_EDGE - 1, 1);
 }
 
 /***************************************************************************************
@@ -163,6 +181,9 @@ bool wakeUpScreen() {
 std::vector<String> wrapText(const String &text, int maxCharsPerLine) {
     std::vector<String> lines;
     if (maxCharsPerLine <= 0) return lines;
+    if (bruce_i18n::containsNonAscii(text)) {
+        return bruce_i18n::utf8WrapToWidth(text, maxCharsPerLine * LW, 1);
+    }
 
     String remaining = text;
     while (remaining.length() > 0) {
@@ -199,25 +220,25 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     int size;
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
 
-    // Calculate max chars per line based on font size
-    int maxCharsFM = (tftWidth - 2 * BORDER_PAD_X) / (LW * FM);
-    int maxCharsFP = (tftWidth - 2 * BORDER_PAD_X) / (LW * FP);
+    String displayText = bruce_i18n::tr(text);
+    int maxBoxPx = tftWidth - 2 * BORDER_PAD_X;
 
     // Determine if we need to wrap the text
     std::vector<String> wrappedLines;
 
-    if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) {
+    if (bruce_i18n::utf8PixelWidth(displayText, FM) < (tftWidth - 2 * FM * LW)) {
         // Text fits with FM font
         size = FM;
-        wrappedLines = wrapText(text, maxCharsFM);
+        wrappedLines = bruce_i18n::utf8WrapToWidth(displayText, maxBoxPx, FM);
     } else {
         // Text needs FP font or larger
         size = FP;
-        wrappedLines = wrapText(text, maxCharsFP);
+        wrappedLines = bruce_i18n::utf8WrapToWidth(displayText, maxBoxPx, FP);
     }
+    if (wrappedLines.empty()) wrappedLines.push_back(displayText);
 
     // Line pitch must fit the actual glyph height at this size, or wrapped lines overlap.
-    int lineHeight = LH * size + 2;
+    int lineHeight = (size == 1 && bruce_i18n::containsNonAscii(displayText)) ? 14 : (LH * size + 2);
     int boxHeight = wrappedLines.size() * lineHeight + 8;
 
     tft.drawPixel(0, 0, 0);
@@ -244,7 +265,7 @@ void drawButton(
         tft.drawRoundRect(x, y, w, h, 5, color);
     }
     tft.setTextColor(inverted ? TFT_BLACK : color);
-    tft.drawString(text, x + w / 2, y + h);
+    tft.drawString(bruce_i18n::tr(text), x + w / 2, y + h);
 }
 
 int8_t displayMessage(
@@ -259,7 +280,7 @@ int8_t displayMessage(
     tft.setTextDatum(TC_DATUM);
 
     // Handle newline characters in message
-    String msg = String(message);
+    String msg = bruce_i18n::tr(String(message));
     int y = tftHeight / 2 - 20;
     int start = 0;
     int end = msg.indexOf('\n');
@@ -472,6 +493,16 @@ void padprintln(const String &s, int16_t padx) {
         return;
     }
 
+    if (bruce_i18n::containsNonAscii(s)) {
+        int16_t maxPx = tftWidth - (padx + 1) * BORDER_PAD_X;
+        std::vector<String> lines = bruce_i18n::utf8WrapToWidth(s, maxPx, tft.getTextSize());
+        for (const auto &line : lines) {
+            tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
+            tft.println(line);
+        }
+        return;
+    }
+
     String buff;
     size_t start = 0;
     int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
@@ -484,22 +515,7 @@ void padprintln(const String &s, int16_t padx) {
     }
 }
 void padprintln(const char str[], int16_t padx) {
-    if (strcmp(str, "") == 0) {
-        tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
-        tft.println(str);
-        return;
-    }
-
-    String buff;
-    size_t start = 0;
-    int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
-
-    // automatically split into multiple lines
-    while (!(buff = String(str).substring(start, start + _maxCharsInLine)).isEmpty()) {
-        tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
-        tft.println(buff);
-        start += buff.length();
-    }
+    padprintln(String(str), padx);
 }
 void padprintln(char c, int16_t padx) {
     tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
@@ -1053,7 +1069,7 @@ Opt_Coord drawOptions(
         int16_t cursorY = tft.getCursorY();
         tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
         tft.setTextColor(getColorVariation(fgcolor), bgcolor);
-        tft.drawCentreString("-- Page Up --", boxX + boxW / 2, cursorY + 4, 1);
+        tft.drawCentreString(bruce_i18n::tr("-- Page Up --"), boxX + boxW / 2, cursorY + 4, 1);
         s_pageUpVisible = true;
         s_pageUpX = boxX;
         s_pageUpY = cursorY;
@@ -1086,24 +1102,35 @@ Opt_Coord drawOptions(
             else tft.setTextColor(fgcolor, bgcolor);
             if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bgcolor);
 
-            String text = "";
+            String labelText = bruce_i18n::tr(options[i].label);
+            String prefix = (i == index) ? ">" : " ";
             if (i == index) {
-                text += ">";
                 coord.x = boxX + BORDER_OFFSET_FROM_SCREEN_EDGE + FM * LW;
                 coord.y = tft.getCursorY() + 4;
                 coord.size = (boxW - 10) / (LW * FM) - 1;
                 coord.fgcolor = options[i].hasColor ? options[i].color : fgcolor;
                 coord.bgcolor = bgcolor;
-            } else text += " ";
-            text += String(options[i].label) + "                                                      ";
-            tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, tft.getCursorY() + 4);
+            }
+            int16_t maxLinePx = boxW - 2 * BORDER_OFFSET_FROM_SCREEN_EDGE - 4;
+            String fitted = bruce_i18n::utf8TruncateToWidth(prefix + labelText, maxLinePx, FM);
+            int32_t textX = boxX + BORDER_OFFSET_FROM_SCREEN_EDGE;
+            int32_t textY = tft.getCursorY() + 4;
 
             // Draw text with appropriate colors for selection
+            uint16_t rowBg = bgcolor;
             if (i == index) {
-                uint16_t highlightColor = options[i].hasColor ? options[i].color : bruceConfig.priColor;
-                tft.setTextColor(bgcolor, highlightColor);
+                rowBg = options[i].hasColor ? options[i].color : bruceConfig.priColor;
+                tft.setTextColor(bgcolor, rowBg);
             }
-            tft.println(text.substring(0, (boxW - 10) / (LW * FM) - 1));
+            if (bruce_i18n::containsNonAscii(fitted)) {
+                tft.fillRect(textX, textY, maxLinePx, FM * LH, rowBg);
+                tft.setCursor(textX, textY);
+                tft.println(fitted);
+            } else {
+                String padded = fitted + "                                                      ";
+                tft.setCursor(textX, textY);
+                tft.println(padded.substring(0, (boxW - 10) / (LW * FM) - 1));
+            }
 
             // Reset text color for next item
             tft.setTextColor(fgcolor, bgcolor);
@@ -1117,7 +1144,7 @@ Opt_Coord drawOptions(
         int16_t cursorY = tft.getCursorY();
         tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
         tft.setTextColor(getColorVariation(fgcolor), bgcolor);
-        tft.drawCentreString("-- Page Down --", boxX + boxW / 2, cursorY + 4, 1);
+        tft.drawCentreString(bruce_i18n::tr("-- Page Down --"), boxX + boxW / 2, cursorY + 4, 1);
         s_pageDownVisible = true;
         s_pageDownX = boxX;
         s_pageDownY = cursorY;
@@ -1162,9 +1189,11 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
         LH * FP,
         bruceConfig.bgColor
     );
-    tft.drawString(title, BORDER_PAD_X, STATUS_BAR_HEIGHT);
+    tft.drawString(bruce_i18n::tr(title), BORDER_PAD_X, STATUS_BAR_HEIGHT);
 
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
+    String selLabel = bruce_i18n::tr(options[index].label);
+    int16_t maxSelPx = tftWidth - 2 * BORDER_PAD_X;
+    int selectedTextSize = bruce_i18n::utf8PixelWidth(selLabel, FG) <= maxSelPx ? FG : FM;
     int selectedTextH = selectedTextSize * LH;
     int neighborTextH = FM * LH;
     int rowGap = FP * (LH / 2);
@@ -1205,7 +1234,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
             rowClearH,
             bruceConfig.bgColor
         );
-        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
+        String nLabel = bruce_i18n::utf8TruncateToWidth(bruce_i18n::tr(options[idx].label), maxSelPx, FM);
+        tft.drawCentreString(nLabel, tftWidth / 2, y, SMOOTH_FONT);
     }
 
     // Selected item
@@ -1218,11 +1248,13 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
         rowClearH,
         bruceConfig.bgColor
     );
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextH / 2, SMOOTH_FONT);
+    String selFitted = bruce_i18n::utf8TruncateToWidth(selLabel, maxSelPx, selectedTextSize);
+    int16_t selPixelW = bruce_i18n::utf8PixelWidth(selFitted, selectedTextSize);
+    tft.drawCentreString(selFitted, tftWidth / 2, middle - selectedTextH / 2, SMOOTH_FONT);
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
+        tftWidth / 2 - selPixelW / 2,
         middle + selectedTextH / 2 + 1,
-        strlen(options[index].label.c_str()) * selectedTextSize * LW,
+        selPixelW,
         bruceConfig.priColor
     );
 
@@ -1239,7 +1271,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
             rowClearH,
             bruceConfig.bgColor
         );
-        tft.drawCentreString(options[idx].label, tftWidth / 2, y, SMOOTH_FONT);
+        String nLabel = bruce_i18n::utf8TruncateToWidth(bruce_i18n::tr(options[idx].label), maxSelPx, FM);
+        tft.drawCentreString(nLabel, tftWidth / 2, y, SMOOTH_FONT);
     }
 
     tft.fillRect(
@@ -1396,34 +1429,39 @@ void drawMainBorderWithTitle(const String &title, bool clear) {
 }
 
 void printTitle(const String &title) {
-    String t = title;
-    t.toUpperCase();
+    String t = bruce_i18n::tr(title);
+    if (!bruce_i18n::containsNonAscii(t)) t.toUpperCase();
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     // Scale down title font if it doesn't fit the screen width
     int titleSize = FM;
-    while (titleSize > FP && (int)(t.length() * titleSize * LW) > tftWidth - 2 * BORDER_PAD_X) {
+    while (titleSize > FP && bruce_i18n::utf8PixelWidth(t, titleSize) > tftWidth - 2 * BORDER_PAD_X) {
         titleSize--;
     }
 
+    int16_t tw = bruce_i18n::utf8PixelWidth(t, titleSize);
     tft.setTextSize(titleSize);
-    tft.setCursor((tftWidth - (t.length() * titleSize * LW)) / 2, BORDER_PAD_Y);
+    tft.setCursor((tftWidth - tw) / 2, BORDER_PAD_Y);
     tft.println(t);
 
     tft.setTextSize(FP);
 }
 
 void printSubtitle(const String &subtitle, bool withLine) {
-    int16_t cursorX = (tftWidth - (subtitle.length() * FP * LW)) / 2;
+    String sub = bruce_i18n::tr(subtitle);
+    int16_t subW = bruce_i18n::utf8PixelWidth(sub, FP);
+    int16_t cursorX = (tftWidth - subW) / 2;
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
 
     tft.setCursor(cursorX, BORDER_PAD_Y + FM * LH);
-    tft.println(subtitle);
+    tft.println(sub);
 
     if (withLine) {
+        int dashCount = subW / (FP * LW);
+        if (dashCount < 1) dashCount = 1;
         String line = "";
-        for (byte i = 0; i < subtitle.length(); i++) line += "-";
+        for (int i = 0; i < dashCount; i++) line += "-";
 
         tft.setCursor(cursorX, tft.getCursorY());
         tft.println(line);
@@ -1432,7 +1470,9 @@ void printSubtitle(const String &subtitle, bool withLine) {
 
 void printFootnote(const String &text) {
     tft.setTextSize(FP);
-    tft.drawRightString(text, tftWidth - BORDER_PAD_X, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
+    tft.drawRightString(
+        bruce_i18n::tr(text), tftWidth - BORDER_PAD_X, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT
+    );
 }
 
 void printCenterFootnote(const String &text) {
@@ -1444,7 +1484,9 @@ void printCenterFootnote(const String &text) {
         bruceConfig.bgColor
     );
     tft.setTextSize(FP);
-    tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
+    tft.drawCentreString(
+        bruce_i18n::tr(text), tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT
+    );
 }
 
 void drawBatteryStatus(uint8_t bat) {
@@ -1473,7 +1515,7 @@ void drawBatteryStatus(uint8_t bat) {
     tft.setTextSize(FP);
     if (charging) {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-        tft.drawRightString("CHG", battX - textGap, textY, 1);
+        tft.drawRightString(bruce_i18n::tr("CHG"), battX - textGap, textY, 1);
     } else {
         tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
         tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", battX - textGap, textY, 1);

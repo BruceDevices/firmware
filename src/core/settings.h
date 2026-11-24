@@ -28,6 +28,8 @@ void setUIColor();
 
 void setMainMenuStyleMenu();
 
+void setLanguageMenu();
+
 bool setCustomUIColorMenu();
 
 void setCustomUIColorChoiceMenu(int colorType);

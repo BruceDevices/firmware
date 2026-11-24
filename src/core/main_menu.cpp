@@ -1,5 +1,6 @@
 #include "main_menu.h"
 #include "display.h"
+#include "i18n.h"
 #include "utils.h"
 #include <globals.h>
 
@@ -261,11 +262,12 @@ void MainMenu::drawGridCell(int index, bool selected) {
     if (item)
         item->drawIconInBox(x + _grid.cellW / 2, y + 3 + _grid.iconBox / 2, _grid.iconBox, fgColor, bgColor);
 
-    int maxChars = (_grid.cellW - 4) / (LW * _grid.labelSize);
     tft.setTextSize(_grid.labelSize);
     tft.setTextColor(fgColor, bgColor);
+    String label = bruce_i18n::tr(options[index].label);
+    String fitted = bruce_i18n::utf8TruncateToWidth(label, _grid.cellW - 4, _grid.labelSize);
     tft.drawCentreString(
-        options[index].label.substring(0, maxChars),
+        fitted,
         x + _grid.cellW / 2,
         y + _grid.cellH - LH * _grid.labelSize - 3,
         1

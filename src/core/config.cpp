@@ -1,4 +1,5 @@
 #include "config.h"
+#include "i18n.h"
 #include "mifare_keys_manager.h"
 #include "sd_functions.h"
 #include <algorithm>
@@ -24,6 +25,7 @@ JsonDocument BruceConfig::toJson() const {
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
     setting["keyboardLang"] = keyboardLang;
+    setting["language"] = language;
 
 #ifdef HAS_RGB_LED
     setting["ledBright"] = ledBright;
@@ -218,6 +220,11 @@ void BruceConfig::fromFile(bool checkFS) {
         keyboardLang = setting["keyboardLang"].as<String>();
     } else {
         keyboardLang = "QWERTY";
+    }
+    if (!setting["language"].isNull()) {
+        language = setting["language"].as<String>();
+    } else {
+        language = "en";
     }
 
 #ifdef HAS_RGB_LED
@@ -479,6 +486,7 @@ void BruceConfig::validateConfig() {
     validateSoundEnabledValue();
     validateSoundVolumeValue();
     validateWifiAtStartupValue();
+    validateLanguage();
 #ifdef HAS_RGB_LED
     validateLedBrightValue();
     validateLedColorValue();
@@ -578,6 +586,17 @@ void BruceConfig::setWifiAtStartup(int value) {
 
 void BruceConfig::validateWifiAtStartupValue() {
     if (wifiAtStartup > 1) wifiAtStartup = 1;
+}
+
+void BruceConfig::setLanguage(const String &value) {
+    language = value;
+    validateLanguage();
+    saveFile();
+}
+
+void BruceConfig::validateLanguage() {
+    language = bruce_i18n::normalizeLanguageCode(language);
+    bruce_i18n::setLanguage(language);
 }
 
 #ifdef HAS_RGB_LED

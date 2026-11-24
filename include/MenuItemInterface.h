@@ -2,6 +2,7 @@
 #define __MENU_ITEM_INTERFACE_H__
 
 #include "core/display.h"
+#include "core/i18n.h"
 #include <globals.h>
 
 // Pixel span a menu icon covers when drawn at scale 1. Lower it to render the icons
@@ -139,8 +140,9 @@ public:
         tft.setTextSize(FM);
         tft.drawPixel(0, 0, 0);
         tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
-        int nchars = (tftWidth - 16) / (LW * FM);
-        tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
+        String label = bruce_i18n::tr(getName());
+        String fitted = bruce_i18n::utf8TruncateToWidth(label, tftWidth - 16, FM);
+        tft.drawCentreString(fitted, iconCenterX, titleY, 1);
     }
 
 protected:
