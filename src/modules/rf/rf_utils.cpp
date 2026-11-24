@@ -61,6 +61,18 @@ int rfGetRssi() {
     return rssi;
 }
 
+// Pages that hold the radio in RX bump this; the ported SubGHz tools use it to
+// refuse a mode change underneath a running capture.
+volatile int rfRxSessions = 0;
+
+bool rfRadioReceiving() { return rfRxSessions > 0; }
+
+void rfSetRxBW(float bandwidth) {
+    rf_spi_lock();
+    ELECHOUSE_cc1101.setRxBW(bandwidth);
+    rf_spi_unlock();
+}
+
 String rf_subghz_header(float frequencyMHz) {
     return "Filetype: Bruce SubGhz File\nVersion: 1\n" + String("Frequency: ") +
            String(int(frequencyMHz * 1000000)) + "\n";

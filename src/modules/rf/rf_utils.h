@@ -45,6 +45,15 @@ void setMHZ(float frequency);
 // getRssi() is one SPI burst as well; go through this wrapper rather than
 // calling ELECHOUSE_cc1101.getRssi() directly from a non-render task.
 int rfGetRssi();
+
+// Set the CC1101 RX filter bandwidth (kHz). Goes through the bus lock like every
+// other register access, so it is safe to call while the display is drawing.
+void rfSetRxBW(float bandwidth);
+
+// True while any page has the radio in RX. Used to refuse a mode change under a
+// running capture.
+bool rfRadioReceiving();
+extern volatile int rfRxSessions;
 int find_pulse_index(const std::vector<int> &indexed_durations, int duration);
 uint64_t crc64_ecma(const std::vector<int> &data);
 
