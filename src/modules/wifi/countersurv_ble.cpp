@@ -1,6 +1,8 @@
 #include "countersurv.h"
 
+#include "core/radio_mem.h"
 #include "modules/ble/ble_common.h"
+#include "wifi_raw_portal.h"
 #include <WiFi.h>
 #include <esp_bt.h>
 #include <esp_heap_caps.h>
@@ -12,6 +14,9 @@ namespace {
 // failure so its RAM goes back instead of leaking. Kept local: upstream's
 // ble_common has no such helper and this port does not edit it.
 bool cadenceBleInit(const char *name) {
+    // Refuse before touching the controller: bringing NimBLE up without the
+    // contiguous DMA block is what used to wedge the board inside init.
+    if (!radioHasMemForBle()) return false;
     if (NimBLEDevice::isInitialized()) return true;
     if (NimBLEDevice::init(name == nullptr ? "" : name)) return true;
     esp_bt_controller_disable();
@@ -22,6 +27,20 @@ bool cadenceBleInit(const char *name) {
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA)
     );
     return false;
+}
+
+// Tear the host down here rather than through stopBLEStack(): that helper only
+// deinits when its own is_ble_inited flag is set, and a cadence pass does not go
+// through the BLE menu path, so calling it would leave the controller running
+// with its RAM still held. The next Wi-Fi page then had no DMA block to start on.
+void cadenceBleStop() {
+    NimBLEScan *scan = NimBLEDevice::getScan();
+    if (scan != nullptr) {
+        scan->stop();
+        scan->clearResults();
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
 }
 } // namespace
 
@@ -58,7 +77,6 @@ struct BleSigEntry {
 
 static BleSigEntry s_bleSigs[BLE_CAD_SIGS];
 static uint32_t s_bleSeen = 0;
-static portMUX_TYPE s_bleMux = portMUX_INITIALIZER_UNLOCKED;
 
 class BleCadenceCallbacks : public NimBLEScanCallbacks {
     void onResult(const NimBLEAdvertisedDevice *dev) override {
@@ -85,7 +103,13 @@ class BleCadenceCallbacks : public NimBLEScanCallbacks {
         }
 
         const uint32_t now = millis();
-        portENTER_CRITICAL(&s_bleMux);
+        // No critical section here on purpose. onResult() runs on the NimBLE
+        // host task, which is the only writer, and portENTER_CRITICAL() in this
+        // callback can either nest on a mux the host already holds (deadlock)
+        // or disable interrupts long enough to trip the task watchdog. Both
+        // showed up as the counter-surveillance page locking the board up until
+        // a reset. The report only runs after scan->stop(), so plain access is
+        // enough.
         s_bleSeen++;
 
         BleSigEntry *e = nullptr;
@@ -140,7 +164,6 @@ class BleCadenceCallbacks : public NimBLEScanCallbacks {
                 e->lastNewMs = now;
             }
         }
-        portEXIT_CRITICAL(&s_bleMux);
     }
 };
 
@@ -176,6 +199,16 @@ static String bleCadenceReport() {
 } // namespace
 
 String bleCadence(int seconds) {
+    // One pass at a time. The dashboard can fire this twice from a double click,
+    // and two concurrent NimBLE inits are a guaranteed wedge.
+    static bool s_running = false;
+    if (s_running) return "ble: pass already running";
+    s_running = true;
+    struct Guard {
+        bool &flag;
+        ~Guard() { flag = false; }
+    } guard{s_running};
+
     memset(s_bleSigs, 0, sizeof(s_bleSigs));
     s_bleSeen = 0;
 
@@ -194,7 +227,7 @@ String bleCadence(int seconds) {
     if (!cadenceBleInit("vnd-cadence")) return "ble: radio unavailable (no memory for the stack)";
     NimBLEScan *scan = NimBLEDevice::getScan();
     if (scan == nullptr) {
-        stopBLEStack();
+        cadenceBleStop();
         return "ble: scan object unavailable";
     }
 
@@ -204,15 +237,14 @@ String bleCadence(int seconds) {
     scan->setWindow(99);
 
     const uint32_t windowMs = (uint32_t)(seconds < 1 ? 1 : seconds) * 1000UL;
-    // This build's start() returns once the controller has been asked to scan, so
-    // the window is held here; a start() that blocks simply makes this loop fall
-    // through immediately.
-    const bool started = scan->start(windowMs, false, true);
-    const uint32_t end = millis() + windowMs + 250;
-    while ((int32_t)(millis() - end) < 0) delay(50);
-    scan->stop();
-    scan->clearResults();
-    stopBLEStack();
+    // Duration 0 = scan until stopped. The window is held by the loop below, so
+    // the scan cannot outlive the pass and cannot block this task while it runs.
+    const bool started = scan->start(0, false, true);
+    const uint32_t end = millis() + windowMs;
+    while ((int32_t)(millis() - end) < 0) vTaskDelay(pdMS_TO_TICKS(50));
+
+    // Always tear down, including when start() failed half-way.
+    cadenceBleStop();
 
     if (!started) return "ble: scan could not start (radio busy)";
 

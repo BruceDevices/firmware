@@ -1,6 +1,8 @@
 #include "countersurv.h"
 
+#include "core/mykeyboard.h"
 #include "core/odid.h"
+#include "wifi_raw_portal.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <globals.h>
@@ -309,6 +311,17 @@ static void buildReport(String &out) {
 }
 
 String run(int seconds, bool fingerprint) {
+    // One capture at a time: two overlapping promiscuous passes re-install the
+    // RX callback underneath each other and the second teardown pulls the radio
+    // out from under the first.
+    static bool s_running = false;
+    if (s_running) return "capture already running";
+    s_running = true;
+    struct Guard {
+        bool &flag;
+        ~Guard() { flag = false; }
+    } guard{s_running};
+
     memset(s_aps, 0, sizeof(s_aps));
     memset(s_obs, 0, sizeof(s_obs));
     memset(s_deauth, 0, sizeof(s_deauth));
@@ -321,9 +334,16 @@ String run(int seconds, bool fingerprint) {
     // Leave any station/AP session first: promiscuous capture on top of a
     // connected STA misses most management frames.
     WiFi.disconnect(true, true);
-    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_OFF);
     wifiConnected = false;
     wifiIP = "";
+
+    // Free the DMA block before re-initialising the stack. Without this the
+    // bring-up ran with BLE (or the Web UI) still holding it and wedged inside
+    // esp_wifi_init - the board stopped answering until it was reset.
+    if (!wifiEnsureRadioMem()) return "wifi: not enough DMA memory for capture";
+    WiFi.mode(WIFI_STA);
+    vTaskDelay(pdMS_TO_TICKS(120));
 
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(packetCb);
@@ -331,12 +351,15 @@ String run(int seconds, bool fingerprint) {
 
     const uint32_t end = millis() + (uint32_t)max(1, seconds) * 1000UL;
     while ((int32_t)(millis() - end) < 0) {
+        // Back button ends the pass early instead of making the page look hung.
+        if (check(EscPress)) break;
         s_channel = (s_channel % 13) + 1;
         esp_wifi_set_channel(s_channel, WIFI_SECOND_CHAN_NONE);
-        delay(60);
+        vTaskDelay(pdMS_TO_TICKS(60));
     }
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(nullptr);
+    vTaskDelay(pdMS_TO_TICKS(50));
     WiFi.mode(WIFI_OFF);
     wifiConnected = false;
     wifiIP = "";
