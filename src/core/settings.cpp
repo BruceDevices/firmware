@@ -33,7 +33,13 @@ void _setBrightness(uint8_t brightval) {}
 void setBrightness(uint8_t brightval, bool save) {
     if (bruceConfig.bright > 100) bruceConfig.setBright(100);
     _setBrightness(brightval);
+#ifdef T_EMBED_1101
+    // Idle fading and wake run in the input task. The board driver owns any
+    // electrical settling it needs; non-persisting updates must not sleep here.
+    if (save) delay(10);
+#else
     delay(10);
+#endif
 
     currentScreenBrightness = brightval;
     if (save) { bruceConfig.setBright(brightval); }

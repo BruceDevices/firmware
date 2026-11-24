@@ -3,6 +3,7 @@
 
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
+#include "hal/inputs/encoder.h"
 #include "core/ram_profile.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
@@ -66,6 +67,7 @@ volatile bool NextPagePress = false;
 volatile bool PrevPagePress = false;
 volatile bool LongPress = false;
 volatile bool SerialCmdPress = false;
+RemoteSelectState remoteSelectState;
 volatile int forceMenuOption = -1;
 volatile uint8_t menuOptionType = 0;
 String menuOptionLabel = "";
@@ -78,13 +80,18 @@ volatile bool touchZoneOutsideFooterEnabled = true;
 
 keyStroke KeyStroke;
 
-volatile int32_t RotaryNetSteps = 0;
+std::atomic<int32_t> RotaryNetSteps{0};
 
 TaskHandle_t xHandle;
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
     while (true) {
         checkPowerSaveTime();
+#ifdef HAS_ENCODER
+        inputLock();
+        hal_encoder_sample_buttons();
+        inputUnlock();
+#endif
         // Sometimes this task run 2 or more times before looptask,
         // and navigation gets stuck, the idea here is run the input detection
         // if AnyKeyPress is false, or rerun if it was not renewed within 75ms (arbitrary)
@@ -97,9 +104,13 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             UpPress = false;
             DownPress = false;
             SelPress = false;
+#ifdef HAS_ENCODER
+            hal_encoder_reset_select_event();
+#endif
             EscPress = false;
             AnyKeyPress = false;
             SerialCmdPress = false;
+            remoteSelectState.legacyEvent = false;
             NextPagePress = false;
             PrevPagePress = false;
             touchPoint.pressed = false;
@@ -113,7 +124,7 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
     }
 }
 // Public Globals Variables
-unsigned long previousMillis = millis();
+std::atomic<unsigned long> previousMillis{millis()};
 int prog_handler; // 0 - Flash, 1 - LittleFS, 3 - Download
 String cachedPassword = "";
 int8_t interpreter_state = -1;

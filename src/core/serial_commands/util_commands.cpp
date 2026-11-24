@@ -275,11 +275,15 @@ uint32_t navCallback(cmd *c) {
     }
     // wakeUpScreen(); // Do not wakeup screen if it is dimmed and using Remote control
     unsigned long tmp = millis();
+    uint32_t selectCommandGeneration = 0;
     while (millis() <= tmp + dur) {
         if (*var == false) {
-            AnyKeyPress = true;
-            SerialCmdPress = true;
-            *var = true;
+            if (var == &SelPress) publishRemoteSelect(dur, selectCommandGeneration);
+            else {
+                AnyKeyPress = true;
+                SerialCmdPress = true;
+                *var = true;
+            }
             if (!LongPress) break;
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);

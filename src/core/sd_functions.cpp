@@ -699,7 +699,15 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             readFs(fs, Folder, allowed_ext);
             rebuildSdOptions();
         }
-        index = loopOptions(sdOptions, MENU_TYPE_REGULAR, "", index, false, true, PAGE_JUMP_SIZE, false);
+        bool longPressDetected = false;
+        index = loopOptions(
+            sdOptions, MENU_TYPE_REGULAR, "", index, false, true, PAGE_JUMP_SIZE, false, false,
+#ifdef HAS_ENCODER
+            &longPressDetected
+#else
+            nullptr
+#endif
+        );
 
         if (index < 0) { // ESC
         BACK_FOLDER:
@@ -719,11 +727,13 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             break;
         }
 
+#ifndef HAS_ENCODER
         LongPress = true;
         unsigned long LongPressTmp = millis();
         while (millis() - LongPressTmp < 500) { vTaskDelay(pdMS_TO_TICKS(10)); }
         LongPress = false;
-        bool longPressDetected = check(SelPress);
+        longPressDetected = check(SelPress);
+#endif
 
         if (isBack) {
             if (longPressDetected) {

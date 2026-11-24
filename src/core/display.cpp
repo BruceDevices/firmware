@@ -1,5 +1,6 @@
 #include "display.h"
 #include "hal/power/gauge.h"
+#include "hal/inputs/encoder.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -140,20 +141,24 @@ void setTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg) {
 void turnOffDisplay() { setBrightness(0, false); }
 
 bool wakeUpScreen() {
+    inputLock();
     previousMillis = millis();
-    if (isScreenOff) {
+    bool consumed = false;
+    if (isScreenOff || dimmer) {
         isScreenOff = false;
         dimmer = false;
+#ifdef T_EMBED_1101
+        setBrightness(min(bruceConfig.bright, 100), false);
+#else
         getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
-        return true;
-    } else if (dimmer) {
-        dimmer = false;
-        getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
-        return true;
+#endif
+        consumed = true;
     }
-    return false;
+    inputUnlock();
+#ifndef T_EMBED_1101
+    if (consumed) vTaskDelay(pdMS_TO_TICKS(200));
+#endif
+    return consumed;
 }
 
 /***************************************************************************************
@@ -544,9 +549,15 @@ void padprintln(double n, int digits, int16_t padx) {
 **********************************************************************/
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter,
-    bool letterShortcuts, uint16_t pageJumpSize, bool border, bool compact
+    bool letterShortcuts, uint16_t pageJumpSize, bool border, bool compact, bool *longPressResult
 ) {
+    // Borrowed output only; never retained by a callback or another task.
+    if (longPressResult) *longPressResult = false;
     if (options.empty()) return -1;
+#ifdef HAS_ENCODER
+    EncoderMenuSelect menuSelect(hal_encoder_select_state().generation);
+    RemoteMenuSelect remoteMenuSelect(readRemoteSelectState().generation);
+#endif
 
     bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
                           (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
@@ -612,8 +623,10 @@ int loopOptions(
     }
     if (index >= options.size()) index = 0;
     bool firstRender = true;
+#ifndef HAS_ENCODER
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
+#endif
 #if defined(HAS_TOUCH)
     bool showEscButton = useTapToSelect && menuType == MENU_TYPE_REGULAR;
     const int escW = 5 * LW * FM + 4;
@@ -623,6 +636,10 @@ int loopOptions(
 #endif
     if (!compact) drawMainBorder();
     while (1) {
+#ifdef HAS_ENCODER
+        bool syntheticTouchSelect = false;
+        bool selectionMoved = false;
+#endif
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
         if (exit) break;
         if (menuType == MENU_TYPE_MAIN) {
@@ -662,7 +679,9 @@ int loopOptions(
                         compact
                     );
             }
+#ifndef HAS_ENCODER
             if (firstRender) menuOpenTs = millis();
+#endif
             firstRender = false;
             redraw = false;
         }
@@ -706,7 +725,12 @@ int loopOptions(
         if (useTapToSelect && touchPoint.pressed) {
             for (size_t i = 0; i < options.size(); i++) {
                 if (options[i].enabled && options[i].contain(touchPoint.x, touchPoint.y)) {
-                    if (static_cast<int>(i) == index) SelPress = true;
+                    if (static_cast<int>(i) == index) {
+                        SelPress = true;
+#ifdef HAS_ENCODER
+                        syntheticTouchSelect = true;
+#endif
+                    }
                     else {
                         index = static_cast<int>(i);
                         redraw = true;
@@ -793,6 +817,7 @@ int loopOptions(
 #ifdef HAS_ENCODER
         int32_t rotarySteps = drainRotarySteps();
         if (rotarySteps != 0) {
+            selectionMoved = true;
             check(PrevPress);
             check(NextPress);
             check(UpPress);
@@ -822,6 +847,9 @@ int loopOptions(
 #endif
         {
             if (PrevPress || check(UpPress)) {
+#ifdef HAS_ENCODER
+                selectionMoved = true;
+#endif
                 devModeCounter = 0;
 #ifdef HAS_KEYBOARD
                 check(PrevPress);
@@ -864,6 +892,9 @@ int loopOptions(
             }
             /* DW Btn to next item */
             if (check(NextPress) || check(DownPress)) {
+#ifdef HAS_ENCODER
+                selectionMoved = true;
+#endif
                 int nextEnabled = findNextEnabled(index, +1);
                 if (nextEnabled >= 0) {
                     if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
@@ -877,13 +908,39 @@ int loopOptions(
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu
         */
-        // Prevent immediate selection if the SEL button was already being held when the menu opened.
-        // Allow a short grace period for the user to release the button first.
-        static const unsigned long MENU_SELECT_IGNORE_MS = 600; // ms to ignore SEL after menu opens
+        bool selectRequested = false;
+#ifdef HAS_ENCODER
+        inputLock();
+        const EncoderButtonState select = hal_encoder_select_state();
+        const RemoteSelectState remoteSelect = readRemoteSelectState();
+        const bool syntheticSelect = syntheticTouchSelect ||
+                                     (!hal_encoder_select_event_is_physical() && !remoteSelect.legacyEvent);
+        const bool selectPulse = check(SelPress);
+        inputUnlock();
 
-        if (forceMenuOption >= 0 || (millis() - menuOpenTs > MENU_SELECT_IGNORE_MS && check(SelPress))) {
+        bool longPress = false;
+        selectRequested = menuSelect.update(select, millis(), index, selectionMoved, longPressResult != nullptr, longPress);
+        if (selectRequested && longPressResult) *longPressResult = longPress;
+        if (selectPulse && syntheticSelect) {
+            menuSelect.cancel();
+            if (longPressResult) *longPressResult = false;
+            selectRequested = true;
+        }
+        bool remoteLongPress = false;
+        if (remoteMenuSelect.consume(remoteSelect, remoteLongPress)) {
+            menuSelect.cancel();
+            if (longPressResult) *longPressResult = remoteLongPress;
+            selectRequested = true;
+        }
+#else
+        // Other input HALs can synthesize select on release or on a gesture;
+        // retain their existing entry guard until they expose physical state.
+        selectRequested = millis() - menuOpenTs > 600 && check(SelPress);
+#endif
+        if (forceMenuOption >= 0 || selectRequested) {
             uint16_t chosen = index;
             if (forceMenuOption >= 0) {
+                if (longPressResult) *longPressResult = false;
                 chosen = forceMenuOption;
                 forceMenuOption = -1; // reset SerialCommand navigation option
                 Serial.print("Forcely ");
@@ -898,7 +955,7 @@ int loopOptions(
         if (interpreter_state > 0 && !interpreter) { break; }
     }
 
-    RotaryNetSteps = 0; // reset rotary steps to avoid unexpected jumps in the next menu
+    RotaryNetSteps.exchange(0, std::memory_order_relaxed);
     touchZoneOutsideFooterEnabled = prevTouchZoneOutsideFooterEnabled;
     return index;
 }

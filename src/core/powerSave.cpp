@@ -1,6 +1,7 @@
 #include "powerSave.h"
 #include "display.h"
 #include "settings.h"
+#include "power_save_timing.h"
 
 /* Check if it's time to put the device to sleep */
 #define SCREEN_OFF_DELAY 5000
@@ -13,20 +14,44 @@ void fadeOutScreen(int startValue) {
     turnOffDisplay();
 }
 
-void checkPowerSaveTime() {
-    if (bruceConfig.dimmerSet == 0) return;
+static void updatePowerSaveTime() {
+    static int lastFadeBrightness = -1;
+    static unsigned long fadeActivity = 0;
+    const unsigned long activity = previousMillis.load(std::memory_order_relaxed);
+    if (fadeActivity != activity || !dimmer) {
+        lastFadeBrightness = -1;
+        fadeActivity = activity;
+    }
+    if (bruceConfig.dimmerSet == 0 || isSleeping) {
+        lastFadeBrightness = -1;
+        return;
+    }
 
-    unsigned long elapsed = millis() - previousMillis;
-    int startDimmerBright = bruceConfig.bright / 3;
-    int dimmerSetMs = bruceConfig.dimmerSet * 1000;
+    const uint32_t elapsed = uint32_t(millis()) - uint32_t(activity);
+    int startDimmerBright = min(max(bruceConfig.bright, 0), 100) / 3;
+    const uint32_t dimmerSetMs = uint32_t(bruceConfig.dimmerSet) * 1000;
 
-    if (elapsed >= dimmerSetMs && !dimmer && !isSleeping) {
+    if (previousMillis.load(std::memory_order_relaxed) != activity) return;
+    if (elapsed >= dimmerSetMs && !dimmer) {
         dimmer = true;
         setBrightness(startDimmerBright, false);
-    } else if (elapsed >= (dimmerSetMs + SCREEN_OFF_DELAY) && !isScreenOff && !isSleeping) {
+        lastFadeBrightness = startDimmerBright;
+    } else if (elapsed >= (dimmerSetMs + SCREEN_OFF_DELAY)) {
         isScreenOff = true;
-        fadeOutScreen(startDimmerBright);
+        const int brightValue = idleFadeBrightness(startDimmerBright, elapsed - dimmerSetMs - SCREEN_OFF_DELAY);
+        if (brightValue != lastFadeBrightness) {
+            setBrightness(brightValue, false);
+            lastFadeBrightness = brightValue;
+        }
     }
+}
+
+void checkPowerSaveTime() {
+    // wakeUpScreen() uses the same recursive mutex. A completed wake cannot be
+    // overwritten by a stale fade step from the input task or another caller.
+    inputLock();
+    updatePowerSaveTime();
+    inputUnlock();
 }
 
 void sleepModeOn() {

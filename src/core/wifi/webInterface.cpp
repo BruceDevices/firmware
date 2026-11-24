@@ -557,10 +557,14 @@ void configureWebServer() {
                 if (cmnd.endsWith("0")) time = cmnd.substring(cmnd.lastIndexOf(' ')).toInt();
                 else time = 10;
                 auto tmp = millis() + time;
+                uint32_t selectCommandGeneration = 0;
                 while (tmp > millis()) {
-                    AnyKeyPress = true;
-                    SerialCmdPress = true;
-                    *var = true;
+                    if (var == &SelPress) publishRemoteSelect(time, selectCommandGeneration);
+                    else {
+                        AnyKeyPress = true;
+                        SerialCmdPress = true;
+                        *var = true;
+                    }
                     if (!LongPress) vTaskDelay(pdMS_TO_TICKS(190));
                     else vTaskDelay(pdMS_TO_TICKS(50));
                 }
