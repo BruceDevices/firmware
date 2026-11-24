@@ -65,7 +65,15 @@ class App {
         // plenty of internal and take the internal fallback here, as before.
         job=wifite_start(mode,target,pin);
         if(!job) {
-            vTaskDelay(500 / portTICK_PERIOD_MS);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            job=wifite_start(mode,target,pin);
+        }
+        if(!job) {
+            vTaskDelay(250 / portTICK_PERIOD_MS);
+            job=wifite_start(mode,target,pin);
+        }
+        for(int attempt=0; !job && attempt<4; ++attempt) {
+            vTaskDelay(250 / portTICK_PERIOD_MS);
             job=wifite_start(mode,target,pin);
         }
         if(!job) {displayError("Cannot allocate WiFite worker",true);return false;}
