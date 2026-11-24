@@ -1,8 +1,8 @@
 /*
  * BLE Suite v4.0 - Complete BLE attack and analysis toolkit
  * Author: Ninja-jr
- * Version: 4.0
- * Last Updated: 07/09/2026
+ * Version: 4.1
+ * Last Updated: 24/11/2026
  *
  * Contains: Smart device recon, connection caching, graduated connection
  *           strategies, robust GATT client, device fingerprinting,
@@ -783,8 +783,15 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
     }
 
     if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
-        return false;
+        // Retry once silently: the teardown triggered by the failed check may
+        // still be in progress. If it completes within 500 ms, proceed without
+        // showing a popup; only show the popup if the retry also fails (which
+        // means it's a genuine low-RAM situation, not a false positive).
+        delay(500);
+        if (!radioHasMemForBle()) {
+            displayError("Low RAM: free WiFi/SD first", true);
+            return false;
+        }
     }
 
     std::string nameStr = name.c_str();
