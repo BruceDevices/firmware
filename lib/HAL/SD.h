@@ -28,7 +28,11 @@
 
 namespace fs {
 
+class SdFsImpl;
+
 class SDFS : public FS {
+    SdFsImpl &sdFs() const;
+
 #ifdef USE_SD_MMC
 protected:
     sdmmc_card_t *_card;
@@ -71,6 +75,15 @@ public:
     );
 #endif
     void end();
+    // Detach FAT only when no local files or directories are open.
+    bool beginRawAccess();
+    // Disable raw access before remounting FAT. A failed remount leaves SD unmounted.
+    bool endRawAccess();
+    bool rawAccessActive() const;
+    // Open both files under the filesystem gate and reject aliases of the source.
+    bool openCopyFiles(
+        const String &source, const String &destination, File &input, File &output
+    );
     sdcard_type_t cardType();
     uint64_t cardSize();
     size_t numSectors();

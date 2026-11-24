@@ -21,10 +21,12 @@
 #include <MD5Builder.h>
 #include <algorithm> // for std::sort
 #include <esp_rom_crc.h>
+#include <mutex>
 
 // SPIClass sdcardSPI;
 String fileToCopy;
 std::vector<FileList> fileList;
+static std::recursive_mutex sdMountMutex;
 
 /***************************************************************************************
 ** Function name: setupLittleFS
@@ -49,6 +51,8 @@ void closeLittleFS() {
 ** Description:   Start SD Card
 ***************************************************************************************/
 bool setupSdCard(uint8_t maxFiles) {
+    std::lock_guard<std::recursive_mutex> lock(sdMountMutex);
+    if (SD.rawAccessActive()) return false;
     if (maxFiles < 1) { maxFiles = 1; }
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0) {
@@ -128,9 +132,11 @@ bool setupSdCard(uint8_t maxFiles) {
 ** Description:   Turn Off SDCard, set sdcardMounted state to false
 ***************************************************************************************/
 void closeSdCard() {
+    std::lock_guard<std::recursive_mutex> lock(sdMountMutex);
+    if (SD.rawAccessActive()) return;
     SD.end();
-    Serial.println("SD Card Unmounted...");
-    sdcardMounted = false;
+    sdcardMounted = SD.cardType() != CARD_NONE;
+    if (!sdcardMounted) Serial.println("SD Card Unmounted...");
 }
 
 /***************************************************************************************
@@ -138,14 +144,30 @@ void closeSdCard() {
 ** Description:   Turn Off or On the SDCard, return sdcardMounted state
 ***************************************************************************************/
 bool ToggleSDCard() {
-    if (sdcardMounted == true) {
+    std::lock_guard<std::recursive_mutex> lock(sdMountMutex);
+    if (SD.rawAccessActive()) return false;
+    if (sdcardMounted) {
         closeSdCard();
-        sdcardMounted = false;
-        return false;
-    } else {
-        sdcardMounted = setupSdCard();
         return sdcardMounted;
     }
+    return setupSdCard();
+}
+
+SdRawAccess beginSdCardRawAccess() {
+    std::lock_guard<std::recursive_mutex> lock(sdMountMutex);
+    if (SD.rawAccessActive()) return SdRawAccess::Busy;
+    if (!setupSdCard()) return SdRawAccess::Unavailable;
+    if (!SD.beginRawAccess()) return SdRawAccess::Busy;
+
+    sdcardMounted = false;
+    return SdRawAccess::Ready;
+}
+
+bool endSdCardRawAccess() {
+    std::lock_guard<std::recursive_mutex> lock(sdMountMutex);
+    const bool mounted = SD.endRawAccess();
+    sdcardMounted = mounted;
+    return mounted;
 }
 /***************************************************************************************
 ** Function name: deleteFromSd
@@ -300,22 +322,43 @@ bool copyFile(FS fs, String path) {
 ** Function name: pasteFile
 ** Description:   paste file to new folder
 ***************************************************************************************/
-bool pasteFile(FS fs, String path) {
-    // Using Global Buffer
-
-    // Abrir o arquivo original
-    File sourceFile = fs.open(fileToCopy, FILE_READ);
-    if (!sourceFile) {
-        // Serial.println("Falha ao abrir o arquivo original para leitura");
-        return false;
+static String normalizedPastePath(const String &path) {
+    String normalized;
+    normalized.reserve(path.length());
+    int start = 0;
+    while (start < path.length()) {
+        int end = start;
+        while (end < path.length() && path[end] != '/') ++end;
+        String component = path.substring(start, end);
+        start = end + 1;
+        if (component.isEmpty() || component == ".") continue;
+        if (component == "..") {
+            normalized = normalized.substring(0, max(0, normalized.lastIndexOf('/')));
+            continue;
+        }
+        normalized += "/" + component;
     }
+    return normalized;
+}
 
-    // Criar o arquivo de destino
-    File destFile = fs.open(path + "/" + fileToCopy.substring(fileToCopy.lastIndexOf('/') + 1), FILE_WRITE);
-    if (!destFile) {
-        // Serial.println("Falha ao criar o arquivo de destino");
-        sourceFile.close();
-        return false;
+bool pasteFile(FS &fs, const String &path) { return pasteFile(fs, path, fileToCopy); }
+
+bool pasteFile(FS &fs, const String &path, const String &source) {
+    const bool fat = &fs == &SD;
+    int separator = source.lastIndexOf('/');
+    if (fat) separator = max(separator, source.lastIndexOf('\\'));
+    const String destination = path + "/" + source.substring(separator + 1);
+    File sourceFile, destFile;
+
+    if (fat) {
+        if (!SD.openCopyFiles(source, destination, sourceFile, destFile)) return false;
+    } else {
+        // Prevent FILE_WRITE from truncating the source through a lexical alias.
+        if (normalizedPastePath(source) == normalizedPastePath(destination)) return false;
+        sourceFile = fs.open(source, FILE_READ);
+        if (!sourceFile || sourceFile.isDirectory()) return false;
+        destFile = fs.open(destination, FILE_WRITE);
+        if (!destFile) return false;
     }
 
     // Ler dados do arquivo original e escrever no arquivo de destino

@@ -734,7 +734,10 @@ uint8_t sdcard_unmount(uint8_t pdrv) {
   return 0;
 }
 
-bool sdcard_mount(uint8_t pdrv, const char *path, uint8_t max_files, bool format_if_empty) {
+bool sdcard_mount(uint8_t pdrv, const char *path, uint8_t max_files, bool format_if_empty, FATFS **mountedFat) {
+  if (mountedFat) {
+    *mountedFat = nullptr;
+  }
   ardu_sdcard_t *card = s_cards[pdrv];
   if (pdrv >= FF_VOLUMES || card == NULL) {
     return false;
@@ -787,6 +790,9 @@ bool sdcard_mount(uint8_t pdrv, const char *path, uint8_t max_files, bool format
   }
   AcquireSPI lock(card);
   card->sectors = sdGetSectorsCount(pdrv);
+  if (mountedFat) {
+    *mountedFat = fs;
+  }
   return true;
 }
 

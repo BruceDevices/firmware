@@ -22,6 +22,10 @@ void closeSdCard();
 
 bool ToggleSDCard();
 
+enum class SdRawAccess { Ready, Unavailable, Busy };
+SdRawAccess beginSdCardRawAccess();
+bool endSdCardRawAccess();
+
 bool deleteFromSd(FS fs, String path);
 
 bool renameFile(FS fs, String path, String filename);
@@ -30,7 +34,8 @@ bool copyFile(FS fs, String path);
 
 bool copyToFs(FS from, FS to, String path, bool draw = true);
 
-bool pasteFile(FS fs, String path);
+bool pasteFile(FS &fs, const String &path);
+bool pasteFile(FS &fs, const String &path, const String &source);
 
 bool createFolder(FS fs, String path);
 

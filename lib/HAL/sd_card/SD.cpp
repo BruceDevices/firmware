@@ -17,16 +17,19 @@
 // limitations under the License.
 
 #include "sd_diskio2.h"
-#include "vfs_api.h"
+#include "SDVFS.h"
 
 using namespace fs;
 
-SDFS::SDFS(FSImplPtr impl) : FS(impl), _pdrv(0xFF) {}
+SDFS::SDFS(FSImplPtr impl) : FS(std::make_shared<SdFsImpl>(std::move(impl))), _pdrv(0xFF) {}
 
 bool SDFS::begin(
     uint8_t ssPin, SPIClass &spi, uint32_t frequency, const char *mountpoint, uint8_t max_files,
     bool format_if_empty
 ) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    if (fs._rawAccess) return false;
     if (_pdrv != 0xFF) { return true; }
 
     spi.begin();
@@ -34,20 +37,24 @@ bool SDFS::begin(
     _pdrv = sdcard_init(ssPin, &spi, frequency);
     if (_pdrv == 0xFF) { return false; }
 
-    if (!sdcard_mount(_pdrv, mountpoint, max_files, format_if_empty)) {
+    if (!sdcard_mount(_pdrv, mountpoint, max_files, format_if_empty, &fs._fat)) {
         sdcard_unmount(_pdrv);
         sdcard_uninit(_pdrv);
         _pdrv = 0xFF;
         return false;
     }
 
-    _impl->mountpoint(mountpoint);
+    fs.setMountpoint(mountpoint);
     return true;
 }
 
 void SDFS::end() {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    if (fs._rawAccess || fs._openFiles != 0) return;
     if (_pdrv != 0xFF) {
-        _impl->mountpoint(NULL);
+        fs.setMountpoint(nullptr);
+        fs._fat = nullptr;
         sdcard_unmount(_pdrv);
 
         sdcard_uninit(_pdrv);
@@ -56,11 +63,13 @@ void SDFS::end() {
 }
 
 sdcard_type_t SDFS::cardType() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_pdrv == 0xFF) { return CARD_NONE; }
     return sdcard_type(_pdrv);
 }
 
 uint64_t SDFS::cardSize() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_pdrv == 0xFF) { return 0; }
     size_t sectors = sdcard_num_sectors(_pdrv);
     size_t sectorSize = sdcard_sector_size(_pdrv);
@@ -68,46 +77,30 @@ uint64_t SDFS::cardSize() {
 }
 
 size_t SDFS::numSectors() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_pdrv == 0xFF) { return 0; }
     return sdcard_num_sectors(_pdrv);
 }
 
 size_t SDFS::sectorSize() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_pdrv == 0xFF) { return 0; }
     return sdcard_sector_size(_pdrv);
 }
 
-uint64_t SDFS::totalBytes() {
-    FATFS *fsinfo;
-    DWORD fre_clust;
-    char drv[3] = {(char)(48 + _pdrv), ':', 0};
-    if (f_getfree(drv, &fre_clust, &fsinfo) != 0) return 0;
-    uint64_t size = ((uint64_t)(fsinfo->csize)) * (fsinfo->n_fatent - 2)
-#if _MAX_SS != 512
-                    * (fsinfo->ssize);
-#else
-                    * 512;
-#endif
-    return size;
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    return fs._rawAccess && buffer && sector < sdcard_num_sectors(_pdrv) &&
+           sd_read_raw(_pdrv, buffer, sector);
 }
 
-uint64_t SDFS::usedBytes() {
-    FATFS *fsinfo;
-    DWORD fre_clust;
-    char drv[3] = {(char)(48 + _pdrv), ':', 0};
-    if (f_getfree(drv, &fre_clust, &fsinfo) != 0) return 0;
-    uint64_t size = ((uint64_t)(fsinfo->csize)) * ((fsinfo->n_fatent - 2) - (fsinfo->free_clst))
-#if _MAX_SS != 512
-                    * (fsinfo->ssize);
-#else
-                    * 512;
-#endif
-    return size;
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    return fs._rawAccess && buffer && sector < sdcard_num_sectors(_pdrv) &&
+           sd_write_raw(_pdrv, buffer, sector);
 }
-
-bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return sd_read_raw(_pdrv, buffer, sector); }
-
-bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return sd_write_raw(_pdrv, buffer, sector); }
 
 SDFS SD = SDFS(FSImplPtr(new VFSImpl()));
 #endif

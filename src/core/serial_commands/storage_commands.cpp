@@ -742,18 +742,13 @@ uint32_t copyCallback(cmd *c) {
         return false;
     }
 
-    bool r;
-    fileToCopy = filepath;
-    if (pasteFile((*fs), newName)) {
+    if (pasteFile(*fs, newName, filepath)) {
         serialDevice->println("File copied to '" + newName + "'");
-        r = true;
-    } else {
-        serialDevice->println("Error copying file");
-        r = false;
+        return true;
     }
 
-    fileToCopy = "";
-    return r;
+    serialDevice->println("Error copying file");
+    return false;
 }
 
 uint32_t mkdirCallback(cmd *c) {

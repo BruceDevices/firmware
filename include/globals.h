@@ -20,6 +20,7 @@
 #include <LittleFS.h>
 #include <NTPClient.h>
 #include <SPI.h>
+#include <atomic>
 #include <functional>
 #include <io_expander/io_expander.h> // ./lib/HAL
 #include <vector>
@@ -67,7 +68,7 @@ extern NTPClient timeClient;
 
 extern int prog_handler; // 0 - Flash, 1 - LittleFS, 2 - Download
 
-extern bool sdcardMounted; // inform if SD Cardis active or not
+extern std::atomic_bool sdcardMounted; // Local FAT mount state, shared by the UI and file tasks.
 
 extern bool wifiConnected; // inform if wifi is active or not
 extern bool isWebUIActive; // inform if WebUI is active or not

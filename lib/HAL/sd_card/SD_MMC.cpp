@@ -3,7 +3,7 @@
 
 #include "io_pin_remap.h"
 #ifdef SOC_SDMMC_HOST_SUPPORTED
-#include "vfs_api.h"
+#include "SDVFS.h"
 
 #include "diskio.h"
 #include "diskio_sdmmc.h"
@@ -22,7 +22,7 @@
 
 using namespace fs;
 
-SDFS::SDFS(FSImplPtr impl) : FS(impl), _card(nullptr) {
+SDFS::SDFS(FSImplPtr impl) : FS(std::make_shared<SdFsImpl>(std::move(impl))), _card(nullptr) {
 #if defined(SOC_SDMMC_USE_GPIO_MATRIX) && defined(BOARD_HAS_SDMMC) && !defined(CONFIG_IDF_TARGET_ESP32P4)
     _pin_clk = SDMMC_CLK;
     _pin_cmd = SDMMC_CMD;
@@ -72,6 +72,9 @@ SDFS::SDFS(FSImplPtr impl) : FS(impl), _card(nullptr) {
 
 bool SDFS::sdmmcDetachBus(void *bus_pointer) {
     SDFS *bus = (SDFS *)bus_pointer;
+    auto &fs = bus->sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    if (fs._rawAccess || fs._openFiles != 0) return false;
     if (bus->_card) { bus->end(); }
     return true;
 }
@@ -81,6 +84,7 @@ bool SDFS::setPins(int clk, int cmd, int d0) {
 }
 
 bool SDFS::setPins(int clk, int cmd, int d0, int d1, int d2, int d3) {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_card != nullptr) {
         log_e("SD_MMC.setPins must be called before SD_MMC.begin");
         return false;
@@ -146,6 +150,7 @@ bool SDFS::setPins(int clk, int cmd, int d0, int d1, int d2, int d3) {
 
 #ifdef SOC_SDMMC_IO_POWER_EXTERNAL
 bool SDFS::setPowerChannel(int power_channel) {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (_card != nullptr) {
         log_e("SD_MMC.setPowerChannel must be called before SD_MMC.begin");
         return false;
@@ -159,6 +164,9 @@ bool SDFS::begin(
     const char *mountpoint, bool mode1bit, bool format_if_mount_failed, int sdmmc_frequency,
     uint8_t maxOpenFiles
 ) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    if (fs._rawAccess) return false;
     if (_card) { return true; }
     perimanSetBusDeinit(ESP32_BUS_TYPE_SDMMC_CLK, SDFS::sdmmcDetachBus);
     perimanSetBusDeinit(ESP32_BUS_TYPE_SDMMC_CMD, SDFS::sdmmcDetachBus);
@@ -288,7 +296,7 @@ bool SDFS::begin(
                 "format_if_mount_failed = true."
             );
         } else if (ret == ESP_ERR_INVALID_STATE) {
-            _impl->mountpoint(mountpoint);
+            fs.setMountpoint(mountpoint);
             log_w("SD Already mounted");
             return true;
         } else {
@@ -301,7 +309,7 @@ bool SDFS::begin(
         _card = NULL;
         return false;
     }
-    _impl->mountpoint(mountpoint);
+    fs.setMountpoint(mountpoint);
     _pdrv = ff_diskio_get_pdrv_card(_card);
 
     if (!perimanSetPinBus(_pin_cmd, ESP32_BUS_TYPE_SDMMC_CMD, (void *)(this), -1, -1)) { goto err; }
@@ -321,10 +329,15 @@ err:
 }
 
 void SDFS::end() {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    if (fs._rawAccess || fs._openFiles != 0) return;
     if (_card) {
-        esp_vfs_fat_sdcard_unmount(_impl->mountpoint(), _card);
-        _impl->mountpoint(NULL);
+        fs._fat = nullptr;
+        esp_vfs_fat_sdcard_unmount(fs.mountpoint(), _card);
+        fs.setMountpoint(nullptr);
         _card = NULL;
+        _pdrv = 0xFF;
         perimanClearPinBus(_pin_cmd);
         perimanClearPinBus(_pin_clk);
         perimanClearPinBus(_pin_d0);
@@ -340,54 +353,42 @@ void SDFS::end() {
 }
 
 sdcard_type_t SDFS::cardType() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (!_card) { return CARD_NONE; }
     return (_card->ocr & SD_OCR_SDHC_CAP) ? CARD_SDHC : CARD_SD;
 }
 
 uint64_t SDFS::cardSize() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (!_card) { return 0; }
     return (uint64_t)_card->csd.capacity * _card->csd.sector_size;
 }
 
-uint64_t SDFS::totalBytes() {
-    FATFS *fsinfo;
-    DWORD fre_clust;
-    if (f_getfree("0:", &fre_clust, &fsinfo) != 0) { return 0; }
-    uint64_t size = ((uint64_t)(fsinfo->csize)) * (fsinfo->n_fatent - 2)
-#if _MAX_SS != 512
-                    * (fsinfo->ssize);
-#else
-                    * 512;
-#endif
-    return size;
-}
-
-uint64_t SDFS::usedBytes() {
-    FATFS *fsinfo;
-    DWORD fre_clust;
-    if (f_getfree("0:", &fre_clust, &fsinfo) != 0) { return 0; }
-    uint64_t size = ((uint64_t)(fsinfo->csize)) * ((fsinfo->n_fatent - 2) - (fsinfo->free_clst))
-#if _MAX_SS != 512
-                    * (fsinfo->ssize);
-#else
-                    * 512;
-#endif
-    return size;
-}
-
 size_t SDFS::sectorSize() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (!_card) { return 0; }
     return _card->csd.sector_size;
 }
 
 size_t SDFS::numSectors() {
+    std::lock_guard<std::recursive_mutex> lock(sdFs().mutex);
     if (!_card) { return 0; }
-    return (totalBytes() / _card->csd.sector_size);
+    return _card->csd.capacity;
 }
 
-bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return (disk_read(_pdrv, buffer, sector, 1) == 0); }
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    return fs._rawAccess && buffer && sector < _card->csd.capacity &&
+           disk_read(_pdrv, buffer, sector, 1) == RES_OK;
+}
 
-bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return (disk_write(_pdrv, buffer, sector, 1) == 0); }
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) {
+    auto &fs = sdFs();
+    std::lock_guard<std::recursive_mutex> lock(fs.mutex);
+    return fs._rawAccess && buffer && sector < _card->csd.capacity &&
+           disk_write(_pdrv, buffer, sector, 1) == RES_OK;
+}
 
 SDFS SD = SDFS(FSImplPtr(new VFSImpl()));
 #endif /* SOC_SDMMC_HOST_SUPPORTED */
