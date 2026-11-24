@@ -377,7 +377,7 @@ void rf_CC1101_rssi() {
 
         // draw dot graph for fixed frequency
         if (bruceConfigPins.rfFxdFreq) {
-            int rssi = ELECHOUSE_cc1101.getRssi();
+            int rssi = rfGetRssi();
             tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
             int prev = signal[0];
             for (int i = 1; i < graph_size; i++) {
@@ -409,7 +409,7 @@ void rf_CC1101_rssi() {
                 if (EscPress || SelPress) break;
                 setMHZ(subghz_frequency_list[range_limits[bruceConfigPins.rfScanRange][0] + i]);
                 vTaskDelay(pdMS_TO_TICKS(5));
-                int rssi = ELECHOUSE_cc1101.getRssi();
+                int rssi = rfGetRssi();
                 tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
                 int size = map(rssi, -95, -20, 0, max_bar_size);
                 if (size > bar_size[i]) bar_size[i] = size;

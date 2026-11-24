@@ -15,6 +15,52 @@ const int range_limits[4][2] = {
 };
 const char *subghz_frequency_ranges[] = {"300-348 MHz", "387-464 MHz", "779-928 MHz", "All ranges"};
 
+#if defined(RF_SHARED_SPI_BUS_LOCK)
+// See rf_spi_lock() in rf_utils.h for why this exists. The recursive mutex makes
+// nested locks free; the depth counter means only the outermost pair takes (and
+// releases) the display's SPI transaction, so a render task can never be inside
+// a draw while another task is talking to the CC1101.
+static StaticSemaphore_t rf_spi_buf;
+static SemaphoreHandle_t rf_spi_mutex = xSemaphoreCreateRecursiveMutexStatic(&rf_spi_buf);
+static int rf_spi_depth = 0;
+
+void rf_spi_lock() {
+    // Static storage: the mutex exists before any task runs, so a lock can no
+    // longer race its own lazy allocation (two tasks used to be able to create
+    // two mutexes, one of which then guarded nothing).
+    if (rf_spi_mutex == nullptr) return;
+    xSemaphoreTakeRecursive(rf_spi_mutex, portMAX_DELAY);
+    if (rf_spi_depth == 0) {
+        // Takes the display's SPI mutex only (no transaction, no CS change), so
+        // the render task finishes whatever it is drawing and cannot start a new
+        // transaction until rf_spi_unlock(). The CC1101 driver is then free to
+        // begin/end its own transactions on the shared instance.
+        TFT_eSPI::busLock();
+    }
+    rf_spi_depth++;
+}
+
+void rf_spi_unlock() {
+    if (rf_spi_mutex == nullptr) return;
+    if (rf_spi_depth > 0) {
+        rf_spi_depth--;
+        if (rf_spi_depth == 0) TFT_eSPI::busUnlock();
+    }
+    xSemaphoreGiveRecursive(rf_spi_mutex);
+}
+#else
+// Boards where the CC1101 has its own SPI bus need no arbitration.
+void rf_spi_lock() {}
+void rf_spi_unlock() {}
+#endif
+
+int rfGetRssi() {
+    rf_spi_lock();
+    int rssi = ELECHOUSE_cc1101.getRssi();
+    rf_spi_unlock();
+    return rssi;
+}
+
 String rf_subghz_header(float frequencyMHz) {
     return "Filetype: Bruce SubGhz File\nVersion: 1\n" + String("Frequency: ") +
            String(int(frequencyMHz * 1000000)) + "\n";
@@ -358,10 +404,12 @@ bool initRfModule(String mode, float frequency) {
 
 void deinitRfModule() {
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+        rf_spi_lock();
         if (cc1101_spi_ready) {
             ELECHOUSE_cc1101.setSidle();
             cc1101_spi_ready = false;
         }
+        rf_spi_unlock();
         digitalWrite(bruceConfigPins.CC1101_bus.io0, LOW);
         digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
         ioExpander.turnPinOnOff(IO_EXP_CC_RX, LOW);
@@ -394,6 +442,7 @@ void setMHZ(float frequency) {
         Serial.println("Frequency out of band");
     }
     if (bruceConfigPins.rfModule == CC1101_SPI_MODULE) {
+        rf_spi_lock();
         // T_EMBED_1101 must enable the antenna switch even when the Arduino board
         // variant no longer supplies T_EMBED. Otherwise SW0/SW1 stay low and the
         // CC1101 board loses receive sensitivity.
@@ -466,6 +515,7 @@ void setMHZ(float frequency) {
             if (previousMode == 1) ELECHOUSE_cc1101.SetTx();
             else if (previousMode == 2) ELECHOUSE_cc1101.SetRx();
         }
+        rf_spi_unlock();
     }
 }
 

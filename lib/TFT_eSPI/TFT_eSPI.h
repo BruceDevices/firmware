@@ -880,6 +880,13 @@ public:
 #if !defined(TFT_PARALLEL_8_BIT) && !defined(RP2040_PIO_INTERFACE)
     static SPIClass &getSPIinstance(void); // Get SPI class handle
 #endif
+#if defined(ESP32) && !defined(TFT_PARALLEL_8_BIT)
+    // Take/release the display's SPI mutex without opening a transaction or
+    // touching CS. Lets another driver sharing this SPIClass instance run its
+    // own transactions while the render task cannot start a new one.
+    static void busLock(void);
+    static void busUnlock(void);
+#endif
     uint32_t textcolor, textbgcolor; // Text foreground and background colours
 
     uint32_t bitmap_fg, bitmap_bg; // Bitmap foreground (bit=1) and background (bit=0) colours

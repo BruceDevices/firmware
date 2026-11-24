@@ -1,5 +1,6 @@
 #include "rf_waterfall.h"
 #include "core/spectrum_plot.h"
+#include "rf_utils.h"
 #ifndef TFT_MOSI
 #define TFT_MOSI -1
 #endif
@@ -142,7 +143,7 @@ void rf_waterfall_run() {
             float f = f_start + (f_end - f_start) * b / (WF_BINS - 1);
             setMHZ(f);
             vTaskDelay(pdMS_TO_TICKS(WF_SETTLE_MS)); // let the PLL/RSSI settle
-            int rssi = ELECHOUSE_cc1101.getRssi();
+            int rssi = rfGetRssi();
             if (sharedBus) tft.drawPixel(0, 0, 0); // keep CC1101/TFT shared SPI happy
 
             int v = map(rssi, -100, -30, 0, 100);
