@@ -57,8 +57,19 @@ public:
 
     bool SRIX_init();
     bool SRIX_initiate_select();
+    // Applies the ST25TB/SRIX RF configuration used by the kpn532 tools: RF
+    // field cycle, ISO14443-B CIU registers (including the receive/conductance
+    // gain) and longer PSL timeouts. The PN532 defaults are tuned for card
+    // detection and read weakly coupled ST25TB tags poorly.
+    // With applyRFConfig = false only the RF field is cycled, leaving the
+    // PN532 defaults untouched (fallback when the CIU writes are rejected).
+    bool SRIX_prepareRead(bool applyRFConfig = true);
     bool SRIX_read_block(uint8_t address, uint8_t *block);
     bool SRIX_write_block(uint8_t address, uint8_t *block);
+    // Returns -1 when the PN532 did not accept the command, 0 when the tag sent
+    // no response frame (unconfirmed, some tags behave this way), or the tag
+    // status byte (0x00 = write accepted).
+    int SRIX_write_block_status(uint8_t address, uint8_t *block);
     bool SRIX_get_uid(uint8_t *buffer);
 
     void setWire(TwoWire *wire) { _wire = wire; }
@@ -70,6 +81,9 @@ private:
 
     // Low-level I2C functions (reimplemented from original)
     bool SAMConfig();
+    bool setRFConfiguration(uint8_t item, const uint8_t *params, uint8_t len);
+    void setRFField(bool on);
+    bool writeCIURegister(uint16_t reg, uint8_t value);
     void readData(uint8_t *buffer, uint8_t n);
     bool readACK();
     bool isReady();
