@@ -35,12 +35,11 @@ static inline size_t radioLargestDmaBlock() { return heap_caps_get_largest_free_
 
 // Minimum contiguous DMA block required BEFORE bringing Wi-Fi up (checked at the
 // scan/menu entry, i.e. before esp_wifi is touched at all).
-constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
+constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 8 * 1024;
 
 // Minimum contiguous DMA block required before bringing the BLE stack up.
 // Lowered to 8 KB: the BLE suite only need a small NimBLE
-// controller init block, and 8 KB is what the Cardputer ADV actually provides
-// with WiFi off and the SDR bank released. The WiFi-sized gate (15 KB) remains
+// controller init block. The WiFi-sized gate (8 KB) remains
 // as a fallback check in radioHasMemForBle() for the "pre-1.17 layout" case.
 #if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 8 * 1024;
