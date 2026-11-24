@@ -8,6 +8,63 @@
 #include "hal/bright/bright.h"
 #include "hal/device.h"
 #include "hal/inputs/encoder.h"
+#ifdef T_EMBED_1101
+#include <freertos/semphr.h>
+
+namespace {
+// Plus V1 uses an AW9364 on GPIO21, not LEDC. GPIO40 belongs to speaker LRCLK.
+// Timing: AW9364 datasheet V2.3, pp. 5, 8-9 (enable >20us, LOW 0.5..500us,
+// HIGH >0.5us, shutdown >2.5ms). Keep all mutable pulse state under one task mutex.
+StaticSemaphore_t backlightMutexStorage;
+SemaphoreHandle_t backlightMutex;
+portMUX_TYPE backlightPulseMux = portMUX_INITIALIZER_UNLOCKED;
+uint8_t backlightStep = 0;
+uint32_t backlightOffAt = 0;
+
+void setupPulseBacklight() {
+    backlightMutex = xSemaphoreCreateMutexStatic(&backlightMutexStorage);
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, LOW);
+    backlightOffAt = micros();
+}
+
+// Task context only. No allocation or caller-owned buffers; the mutex serializes
+// settings and input-task fades. Only the LOW pulse is interrupt protected.
+void setPulseBacklight(uint8_t percent) {
+    if (percent > 100) percent = 100;
+    const uint8_t step = (percent * 16U + 99U) / 100U;
+    xSemaphoreTake(backlightMutex, portMAX_DELAY);
+    if (step != backlightStep) {
+        if (step == 0) {
+            digitalWrite(TFT_BL, LOW);
+            backlightOffAt = micros();
+        } else {
+            if (backlightStep == 0) {
+                // A quick off/on must finish shutdown before enabling at step 16.
+                // This wait is outside the critical section; ordinary fades never wait.
+                const uint32_t offTime = micros() - backlightOffAt;
+                if (offTime < 3000U) delayMicroseconds(3000U - offTime);
+                digitalWrite(TFT_BL, HIGH);
+                delayMicroseconds(30);
+                backlightStep = 16;
+            }
+            const uint8_t pulses = (backlightStep + 16U - step) % 16U;
+            for (uint8_t i = 0; i < pulses; ++i) {
+                // Preemption while LOW could shut the driver down and lose its count.
+                portENTER_CRITICAL(&backlightPulseMux);
+                digitalWrite(TFT_BL, LOW);
+                delayMicroseconds(2);
+                digitalWrite(TFT_BL, HIGH);
+                portEXIT_CRITICAL(&backlightPulseMux);
+                delayMicroseconds(2);
+            }
+        }
+        backlightStep = step;
+    }
+    xSemaphoreGive(backlightMutex);
+}
+} // namespace
+#endif
 
 // Encoder pins differ between the two envs built from this directory; GAUGE_BQ27220 is
 // the real discriminator (T_EMBED_1101/T_EMBED are never defined by any -D, see _setup_gpio).
@@ -57,6 +114,9 @@ static DeviceEncoder encoderCfg() {
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+#ifdef T_EMBED_1101
+    setupPulseBacklight();
+#endif
 #ifdef GAUGE_BQ27220
     // lilygo-t-embed-cc1101 env (real discriminator: T_EMBED_1101/T_EMBED are never actually
     // defined by any -D flag in this codebase -- pre-existing dead macros, not touched here --
@@ -194,15 +254,25 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup after TFT is initialized
 ***************************************************************************************/
 void _post_setup_gpio() {
+#ifdef T_EMBED_1101
+    setPulseBacklight(100);
+#else
     // Backlight control via PWM (must be after TFT init)
     hal_bright_attach(TFT_BL);
     hal_bright_set(TFT_BL, 100); // Full brightness initially
+#endif
 }
 /*********************************************************************
 **  Function: setBrightness
 **  set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) { hal_bright_set(TFT_BL, brightval); }
+void _setBrightness(uint8_t brightval) {
+#ifdef T_EMBED_1101
+    setPulseBacklight(brightval);
+#else
+    hal_bright_set(TFT_BL, brightval);
+#endif
+}
 
 /*********************************************************************
 ** Function: InputHandler
