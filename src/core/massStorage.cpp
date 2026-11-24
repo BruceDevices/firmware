@@ -280,32 +280,37 @@ void drawUSBStickIcon(bool plugged) {
 
     int radius = 5;
 
-    int bodyW = 2 * iconW / 3;
+    int bodyW = 3 * iconW / 4;
     int bodyH = iconH;
     int bodyX = tftWidth / 2 - iconW / 2;
     int bodyY = tftHeight / 2;
 
-    int portW = iconW - bodyW;
+    // Share both pixels of the joining outline without changing the total width.
+    int portW = iconW - bodyW + 2;
     int portH = 0.8 * bodyH;
-    int portX = bodyX + bodyW;
+    int portX = bodyX + bodyW - 2;
     int portY = bodyY + (bodyH - portH) / 2;
 
-    int portDetailW = portW / 2;
-    int portDetailH = portH / 4;
-    int portDetailX = portX + (portW - portDetailW) / 2;
-    int portDetailY1 = portY + 0.8 * portDetailH;
-    int portDetailY2 = portY + portH - 1.8 * portDetailH;
+    int contactSize = std::max(1, portH / 6);
+    int contactX = portX + (portW - contactSize) / 2;
+    int contactY1 = portY + portH / 3 - contactSize / 2;
+    int contactY2 = portY + 2 * portH / 3 - contactSize / 2;
 
-    int ledW = 0.1 * bodyH;
+    int ledW = std::max(3, bodyH / 10);
     int ledH = 0.6 * bodyH;
     int ledX = bodyX + 2 * ledW;
     int ledY = bodyY + (iconH - ledH) / 2;
 
-    tft.fillRoundRect(bodyX, bodyY, bodyW, bodyH, radius, TFT_DARKCYAN);
-    tft.fillRoundRect(portX, portY, portW, portH, radius, TFT_LIGHTGREY);
-    tft.fillRoundRect(portDetailX, portDetailY1, portDetailW, portDetailH, radius, TFT_DARKGREY);
-    tft.fillRoundRect(portDetailX, portDetailY2, portDetailW, portDetailH, radius, TFT_DARKGREY);
-    tft.fillRoundRect(ledX, ledY, ledW, ledH, radius, plugged ? TFT_GREEN : TFT_RED);
+    // The existing screen redraw supplies the themed background inside both outlines.
+    tft.drawRoundRect(bodyX, bodyY, bodyW, bodyH, radius, bruceConfig.priColor);
+    tft.drawRoundRect(bodyX + 1, bodyY + 1, bodyW - 2, bodyH - 2, radius - 1, bruceConfig.priColor);
+    tft.drawRect(portX, portY, portW, portH, bruceConfig.priColor);
+    tft.drawRect(portX + 1, portY + 1, portW - 2, portH - 2, bruceConfig.priColor);
+    tft.fillRect(contactX, contactY1, contactSize, contactSize, bruceConfig.priColor);
+    tft.fillRect(contactX, contactY2, contactSize, contactSize, bruceConfig.priColor);
+    // Five pixels wide on the 320x170 display; clear the fill when disconnected.
+    tft.fillRect(ledX, ledY, ledW, ledH, plugged ? bruceConfig.priColor : bruceConfig.bgColor);
+    if (!plugged) tft.drawRect(ledX, ledY, ledW, ledH, bruceConfig.priColor);
 }
 
 } // namespace
