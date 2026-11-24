@@ -15,6 +15,8 @@ void hal_pmic_enable_otg(); // 5V boost output
 void hal_pmic_disable_otg();
 bool hal_pmic_is_charging();
 bool hal_pmic_is_charge_done();
+// Return 1 for valid VBUS, 0 for absent VBUS, or -1 when unavailable/read failed.
+int hal_pmic_get_vbus_present();
 int hal_pmic_get_batt_voltage_mv();
 void hal_pmic_disable_bat_load();
 int hal_pmic_get_input_current_limit_ma();

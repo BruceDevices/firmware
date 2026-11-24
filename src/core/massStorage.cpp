@@ -2,6 +2,9 @@
 #if defined(SOC_USB_OTG_SUPPORTED)
 #include "core/display.h"
 #include "core/sd_functions.h"
+#if defined(T_EMBED_1101) && defined(PMIC_BQ25896)
+#include "hal/power/pmic.h"
+#endif
 #include <USB.h>
 #include <USBMSC.h>
 #include <atomic>
@@ -160,7 +163,93 @@ void displayMessage(const char *message) {
 
 void drawUSBStickIcon(bool plugged);
 
+#if defined(T_EMBED_1101) && defined(PMIC_BQ25896)
+std::atomic<uint32_t> usbMountGeneration{0};
+
+void registerUsbMountEvents() {
+    static const bool registered = []() {
+        USB.onEvent(ARDUINO_USB_STARTED_EVENT, [](void *, esp_event_base_t, int32_t, void *) {
+            usbMountGeneration.fetch_add(1, std::memory_order_relaxed);
+        });
+        return true;
+    }();
+    (void)registered;
+}
+
+enum class UsbConnection : uint8_t { Disconnected, Waiting, Mounted };
+
+struct UsbConnectionTracker {
+    int lastVbus = -1;
+    uint32_t detachGeneration = 0;
+    bool awaitingMount = false;
+    bool sawUnmount = false;
+
+    void requireFreshMount(uint32_t generation) {
+        detachGeneration = generation;
+        awaitingMount = true;
+        sawUnmount = false;
+    }
+
+    UsbConnection update(int vbus, bool mounted, uint32_t generation) {
+        // Keep the last confirmed physical state through a transient I2C failure.
+        // Before the first successful PMIC read, retain native USB indication.
+        if (vbus < 0) vbus = lastVbus;
+        if (vbus < 0) return mounted ? UsbConnection::Mounted : UsbConnection::Waiting;
+        if (vbus == 0) {
+            if (lastVbus != 0 && !awaitingMount) requireFreshMount(generation);
+            if (!mounted) sawUnmount = true;
+            lastVbus = 0;
+            return UsbConnection::Disconnected;
+        }
+
+        lastVbus = 1;
+        if (!mounted) sawUnmount = true;
+        // REG11 can qualify VBUS after the host has already mounted the device.
+        // Keep the generation captured at removal until that new mount is accepted.
+        if (awaitingMount && (generation != detachGeneration || (sawUnmount && mounted))) {
+            awaitingMount = false;
+        }
+        return mounted && !awaitingMount ? UsbConnection::Mounted : UsbConnection::Waiting;
+    }
+};
+
+// Keep a confirmed removal across screen re-entry until a fresh host mount occurs.
+UsbConnectionTracker usbConnectionTracker;
+#endif
+
 void showSession() {
+#if defined(T_EMBED_1101) && defined(PMIC_BQ25896)
+    auto &tracker = usbConnectionTracker;
+    uint32_t generation = usbMountGeneration.load(std::memory_order_relaxed);
+    int vbus = hal_pmic_get_vbus_present();
+    uint32_t lastVbusPoll = millis();
+    auto state = tracker.update(vbus, tud_mounted(), generation);
+    auto drawConnection = [](UsbConnection connection) {
+        switch (connection) {
+            case UsbConnection::Disconnected: displayMessage("USB disconnected"); break;
+            case UsbConnection::Waiting: displayMessage("Waiting for USB host"); break;
+            case UsbConnection::Mounted: displayMessage("Eject on PC before Back"); break;
+        }
+        drawUSBStickIcon(connection == UsbConnection::Mounted);
+    };
+    drawConnection(state);
+
+    while (session == Session::Active && !check(EscPress)) {
+        // Snapshot before the PMIC transaction so a mount during VBUS qualification
+        // cannot become the baseline for a newly observed removal.
+        generation = usbMountGeneration.load(std::memory_order_relaxed);
+        if (millis() - lastVbusPoll >= 200) {
+            vbus = hal_pmic_get_vbus_present();
+            lastVbusPoll = millis();
+        }
+        const auto now = tracker.update(vbus, tud_mounted(), generation);
+        if (now != state) {
+            state = now;
+            drawConnection(state);
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+#else
     bool mounted = tud_mounted();
     displayMessage(mounted ? "Eject on PC before Back" : "Connect USB");
     drawUSBStickIcon(mounted);
@@ -175,6 +264,7 @@ void showSession() {
         // A host reset can also clear the mounted state. Keep the session available for reconnect.
         vTaskDelay(pdMS_TO_TICKS(20));
     }
+#endif
 }
 
 void drawUSBStickIcon(bool plugged) {
@@ -221,6 +311,9 @@ void drawUSBStickIcon(bool plugged) {
 } // namespace
 
 MassStorage::MassStorage() {
+#if defined(T_EMBED_1101) && defined(PMIC_BQ25896)
+    registerUsbMountEvents();
+#endif
     displayMessage("Mounting...");
     switch (beginSdCardRawAccess()) {
         case SdRawAccess::Unavailable: displayError("SD card not found", true); return;
@@ -234,6 +327,13 @@ MassStorage::MassStorage() {
                           blockSize <= UINT16_MAX && USB.begin();
     if (canStart) {
         // A host that safely removed the USB device may not poll the LUN again until enumeration.
+#if defined(T_EMBED_1101) && defined(PMIC_BQ25896)
+        if (exportedBefore) {
+            // A cable change while the screen was closed can leave mounted status stale.
+            // Arm before disconnect so a fast new mount can satisfy this session.
+            usbConnectionTracker.requireFreshMount(usbMountGeneration.load(std::memory_order_relaxed));
+        }
+#endif
         const bool reconnect = exportedBefore && tud_disconnect();
         if (reconnect) vTaskDelay(pdMS_TO_TICKS(250));
         {

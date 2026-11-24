@@ -6,6 +6,7 @@
 #include <XPowersLib.h>
 
 static XPowersPPM ppm;
+static bool pmicReady = false;
 
 static void applyOperatingPoint(
     uint16_t input_current_limit_ma, uint16_t charge_target_mv, uint16_t charge_current_ma
@@ -26,6 +27,7 @@ bool hal_pmic_init(const DevicePmic &cfg, uint16_t input_current_limit_ma) {
 #if defined(PMIC_BQ25896)
     bool ok = (cfg.pin_sda < 0 && cfg.pin_scl < 0) ? ppm.init()
                                                     : ppm.init(Wire, cfg.pin_sda, cfg.pin_scl, cfg.address);
+    pmicReady = ok;
     if (!ok) return false;
     applyOperatingPoint(input_current_limit_ma, cfg.charge_target_mv, cfg.charge_current_ma);
     return true;
@@ -40,7 +42,8 @@ bool hal_pmic_init_via_callbacks(
     uint8_t address, PmicI2cFptr readReg, PmicI2cFptr writeReg, uint16_t input_current_limit_ma
 ) {
 #if defined(PMIC_BQ25896)
-    if (!ppm.begin(address, readReg, writeReg)) return false;
+    pmicReady = ppm.begin(address, readReg, writeReg);
+    if (!pmicReady) return false;
     applyOperatingPoint(input_current_limit_ma, 4208, 832);
     return true;
 #else
@@ -115,6 +118,17 @@ bool hal_pmic_is_charge_done() {
     return ppm.isChargeDone();
 #else
     return false;
+#endif
+}
+
+int hal_pmic_get_vbus_present() {
+#if defined(PMIC_BQ25896)
+    if (!pmicReady) return -1;
+    // Preserve an I2C failure separately from a confirmed cable removal.
+    const int status = ppm.readRegister(POWERS_PPM_REG_11H);
+    return status < 0 ? -1 : ((status >> 7) & 1);
+#else
+    return -1;
 #endif
 }
 
