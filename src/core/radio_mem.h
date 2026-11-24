@@ -14,6 +14,14 @@
     These helpers let callers refuse to start a radio *before* touching it when
     there isn't enough contiguous DMA memory, turning an unavoidable crash into a
     clean, user-visible error.
+
+    Teardown timing: WiFi.mode(WIFI_OFF) releases the driver's DMA buffers
+    asynchronously. A single fixed delay after wifiDisconnect() either
+    over-waits (slowing boot) or under-waits (false "Low RAM" popups that
+    resolve a moment later). radioHasMemForBle() therefore polls the largest
+    block for up to ~1.5s after triggering teardown, returning as soon as the
+    threshold is met, and only failing (popup) if the block genuinely never
+    recovers in that window.
 */
 #include <esp_heap_caps.h>
 #include <stddef.h>
@@ -27,25 +35,14 @@ static inline size_t radioLargestDmaBlock() { return heap_caps_get_largest_free_
 
 // Minimum contiguous DMA block required BEFORE bringing Wi-Fi up (checked at the
 // scan/menu entry, i.e. before esp_wifi is touched at all).
-constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
+constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 8 * 1024;
 
 // Minimum contiguous DMA block required before bringing the BLE stack up.
-// The raised value applies ONLY while the IQ-record bank is still fenced out
-// of the heap (see modules/wifi/sdr.cpp): with the bank reserved the menu heap
-// only has ~15.8 kB contiguous (measured on Cardputer ADV) and the controller
-// still fails ("Malloc failed"), so the threshold must sit comfortably above
-// that; the bank hand-off in radioHasMemForBle() gives the heap ~64 kB more,
-// which is what makes this higher gate reachable there.
-// Once the bank has been handed back, the heap is the pre-1.17 layout, where
-// BLE ran with the Wi-Fi-sized gate — radioHasMemForBle() falls back to it, so
-// BLE menus don't show "Low RAM" red lines in states pre-1.17 handled fine
-// (WiFi up, SD mounted, hand-off already consumed).
-// On every other board the bank is NOT reserved (BRUCE_NO_IQ_RECORD), so there
-// is no hand-off that could ever satisfy a bigger gate: those builds keep the
-// pre-1.17 gate (same as Wi-Fi), otherwise BLE fails right after boot on
-// T-Embed/T-Deck/etc. even with WiFi off.
+// Lowered to 8 KB: the BLE suite only need a small NimBLE
+// controller init block. The WiFi-sized gate (8 KB) remains
+// as a fallback check in radioHasMemForBle() for the "pre-1.17 layout" case.
 #if !defined(BRUCE_IQ_RECORD_UNAVAILABLE)
-constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 48 * 1024;
+constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 8 * 1024;
 #else
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = RADIO_WIFI_MIN_DMA_BLOCK;
 #endif
@@ -73,45 +70,40 @@ static inline bool radioHasMemForWifi() {
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
+
+    // Fast path: enough DMA already.
     if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) return true;
 
-    // Not enough DMA memory - first hand the SDR bank back to the heap
+    // Hand the SDR bank back to the heap (if it was reserved).
     sdrBankHeapInit();
     sdrBankReleaseForRadio();
-    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
-        return true;
-    }
+    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) return true;
 
-    // The bank is back in the heap now (or was never reserved): the heap is
-    // the pre-1.17 layout, where BLE ran with the Wi-Fi-sized gate. Holding
-    // the raised gate here would refuse BLE in states pre-1.17 handled fine
-    // (WiFi up, SD mounted) even though the controller has what it had then.
-    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
-        return true;
-    }
+    // Pre-1.17 layout fallback: if the block meets the WiFi-sized gate, the
+    // heap is in a state where BLE ran fine before 1.17, so accept it.
+    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) return true;
 
-    // Still not enough - try to free WiFi
+    // Try to free WiFi. Teardown is asynchronous, so poll for up to ~1.5s.
     Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
 
-    // Disconnect WiFi if active
     if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
         wifiDisconnect();
-        delay(200);
-        #ifdef WIFI_DEINIT_ON_DISCONNECT
+#ifdef WIFI_DEINIT_ON_DISCONNECT
         WiFi.mode(WIFI_OFF);
-        #endif
-        delay(300);
+#endif
+        for (int i = 0; i < 6; i++) {
+            delay(250);
+            size_t block = radioLargestDmaBlock();
+            if (block >= RADIO_WIFI_MIN_DMA_BLOCK) {
+                Serial.printf("[RAM] WiFi freed after %d ms, DMA block: %u bytes\n",
+                              (i + 1) * 250, (unsigned)block);
+                return true;
+            }
+        }
     }
 
-    // Recheck after freeing WiFi (pre-1.17 gate, same reasoning as above)
-    if (radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK) {
-        Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
-        return true;
-    }
-
-    // Still not enough - return false, caller shows error
-    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n",
-                  radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
+    Serial.printf("[RAM] Still only %u bytes DMA block, minimum %u needed\n",
+                  (unsigned)radioLargestDmaBlock(), (unsigned)RADIO_BLE_MIN_DMA_BLOCK);
     return false;
 }
 
