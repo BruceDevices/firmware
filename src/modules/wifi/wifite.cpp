@@ -53,13 +53,21 @@ class App {
     }
     String logText() { String all;all.reserve(logs.size()*90);for(auto &s:logs) all+=s+"\n";return all; }
     bool start(WifiteMode mode,const WfTarget *target=nullptr,const char *pin=nullptr) {
-        if(!platform) { platform=wf_platform_prepare(); if(!platform) {displayError("Wi-Fi initialization failed",true);return false;} }
+        if(!platform) {
+            platform=wf_platform_prepare();
+            if(!platform) {displayError("Wi-Fi initialization failed",true);return false;}
+            vTaskDelay(200 / portTICK_PERIOD_MS);
+        }
         logs.clear();started=millis();if(mode==WifiteScan) {targets.clear();selected=0;}
         // The worker's 24 kB stack goes to PSRAM on boards that have it
         // (xTaskCreateWithCaps in radio.c), so it never competes with the
         // WiFi driver for internal RAM; no-PSRAM boards (cardputer) have
         // plenty of internal and take the internal fallback here, as before.
         job=wifite_start(mode,target,pin);
+        if(!job) {
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+            job=wifite_start(mode,target,pin);
+        }
         if(!job) {displayError("Cannot allocate WiFite worker",true);return false;}
         return true;
     }
