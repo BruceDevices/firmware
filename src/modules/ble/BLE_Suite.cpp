@@ -15,6 +15,7 @@
 #include "HFP_Exploit.h"
 #include "ble_common.h"
 #include "core/display.h"
+#include "core/i18n.h"
 #include "core/mykeyboard.h"
 #include "core/radio_mem.h"
 #include "core/utils.h"
@@ -3014,8 +3015,15 @@ static uint16_t bleAccent() { return getColorVariation(bruceConfig.priColor, 8, 
 // characters, so proportional titles and names stop overflowing.
 static String bleFit(const String &text, int maxPx) {
     if (maxPx <= 0) return "";
-    if (tft.textWidth(text.c_str()) <= maxPx) return text;
-    String s = text;
+    String trText = bruce_i18n::tr(text);
+    if (bruce_i18n::containsNonAscii(trText)) {
+        if (bruce_i18n::utf8PixelWidth(trText, FP) <= maxPx) return trText;
+        int dotW = bruce_i18n::utf8PixelWidth("..", FP);
+        if (maxPx <= dotW) return "..";
+        return bruce_i18n::utf8TruncateToWidth(trText, maxPx - dotW, FP) + "..";
+    }
+    if (tft.textWidth(trText.c_str()) <= maxPx) return trText;
+    String s = trText;
     while (s.length() > 1 && tft.textWidth((s + "..").c_str()) > maxPx) s.remove(s.length() - 1);
     return s + "..";
 }

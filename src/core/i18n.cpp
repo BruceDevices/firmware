@@ -61,7 +61,33 @@ String tr(const String &en) {
     const char *exact = lookupExactZh(en.c_str());
     if (exact) return String(exact);
 
-    // Handle dynamic "Prefix: Value" labels such as "Sound: ON", "Keyboard Language: QWERTY"
+    // Handle leading/trailing whitespace around translatable strings (e.g. " Bright: 80% ", "Overwrite ")
+    String trimmed = en;
+    trimmed.trim();
+    if (trimmed.length() != en.length() && !trimmed.isEmpty()) {
+        String trTrimmed = tr(trimmed);
+        if (trTrimmed != trimmed) {
+            size_t lead = 0;
+            while (lead < en.length() && (en[lead] == ' ' || en[lead] == '\t')) ++lead;
+            size_t trail = en.length();
+            while (trail > lead && (en[trail - 1] == ' ' || en[trail - 1] == '\t')) --trail;
+            return en.substring(0, lead) + trTrimmed + en.substring(trail);
+        }
+    }
+
+    // Handle "Left > Right" breadcrumb titles (e.g. "Apple Pairing Prompt > Device", "... > Config")
+    int arrow = en.indexOf(" > ");
+    if (arrow > 0) {
+        String left = en.substring(0, arrow);
+        String right = en.substring(arrow + 3);
+        String trLeft = tr(left);
+        String trRight = tr(right);
+        if (trLeft != left || trRight != right) {
+            return trLeft + " > " + trRight;
+        }
+    }
+
+    // Handle dynamic "Prefix: Value" labels such as "Sound: ON", "Total heap: 120 KB", "Connecting to: SSID"
     int sep = en.indexOf(": ");
     if (sep > 0) {
         String key = en.substring(0, sep);
@@ -70,6 +96,15 @@ String tr(const String &en) {
             String val = en.substring(sep + 2);
             const char *trVal = lookupExactZh(val.c_str());
             return String(trKey) + ": " + (trVal ? String(trVal) : val);
+        }
+    }
+
+    // Handle trailing-colon prompts such as "Network Password:", "Evil Portal SSID:"
+    if (en.endsWith(":") && en.length() > 1) {
+        String key = en.substring(0, en.length() - 1);
+        const char *trKey = lookupExactZh(key.c_str());
+        if (trKey) {
+            return String(trKey) + ":";
         }
     }
 

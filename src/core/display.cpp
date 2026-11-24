@@ -443,11 +443,11 @@ void padprintf(const char *format, ...) {
 
 void padprint(const String &s, int16_t padx) {
     tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
-    tft.print(s);
+    tft.print(bruce_i18n::tr(s));
 }
 void padprint(const char str[], int16_t padx) {
     tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
-    tft.print(str);
+    tft.print(bruce_i18n::tr(String(str)));
 }
 void padprint(char c, int16_t padx) {
     tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
@@ -493,9 +493,10 @@ void padprintln(const String &s, int16_t padx) {
         return;
     }
 
-    if (bruce_i18n::containsNonAscii(s)) {
+    String trS = bruce_i18n::tr(s);
+    if (bruce_i18n::containsNonAscii(trS)) {
         int16_t maxPx = tftWidth - (padx + 1) * BORDER_PAD_X;
-        std::vector<String> lines = bruce_i18n::utf8WrapToWidth(s, maxPx, tft.getTextSize());
+        std::vector<String> lines = bruce_i18n::utf8WrapToWidth(trS, maxPx, tft.getTextSize());
         for (const auto &line : lines) {
             tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
             tft.println(line);
@@ -508,7 +509,7 @@ void padprintln(const String &s, int16_t padx) {
     int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
 
     // automatically split into multiple lines
-    while (!(buff = s.substring(start, start + _maxCharsInLine)).isEmpty()) {
+    while (!(buff = trS.substring(start, start + _maxCharsInLine)).isEmpty()) {
         tft.setCursor(padx * BORDER_PAD_X, tft.getCursorY());
         tft.println(buff);
         start += buff.length();

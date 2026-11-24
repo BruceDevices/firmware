@@ -51,6 +51,13 @@ const WebI18n = {
     "Folder Name:": "文件夹名称:",
     "File Name:": "文件名称:",
     "Command:": "命令:",
+    "Rename Folder:": "重命名文件夹:",
+    "Rename File:": "重命名文件:",
+    "Refresh folder": "刷新目录",
+    "Upload files to current folder": "上传文件到当前目录",
+    "Upload folder to current folder": "上传文件夹到当前目录",
+    "Create new file": "新建文件",
+    "Create new folder": "新建文件夹",
     "⚠️ WiFi features will stop the WebUI after configuration":
       "⚠️ 配置 WiFi 功能后网页管理将断开连接",
   },
@@ -88,6 +95,16 @@ const WebI18n = {
     setTxt(".act-save-credential", "Save");
     setTxt(".act-save-edit-file", "Save");
     setTxt(".act-run-edit-file", "Run");
+    setTxt(".act-navigator-shortcut", "Shortcut");
+    const setTitle = (sel, en) => {
+      const el = $(sel);
+      if (el) el.title = isZh ? this.t(en) : en;
+    };
+    setTitle("#refresh-folder", "Refresh folder");
+    setTitle('.body-actions input[title*="Upload files"]', "Upload files to current folder");
+    setTitle('.body-actions input[title*="Upload folder"]', "Upload folder to current folder");
+    setTitle('.act-oinput[data-action="createFile"]', "Create new file");
+    setTitle('.act-oinput[data-action="createFolder"]', "Create new folder");
     document.querySelectorAll(".act-dialog-close").forEach((el) => {
       el.textContent = isZh ? "关闭" : "Close";
     });
@@ -176,7 +193,7 @@ const Dialog = {
   loading: {
     show: function (message) {
       $(".loading-area").classList.remove("hidden");
-      $(".loading-area .text").textContent = message || "Loading...";
+      $(".loading-area .text").textContent = WebI18n.t(message || "Loading...");
     },
     hide: function () {
       $(".loading-area").classList.add("hidden");
@@ -185,29 +202,29 @@ const Dialog = {
   showOneInput: function (name, inputVal, data) {
     const dbForm = {
       renameFolder: {
-        title: "Rename Folder: " + inputVal,
-        label: `New Folder Name:`,
-        action: "Rename",
+        title: WebI18n.t("Rename Folder:") + " " + inputVal,
+        label: WebI18n.t("New Folder Name:"),
+        action: WebI18n.t("Rename"),
       },
       renameFile: {
-        title: "Rename File: " + inputVal,
-        label: `New File Name:`,
-        action: "Rename",
+        title: WebI18n.t("Rename File:") + " " + inputVal,
+        label: WebI18n.t("New File Name:"),
+        action: WebI18n.t("Rename"),
       },
       createFolder: {
-        title: "Create Folder",
-        label: `Folder Name:`,
-        action: "Create Folder",
+        title: WebI18n.t("Create Folder"),
+        label: WebI18n.t("Folder Name:"),
+        action: WebI18n.t("Create Folder"),
       },
       createFile: {
-        title: "Create File",
-        label: `File Name:`,
-        action: "Create File",
+        title: WebI18n.t("Create File"),
+        label: WebI18n.t("File Name:"),
+        action: WebI18n.t("Create File"),
       },
       serial: {
-        title: "Serial Command",
-        label: `Command:`,
-        action: "Run",
+        title: WebI18n.t("Serial Command"),
+        label: WebI18n.t("Command:"),
+        action: WebI18n.t("Run"),
       },
     };
 
@@ -1016,7 +1033,7 @@ function drawCanvasLoading() {
   ctx.font = "bold 14px 'DejaVu Sans Mono', Consolas, Menlo";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("Navigating...", width / 2, height / 2);
+  ctx.fillText(WebI18n.t("Navigating..."), width / 2, height / 2);
   ctx.restore();
 }
 

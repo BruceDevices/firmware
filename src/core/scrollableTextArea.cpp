@@ -156,8 +156,9 @@ void ScrollableTextArea::addLine(const String &text) {
         return;
     }
 
-    if (bruce_i18n::containsNonAscii(text)) {
-        String clean = text;
+    String trText = bruce_i18n::tr(text);
+    if (bruce_i18n::containsNonAscii(trText)) {
+        String clean = trText;
         if (clean.endsWith("\r")) clean.remove(clean.length() - 1);
         std::vector<String> wrapped = bruce_i18n::utf8WrapToWidth(clean, _width, _fontSize);
         if (wrapped.empty()) {

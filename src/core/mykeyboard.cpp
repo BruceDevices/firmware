@@ -1,4 +1,5 @@
 #include "mykeyboard.h"
+#include "core/i18n.h"
 #include "core/utils.h"
 #include "core/wifi/webInterface.h"
 #include "modules/ir/TV-B-Gone.h"
@@ -739,9 +740,11 @@ String generalKeyboard(
 
             // Prints the title of the textbox, it should report what the user has to write in it
             tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), 0x5AAB);
-            tft.drawString(
-                textbox_title.substring(0, max_FP_size - chars_counter.length() - 1), 3, counter_y
-            );
+            String trTitle = bruce_i18n::tr(textbox_title);
+            int16_t maxTitlePx =
+                tftWidth - ((chars_counter.length() * LW * FP) + 2 * BORDER_PAD_X) - 6;
+            if (maxTitlePx < 24) maxTitlePx = 24;
+            tft.drawString(bruce_i18n::utf8TruncateToWidth(trTitle, maxTitlePx, FP), 3, counter_y);
 
             // Drawing the textbox and the currently typed string
             tft.setTextSize(FM);

@@ -1,5 +1,6 @@
 #include "webInterface.h"
 #include "core/display.h"    // using displayRedStripe as error msg
+#include "core/i18n.h"
 #include "core/mykeyboard.h" // using keyboard when calling rename
 #include "core/passwords.h"
 #include "core/ram_profile.h"
@@ -308,7 +309,7 @@ void drawWebUiScreen(bool mode_ap) {
 
     tft.setTextColor(TFT_RED, bruceConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawCentreString("press Esc to stop", tftWidth / 2, tftHeight - 2 * LH * FP - 5, 1);
+    tft.drawCentreString(bruce_i18n::tr("press Esc to stop"), tftWidth / 2, tftHeight - 2 * LH * FP - 5, 1);
 
 #if defined(HAS_TOUCH)
     TouchFooter();

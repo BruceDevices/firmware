@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "core/i18n.h"
 #include "core/led_control.h"
 #include "core/wifi/wifi_common.h"
 #include "current_year.h"
@@ -152,7 +153,7 @@ void setBrightnessMenu() {
             tft.setTextSize(FM);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.drawCentreString(
-                " Bright: " + String(val) + "% ", boxX + contentWidth / 2, boxY + paddingTop, 1
+                bruce_i18n::tr(" Bright: " + String(val) + "% "), boxX + contentWidth / 2, boxY + paddingTop, 1
             );
 
             int indicatorX = trackX + (trackW * val) / 100;
@@ -174,7 +175,9 @@ void setBrightnessMenu() {
 
             tft.setTextSize(FP);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.drawCentreString("Sel to apply", boxX + contentWidth / 2, trackY + sliderH + spacing, 1);
+            tft.drawCentreString(
+                bruce_i18n::tr("Sel to apply"), boxX + contentWidth / 2, trackY + sliderH + spacing, 1
+            );
 
             setBrightness(val, false);
             redraw = false;
@@ -1097,7 +1100,7 @@ void runClockLoop(bool showMenuHint) {
             // "OK to show menu" hint management
             if (hintVisible && (millis() - hintStartTime < 5000)) {
                 tft.setTextSize(FP);
-                tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
+                tft.drawCentreString(bruce_i18n::tr("OK to show menu"), tftWidth / 2, tftHeight / 2 + 25, 1);
             } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
                 // Clear hint after 5 seconds
                 tft.fillRect(
@@ -2092,7 +2095,9 @@ void calibrateTouch() {
         uint16_t y;
     };
 
-    auto drawCenteredLine = [&](const char *text, int16_t y) { tft.drawCentreString(text, _w / 2, y, 1); };
+    auto drawCenteredLine = [&](const char *text, int16_t y) {
+        tft.drawCentreString(bruce_i18n::tr(text), _w / 2, y, 1);
+    };
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
