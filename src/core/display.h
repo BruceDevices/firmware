@@ -193,7 +193,10 @@ Opt_Coord drawOptions(
     bool firstRender = true, bool border = true, bool compact = false
 );
 
-void drawSubmenu(int index, std::vector<Option> &options, const char *title);
+// Caller owns status refresh; invalidate after another renderer repaints the submenu.
+void drawSubmenu(
+    int index, std::vector<Option> &options, const char *title, bool firstRender = true, int previousIndex = -1
+);
 
 void drawStatusBar();
 void drawMainBorder(bool clear = true);
