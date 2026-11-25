@@ -502,14 +502,11 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
 
     // Same DMA-memory guard as bleSpamInitAdvertiser: a half-initialized
     // controller crashes on the first advertisement call
-    if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+    if (!radioHasMemForBle() || !radioSafeBleInit(DeviceName)) {
+        displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
         return;
     }
 
-    // FIX: Always init - if already init'd, it's a no-op
-    // This handles the case where another module deinit'd the stack
-    BLEDevice::init(DeviceName);
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
 
@@ -1550,7 +1547,7 @@ static bool bleSpamInitAdvertiser(
     // boards (e.g. after Wi-Fi/SD churn) it fails half-initialized and the
     // first advertisement call crashes. Same guard as BLE_Suite/ble_common.
     if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+        displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
         return false;
     }
 
@@ -1561,8 +1558,10 @@ static bool bleSpamInitAdvertiser(
         state.mac_initialized = false;
     }
 
-    // FIX: Always init - if already init'd, it's a no-op
-    BLEDevice::init("");
+    if (!radioSafeBleInit("")) {
+        displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
+        return false;
+    }
     vTaskDelay(5 / portTICK_PERIOD_MS);
 
     pAdvertising = BLEDevice::getAdvertising();

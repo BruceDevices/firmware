@@ -629,8 +629,9 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
     if (hid == nullptr) {
         Serial.printf("Creating new HID instance for BLE=%d\n", ble);
         if (ble) {
-            if (!radioHasMemForBle()) {
-                displayError("Low RAM: free WiFi/SD first", true);
+            // Keep SD mounted when BadBLE is about to execute a script stored on SD.
+            if (!radioHasMemForBle(false)) {
+                displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
                 returnToMenu = true;
                 return;
             }
@@ -655,7 +656,11 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
             // Check if BLE needs initialization
             if (!NimBLEDevice::isInitialized()) {
                 Serial.println("[ducky_startKb] Initializing BLE stack...");
-                NimBLEDevice::init(std::string(deviceName.c_str()));
+                if (!radioSafeBleInit(std::string(deviceName.c_str()), false)) {
+                    displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
+                    returnToMenu = true;
+                    return;
+                }
                 Serial.println("[ducky_startKb] BLE stack initialized");
                 delay(50);
             } else {
