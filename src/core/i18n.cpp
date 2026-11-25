@@ -1,6 +1,7 @@
 #include "i18n.h"
 #include "lang_zh_cn.h"
 #include <cstring>
+#include <strings.h>
 
 namespace bruce_i18n {
 
@@ -46,6 +47,10 @@ static const char *lookupExactZh(const char *en) {
         if (cmp < 0) lo = mid + 1;
         else hi = mid;
     }
+    // Case-insensitive fallback (handles e.g. "Custom SubGHz" vs "Custom SubGhz", "Connect to WiFi" vs "Wifi")
+    for (size_t i = 0; i < kZhCnTableSize; ++i) {
+        if (strcasecmp(kZhCnTable[i].en, en) == 0) return kZhCnTable[i].zh;
+    }
     return nullptr;
 }
 
@@ -87,7 +92,7 @@ String tr(const String &en) {
         }
     }
 
-    // Handle dynamic "Prefix: Value" labels such as "Sound: ON", "Total heap: 120 KB", "Connecting to: SSID"
+    // Handle dynamic "Prefix: Value" labels such as "Sound: ON", "Low RAM: free BLE/SD (22K/34K)"
     int sep = en.indexOf(": ");
     if (sep > 0) {
         String key = en.substring(0, sep);
@@ -95,7 +100,14 @@ String tr(const String &en) {
         if (trKey) {
             String val = en.substring(sep + 2);
             const char *trVal = lookupExactZh(val.c_str());
-            return String(trKey) + ": " + (trVal ? String(trVal) : val);
+            if (trVal) return String(trKey) + ": " + String(trVal);
+            int paren = val.indexOf(" (");
+            if (paren > 0) {
+                String valHead = val.substring(0, paren);
+                const char *trHead = lookupExactZh(valHead.c_str());
+                if (trHead) return String(trKey) + ": " + String(trHead) + val.substring(paren);
+            }
+            return String(trKey) + ": " + val;
         }
     }
 

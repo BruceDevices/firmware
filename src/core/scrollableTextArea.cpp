@@ -36,7 +36,7 @@ void ScrollableTextArea::setup() {
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, bruceConfig.bgColor);
 
     _maxCharactersPerLine = floor(_width / _scrollBuffer.textWidth("w", _fontSize));
-    _pixelsPerLine = _scrollBuffer.fontHeight() + 2;
+    _pixelsPerLine = (_fontSize == 1 && bruce_i18n::isChinese()) ? 14 : (_scrollBuffer.fontHeight() + 2);
     _maxVisibleLines = floor(_height / _pixelsPerLine);
 }
 

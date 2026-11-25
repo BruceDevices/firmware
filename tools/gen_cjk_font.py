@@ -131,8 +131,16 @@ def generate_header(codepoints: list[int], font_path: str) -> str:
         "struct CjkGlyph {",
         "    uint16_t codepoint;",
         "    uint16_t rows12[12]; // 12x12 bitmap (MSB = leftmost pixel in bits 11..0)",
+        "#if !defined(BRUCE_COMPACT_CJK_FONT)",
         "    uint16_t rows16[16]; // 16x16 bitmap (MSB = leftmost pixel in bits 15..0)",
+        "#endif",
         "};",
+        "",
+        "#if defined(BRUCE_COMPACT_CJK_FONT)",
+        "#define BRUCE_CJK_R16(...)",
+        "#else",
+        "#define BRUCE_CJK_R16(...) , {__VA_ARGS__}",
+        "#endif",
         "",
         f"static constexpr size_t kCjkGlyphCount = {len(codepoints)};",
         "",
@@ -146,10 +154,11 @@ def generate_header(codepoints: list[int], font_path: str) -> str:
         r12_str = ", ".join(f"0x{v:03X}" for v in r12)
         r16_str = ", ".join(f"0x{v:04X}" for v in r16)
         safe_comment = ch if ch not in ("\\", "*/") else ""
-        lines.append(f"    {{0x{cp:04X}, {{{r12_str}}}, {{{r16_str}}}}}, // {safe_comment}")
+        lines.append(f"    {{0x{cp:04X}, {{{r12_str}}} BRUCE_CJK_R16({r16_str})}}, // {safe_comment}")
 
     lines += [
         "};",
+        "#undef BRUCE_CJK_R16",
         "",
         "} // namespace bruce_i18n",
         "",

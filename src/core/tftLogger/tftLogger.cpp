@@ -517,7 +517,7 @@ int16_t tft_logger::drawUtf8Text(
     bool opaque = (fg != bg);
 
     int16_t totalW = bruce_i18n::utf8PixelWidth(s, ts);
-    int16_t lineH = bruce_i18n::utf8LineHeight(ts);
+    int16_t lineH = (ts == 1) ? 12 : bruce_i18n::utf8LineHeight(ts);
     uint8_t oldDatum = getTextDatum();
 
     int32_t startX = x;
@@ -552,8 +552,13 @@ int16_t tft_logger::drawUtf8Text(
             while (*p && static_cast<unsigned char>(*p) < 0x80 && *p != '\n' && *p != '\r') { ++p; }
             if (p > runStart) {
                 String run = s.substring(runStart - s.c_str(), p - s.c_str());
-                BRUCE_TFT_DRIVER::drawString(run, curX, startY, font);
-                curX += static_cast<int32_t>(run.length()) * LW * ts;
+                int32_t runW = static_cast<int32_t>(run.length()) * LW * ts;
+                if (ts == 1 && opaque) {
+                    BRUCE_TFT_DRIVER::fillRect(curX, startY, runW, lineH, bg);
+                }
+                int32_t asciiY = (ts == 1) ? (startY + 2) : startY;
+                BRUCE_TFT_DRIVER::drawString(run, curX, asciiY, font);
+                curX += runW;
             } else {
                 ++p; // skip CR/LF inside single-line drawString
             }
@@ -566,7 +571,6 @@ int16_t tft_logger::drawUtf8Text(
 
         int32_t glyphY = startY;
         int16_t drawSize = (ts == 1) ? 12 : (ts == 2 ? 16 : static_cast<int16_t>(8 * ts));
-        if (ts == 1 && startY >= 2) glyphY = startY - 2;
 
         if (opaque) {
             BRUCE_TFT_DRIVER::fillRect(curX, glyphY, drawSize, drawSize, bg);
@@ -583,7 +587,24 @@ int16_t tft_logger::drawUtf8Text(
                         }
                     }
                 }
-            } else if (ts == 2) {
+            }
+#if defined(BRUCE_COMPACT_CJK_FONT)
+            else {
+                // Scale 12x12 glyph cleanly to drawSize x drawSize (saves ~18KB Flash on 4MB boards)
+                for (int dy = 0; dy < drawSize; ++dy) {
+                    int sy = (dy * 12) / drawSize;
+                    uint16_t bits = pgm_read_word(&glyph->rows12[sy]);
+                    if (!bits) continue;
+                    for (int dx = 0; dx < drawSize; ++dx) {
+                        int sx = (dx * 12) / drawSize;
+                        if (bits & (1u << (11 - sx))) {
+                            BRUCE_TFT_DRIVER::drawPixel(curX + dx, glyphY + dy, fg);
+                        }
+                    }
+                }
+            }
+#else
+            else if (ts == 2) {
                 for (int row = 0; row < 16; ++row) {
                     uint16_t bits = pgm_read_word(&glyph->rows16[row]);
                     if (!bits) continue;
@@ -607,6 +628,7 @@ int16_t tft_logger::drawUtf8Text(
                     }
                 }
             }
+#endif
         } else {
             // Fallback hollow box for unmapped non-ASCII codepoint
             BRUCE_TFT_DRIVER::drawRect(curX + 1, glyphY + 1, drawSize - 2, drawSize - 2, fg);
@@ -725,7 +747,7 @@ size_t tft_logger::print(const String &s) {
                 }
                 if (nl != -1) {
                     cx = 0;
-                    cy += LH * ts;
+                    cy += (ts == 1 && bruce_i18n::containsNonAscii(seg)) ? 13 : (LH * ts);
                     start = nl + 1;
                     if (start == static_cast<int>(chunk.length())) break;
                 } else {

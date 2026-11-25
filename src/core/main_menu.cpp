@@ -266,10 +266,11 @@ void MainMenu::drawGridCell(int index, bool selected) {
     tft.setTextColor(fgColor, bgColor);
     String label = bruce_i18n::tr(options[index].label);
     String fitted = bruce_i18n::utf8TruncateToWidth(label, _grid.cellW - 4, _grid.labelSize);
+    int labelH = (_grid.labelSize == 1 && bruce_i18n::containsNonAscii(fitted)) ? 12 : (LH * _grid.labelSize);
     tft.drawCentreString(
         fitted,
         x + _grid.cellW / 2,
-        y + _grid.cellH - LH * _grid.labelSize - 3,
+        y + _grid.cellH - labelH - 2,
         1
     );
 }

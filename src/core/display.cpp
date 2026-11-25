@@ -74,11 +74,12 @@ void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight) 
         }
         String tail = displayText.substring(startPtr - base);
         String scrollingPart = bruce_i18n::utf8TruncateToWidth(tail, boxPx, ts);
+        int16_t clearH = (ts == 1 && bruce_i18n::containsNonAscii(trText)) ? 12 : (LH * ts);
         tft.fillRect(
             coord.x,
             coord.y,
             boxPx,
-            LH * ts,
+            clearH,
             highlight ? coord.fgcolor : bruceConfig.bgColor
         ); // Clear display area
         tft.setCursor(coord.x, coord.y);
@@ -1183,14 +1184,16 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.drawPixel(0, 0, 0);
+    String trTitle = bruce_i18n::tr(String(title));
+    int titleH = (FP == 1 && bruce_i18n::containsNonAscii(trTitle)) ? 12 : (LH * FP);
     tft.fillRect(
         BORDER_OFFSET_FROM_SCREEN_EDGE + 1,
         STATUS_BAR_HEIGHT,
         tftWidth - 2 * (BORDER_OFFSET_FROM_SCREEN_EDGE + 1),
-        LH * FP,
+        titleH,
         bruceConfig.bgColor
     );
-    tft.drawString(bruce_i18n::tr(title), BORDER_PAD_X, STATUS_BAR_HEIGHT);
+    tft.drawString(trTitle, BORDER_PAD_X, STATUS_BAR_HEIGHT);
 
     String selLabel = bruce_i18n::tr(options[index].label);
     int16_t maxSelPx = tftWidth - 2 * BORDER_PAD_X;
@@ -1202,7 +1205,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     int rowClearH = FG * LH + rowGap;
 
     // Keep the title row intact and center the selected option in the remaining content area.
-    int contentTop = STATUS_BAR_HEIGHT + LH * FP + 4;
+    int contentTop = STATUS_BAR_HEIGHT + titleH + 4;
     int contentBottom = tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - 1;
     int middle = contentTop + (contentBottom - contentTop) / 2;
 
@@ -1470,24 +1473,24 @@ void printSubtitle(const String &subtitle, bool withLine) {
 }
 
 void printFootnote(const String &text) {
+    String trText = bruce_i18n::tr(text);
+    int fh = (FP == 1 && bruce_i18n::containsNonAscii(trText)) ? 12 : (FP * LH);
     tft.setTextSize(FP);
-    tft.drawRightString(
-        bruce_i18n::tr(text), tftWidth - BORDER_PAD_X, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT
-    );
+    tft.drawRightString(trText, tftWidth - BORDER_PAD_X, tftHeight - BORDER_PAD_X - fh, SMOOTH_FONT);
 }
 
 void printCenterFootnote(const String &text) {
+    String trText = bruce_i18n::tr(text);
+    int fh = (FP == 1 && bruce_i18n::containsNonAscii(trText)) ? 12 : (FP * LH);
     tft.fillRect(
         BORDER_PAD_X,
-        tftHeight - BORDER_PAD_X - FP * LH,
+        tftHeight - BORDER_PAD_X - fh,
         tftWidth - 2 * BORDER_PAD_X,
-        FP * LH,
+        fh,
         bruceConfig.bgColor
     );
     tft.setTextSize(FP);
-    tft.drawCentreString(
-        bruce_i18n::tr(text), tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT
-    );
+    tft.drawCentreString(trText, tftWidth / 2, tftHeight - BORDER_PAD_X - fh, SMOOTH_FONT);
 }
 
 void drawBatteryStatus(uint8_t bat) {
