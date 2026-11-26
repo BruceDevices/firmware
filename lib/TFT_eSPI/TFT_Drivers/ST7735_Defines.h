@@ -13,8 +13,14 @@
 // #define ST7735_GREENTAB2
 //#define ST7735_GREENTAB3
 // #define ST7735_GREENTAB128    // For 128 x 128 display
+// Let a -DST7735_<TAB> build flag choose the panel: without this guard the 160x80 default
+// below wins over REDTAB160x80, REDTAB and BLACKTAB. Boards that set no flag still get 160x80.
+#if !defined(ST7735_BLACKTAB) && !defined(ST7735_REDTAB) && !defined(ST7735_REDTAB160x80) && \
+    !defined(ST7735_GREENTAB) && !defined(ST7735_GREENTAB2) && !defined(ST7735_GREENTAB3) && \
+    !defined(ST7735_GREENTAB128)
 #define ST7735_GREENTAB160x80  // For 160 x 80 display (BGR, inverted, 26
                                // offset)
+#endif
                                //#define ST7735_REDTAB
 //#define ST7735_BLACKTAB
 //#define ST7735_REDTAB160x80
