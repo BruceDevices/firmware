@@ -1,5 +1,5 @@
 /*
-Last Updated: 05/07/2026
+Last Updated: 12/10/2026
 By: Ninja-Jr
 Updated for universal power-off codes support (parsed + raw)
 
