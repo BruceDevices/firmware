@@ -300,13 +300,12 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
         }
     }
 
-    if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+    std::string nameStr = name.c_str();
+    if (!radioHasMemForBle() || !radioSafeBleInit(nameStr)) {
+        displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
         return false;
     }
 
-    std::string nameStr = name.c_str();
-    NimBLEDevice::init(nameStr);
     NimBLEDevice::setPower((esp_power_level_t)powerLevel);
 
     currentDeviceName = name;

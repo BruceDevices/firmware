@@ -97,15 +97,14 @@ void stopBLEStack() {
         pBLEScan = nullptr;
     }
 
-    if (is_ble_inited) {
+    if (is_ble_inited || BLEDevice::isInitialized()) {
 #if !defined(LITE_VERSION)
         if (BLEStateManager::isBLEActive() || BLEStateManager::getActiveClientCount() > 0) {
             BLEStateManager::deinitBLE(true);
         } else
 #endif
-            if (BLEDevice::getScan() != nullptr || BLEDevice::getAdvertising() != nullptr ||
-                BLEDevice::getServer() != nullptr || BLEConnected) {
-            BLEDevice::deinit();
+        {
+            BLEDevice::deinit(true);
         }
     }
 
@@ -140,13 +139,12 @@ bool ble_scan_setup() {
     RAM_LOG("ble-scan pre-init");
 
     // FIX: Always try to init - if already init'd, it's a no-op
-    if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+    if (!radioHasMemForBle() || !radioSafeBleInit("")) {
+        displayError(radioLowRamError("Low RAM: free WiFi/SD"), true);
         returnToMenu = true;
         return false;
     }
 
-    BLEDevice::init("");
     is_ble_inited = true;
 
     RAM_LOG("ble-scan post-init");
