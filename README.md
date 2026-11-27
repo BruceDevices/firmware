@@ -38,6 +38,37 @@ If you already use M5Launcher to manage your m5stack device, you can install it 
 
 Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/download), just search for 'Bruce' (My official builds will be uploaded by "owner" and have photos.) on the device category you want to and click on burn
 
+## Frank Vader / Bruce Force custom build
+
+This repository includes custom PlatformIO environments in `boards/frank_vader.ini`:
+
+| Environment | Based on | Output |
+| --- | --- | --- |
+| `fv_cardputer` | `m5stack-cardputer` | `Bruce-fv_cardputer.bin` |
+| `fv_m5stick` | `m5stack-sticks3` | `Bruce-fv_m5stick.bin` |
+| `fv_tembed` | `lilygo-t-embed` | `Bruce-fv_tembed.bin` |
+
+They add `FV_BUILD=1` (Frank Vader boot text, serial banner, and the
+`FV Profile` and `FV Character` menu entries) and `FV_SAFE_MENU=1` (hides the
+BadUSB/HID payload menu). No payload files or secrets are bundled.
+`FV Character` draws a small animated helmet-and-bolts sprite; no image file
+is needed.
+
+Build locally:
+
+```sh
+pio run -e fv_cardputer    # or fv_m5stick / fv_tembed
+```
+
+The merged flash image is written to `Bruce-fv_<env>.bin` in the repo root.
+
+Only flash a device after confirming its exact board, chip, and display.
+Flashing the wrong image can permanently damage the device. Connect the
+board, identify its serial port, then follow the install method above,
+substituting the matching `Bruce-fv_<env>.bin` file. Authorized use only:
+use this firmware on hardware and networks you own or have written
+permission to test.
+
 ## :keyboard: Discord Server
 
 Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT)!
@@ -278,7 +309,7 @@ _LITE_VERSION_: TelNet, SSH, WireGuard, ScanHosts, RawSniffer, Brucegotchi, BLEB
 
 ## :sparkles: Why and how does it look?
 
-Bruce stems from a keen observation within the community focused on devices like Flipper Zero. While these devices offered a glimpse into the world of offensive security, there was a palpable sense that something more could be achieved without being that overpriced, particularly with the robust and modular hardware ecosystem provided by ESP32 Devices, Lilygo and M5Stack products.
+Bruce grew out of a community observation: devices like Flipper Zero showed what portable offensive-security tools could do, but some users thought a similar tool could cost less. Bruce uses modular ESP32 hardware, including devices from LILYGO and M5Stack.
 
 ![Bruce Main Menu](./media/pictures/pic1.png)
 ![Bruce on M5Core](./media/pictures/core.png)
