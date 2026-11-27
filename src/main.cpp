@@ -11,6 +11,7 @@
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
+#include "frank_vader.h"
 #include <functional>
 #include <string>
 #include <vector>
@@ -274,13 +275,25 @@ void boot_screen() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
     tft.drawPixel(0, 0, bruceConfig.bgColor);
+#ifdef FV_BUILD
+    tft.drawCentreString("FRANK VADER", tftWidth / 2, 10, 1);
+#else
     tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
+#endif
     tft.setTextSize(FP);
+#ifdef FV_BUILD
+    tft.drawCentreString(FV_VERSION, tftWidth / 2, 25, 1);
+#else
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
+#endif
     tft.setTextSize(FM);
+#ifdef FV_BUILD
+    tft.drawCentreString("AUTHORIZED USE ONLY", tftWidth / 2, tftHeight + 2, 1);
+#else
     tft.drawCentreString(
         "PREDATORY FIRMWARE", tftWidth / 2, tftHeight + 2, 1
     ); // will draw outside the screen on non touch devices
+#endif
 }
 
 /*********************************************************************

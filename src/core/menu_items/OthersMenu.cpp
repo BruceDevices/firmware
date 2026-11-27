@@ -2,6 +2,7 @@
 
 #include "core/display.h"
 #include "core/utils.h"
+#include "frank_vader.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/clicker.h"
@@ -22,12 +23,17 @@ void OthersMenu::optionsMenu() {
 #endif
 
 // New consolidated BadUSB & HID submenu
-#if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION) && !defined(FV_SAFE_MENU)
         {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
 #endif
 
 #ifndef LITE_VERSION
         {"iButton",      setup_ibutton                },
+#endif
+
+#ifdef FV_BUILD
+        {"FV Profile",   fv_show_profile              },
+        {"FV Character", fv_show_character            },
 #endif
 
         // Timer removed - moved to another "Clock"

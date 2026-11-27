@@ -7,6 +7,7 @@
 #include "core/bus_HAL.h"
 #include "modules/badusb_ble/ducky_typer.h"
 #include <globals.h>
+#include "frank_vader.h"
 
 uint32_t uptimeCallback(cmd *c) {
     // https://github.com/espressif/arduino-esp32/blob/66c9c0b1a6a36b85d27cdac0fb52098368de1a09/libraries/WebServer/examples/AdvancedWebServer/AdvancedWebServer.ino#L64
@@ -125,8 +126,13 @@ uint32_t infoCallback(cmd *c) {
 }
 
 uint32_t helpCallback(cmd *c) {
+#ifdef FV_BUILD
+    serialDevice->print("Frank Vader / Bruce Force ");
+    serialDevice->print(FV_VERSION);
+#else
     serialDevice->print("Bruce v");
     serialDevice->print(BRUCE_VERSION);
+#endif
     serialDevice->print("\nThese shell commands are defined internally.\n");
 
     serialDevice->println("\nWiFi Commands:");

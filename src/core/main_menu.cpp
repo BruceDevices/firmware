@@ -5,22 +5,28 @@
 
 MainMenu::MainMenu() {
     _menuItems = {
+#ifndef FV_SAFE_MENU
         &wifiMenu,
         &bleMenu,
         &rfMenu,
         &nrf24Menu,
+#endif
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
 #if !defined(LITE_VERSION)
         &fmMenu,
 #endif
+#ifndef FV_SAFE_MENU
         &irMenu,
+#endif
 #if !defined(LITE_VERSION)
         &ethernetMenu,
 #endif
         &gpsMenu,
+#ifndef FV_SAFE_MENU
         &rfidMenu,
+#endif
         &fileMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
