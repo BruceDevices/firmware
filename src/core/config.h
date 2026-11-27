@@ -17,6 +17,10 @@
 
 enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSWORD = 2, SAVE_LENGTH = 3 };
 
+// SubGHz wardriver capture modes. Hop walks 433/315/868/915 at the slow dwell,
+// Fast hop shortens the dwell, Wideband uses a wider filter and a squelch.
+enum WardriverMode : uint8_t { WR_MODE_HOP = 0, WR_MODE_FAST_HOP = 1, WR_MODE_WIDEBAND = 2 };
+
 // How the main menu presents the modules:
 // CAROUSEL shows one big icon at a time, GRID exposes every module as a selectable cell
 enum MainMenuStyle { MAIN_MENU_CAROUSEL = 0, MAIN_MENU_GRID = 1 };
@@ -69,6 +73,19 @@ public:
     int ledEffectSpeed = 5;
     int ledEffectDirection = 1;
 #endif
+
+    // RF wardriver. These four used to be constants in the wardriver page.
+    // They are read on every hop, so they live here as plain settings; they are
+    // not persisted to bruce.conf yet.
+    float rfWardriverFreq = 433.92f;      // frequency to listen on
+    uint32_t rfWardriverDedupeMs = 30000; // ignore an identical signal this long (0 = off)
+    uint8_t rfWardriverMinPulses = 16;    // shorter bursts are noise, not a remote
+    WardriverMode rfWardriverMode = WR_MODE_HOP;
+
+    void setWardriverFreq(float mhz) { rfWardriverFreq = mhz; }
+    void setWardriverDedupeMs(uint32_t ms) { rfWardriverDedupeMs = ms; }
+    void setWardriverMinPulses(uint8_t n) { rfWardriverMinPulses = n; }
+    void setWardriverMode(uint8_t m) { rfWardriverMode = (WardriverMode)(m % 3); }
 
     // Wifi
     Credential webUI = {"admin", "bruce"};

@@ -6001,6 +6001,24 @@ SPIClass& TFT_eSPI::getSPIinstance(void)
 }
 #endif
 
+/***************************************************************************************
+** Function name:           busLock / busUnlock
+** Description:             Take/release the SPI bus mutex only (no transaction or CS
+**                          changes), so another task can safely drive a peripheral
+**                          that shares this SPIClass instance with the display.
+***************************************************************************************/
+#if defined(ESP32) && !defined(TFT_PARALLEL_8_BIT)
+void TFT_eSPI::busLock(void)
+{
+  if (tftMutex) xSemaphoreTakeRecursive(tftMutex, portMAX_DELAY);
+}
+
+void TFT_eSPI::busUnlock(void)
+{
+  if (tftMutex) xSemaphoreGiveRecursive(tftMutex);
+}
+#endif
+
 
 /***************************************************************************************
 ** Function name:           verifySetupID

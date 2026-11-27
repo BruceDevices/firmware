@@ -16,6 +16,10 @@
 #include "esp_wifi.h"
 #include "evil_portal.h"
 #include "karma_attack.h"
+#include "mitm_menu.h"
+#include "modules/wifi/countersurv.h"
+#include "modules/wifi/eapol_ident.h"
+#include "more_atks.h"
 #include "sniffer.h"
 #include "vector"
 #include <Arduino.h>
@@ -261,6 +265,17 @@ void wifi_atk_menu() {
         {"Beacon SPAM",     [=]() { beaconAttack(); }      },
         {"Deauth Flood",    [=]() { deauthFloodAttack(); } },
         {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
+#ifndef LITE_VERSION
+        {"Auth Flood",      [=]() { moreAuthFloodMenu(); }    },
+        {"Probe Request",   [=]() { moreProbeFloodMenu(); }   },
+        {"EAPOL Attack",    [=]() { moreEapolStartMenu(); }   },
+        // Application-layer interception: target network, one payload, one
+        // Start. Drives the net_spoof engine; the payload's page/redirect/dns/
+        // fallback lines are that engine's script format (see mitm_menu.h).
+        {"MITM Attack",     [=]() { mitmAttackMenu(); }       },
+        // Blue-team tools sit beside the attacks they detect.
+        {"Counter-Surv",    [=]() { CounterSurv::dashboard(); }},
+#endif
     };
     addOptionToMainMenu();
     loopOptions(options);
@@ -650,9 +665,19 @@ AGAIN:
         {"Information",         [=]() { wifi_atk_info(tssid, mac, channel); }      },
         {"Deauth",              [=]() { target_atk(tssid, mac, channel); }         },
 #ifndef LITE_VERSION
-        {"Capture Handshake",   [=]() { capture_handshake(tssid, mac, channel); }  },
+        {"Capture Handshake",     [=]() { capture_handshake(tssid, mac, channel); }         },
+        {"EAPOL Logoff",          [=]() { moreTargetEapolLogoff(tssid, mac, channel); }     },
+        // Passive 802.1X identity harvest. Not target-specific, but this is
+        // where EAPOL Logoff lives, so the two EAPOL actions stay together.
+        {"EAPOL Harvest",         [=]() { EapolIdent::menu(); }                            },
+        {"Channel Switch",        [=]() { moreTargetChannelSwitch(tssid, mac, channel); }   },
+        {"Bad Message",           [=]() { moreTargetBadMessage(tssid, mac, channel); }      },
+        {"Authentication Attack", [=]() { moreTargetAuthAttack(tssid, mac, channel); }     },
+        {"Disassociation Attack", [=]() { moreTargetDisassoc(tssid, mac, channel); }       },
+        // Joins the AP this page was opened on and starves its DHCP pool.
+        {"DHCP Starvation",       [=]() { moreTargetDhcpStarve(tssid, mac, channel); }     },
 #endif
-        {"Clone Portal",        [=]() { EvilPortal(tssid, channel, false, false); }},
+        {"Clone Portal",          [=]() { EvilPortal(tssid, channel, false, false); }      },
         {"Deauth+Clone",        [=]() { EvilPortal(tssid, channel, true, false); } },
         {"Deauth+Clone+Verify", [=]() { EvilPortal(tssid, channel, true, true); }  },
     };

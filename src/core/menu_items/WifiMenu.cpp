@@ -43,6 +43,7 @@
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "modules/wifi/socks4_proxy.h"
 #include "modules/wifi/tcp_utils.h"
+#include "modules/wifi/telnet_scan.h"
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
 bool showHiddenNetworks = false;
@@ -77,6 +78,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Client TCP", clientTCP});
     options.push_back({"SOCKS4 Proxy", []() { socks4Proxy(1080); }});
     options.push_back({"TelNET", telnet_setup});
+    options.push_back({"Telnet Scan", telnetScanMenu}); // find hosts on port 23 on this subnet
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"Channel Analyzer", channel_analyzer_setup});

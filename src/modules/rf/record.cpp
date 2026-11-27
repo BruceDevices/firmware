@@ -146,7 +146,7 @@ static void rf_raw_record_update_status(
         else status.latestRssi = -90;
         fakeRssiPresent = false;
 
-        if (rssiFeature) status.latestRssi = ELECHOUSE_cc1101.getRssi();
+        if (rssiFeature) status.latestRssi = rfGetRssi();
 
         status.rssiCount++;
         status.lastRssiUpdate = millis();
@@ -179,7 +179,7 @@ float rf_freq_scan() {
             setMHZ(checkFrequency);
             tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
             vTaskDelay(5 / portTICK_PERIOD_MS);
-            rssi = ELECHOUSE_cc1101.getRssi();
+            rssi = rfGetRssi();
             if (rssi > rssiThreshold) {
                 best_frequencies[attempt].freq = checkFrequency;
                 best_frequencies[attempt].rssi = rssi;
