@@ -396,6 +396,11 @@ static bool startMdnsResponder() {
 void configureWebServer() {
     mdnsRunning = startMdnsResponder();
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    // The WebUI is embedded in firmware; prevent browsers from keeping an older
+    // terminal script after a firmware update.
+    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+    DefaultHeaders::Instance().addHeader("Expires", "0");
     server->onNotFound(notFound);
 
     // Index
