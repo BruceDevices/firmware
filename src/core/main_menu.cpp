@@ -60,6 +60,31 @@ void MainMenu::begin(void) {
         float scale = float((float)tftWidth / (float)240);
         if (bruceConfigPins.rotation & 0b01) scale = float((float)tftHeight / (float)135);
         obj->draw(scale);
+
+        // 1RAT TEAM cyberpunk main-menu identity. Keep the original Bruce module
+        // artwork untouched; only decorate the carousel presentation.
+        const uint16_t neonCyan = 0x07FF;
+        const uint16_t neonPurple = 0x801F;
+        const int headerY = STATUS_BAR_HEIGHT + 1;
+        const int headerH = 19;
+        tft.fillRect(0, headerY, tftWidth, headerH, bruceConfig.bgColor);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextSize(FP);
+        tft.setTextColor(neonCyan, bruceConfig.bgColor);
+        tft.drawCentreString("1RAT TEAM", tftWidth / 2, headerY + 2, 1);
+        tft.drawFastHLine(12, headerY + headerH, tftWidth - 24, neonCyan);
+
+        // A restrained HUD frame around the selected original icon.
+        int frameTop = headerY + headerH + 8;
+        int frameBottom = tftHeight - 2 * BORDER_PAD_Y - 10;
+        int frameHeight = frameBottom - frameTop;
+        if (frameHeight > 40) {
+            tft.drawRoundRect(9, frameTop, tftWidth - 18, frameHeight, 9, 0x039F);
+            tft.drawFastHLine(18, frameTop, tftWidth / 4, neonPurple);
+            tft.drawFastHLine(tftWidth - 18 - tftWidth / 4, frameBottom - 1, tftWidth / 4, neonCyan);
+        }
+        tft.drawFastHLine(12, tftHeight - 4, tftWidth - 24, neonCyan);
+        tft.setTextDatum(TL_DATUM);
 #if defined(HAS_TOUCH)
         TouchFooter();
 #endif
