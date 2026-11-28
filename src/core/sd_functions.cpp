@@ -60,7 +60,13 @@ bool setupSdCard(uint8_t maxFiles) {
     if (sdcardMounted) return true;
     bool result = true;
 #ifdef USE_SD_MMC
-    if (!SD.begin("/sdcard", true, false, BOARD_MAX_SDMMC_FREQ, maxFiles)) {
+    // 4-bit SDIO is opt-in per board (define SD_MMC_4BIT); everything else uses 1-bit.
+#ifdef SD_MMC_4BIT
+    constexpr bool sdmmc1Bit = false;
+#else
+    constexpr bool sdmmc1Bit = true;
+#endif
+    if (!SD.begin("/sdcard", sdmmc1Bit, false, BOARD_MAX_SDMMC_FREQ, maxFiles)) {
         sdcardMounted = false;
         result = false;
     }
