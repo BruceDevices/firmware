@@ -690,6 +690,28 @@
           <button class="btn-action act-dialog-close act-escape">Close</button>
         </div>
       </div>
+      <div class="dialog terminal hidden">
+        <div class="dialog-head">
+          <span>Bruce Command Terminal</span>
+          <span id="terminal-status">READY</span>
+        </div>
+        <div class="dialog-body">
+          <div class="terminal-layout">
+            <section class="terminal-history-panel">
+              <div class="terminal-section-title">COMMAND HISTORY</div>
+              <pre id="terminal-history"></pre>
+            </section>
+            <section class="terminal-output-panel">
+              <div class="terminal-section-title">COMMAND OUTPUT</div>
+              <pre id="terminal-output" aria-live="polite"></pre>
+            </section>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-action" onclick="document.querySelector('#terminal-output').textContent = ''">Clear Output</button>
+          <button class="btn-action act-dialog-close">Close</button>
+        </div>
+      </div>
     </div>
     <div class="loading-area hidden">
       <div class="text"></div>
