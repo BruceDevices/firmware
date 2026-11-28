@@ -279,14 +279,53 @@ async function uploadFile() {
   });
 }
 
+const terminalHistory = [];
+
+function appendTerminalOutput(text) {
+  const output = $("#terminal-output");
+  output.textContent += text;
+  // Bound browser memory while keeping a useful recent terminal transcript.
+  if (output.textContent.length > 16000) {
+    output.textContent = output.textContent.slice(-16000);
+  }
+  output.scrollTop = output.scrollHeight;
+}
+
+function renderTerminalHistory() {
+  $("#terminal-history").textContent = terminalHistory
+    .map((command, index) => `${index + 1}. ${command}`)
+    .join("\\n");
+}
+
 async function runCommand(cmd) {
-  Dialog.loading.show("Running command...");
+  Dialog.show("terminal");
+  $("#terminal-status").textContent = "EXECUTING";
+  terminalHistory.push(cmd);
+  if (terminalHistory.length > 30) terminalHistory.shift();
+  renderTerminalHistory();
+  appendTerminalOutput(`\\n> ${cmd}\\n`);
+
   try {
-    await requestPost("/cm", { cmnd: cmd });
+    const requestId = Number(await requestPost("/cm", { cmnd: cmd }));
+    if (!requestId) throw new Error("The device could not queue this command.");
+
+    let result = "__PENDING__";
+    for (let attempt = 0; attempt < 300; attempt++) {
+      result = await requestGet("/cm/result", { id: requestId });
+      if (result !== "__PENDING__") break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    if (result === "__PENDING__") {
+      appendTerminalOutput("[Still running. Reopen the terminal and try again later.]\\n");
+      $("#terminal-status").textContent = "RUNNING";
+    } else {
+      appendTerminalOutput(result + "\\n");
+      $("#terminal-status").textContent = "READY";
+    }
   } catch (error) {
-    alert("Failed to run command: " + error.message);
-  } finally {
-    Dialog.loading.hide();
+    appendTerminalOutput(`[ERROR] ${error.message}\\n`);
+    $("#terminal-status").textContent = "ERROR";
   }
 }
 
@@ -1118,9 +1157,10 @@ $(".act-save-oinput-file").addEventListener("click", async (e) => {
     });
     await requestGet("/file?" + urlQuery.toString());
   } else if (actionType === "serial") {
-    Dialog.loading.show("Running Serial Command...");
-    await runCommand(fileName);
+    Dialog.hide();
     refreshList = false; // No need to refresh file list for serial commands
+    await runCommand(fileName);
+    return;
   }
 
   if (refreshList) fetchFiles(currentDrive, currentPath);
