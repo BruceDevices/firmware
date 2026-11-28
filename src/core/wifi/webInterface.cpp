@@ -396,6 +396,11 @@ static bool startMdnsResponder() {
 void configureWebServer() {
     mdnsRunning = startMdnsResponder();
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    // The WebUI is embedded in firmware; prevent browsers from keeping an older
+    // terminal script after a firmware update.
+    DefaultHeaders::Instance().addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+    DefaultHeaders::Instance().addHeader("Expires", "0");
     server->onNotFound(notFound);
 
     // Index
@@ -565,14 +570,35 @@ void configureWebServer() {
                     else vTaskDelay(pdMS_TO_TICKS(50));
                 }
             } else {
-                if (parseSerialCommand(cmnd, false)) {
-                    request->send(200, "text/plain", "command " + cmnd + " queued");
-                } else {
-                    request->send(400, "text/plain", "command failed, check the serial log for details");
-                }
+                uint32_t requestId = queueWebSerialCommand(cmnd);
+                if (requestId) request->send(200, "text/plain", String(requestId));
+                else request->send(409, "text/plain", "command queue busy or unavailable");
             }
         } else {
             request->send(400, "text/plain", "http request missing required arg: cmnd");
+        }
+    });
+
+    // Poll the result of an asynchronously executed WebUI command.
+    server->on("/cm/result", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasArg("id")) {
+            request->send(400, "text/plain", "missing command id");
+            return;
+        }
+
+        uint32_t id = (uint32_t)request->arg("id").toInt();
+        String output;
+        bool done = false;
+        bool success = false;
+        if (!getWebSerialCommandResult(id, output, done, success)) {
+            request->send(404, "text/plain", "unknown or expired command id");
+        } else if (!done) {
+            request->send(202, "text/plain", "__PENDING__");
+        } else {
+            if (!success) output += "\n[CLI] Command was not accepted.";
+            if (output.length() == 0) output = "[Command completed with no output.]";
+            request->send(200, "text/plain", output);
         }
     });
 
