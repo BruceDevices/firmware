@@ -591,7 +591,7 @@ void configureWebServer() {
         } else if (!done) {
             request->send(202, "text/plain", "__PENDING__");
         } else {
-            if (!success) output += "\\n[CLI] Command was not accepted.";
+            if (!success) output += "\n[CLI] Command was not accepted.";
             if (output.length() == 0) output = "[Command completed with no output.]";
             request->send(200, "text/plain", output);
         }
