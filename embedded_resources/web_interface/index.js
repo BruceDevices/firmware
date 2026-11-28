@@ -294,7 +294,7 @@ function appendTerminalOutput(text) {
 function renderTerminalHistory() {
   $("#terminal-history").textContent = terminalHistory
     .map((command, index) => `${index + 1}. ${command}`)
-    .join("\\n");
+    .join("\n");
 }
 
 async function runCommand(cmd) {
@@ -303,7 +303,7 @@ async function runCommand(cmd) {
   terminalHistory.push(cmd);
   if (terminalHistory.length > 30) terminalHistory.shift();
   renderTerminalHistory();
-  appendTerminalOutput(`\\n> ${cmd}\\n`);
+  appendTerminalOutput(`\n> ${cmd}\n`);
 
   try {
     const requestId = Number(await requestPost("/cm", { cmnd: cmd }));
@@ -317,14 +317,14 @@ async function runCommand(cmd) {
     }
 
     if (result === "__PENDING__") {
-      appendTerminalOutput("[Still running. Reopen the terminal and try again later.]\\n");
+      appendTerminalOutput("[Still running. Reopen the terminal and try again later.]\n");
       $("#terminal-status").textContent = "RUNNING";
     } else {
-      appendTerminalOutput(result + "\\n");
+      appendTerminalOutput(result + "\n");
       $("#terminal-status").textContent = "READY";
     }
   } catch (error) {
-    appendTerminalOutput(`[ERROR] ${error.message}\\n`);
+    appendTerminalOutput(`[ERROR] ${error.message}\n`);
     $("#terminal-status").textContent = "ERROR";
   }
 }
@@ -858,7 +858,7 @@ async function renderTFT(data) {
         }
         ctx.fillStyle = color565toCSS(input.bg);
 
-        input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
+        input.txt = input.txt.replaceAll("\n", ""); // remove new lines
         screenText.push(input.txt); // Collect text for WiFi detection
 
         var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
