@@ -838,3 +838,68 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .container .content .table .col-action { width: 116px; }
   .container .content .table tbody tr td { padding: 6px; }
 }
+
+
+/* Bruce command terminal */
+.dialog.terminal {
+  width: min(900px, calc(100vw - 24px));
+  max-width: 900px;
+}
+.dialog.terminal .dialog-head {
+  justify-content: space-between;
+}
+#terminal-status {
+  color: var(--color);
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+.dialog.terminal .dialog-body {
+  padding: 12px;
+}
+.terminal-layout {
+  display: grid;
+  grid-template-columns: minmax(150px,  .32fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.terminal-history-panel,
+.terminal-output-panel {
+  min-width: 0;
+  border: 1px solid rgba(69,245,208,.2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #06111d;
+}
+.terminal-section-title {
+  padding: 8px 10px;
+  color: #8ca8bc;
+  background: #102238;
+  border-bottom: 1px solid rgba(69,245,208,.18);
+  font: 700 10px "Segoe UI", sans-serif;
+  letter-spacing: .12em;
+}
+#terminal-history,
+#terminal-output {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px;
+  color: #c9f9ed;
+  background: transparent;
+  font: 12px/1.55 "DejaVu Sans Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+}
+#terminal-history {
+  height: 48vh;
+  max-height: 560px;
+  color: #8ca8bc;
+}
+#terminal-output {
+  height: 48vh;
+  max-height: 560px;
+}
+@media (max-width: 650px) {
+  .terminal-layout { grid-template-columns: 1fr; }
+  #terminal-history { height: 90px; max-height: 90px; }
+  #terminal-output { height: 38vh; }
+}
